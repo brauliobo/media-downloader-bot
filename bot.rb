@@ -41,13 +41,15 @@ class Bot
 
   def react msg
     download msg, msg.text
+  rescue => e
+    report_error msg, e
   end
 
   CMD = "youtube-dl -4 --user-agent 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36' -f worst --write-info-json '%{url}'"
 
   def download msg, url
+    resp = send_message msg, "Downloading..."
     Dir.mktmpdir "media-downloader-#{url.parameterize}" do |d|
-      resp = send_message msg, "Downloading..."
       _o, _e, _s = Open3.capture3 CMD % {url: url}, chdir: d
       Dir.glob "#{d}/*.info.json" do |f|
         info   = Hashie::Mash.new JSON.parse File.read f
@@ -69,9 +71,10 @@ class Bot
         edit_message msg, resp.result.message_id, text: (resp.text += "\nSending...")
         fn_io = Faraday::UploadIO.new fn_out, mtype
         send_message msg, text, type: type.name, type.name => fn_io
-        delete_message msg, resp.result.message_id, wait: nil
       end
     end
+  ensure
+    delete_message msg, resp.result.message_id, wait: nil
   end
 
 end
