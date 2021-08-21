@@ -3,7 +3,7 @@ source 'https://rubygems.org'
 gem 'activesupport'
 gem 'dotenv'
 gem 'hashie'
-gem 'mime-types'
+gem 'rack' # for better mime type
 
 gem 'telegram-bot-ruby'
 

@@ -43,14 +43,12 @@ GEM
       concurrent-ruby (~> 1.0)
     ice_nine (0.11.2)
     method_source (1.0.0)
-    mime-types (3.3.1)
-      mime-types-data (~> 3.2015)
-    mime-types-data (3.2021.0704)
     minitest (5.14.4)
     multipart-post (2.1.1)
     pry (0.14.1)
       coderay (~> 1.1)
       method_source (~> 1.0)
+    rack (2.2.3)
     ruby2_keywords (0.0.5)
     telegram-bot-ruby (0.16.0)
       dry-inflector
@@ -72,8 +70,8 @@ DEPENDENCIES
   activesupport
   dotenv
   hashie
-  mime-types
   pry
+  rack
   telegram-bot-ruby
 
 BUNDLED WITH
