@@ -67,10 +67,11 @@ class Bot
         edit_message msg, resp.result.message_id, text: (resp.text += "\nConverting...")
         send "zip_#{type.name}", fn_in, fn_out
 
-        text  = "_#{info.title}_"
-        text += "\nby #{info.uploader}" if info.uploader
+        text  = "_#{e info.title}_"
+        text += "\nby #{e info.uploader}" if info.uploader
         text += "\n\n#{url}"
 
+        require'pry';binding.pry
         edit_message msg, resp.result.message_id, text: (resp.text += "\nSending...")
         fn_io = Faraday::UploadIO.new fn_out, mtype
         send_message msg, text, type: type.name, type.name => fn_io
