@@ -82,7 +82,15 @@ class Bot
       error << "#{he e.backtrace.join "\n"}</pre>"
 
       STDERR.puts "error: #{error}"
-      send_message msg, error, parse_mode: 'HTML', delete: 30.seconds
+      send_message msg, error, parse_mode: 'HTML', delete_both: 1.minutes
+      send_message admin_msg, error, parse_mode: 'HTML' if ADMIN_ID != msg.chat.id
+    end
+
+    def fake_msg chat_id
+      SymMash.new chat: {id: chat_id}
+    end
+    def admin_msg
+      fake_msg ADMIN_ID
     end
 
     def api
