@@ -1,0 +1,21 @@
+#!/usr/bin/env ruby
+
+require_relative '../bot'
+
+ID = 1
+
+Bot.define_method :send_message do |msg, text, *args|
+  puts text
+  SymMash.new result: {message_id: ID}
+end
+Bot.define_method :edit_message do |msg, id, text: nil, **params|
+  puts text
+end
+
+bot = Bot.new nil
+msg = ARGV[0]
+puts "reacting to message: #{msg}"
+bot.react SymMash.new(
+  text: msg,
+  chat: {},
+)
