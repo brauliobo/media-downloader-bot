@@ -50,8 +50,7 @@ class Bot
     def send_message msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **params
       _text = text
       text  = parse_text text, parse_mode: parse_mode
-      STDERR.puts "Sending #{text}"
-      resp = SymMash.new api.send "send_#{type}",
+      resp  = SymMash.new api.send "send_#{type}",
         reply_to_message_id: msg.message_id,
         chat_id:             msg.chat.id,
         text:                text,
