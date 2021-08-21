@@ -4,6 +4,7 @@ module Zipper
     video: {
       name: :video,
       ext:  :mp4,
+      opts: {width: 720, quality: 30},
       cmd:  <<-EOC
 ffmpeg -loglevel quiet -i %{infile} \
   -c:v libx264 -vf scale="%{width}:trunc(ow/a/2)*2" -crf %{quality} \
@@ -14,6 +15,7 @@ EOC
     audio: {
       name: :audio,
       ext:  :m4a,
+      opts: {bitrate: 80},
       cmd:  <<-EOC
 ffmpeg -loglevel quiet -i %{infile} \
   -c:a libfdk_aac -profile:a aac_he_v2 -b:a %{bitrate}k \
@@ -28,20 +30,20 @@ EOC
     },
   )
 
-  def zip_video infile, outfile, width: 720, quality: 30
+  def zip_video infile, outfile, opts = Types.video.opts
     system Types.video.cmd % {
       infile:  Shellwords.escape(infile),
       outfile: Shellwords.escape(outfile),
-      width:   width,
-      quality: quality,
+      width:   opts.width,
+      quality: opts.quality,
     }
   end
 
-  def zip_audio infile, outfile, bitrate: 80
+  def zip_audio infile, outfile, opts = Types.audio.opts
     system Types.audio.cmd % {
       infile:  Shellwords.escape(infile),
       outfile: Shellwords.escape(outfile),
-      bitrate: bitrate,
+      bitrate: opts.bitrate,
     }
   end
 
