@@ -1,0 +1,8 @@
+#!/usr/bin/env ruby
+
+require 'pry'
+require_relative '../bot'
+
+bot = Bot.new ENV['TOKEN']
+Pry.start bot
+
