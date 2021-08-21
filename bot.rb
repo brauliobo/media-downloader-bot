@@ -47,6 +47,9 @@ class Bot
 
   CMD = "youtube-dl -4 --user-agent 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36' -f worst --write-info-json '%{url}'"
 
+  # missing mimes
+  Rack::Mime::MIME_TYPES['.opus'] = 'audio/ogg'
+
   def download msg, url
     resp = send_message msg, "Downloading..."
     Dir.mktmpdir "media-downloader-#{url.parameterize}" do |d|
@@ -58,7 +61,7 @@ class Bot
         fn_in  = Dir.glob("#{d}/#{fnbase}*").first
         mtype  = Rack::Mime.mime_type File.extname fn_in
         type   = if mtype.index 'video' then Types.video elsif mtype.index 'audio' then Types.audio end
-        raise "Unknown type" unless type
+        raise "Unknown type for #{info._filename}" unless type
         fn_out = "#{d}/#{fnbase}.#{type.ext}"
 
         edit_message msg, resp.result.message_id, text: (resp.text += "\nConverting...")

@@ -16,7 +16,7 @@ EOC
       ext:  :m4a,
       cmd:  <<-EOC
 ffmpeg -loglevel quiet -i %{infile} \
-  -c:a libfdk_aac -profile:a aac_he_v2 -b:a %{bitrate}k
+  -c:a libfdk_aac -profile:a aac_he_v2 -b:a %{bitrate}k \
   %{outfile}
 EOC
 # Opus in Telegram Bots are considered voice messages
