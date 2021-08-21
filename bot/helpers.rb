@@ -17,8 +17,8 @@ class Bot
       end
     end
 
-    ADMIN_CHAT_ID  = ENV['ADMIN_CHAT_ID'].to_i
-    REPORT_CHAT_ID = ENV['REPORT_CHAT_ID'].to_i
+    ADMIN_CHAT_ID  = ENV['ADMIN_CHAT_ID']&.to_i
+    REPORT_CHAT_ID = ENV['REPORT_CHAT_ID']&.to_i
 
     def from_admin? msg
       msg.from.id == ADMIN_CHAT_ID
@@ -83,14 +83,14 @@ class Bot
 
       STDERR.puts "error: #{error}"
       send_message msg, error, parse_mode: 'HTML', delete_both: 1.minutes
-      send_message admin_msg, error, parse_mode: 'HTML' if ADMIN_ID != msg.chat.id
+      send_message admin_msg, error, parse_mode: 'HTML' if ADMIN_CHAT_ID != msg.chat.id
     end
 
     def fake_msg chat_id
       SymMash.new chat: {id: chat_id}
     end
     def admin_msg
-      fake_msg ADMIN_ID
+      fake_msg ADMIN_CHAT_ID
     end
 
     def api
