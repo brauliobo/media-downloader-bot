@@ -40,7 +40,8 @@ class Bot
   end
 
   def react msg
-    download msg, msg.text
+    args = msg.text.split(/\s+/)
+    download msg, args.shift, *args
   rescue => e
     report_error msg, e
   end
@@ -50,10 +51,16 @@ class Bot
   # missing mimes
   Rack::Mime::MIME_TYPES['.opus'] = 'audio/ogg'
 
-  def download msg, url
+  def download msg, url, *args
     resp = send_message msg, "Downloading..."
     Dir.mktmpdir "media-downloader-#{url.parameterize}" do |d|
-      _o, _e, _s = Open3.capture3 CMD % {url: url}, chdir: d
+      _o, e, s = Open3.capture3 CMD % {url: url}, chdir: d
+      if s != 0
+        edit_message msg, resp.result.message_id, text: "Download failed:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
+        resp = nil
+        break
+      end
+
       Dir.glob "#{d}/*.info.json" do |f|
         info   = Hashie::Mash.new JSON.parse File.read f
 
@@ -71,14 +78,13 @@ class Bot
         text += "\nby #{e info.uploader}" if info.uploader
         text += "\n\n#{url}"
 
-        require'pry';binding.pry
         edit_message msg, resp.result.message_id, text: (resp.text += "\nSending...")
         fn_io = Faraday::UploadIO.new fn_out, mtype
         send_message msg, text, type: type.name, type.name => fn_io
       end
     end
   ensure
-    delete_message msg, resp.result.message_id, wait: nil
+    delete_message msg, resp.result.message_id, wait: nil if resp
   end
 
 end
