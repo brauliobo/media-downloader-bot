@@ -41,7 +41,8 @@ class Bot
 
   def react msg
     args = msg.text.split(/\s+/)
-    download msg, args.shift, *args
+    url  = args.shift
+    download msg, url, *args
   rescue => e
     report_error msg, e
   end
@@ -52,7 +53,9 @@ class Bot
   Rack::Mime::MIME_TYPES['.opus'] = 'audio/ogg'
 
   def download msg, url, *args
+    args = args.each.with_object(SymMash.new){ |a, h| h[a] = 1 }
     resp = send_message msg, "Downloading..."
+
     Dir.mktmpdir "media-downloader-#{url.parameterize}" do |d|
       _o, e, s = Open3.capture3 CMD % {url: url}, chdir: d
       if s != 0
@@ -62,7 +65,7 @@ class Bot
       end
 
       Dir.glob "#{d}/*.info.json" do |f|
-        info   = Hashie::Mash.new JSON.parse File.read f
+        info   = SymMash.new JSON.parse File.read f
 
         fnbase = File.basename info._filename, File.extname(info._filename)
         fn_in  = Dir.glob("#{d}/#{fnbase}*").first
@@ -74,9 +77,11 @@ class Bot
         edit_message msg, resp.result.message_id, text: (resp.text += "\nConverting...")
         send "zip_#{type.name}", fn_in, fn_out
 
-        text  = "_#{e info.title}_"
-        text += "\nby #{e info.uploader}" if info.uploader
-        text += "\n\n#{url}"
+        unless args.nocaption
+          text  = "_#{e info.title}_"
+          text += "\nby #{e info.uploader}" if info.uploader
+          text += "\n\n#{url}"
+        end
 
         edit_message msg, resp.result.message_id, text: (resp.text += "\nSending...")
         fn_io = Faraday::UploadIO.new fn_out, mtype
