@@ -41,6 +41,7 @@ class Bot
   end
 
   def react msg
+    return if msg.text.blank?
     args = msg.text.split(/\s+/)
     url  = args.shift
     return unless URI.parse(url).is_a? URI::HTTP
