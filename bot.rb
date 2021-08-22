@@ -2,6 +2,7 @@ require 'bundler/setup'
 require 'active_support/all'
 require 'dotenv'
 require 'telegram/bot'
+Dotenv.load! '.env'
 
 require 'tmpdir'
 require 'shellwords'
