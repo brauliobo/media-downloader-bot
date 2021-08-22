@@ -44,6 +44,8 @@ class Bot
   def react msg
     args = msg.text.split(/\s+/)
     url  = args.shift
+    return unless URI.parse(url).is_a? URI::HTTP
+
     opts = args.each.with_object(SymMash.new){ |a, h| h[a] = 1 }
     download msg, url, opts
   rescue => e
