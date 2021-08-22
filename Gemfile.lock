@@ -7,6 +7,8 @@ GEM
       minitest (>= 5.1)
       tzinfo (~> 2.0)
       zeitwerk (~> 2.3)
+    addressable (2.8.0)
+      public_suffix (>= 2.0.2, < 5.0)
     axiom-types (0.1.1)
       descendants_tracker (~> 0.0.4)
       ice_nine (~> 0.11.0)
@@ -15,8 +17,11 @@ GEM
     coercible (1.0.0)
       descendants_tracker (~> 0.0.1)
     concurrent-ruby (1.1.9)
+    connection_pool (2.2.5)
     descendants_tracker (0.0.4)
       thread_safe (~> 0.3, >= 0.3.1)
+    domain_name (0.5.20190701)
+      unf (>= 0.0.5, < 1.0.0)
     dotenv (2.7.6)
     dry-inflector (0.2.0)
     faraday (1.7.0)
@@ -39,17 +44,42 @@ GEM
     faraday-patron (1.0.0)
     faraday-rack (1.0.0)
     hashie (4.1.0)
+    http-cookie (1.0.4)
+      domain_name (~> 0.5)
     i18n (1.8.10)
       concurrent-ruby (~> 1.0)
     ice_nine (0.11.2)
+    mechanize (2.8.1)
+      addressable (~> 2.7)
+      domain_name (~> 0.5, >= 0.5.20190701)
+      http-cookie (~> 1.0, >= 1.0.3)
+      mime-types (~> 3.0)
+      net-http-digest_auth (~> 1.4, >= 1.4.1)
+      net-http-persistent (>= 2.5.2, < 5.0.dev)
+      nokogiri (~> 1.11, >= 1.11.2)
+      rubyntlm (~> 0.6, >= 0.6.3)
+      webrick (~> 1.7)
+      webrobots (~> 0.1.2)
     method_source (1.0.0)
+    mime-types (3.3.1)
+      mime-types-data (~> 3.2015)
+    mime-types-data (3.2021.0704)
     minitest (5.14.4)
     multipart-post (2.1.1)
+    net-http-digest_auth (1.4.1)
+    net-http-persistent (4.0.1)
+      connection_pool (~> 2.2)
+    nokogiri (1.11.7-x86_64-linux)
+      racc (~> 1.4)
     pry (0.14.1)
       coderay (~> 1.1)
       method_source (~> 1.0)
+    public_suffix (4.0.6)
+    racc (1.5.2)
     rack (2.2.3)
+    rmagick (4.2.2)
     ruby2_keywords (0.0.5)
+    rubyntlm (0.6.3)
     telegram-bot-ruby (0.16.0)
       dry-inflector
       faraday
@@ -57,10 +87,15 @@ GEM
     thread_safe (0.3.6)
     tzinfo (2.0.4)
       concurrent-ruby (~> 1.0)
+    unf (0.1.4)
+      unf_ext
+    unf_ext (0.0.7.7)
     virtus (2.0.0)
       axiom-types (~> 0.1)
       coercible (~> 1.0)
       descendants_tracker (~> 0.0, >= 0.0.3)
+    webrick (1.7.0)
+    webrobots (0.1.2)
     zeitwerk (2.4.2)
 
 PLATFORMS
@@ -70,8 +105,10 @@ DEPENDENCIES
   activesupport
   dotenv
   hashie
+  mechanize
   pry
   rack
+  rmagick
   telegram-bot-ruby
 
 BUNDLED WITH

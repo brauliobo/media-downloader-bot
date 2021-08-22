@@ -7,6 +7,8 @@ require 'tmpdir'
 require 'shellwords'
 require 'open3'
 require 'rack/mime'
+require 'rmagick'
+require 'mechanize'
 
 require_relative 'exts/sym_mash'
 require_relative 'bot/helpers'
@@ -119,13 +121,31 @@ class Bot
 
         edit_message msg, resp.result.message_id, text: (resp.text << "\nSending...")
         fn_io = Faraday::UploadIO.new fn_out, mtype
-        send_message msg, text, type: type.name, type.name => fn_io,
-          duration: durat,
-          title:    info.title
+        send_message(msg, text,
+          type:        type.name,
+          type.name => fn_io,
+          duration:    durat,
+          title:       info.title,
+          thumb:       thumb(info, d),
+        )
       end
     end
   ensure
     delete_message msg, resp.result.message_id, wait: nil if resp
+  end
+
+  def thumb info, d
+    url    = info.thumbnails&.last&.url
+    return unless url
+    im_in  = "#{d}/img"
+    im_out = "#{d}/out.jpg"
+
+    File.write im_in, Mechanize.new.get(url).body
+    thumb  = Magick::Image.read(im_in).first
+    thumb.format = "JPG"
+    thumb.write im_out
+
+    Faraday::UploadIO.new im_out, 'image/jpeg'
   end
 
   def convert d, fn_in, type, msg, resp
