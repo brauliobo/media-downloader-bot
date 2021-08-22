@@ -5,7 +5,6 @@ gem 'dotenv'
 gem 'hashie'
 gem 'rack' # for better mime type
 gem 'mechanize'
-gem 'rmagick'
 
 gem 'telegram-bot-ruby'
 

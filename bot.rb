@@ -8,7 +8,6 @@ require 'tmpdir'
 require 'shellwords'
 require 'open3'
 require 'rack/mime'
-require 'rmagick'
 require 'mechanize'
 
 require_relative 'exts/sym_mash'
@@ -24,7 +23,6 @@ class Bot
 
   def initialize token
     @token = token
-    @dir   = Dir.mktmpdir 'media-downloader-'
   end
 
   def start
@@ -144,9 +142,7 @@ class Bot
     im_out = "#{d}/out.jpg"
 
     File.write im_in, Mechanize.new.get(url).body
-    thumb  = Magick::Image.read(im_in).first
-    thumb.format = "JPG"
-    thumb.write im_out
+    system "convert #{im_in} -resize x320 -define jpeg:extent=190kb #{im_out}"
 
     Faraday::UploadIO.new im_out, 'image/jpeg'
   end
