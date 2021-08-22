@@ -84,6 +84,7 @@ class Bot
 
         type   = if mtype.index 'video' then Types.video elsif mtype.index 'audio' then Types.audio end
         type   = Types.audio if opts.audio
+        # current video compression is about 2mb per min
         if type == Types.video and durat > DURATION_LIMIT
           edit_message msg, resp.result.message_id, text: (resp.text << MSG_TOO_LONG)
           type = Types.audio
@@ -97,7 +98,8 @@ class Bot
         end
         mbsize = File.size(fn_out) / 2**20
 
-        if mbsize >= SIZE_MB_LIMIT and type == Types.video
+        # duration check above can fail, fallback to size check
+        if type == Types.video and mbsize >= SIZE_MB_LIMIT
           edit_message msg, resp.result.message_id, text: (resp.text << MSG_VD_TOO_BIG)
           type   = Types.audio
           fn_out = convert d, fn_in, type, msg, resp
