@@ -9,7 +9,7 @@ module Zipper
 ffmpeg -loglevel quiet -i %{infile} \
   -c:v libx264 -vf scale="%{width}:trunc(ow/a/2)*2" -crf %{quality} \
   -c:a libfdk_aac -profile:a aac_he_v2 -b:a 64k \
-  %{outfile}
+  -y %{outfile}
 EOC
     },
     audio: {
@@ -19,7 +19,7 @@ EOC
       cmd:  <<-EOC
 ffmpeg -loglevel quiet -i %{infile} \
   -c:a libfdk_aac -profile:a aac_he_v2 -b:a %{bitrate}k \
-  %{outfile}
+  -vn -y %{outfile}
 EOC
 # Opus in Telegram Bots are considered voice messages
 #      ext:  :opus,
