@@ -89,7 +89,7 @@ class Bot
         type   = if mtype.index 'video' then Types.video elsif mtype.index 'audio' then Types.audio end
         type   = Types.audio if opts.audio
         # current video compression is about 2mb per min
-        if type == Types.video and durat > DURATION_LIMIT
+        if type == Types.video and (durat / 60).seconds > DURATION_LIMIT.minutes
           edit_message msg, resp.result.message_id, text: (resp.text << MSG_TOO_LONG)
           type = Types.audio
         end
