@@ -118,7 +118,7 @@ class Bot
         unless opts.nocaption
           text  = "_#{e info.title}_"
           text << "\nby #{e info.uploader}" if info.uploader
-          text << "\n\n#{url}"
+          text << "\n\n#{e url}"
         end
 
         edit_message msg, resp.result.message_id, text: (resp.text << "\nSending...")
