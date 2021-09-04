@@ -40,8 +40,27 @@ class Bot
     end
   end
 
+  START_MSG = <<-EOS
+Download and convert videos/audios from Youtube, Facebook, Instagram, etc.
+Use `audio` keyword after link to extract audio
+Use `nocaption` to remove title and URLs
+
+Contribute at https://github.com/brauliobo/media-downloader-bot
+
+Examples:
+https://youtu.be/FtGEzUKcAnE audio
+https://youtu.be/n8TOOEXsrLw audio nocaptions
+EOS
+
+  def send_help msg
+    send_message msg, START_MSG
+  end
+
   def react msg
     return if msg.text.blank?
+    return send_help msg if msg.text.starts_with? '/start'
+    return send_help msg if msg.text.starts_with? '/help'
+
     args = msg.text.split(/\s+/)
     url  = args.shift
     return unless URI.parse(url).is_a? URI::HTTP
