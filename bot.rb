@@ -43,13 +43,13 @@ class Bot
   START_MSG = <<-EOS
 Download and convert videos/audios from Youtube, Facebook, Instagram, etc.
 Use `audio` keyword after link to extract audio
-Use `nocaption` to remove title and URLs
+Use `nocaption` to remove title and URL
 
 Contribute at https://github.com/brauliobo/media-downloader-bot
 
 Examples:
 https://youtu.be/FtGEzUKcAnE audio
-https://youtu.be/n8TOOEXsrLw audio nocaptions
+https://youtu.be/n8TOOEXsrLw audio nocaption
 EOS
 
   def send_help msg
