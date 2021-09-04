@@ -23,6 +23,12 @@ class Bot
     def from_admin? msg
       msg.from.id == ADMIN_CHAT_ID
     end
+    def report_group? msg
+      msg.chat.id == REPORT_CHAT_ID
+    end
+    def in_group? msg
+      msg.from.id == msg.chat.id
+    end
 
     def edit_message msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', **params
       text = parse_text text, parse_mode: parse_mode
@@ -82,7 +88,7 @@ class Bot
       error << "#{he e.backtrace.join "\n"}</pre>"
 
       STDERR.puts "error: #{error}"
-      send_message msg, error, parse_mode: 'HTML', delete_both: 1.minutes
+      send_message msg, error, parse_mode: 'HTML', delete_both: 30.seconds
       send_message admin_msg, error, parse_mode: 'HTML' if ADMIN_CHAT_ID != msg.chat.id
     end
 
@@ -104,8 +110,8 @@ class Bot
       text
     end
 
-    MARKDOWN_RESERVED = %w[\# [ ] ( ) ~ ` # + - = | { } . ! < >]
-    MARKDOWN_FORMAT   = %w[* _]
+    MARKDOWN_RESERVED = %w[\# [ ] ( ) ~ # + - = | { } . ! < >]
+    MARKDOWN_FORMAT   = %w[* _ `]
     def me t
       MARKDOWN_RESERVED.each{ |c| t = t.gsub c, "\\#{c}" }
       t
