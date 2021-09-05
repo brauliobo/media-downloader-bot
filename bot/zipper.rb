@@ -6,7 +6,7 @@ module Zipper
       ext:  :mp4,
       opts: {width: 640, quality: 28},
       cmd:  <<-EOC
-ffmpeg -loglevel quiet -i %{infile} \
+nice ffmpeg -loglevel quiet -i %{infile} \
   -c:v libx264 -vf scale="%{width}:trunc(ow/a/2)*2" -crf %{quality} \
   -c:a libfdk_aac -profile:a aac_he_v2 -b:a 64k \
   -y %{outfile}
@@ -17,7 +17,7 @@ EOC
       ext:  :m4a,
       opts: {bitrate: 80},
       cmd:  <<-EOC
-ffmpeg -loglevel quiet -i %{infile} \
+nice ffmpeg -loglevel quiet -i %{infile} \
   -c:a libfdk_aac -profile:a aac_he_v2 -b:a %{bitrate}k \
   -vn -y %{outfile}
 EOC
