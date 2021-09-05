@@ -221,7 +221,7 @@ EOS
 
   def convert dir, info, fn_in, type, msg, resp
     fn_out  = "#{dir}/#{info.title} by .#{type.ext}"
-    fn_out  = "by #{info.uploader}" if info.uploader
+    fn_out += "by #{info.uploader}" if info.uploader
     fn_out += ".#{type.ext}"
     edit_message msg, resp.result.message_id, text: (resp.text << "\nConverting...")
     send "zip_#{type.name}", fn_in, fn_out
