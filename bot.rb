@@ -176,12 +176,14 @@ EOS
       return
     end
 
-    infos = Dir.glob "#{dir}/*.info.json"
+    infos   = Dir.glob "#{dir}/*.info.json"
     infos.map do |i|
-      info = SymMash.new JSON.parse File.read i
+      info  = SymMash.new JSON.parse File.read i
+      # glob instead as info._filename comes with the wrong extension when -x is used
+      fn_in = Dir.glob("#{dir}/#{File.basename info._filename, File.extname(info._filename)}*").first
 
       SymMash.new(
-        fn_in: "#{dir}/#{info._filename}",
+        fn_in: fn_in,
         info:  info,
         url:   if infos.size > 1 then info.webpage_url else url end,
       )
