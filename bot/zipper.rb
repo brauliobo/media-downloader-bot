@@ -4,7 +4,7 @@ module Zipper
     video: {
       name: :video,
       ext:  :mp4,
-      opts: {width: 720, quality: 30},
+      opts: {width: 640, quality: 28},
       cmd:  <<-EOC
 ffmpeg -loglevel quiet -i %{infile} \
   -c:v libx264 -vf scale="%{width}:trunc(ow/a/2)*2" -crf %{quality} \
