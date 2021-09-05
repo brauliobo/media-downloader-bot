@@ -4,5 +4,6 @@ require_relative '../bot'
 require 'pry'
 
 bot = Bot.new ENV['TOKEN']
+Thread.new{ bot.start }
 Pry.start bot
 
