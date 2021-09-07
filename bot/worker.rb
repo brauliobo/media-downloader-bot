@@ -15,8 +15,9 @@ class Bot::Worker
   attr_reader :bot
   attr_reader :msg, :args, :opts
   attr_reader :url
-  attr_reader :resp
   attr_reader :dir
+
+  attr_accessor :resp
 
   delegate_missing_to :bot
 
@@ -122,7 +123,7 @@ class Bot::Worker
     _o, e, st = Open3.capture3 cmd, chdir: dir
     if st != 0
       edit_message msg, resp.result.message_id, text: "Download failed:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
-      return
+      return @resp = nil
     end
 
     infos   = Dir.glob("#{dir}/*.info.json").sort_by{ |f| File.mtime f }
