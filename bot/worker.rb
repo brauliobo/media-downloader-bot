@@ -28,10 +28,10 @@ class Bot::Worker
   end
 
   def process
-    inputs = []
-
     Dir.mktmpdir "mdb-" do |dir|
-      @dir = dir
+      @dir   = dir
+      inputs = []
+
       if msg.text.present?
         @url  = args.shift
         return unless URI.parse(url).is_a? URI::HTTP
@@ -125,16 +125,20 @@ class Bot::Worker
       return
     end
 
-    infos   = Dir.glob "#{dir}/*.info.json"
-    infos.map do |i|
-      info  = SymMash.new JSON.parse File.read i
+    infos   = Dir.glob("#{dir}/*.info.json").sort_by{ |f| File.mtime f }
+    mult    = infos.size > 1
+    infos.map.with_index do |info, i|
+      info  = SymMash.new JSON.parse File.read info
       # glob instead as info._filename comes with the wrong extension when -x is used
       fn_in = Dir.glob("#{dir}/#{File.basename info._filename, File.extname(info._filename)}*").first
+
+      # number files
+      info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.nocaption
 
       SymMash.new(
         fn_in: fn_in,
         info:  info,
-        url:   if infos.size > 1 then info.webpage_url else url end,
+        url:   if mult then info.webpage_url else url end,
       )
     end
   end
@@ -168,6 +172,12 @@ class Bot::Worker
     Faraday::UploadIO.new im_out, 'image/jpeg'
   end
 
+  def skip_convert? type, probe, opts
+    stream = probe.streams.first
+    return true if type.name == :audio and stream.codec_name == 'aac' and stream.bit_rate.to_i/1000 < Types.audio.opts.bitrate
+    false
+  end
+
   def convert info, fn_in, type
     fn_out  = "#{dir}/#{info.title} by .#{type.ext}"
     fn_out += "by #{info.uploader}" if info.uploader
@@ -183,12 +193,6 @@ class Bot::Worker
     probe = `#{PROBE_CMD % {file: Shellwords.escape(file)}}`
     probe = JSON.parse probe if probe.present?
     probe = SymMash.new probe
-  end
-
-  def skip_convert? type, probe, opts
-    stream = probe.streams.first
-    return true if type.name == :audio and stream.codec_name == 'aac' and stream.bit_rate.to_i/1000 < Types.audio.opts.bitrate
-    false
   end
 
   def http
