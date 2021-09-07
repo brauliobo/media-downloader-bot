@@ -49,8 +49,11 @@ Use `nocaption` to remove title and URL
 Contribute at https://github.com/brauliobo/media-downloader-bot
 
 Examples:
-https://youtu.be/FtGEzUKcAnE audio
+https://youtu.be/FtGEzUKcAnE
 https://youtu.be/n8TOOEXsrLw audio nocaption
+https://www.instagram.com/p/CTAXxxODblP/
+https://web.facebook.com/groups/590968084832296/posts/920964005166034 audio
+https://soundcloud.com/br-ulio-bhavamitra/sets/didi-gunamrta nocaption nonumber
 EOS
 
   def send_help msg
