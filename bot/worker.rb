@@ -133,7 +133,7 @@ class Bot::Worker
       fn_in = Dir.glob("#{dir}/#{File.basename info._filename, File.extname(info._filename)}*").first
 
       # number files
-      info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.nocaption
+      info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.nocaption and !opts.nonumber
 
       SymMash.new(
         fn_in: fn_in,
