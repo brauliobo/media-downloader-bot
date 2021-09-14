@@ -57,9 +57,9 @@ class Bot::Worker
   def handle_input input, opts
     fn_in  = input.fn_in
     info   = input.info
-    probe  = probe_for fn_in
-    vstrea = probe&.streams&.find{ |s| s.codec_type == 'video' }
-    durat  = probe.format.duration.to_i
+    iprobe = probe_for fn_in
+    vstrea = iprobe&.streams&.find{ |s| s.codec_type == 'video' }
+    durat  = iprobe.format.duration.to_i
 
     mtype  = Rack::Mime.mime_type File.extname fn_in
     type   = if mtype.index 'video' then Types.video elsif mtype.index 'audio' then Types.audio end
@@ -74,10 +74,10 @@ class Bot::Worker
       return
     end
 
-    if skip_convert? type, probe, opts
+    if skip_convert? type, iprobe, opts
       fn_out = fn_in
     else
-      fn_out = convert info, fn_in, type
+      fn_out = convert info, fn_in, type: type, probe: iprobe
     end
     mbsize = File.size(fn_out) / 2**20
 
@@ -85,7 +85,7 @@ class Bot::Worker
     if type == Types.video and mbsize >= SIZE_MB_LIMIT
       edit_message msg, resp.result.message_id, text: (resp.text << MSG_VD_TOO_BIG)
       type   = Types.audio
-      fn_out = convert info, fn_in, type
+      fn_out = convert info, fn_in, type: type, probe: iprobe
       mbsize = File.size(fn_out) / 2**20
     end
     # still too big as audio...
@@ -99,6 +99,9 @@ class Bot::Worker
       text << "\nby #{e info.uploader}" if info.uploader
       text << "\n\n#{e input.url}" if input.url
     end
+
+    oprobe = probe_for fn_out
+    vstrea = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
 
     edit_message msg, resp.result.message_id, text: (resp.text << "\nSending...")
     fn_io = Faraday::UploadIO.new fn_out, mtype
@@ -179,12 +182,12 @@ class Bot::Worker
     false
   end
 
-  def convert info, fn_in, type
+  def convert info, fn_in, type:, probe:
     fn_out  = "#{dir}/#{info.title} by .#{type.ext}"
     fn_out += "by #{info.uploader}" if info.uploader
     fn_out += ".#{type.ext}"
     edit_message msg, resp.result.message_id, text: (resp.text << "\nConverting...")
-    send "zip_#{type.name}", fn_in, fn_out
+    send "zip_#{type.name}", fn_in, fn_out, probe: probe
     fn_out
   end
 

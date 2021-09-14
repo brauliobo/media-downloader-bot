@@ -5,10 +5,11 @@ module Zipper
       name: :video,
       ext:  :mp4,
       opts: {width: 640, quality: 30},
+      # aac_he_v2 doesn't work with instagram
       cmd:  <<-EOC
 nice ffmpeg -loglevel quiet -i %{infile} \
   -c:v libx264 -vf scale="%{width}:trunc(ow/a/2)*2" -crf %{quality} \
-  -c:a libfdk_aac -profile:a aac_he_v2 -b:a 64k \
+  -c:a libfdk_aac -profile:a aac_he -b:a 64k \
   -y %{outfile}
 EOC
     },
@@ -18,7 +19,7 @@ EOC
       opts: {bitrate: 80},
       cmd:  <<-EOC
 nice ffmpeg -loglevel quiet -i %{infile} \
-  -c:a libfdk_aac -profile:a aac_he_v2 -b:a %{bitrate}k \
+  -c:a libfdk_aac -profile:a aac_he -b:a %{bitrate}k \
   -vn -y %{outfile}
 EOC
 # Opus in Telegram Bots are considered voice messages
@@ -30,7 +31,9 @@ EOC
     },
   )
 
-  def zip_video infile, outfile, opts = Types.video.opts
+  def zip_video infile, outfile, opts = Types.video.opts, probe:
+    vstrea = probe.streams.find{ |s| s.codec_type == 'video' }
+    opts.width /= 2 if vstrea.width < vstrea.height
     system Types.video.cmd % {
       infile:  Shellwords.escape(infile),
       outfile: Shellwords.escape(outfile),
@@ -39,7 +42,7 @@ EOC
     }
   end
 
-  def zip_audio infile, outfile, opts = Types.audio.opts
+  def zip_audio infile, outfile, opts = Types.audio.opts, probe:
     system Types.audio.cmd % {
       infile:  Shellwords.escape(infile),
       outfile: Shellwords.escape(outfile),
