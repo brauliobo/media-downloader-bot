@@ -1,3 +1,5 @@
+require 'taglib'
+
 class Bot::Worker
 
   DURATION_LIMIT = 20
@@ -34,8 +36,8 @@ class Bot::Worker
       inputs = []
 
       if msg.text.present?
-        @url  = args.shift
-        return unless URI.parse(url).is_a? URI::HTTP
+        @url  = URI.parse args.shift
+        return unless url.is_a? URI::HTTP
         @resp = send_message msg, "Downloading..."
 
         inputs  = youtube_dl url, opts
@@ -103,6 +105,8 @@ class Bot::Worker
     oprobe = probe_for fn_out
     vstrea = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
 
+    tag fn_out, info
+
     edit_message msg, resp.result.message_id, text: (resp.text << "\nSending...")
     fn_io = Faraday::UploadIO.new fn_out, mtype
     send_message(msg, text,
@@ -112,17 +116,30 @@ class Bot::Worker
       width:       vstrea&.width,
       height:      vstrea&.height,
       title:       info.title,
+      performer:   info.uploader,
       thumb:       thumb(info, dir),
       supports_streaming: true,
     )
   end
 
-  DOWN_CMD  = "youtube-dl -4 --user-agent 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36' -f worst --write-info-json '%{url}'"
+  def tag fn, info
+    TagLib::FileRef.open fn do |f|
+      next if f.nil?
+      f.tag.title  = info.title
+      f.tag.artist = info.uploader
+      f.save
+    end
+  end
+
+  DOWN_CMD   = "youtube-dl -4 --write-info-json '%{url}'"
+  USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36'
 
   def youtube_dl url, opts
-    cmd  = DOWN_CMD % {url: url}
+    cmd  = DOWN_CMD % {url: url.to_s}
     cmd << " -o 'input-%(playlist_index)s.%(ext)s'"
     cmd << ' -x' if opts.audio
+    cmd << " --user-agent '#{USER_AGENT}'" unless url.host.index 'facebook'
+
     _o, e, st = Open3.capture3 cmd, chdir: dir
     if st != 0
       edit_message msg, resp.result.message_id, text: "Download failed:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
@@ -142,7 +159,7 @@ class Bot::Worker
       SymMash.new(
         fn_in: fn_in,
         info:  info,
-        url:   if mult then info.webpage_url else url end,
+        url:   if mult then info.webpage_url else url.to_s end,
       )
     end
   end
