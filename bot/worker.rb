@@ -191,6 +191,9 @@ class Bot::Worker
     system "convert #{im_in} -resize x320 -define jpeg:extent=190kb #{im_out}"
 
     Faraday::UploadIO.new im_out, 'image/jpeg'
+
+  rescue => e # continue on errors
+    report_error msg, e
   end
 
   def skip_convert? type, probe, opts
