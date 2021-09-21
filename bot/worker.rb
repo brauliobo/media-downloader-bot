@@ -2,17 +2,16 @@ require 'taglib'
 
 class Bot::Worker
 
-  DURATION_LIMIT = 20
-  SIZE_MB_LIMIT  = 50
+  include Zipper
 
-  MSG_TOO_LONG   = "\nVideo too long for #{SIZE_MB_LIMIT}MB Telegram Bot's limit, converting to audio..."
+  DURATION_THLD = 35
+
+  MSG_TOO_LONG   = "\nQuality is compromised due to video too long for #{SIZE_MB_LIMIT}MB Telegram Bot's limit"
   MSG_VD_TOO_BIG = "\nVideo over #{SIZE_MB_LIMIT}MB Telegram Bot's limit, converting to audio..."
   MSG_TOO_BIG    = "\nFile over #{SIZE_MB_LIMIT}MB Telegram Bot's limit"
 
   # missing mimes
   Rack::Mime::MIME_TYPES['.opus'] = 'audio/ogg'
-
-  include Zipper
 
   attr_reader :bot
   attr_reader :msg, :args, :opts
@@ -66,10 +65,8 @@ class Bot::Worker
     mtype  = Rack::Mime.mime_type File.extname fn_in
     type   = if mtype.index 'video' then Types.video elsif mtype.index 'audio' then Types.audio end
     type   = Types.audio if opts.audio
-    # current video compression is about 2mb per min
-    if type == Types.video and (durat / 60).seconds > DURATION_LIMIT.minutes
+    if type == Types.video and durat > DURATION_THLD.minutes.to_i
       edit_message msg, resp.result.message_id, text: (resp.text << MSG_TOO_LONG)
-      type = Types.audio
     end
     unless type
       edit_message msg, resp.result.message_id, text: "Unknown type for #{fn_in}"
