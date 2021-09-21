@@ -193,7 +193,8 @@ class Bot::Worker
     Faraday::UploadIO.new im_out, 'image/jpeg'
 
   rescue => e # continue on errors
-    report_error msg, e
+    report_error msg, e, delete: nil
+    nil
   end
 
   def skip_convert? type, probe, opts
