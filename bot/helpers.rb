@@ -20,6 +20,13 @@ class Bot
     ADMIN_CHAT_ID  = ENV['ADMIN_CHAT_ID']&.to_i
     REPORT_CHAT_ID = ENV['REPORT_CHAT_ID']&.to_i
 
+    def net_up?
+      Net::HTTP.new('www.google.com').head('/').kind_of? Net::HTTPOK
+    end
+    def wait_net_up
+      sleep 1 while !net_up?
+    end
+
     def from_admin? msg
       msg.from.id == ADMIN_CHAT_ID
     end
@@ -44,13 +51,6 @@ class Bot
       resp = SymMash.new JSON.parse e.response.body
       return if resp.description.match(/exactly the same as a current content/)
       raise
-    end
-
-    def help_cmd cmd
-      help = Command::LIST[cmd].help
-      return unless help
-      help = help.call if help.is_a? Proc
-      "*/#{e cmd.to_s}* #{help}"
     end
 
     def send_message msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **params

@@ -27,6 +27,7 @@ class Bot
   end
 
   def start
+    wait_net_up
     Telegram::Bot::Client.run @token, logger: Logger.new(STDOUT) do |bot|
       @bot = bot
 
