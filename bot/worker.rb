@@ -12,6 +12,7 @@ class Bot::Worker
 
   # missing mimes
   Rack::Mime::MIME_TYPES['.opus'] = 'audio/ogg'
+  Rack::Mime::MIME_TYPES['.mkv']  = 'video/x-matroska'
 
   attr_reader :bot
   attr_reader :msg, :args, :opts
@@ -135,7 +136,8 @@ class Bot::Worker
     cmd  = DOWN_CMD % {url: url.to_s}
     cmd << " -o 'input-%(playlist_index)s.%(ext)s'"
     cmd << ' -x' if opts.audio
-    cmd << " --user-agent '#{USER_AGENT}'" unless url.host.index 'facebook'
+    # user-agent can slowdown on youtube
+    #cmd << " --user-agent '#{USER_AGENT}'" unless url.host.index 'facebook'
 
     _o, e, st = Open3.capture3 cmd, chdir: dir
     if st != 0
