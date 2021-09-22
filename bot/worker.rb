@@ -121,7 +121,7 @@ class Bot::Worker
 
   def tag fn, info
     TagLib::FileRef.open fn do |f|
-      next if f.nil?
+      return if f&.tag&.nil?
       f.tag.title  = info.title
       f.tag.artist = info.uploader
       f.save
@@ -204,8 +204,13 @@ class Bot::Worker
     fn_out  = "#{dir}/#{info.title} by .#{type.ext}"
     fn_out += "by #{info.uploader}" if info.uploader
     fn_out += ".#{type.ext}"
+
     edit_message msg, resp.result.message_id, text: (resp.text << "\nConverting...")
-    send "zip_#{type.name}", fn_in, fn_out, probe: probe
+    o, e, st = send "zip_#{type.name}", fn_in, fn_out, probe: probe
+    if st != 0
+      edit_message msg, resp.result.message_id, text: (resp.text << "\nConvert failed: #{o}\n#{e}")
+    end
+
     fn_out
   end
 
