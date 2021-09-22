@@ -6,7 +6,6 @@ Dotenv.load! '.env'
 
 require 'tmpdir'
 require 'shellwords'
-require 'open3'
 require 'rack/mime'
 require 'mechanize'
 
