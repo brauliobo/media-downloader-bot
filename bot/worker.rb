@@ -122,7 +122,7 @@ class Bot::Worker
 
   def tag fn, info
     TagLib::FileRef.open fn do |f|
-      return if f&.tag&.nil?
+      return if f&.tag.nil?
       f.tag.title  = info.title
       f.tag.artist = info.uploader
       f.save
