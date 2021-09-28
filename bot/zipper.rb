@@ -36,7 +36,7 @@ EOC
     },
   )
 
-  def zip_video infile, outfile, opts = Types.video.opts, probe:
+  def zip_video infile, outfile, opts = Types.video.opts.deep_dup, probe:
     # portrait image
     vstrea = probe.streams.find{ |s| s.codec_type == 'video' }
     opts.width /= 2 if vstrea.width < vstrea.height
@@ -62,7 +62,7 @@ EOC
     Open3.capture3 cmd
   end
 
-  def zip_audio infile, outfile, opts = Types.audio.opts, probe:
+  def zip_audio infile, outfile, opts = Types.audio.opts.deep_dup, probe:
     cmd = Types.audio.cmd % {
       infile:  Shellwords.escape(infile),
       outfile: Shellwords.escape(outfile),
