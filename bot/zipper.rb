@@ -57,6 +57,8 @@ EOC
       maxrate: maxrate,
       bufsize: bufsize,
     }
+
+    binding.pry if ENV['PRY_ZIPPER']
     Open3.capture3 cmd
   end
 
