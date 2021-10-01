@@ -6,7 +6,7 @@ class Bot::Worker
 
   DURATION_THLD = 35
 
-  MSG_TOO_LONG   = "\nQuality is compromised due to video too long for #{SIZE_MB_LIMIT}MB Telegram Bot's limit"
+  MSG_TOO_LONG   = "\nQuality is compromised as the video is too long to fit the #{SIZE_MB_LIMIT}MB upload limit on Telegram Bots"
   MSG_VD_TOO_BIG = "\nVideo over #{SIZE_MB_LIMIT}MB Telegram Bot's limit, converting to audio..."
   MSG_TOO_BIG    = "\nFile over #{SIZE_MB_LIMIT}MB Telegram Bot's limit"
 
