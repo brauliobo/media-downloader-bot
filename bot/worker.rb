@@ -94,11 +94,12 @@ class Bot::Worker
       return
     end
 
-    unless opts.nocaption
+    text = ''
+    if opts.caption
       text  = "_#{e info.title}_"
       text << "\nby #{e info.uploader}" if info.uploader
-      text << "\n\n#{e input.url}" if input.url
     end
+    text << "\n\n#{e input.url}" if input.url
 
     oprobe = probe_for fn_out
     vstrea = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
@@ -153,7 +154,7 @@ class Bot::Worker
       fn_in = Dir.glob("#{dir}/#{File.basename info._filename, File.extname(info._filename)}*").first
 
       # number files
-      info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.nocaption and !opts.nonumber
+      info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.number
 
       SymMash.new(
         fn_in: fn_in,
