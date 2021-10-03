@@ -13,6 +13,7 @@ require 'pry'
 require_relative 'exts/sym_mash'
 require_relative 'bot/helpers'
 require_relative 'bot/zipper'
+require_relative 'bot/url_shortner'
 require_relative 'bot/worker'
 
 class Bot

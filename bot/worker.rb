@@ -156,10 +156,12 @@ class Bot::Worker
       # number files
       info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.number
 
+      url = if mult then info.webpage_url else url.to_s end
+      url = Bot::UrlShortner.shortify(info) || url
       SymMash.new(
         fn_in: fn_in,
         info:  info,
-        url:   if mult then info.webpage_url else url.to_s end,
+        url:   url,
       )
     end
   end
