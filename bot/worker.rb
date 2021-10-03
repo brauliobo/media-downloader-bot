@@ -95,7 +95,7 @@ class Bot::Worker
     end
 
     text = ''
-    if opts.caption
+    if opts.caption || type == Types.video
       text  = "_#{e info.title}_"
       text << "\nby #{e info.uploader}" if info.uploader
     end
