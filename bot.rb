@@ -8,7 +8,7 @@ require 'tmpdir'
 require 'shellwords'
 require 'rack/mime'
 require 'mechanize'
-require 'pry'
+require 'pry' rescue nil # fails with systemd
 
 require_relative 'exts/sym_mash'
 require_relative 'bot/helpers'
