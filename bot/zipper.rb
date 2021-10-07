@@ -12,7 +12,7 @@ module Zipper
       # aac_he_v2 doesn't work with instagram
       cmd:  <<-EOC
 nice ffmpeg -loglevel quiet -i %{infile} \
-  -c:v libx264 -vf scale="%{width}:trunc(ow/a/2)*2" -crf %{quality} \
+  -c:v libx264 -vf scale="%{width}:trunc(ow/a/2)*2%{vf}" -crf %{quality} \
     -maxrate:v %{maxrate} -bufsize %{bufsize} \
   -c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k \
   -y %{outfile}
@@ -36,10 +36,17 @@ EOC
     },
   )
 
-  def zip_video infile, outfile, opts = Types.video.opts.deep_dup, probe:
-    # portrait image
-    vstrea = probe.streams.find{ |s| s.codec_type == 'video' }
-    opts.width /= 2 if vstrea.width < vstrea.height
+  def zip_video infile, outfile, opts = SymMash.new, probe:
+    opts.reverse_merge! Types.video.opts.deep_dup
+
+    if not opts.vf&.index 'transpose'
+      # portrait image
+      vstrea = probe.streams.find{ |s| s.codec_type == 'video' }
+      opts.width /= 2 if vstrea.width < vstrea.height
+    end
+
+    vf = ",#{opts.vf}" if opts.vf.present?
+
     # max bitrate to fit SIZE_MB_LIMIT
     duration = probe.format.duration.to_i
     audsize  = (duration * opts.abrate/8) / 1000
@@ -56,13 +63,15 @@ EOC
       abrate:  opts.abrate,
       maxrate: maxrate,
       bufsize: bufsize,
+      vf:      vf,
     }
 
     binding.pry if ENV['PRY_ZIPPER']
     Open3.capture3 cmd
   end
 
-  def zip_audio infile, outfile, opts = Types.audio.opts.deep_dup, probe:
+  def zip_audio infile, outfile, opts = SymMash.new, probe:
+    opts.reverse_merge! Types.audio.opts.deep_dup
     cmd = Types.audio.cmd % {
       infile:  Shellwords.escape(infile),
       outfile: Shellwords.escape(outfile),

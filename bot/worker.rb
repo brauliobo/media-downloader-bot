@@ -27,7 +27,10 @@ class Bot::Worker
     @bot  = bot
     @msg  = msg
     @args = msg.text.to_s.split(/\s+/)
-    @opts = args.each.with_object(SymMash.new){ |a, h| h[a] = 1 }
+    @opts = args.each.with_object SymMash.new do |a, h|
+      k,v = a.split '=', 2
+      h[k] = v || 1
+    end
   end
 
   def process
@@ -95,7 +98,7 @@ class Bot::Worker
     end
 
     text = ''
-    if opts.caption || type == Types.video
+    if opts.caption or type == Types.video
       text  = "_#{e info.title}_"
       text << "\nby #{e info.uploader}" if info.uploader
     end
@@ -211,7 +214,7 @@ class Bot::Worker
     fn_out += ".#{type.ext}"
 
     edit_message msg, resp.result.message_id, text: (resp.text << "\nConverting...")
-    o, e, st = send "zip_#{type.name}", fn_in, fn_out, probe: probe
+    o, e, st = send "zip_#{type.name}", fn_in, fn_out, opts, probe: probe
     if st != 0
       edit_message msg, resp.result.message_id, text: (resp.text << "\nConvert failed: #{o}\n#{e}")
     end
