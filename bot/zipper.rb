@@ -38,12 +38,14 @@ EOC
 
   def zip_video infile, outfile, opts = SymMash.new, probe:
     opts.reverse_merge! Types.video.opts.deep_dup
+    vstrea = probe.streams.find{ |s| s.codec_type == 'video' }
 
-    if not opts.vf&.index 'transpose'
-      # portrait image
-      vstrea = probe.streams.find{ |s| s.codec_type == 'video' }
+    if opts.vf&.index 'transpose'
+    else # portrait image
       opts.width /= 2 if vstrea.width < vstrea.height
     end
+    # lower resolution
+    opts.width = vstrea.width if opts.width < vstrea.width
 
     vf = ",#{opts.vf}" if opts.vf.present?
 
