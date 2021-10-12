@@ -43,7 +43,7 @@ class Bot::Worker
         return unless url.is_a? URI::HTTP
         @resp = send_message msg, "Downloading..."
 
-        inputs  = youtube_dl url, opts
+        inputs  = url_download url, opts
         break if inputs.blank?
 
       elsif msg.audio.present? or msg.video.present?
@@ -133,11 +133,13 @@ class Bot::Worker
     end
   end
 
-  DOWN_CMD   = "youtube-dl -4 --write-info-json '%{url}'"
+  DOWN_BIN   = "yt-dlp"
+  DOWN_CMD   = "#{DOWN_BIN} --write-info-json '%{url}'"
   USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36'
 
-  def youtube_dl url, opts
+  def url_download url, opts
     cmd  = DOWN_CMD % {url: url.to_s}
+    cmd << " --cache-dir #{dir}"
     cmd << " -o 'input-%(playlist_index)s.%(ext)s'"
     cmd << ' -x' if opts.audio
     # user-agent can slowdown on youtube
