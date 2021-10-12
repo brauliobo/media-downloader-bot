@@ -134,7 +134,7 @@ class Bot::Worker
   end
 
   DOWN_BIN   = "yt-dlp"
-  DOWN_CMD   = "#{DOWN_BIN} --write-info-json '%{url}'"
+  DOWN_CMD   = "#{DOWN_BIN} --write-info-json --no-clean-infojson '%{url}'"
   USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36'
 
   def url_download url, opts
@@ -153,10 +153,12 @@ class Bot::Worker
 
     infos   = Dir.glob("#{dir}/*.info.json").sort_by{ |f| File.mtime f }
     mult    = infos.size > 1
-    infos.map.with_index do |info, i|
-      info  = SymMash.new JSON.parse File.read info
+    infos.map.with_index do |infof, i|
+      info  = SymMash.new JSON.parse File.read infof
       # glob instead as info._filename comes with the wrong extension when -x is used
-      fn_in = Dir.glob("#{dir}/#{File.basename info._filename, File.extname(info._filename)}*").first
+
+      fn    = info._filename
+      fn_in = Dir.glob("#{dir}/#{File.basename fn, File.extname(fn)}*").first
 
       # number files
       info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.number
