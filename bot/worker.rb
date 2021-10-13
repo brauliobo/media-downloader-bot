@@ -51,8 +51,11 @@ class Bot::Worker
         inputs << file_download(msg)
       end
 
-      inputs.each do |i|
+      inputs.api_peach do |i|
         handle_input i, opts
+      rescue => e
+        i.except! :info
+        report_error msg, e, context: i.inspect
       end
     end
 
@@ -110,8 +113,8 @@ class Bot::Worker
     tag fn_out, info
 
     edit_message msg, resp.result.message_id, text: (resp.text << "\nSending...")
-    fn_io = Faraday::UploadIO.new fn_out, mtype
-    send_message(msg, text,
+    fn_io   = Faraday::UploadIO.new fn_out, type.mime
+    ret_msg = input.ret_msg = {
       type:        type.name,
       type.name => fn_io,
       duration:    durat,
@@ -121,7 +124,8 @@ class Bot::Worker
       performer:   info.uploader,
       thumb:       thumb(info, dir),
       supports_streaming: true,
-    )
+    }
+    send_message msg, text, ret_msg
   end
 
   def tag fn, info
@@ -155,9 +159,8 @@ class Bot::Worker
     mult    = infos.size > 1
     infos.map.with_index do |infof, i|
       info  = SymMash.new JSON.parse File.read infof
-      # glob instead as info._filename comes with the wrong extension when -x is used
-
       fn    = info._filename
+      next unless fn # playlist info
       fn_in = Dir.glob("#{dir}/#{File.basename fn, File.extname(fn)}*").first
 
       # number files
@@ -167,8 +170,8 @@ class Bot::Worker
       url = Bot::UrlShortner.shortify(info) || url
       SymMash.new(
         fn_in: fn_in,
-        info:  info,
         url:   url,
+        info:  info,
       )
     end
   end
@@ -213,7 +216,7 @@ class Bot::Worker
   end
 
   def convert info, fn_in, type:, probe:
-    fn_out  = "#{dir}/#{info.title} by .#{type.ext}"
+    fn_out  = "#{dir}/#{info.title}"
     fn_out += "by #{info.uploader}" if info.uploader
     fn_out += ".#{type.ext}"
 

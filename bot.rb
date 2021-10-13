@@ -11,6 +11,8 @@ require 'mechanize'
 require 'pry' rescue nil # fails with systemd
 
 require_relative 'exts/sym_mash'
+require_relative 'exts/peach'
+
 require_relative 'bot/helpers'
 require_relative 'bot/zipper'
 require_relative 'bot/url_shortner'
@@ -22,6 +24,7 @@ class Bot
   delegate :api, to: :bot
 
   include Helpers
+  self.error_delete_time = nil
 
   def initialize token
     @token = token
