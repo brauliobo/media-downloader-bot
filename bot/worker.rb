@@ -159,6 +159,8 @@ class Bot::Worker
     mult    = infos.size > 1
     infos.map.with_index do |infof, i|
       info  = SymMash.new JSON.parse File.read infof
+      File.unlink infof # for the next Dir.glob to work properly
+
       fn    = info._filename
       next unless fn # playlist info
       # info._filename extension isn't accurate
@@ -195,6 +197,7 @@ class Bot::Worker
   end
 
   def thumb info, dir
+    info.thumbnails.reject!{ |t| t.url.index 'hqdefault' } # youtube processing image
     url    = info.thumbnails&.last&.url
     return unless url
     im_in  = "#{dir}/img"
