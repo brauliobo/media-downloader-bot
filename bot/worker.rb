@@ -201,7 +201,7 @@ class Bot::Worker
     url    = info.thumbnails&.last&.url
     return unless url
     im_in  = "#{dir}/img"
-    im_out = "#{dir}/out.jpg"
+    im_out = "#{dir}/#{info._filename}-thumb.jpg"
 
     File.write im_in, http.get(url).body
     system "convert #{im_in} -resize x320 -define jpeg:extent=190kb #{im_out}"
