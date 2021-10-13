@@ -161,6 +161,7 @@ class Bot::Worker
       info  = SymMash.new JSON.parse File.read infof
       fn    = info._filename
       next unless fn # playlist info
+      # info._filename extension isn't accurate
       fn_in = Dir.glob("#{dir}/#{File.basename fn, File.extname(fn)}*").first
 
       # number files
@@ -217,8 +218,9 @@ class Bot::Worker
 
   def convert info, fn_in, type:, probe:
     fn_out  = "#{dir}/#{info.title}"
-    fn_out += "by #{info.uploader}" if info.uploader
+    fn_out += " by #{info.uploader}" if info.uploader
     fn_out += ".#{type.ext}"
+    fn_out.gsub! '"', '' # Telegram doesn't accept "
 
     edit_message msg, resp.result.message_id, text: (resp.text << "\nConverting...")
     o, e, st = send "zip_#{type.name}", fn_in, fn_out, opts, probe: probe
