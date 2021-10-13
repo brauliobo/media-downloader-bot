@@ -206,7 +206,7 @@ class Bot::Worker
     Faraday::UploadIO.new im_out, 'image/jpeg'
 
   rescue => e # continue on errors
-    report_error msg, e, delete: nil
+    report_error msg, e
     nil
   end
 
