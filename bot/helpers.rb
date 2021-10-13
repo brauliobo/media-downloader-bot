@@ -73,6 +73,9 @@ class Bot
       delete_message msg, msg.message_id, wait: delete_both if delete_both
 
       resp
+    rescue => e
+      binding.pry if ENV['PRY_SEND_MESSAGE']
+      raise
     end
 
     def delete_message msg, id, wait: 30.seconds
