@@ -140,12 +140,17 @@ class Bot::Worker
   DOWN_BIN   = "yt-dlp"
   DOWN_CMD   = "#{DOWN_BIN} --write-info-json --no-clean-infojson '%{url}'"
   USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36'
+  DOWN_OPTS = %i[referer]
 
   def url_download url, opts
     cmd  = DOWN_CMD % {url: url.to_s}
     cmd << " --cache-dir #{dir}"
     cmd << " -o 'input-%(playlist_index)s.%(ext)s'"
     cmd << ' -x' if opts.audio
+    opts.slice(*DOWN_OPTS).each do |k,v|
+      v.gsub! "'", "\'"
+      cmd << " --#{k} '#{v}'"
+    end
     # user-agent can slowdown on youtube
     #cmd << " --user-agent '#{USER_AGENT}'" unless url.host.index 'facebook'
 
