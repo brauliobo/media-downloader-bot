@@ -9,8 +9,9 @@ User=daemon
 WorkingDirectory=/home/braulio/Projects/media-downloader-bot
 ExecStart=/home/braulio/.rvm/wrappers/ruby-2.5.3/bundle exec bin/bot
 Environment="TOKEN=xxx"
-Restart=on-failure
+Restart=always
 RestartSec=1
+StartLimitInterval=0
 
 [Install]
 WantedBy=multi-user.target
