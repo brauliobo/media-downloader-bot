@@ -9,7 +9,7 @@ module Zipper
       name: :video,
       ext:  :mp4,
       mime: 'video/mp4',
-      opts: {width: 640, quality: 28, abrate: 64},
+      opts: {width: 640, quality: 30, abrate: 64},
       # aac_he_v2 doesn't work with instagram
       cmd:  <<-EOC
 nice ffmpeg -loglevel quiet -i %{infile} \
