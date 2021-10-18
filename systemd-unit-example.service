@@ -4,7 +4,7 @@ After=network-online.target
 Wants=network-online.target systemd-networkd-wait-online.service
 
 [Service]
-CPUQuota=50%
+CPUQuota=600%
 User=daemon
 WorkingDirectory=/home/braulio/Projects/media-downloader-bot
 ExecStart=/home/braulio/.rvm/wrappers/ruby-2.5.3/bundle exec bin/bot
