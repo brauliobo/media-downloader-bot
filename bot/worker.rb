@@ -56,6 +56,9 @@ class Bot::Worker
       rescue => e
         input_error e, i
       end
+
+      inputs.reverse! if opts.reverse
+
       inputs.each do |i|
         upload i
       rescue => e
