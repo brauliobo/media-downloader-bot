@@ -54,12 +54,21 @@ class Bot::Worker
       inputs.api_peach do |i|
         handle_input i, opts
       rescue => e
-        i.except! :info
-        report_error msg, e, context: i.inspect
+        input_error e, i
+      end
+      inputs.each do |i|
+        upload i
+      rescue => e
+        input_error e, i
       end
     end
 
     @resp
+  end
+
+  def input_error e, i
+    i.except! :info
+    report_error msg, e, context: i.inspect
   end
 
   def handle_input input, opts
@@ -100,6 +109,20 @@ class Bot::Worker
       return
     end
 
+    tag fn_out, info
+
+    input.fn_out = fn_out
+    input.durat  = durat
+    input.type   = type
+    input
+  end
+
+  def upload input
+    fn_out = input.fn_out
+    type   = input.type
+    info   = input.info
+    durat  = input.durat
+
     text = ''
     if opts.caption or type == Types.video
       text  = "_#{e info.title}_"
@@ -109,8 +132,6 @@ class Bot::Worker
 
     oprobe = probe_for fn_out
     vstrea = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
-
-    tag fn_out, info
 
     edit_message msg, resp.result.message_id, text: (resp.text << "\nSending...")
     fn_io   = Faraday::UploadIO.new fn_out, type.mime
@@ -181,7 +202,7 @@ class Bot::Worker
         url:   url,
         info:  info,
       )
-    end
+    end.compact
   end
 
   def file_download msg
