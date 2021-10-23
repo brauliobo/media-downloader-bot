@@ -53,7 +53,7 @@ Options:
 - Use `caption` to put title and uploader
 - Use `number` to add the number for each file in playlists
 
-Contribute at https://github.com/brauliobo/media-downloader-bot
+Report issues at https://github.com/brauliobo/media-downloader-bot/issues/new
 
 Examples:
 https://youtu.be/FtGEzUKcAnE
