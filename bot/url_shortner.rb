@@ -8,8 +8,14 @@ class Bot
     )
 
     def self.shortify info
-      return unless site = SITES[info.extractor_key]
-      site.call info
+      url = info.url.dup
+      url.gsub! /^https?:\/\//, ''
+      url.gsub! /^www\./, ''
+
+      return url unless site = SITES[info.extractor_key]
+
+      url = site.call info
+      url
     end
 
   end
