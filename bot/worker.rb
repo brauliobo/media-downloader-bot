@@ -230,6 +230,7 @@ class Bot::Worker
 
   def thumb info, dir
     info.thumbnails.reject!{ |t| t.url.index 'default' } # youtube processing image
+    info.thumbnails.reject!{ |t| t.url.index 'hq' } # youtube processing image
     url    = info.thumbnails&.last&.url
     return unless url
     im_in  = "#{dir}/img"
