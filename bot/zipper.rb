@@ -12,7 +12,7 @@ module Zipper
       opts: {width: 640, quality: 30, abrate: 64},
       # aac_he_v2 doesn't work with instagram
       cmd:  <<-EOC
-nice ffmpeg -loglevel quiet -i %{infile} \
+nice ffmpeg -loglevel error -i %{infile} \
   -c:v libx264 -vf scale="%{width}:trunc(ow/a/2)*2%{vf}" -crf %{quality} \
     -maxrate:v %{maxrate} -bufsize %{bufsize} \
   -c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k \
@@ -25,7 +25,7 @@ EOC
       mime: 'audio/aac',
       opts: {bitrate: 80},
       cmd:  <<-EOC
-nice ffmpeg -loglevel quiet -i %{infile} \
+nice ffmpeg -loglevel error -i %{infile} \
   -c:a libfdk_aac -profile:a aac_he -b:a %{bitrate}k \
   -vn -y %{outfile}
 EOC
@@ -60,8 +60,8 @@ EOC
     maxrate  = "#{maxrate}k"
 
     cmd = Types.video.cmd % {
-      infile:  Shellwords.escape(infile),
-      outfile: Shellwords.escape(outfile),
+      infile:  escape(infile),
+      outfile: escape(outfile),
       width:   opts.width,
       quality: opts.quality,
       abrate:  opts.abrate,
@@ -77,11 +77,15 @@ EOC
   def zip_audio infile, outfile, opts = SymMash.new, probe:
     opts.reverse_merge! Types.audio.opts.deep_dup
     cmd = Types.audio.cmd % {
-      infile:  Shellwords.escape(infile),
-      outfile: Shellwords.escape(outfile),
+      infile:  escape(infile),
+      outfile: escape(outfile),
       bitrate: opts.bitrate,
     }
     Open3.capture3 cmd
+  end
+
+  def escape f
+    Shellwords.escape f
   end
 
 end

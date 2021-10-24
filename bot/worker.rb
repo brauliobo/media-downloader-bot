@@ -51,8 +51,10 @@ class Bot::Worker
         inputs << file_download(msg)
       end
 
-      inputs.api_peach do |i|
-        handle_input i, opts
+      inputs.api_peach.select! do |i|
+        ni = handle_input i, opts
+        @resp = nil unless ni
+        ni
       rescue => e
         input_error e, i
       end
@@ -70,7 +72,7 @@ class Bot::Worker
   end
 
   def input_error e, i
-    i.except! :info
+    i&.except! :info
     report_error msg, e, context: i.inspect
   end
 
@@ -96,6 +98,7 @@ class Bot::Worker
       fn_out = fn_in
     else
       fn_out = convert info, fn_in, type: type, probe: iprobe
+      return unless fn_out
     end
     mbsize = File.size(fn_out) / 2**20
 
@@ -181,7 +184,7 @@ class Bot::Worker
     _o, e, st = Open3.capture3 cmd, chdir: dir
     if st != 0
       edit_message msg, resp.result.message_id, text: "Download failed:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
-      return @resp = nil
+      return
     end
 
     infos   = Dir.glob("#{dir}/*.info.json").sort_by{ |f| File.mtime f }
@@ -198,7 +201,7 @@ class Bot::Worker
       # number files
       info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.number
 
-      url = if mult then info.webpage_url else url.to_s end
+      url = info.url = if mult then info.webpage_url else url.to_s end
       url = Bot::UrlShortner.shortify(info) || url
       SymMash.new(
         fn_in: fn_in,
@@ -226,7 +229,7 @@ class Bot::Worker
   end
 
   def thumb info, dir
-    info.thumbnails.reject!{ |t| t.url.index 'hqdefault' } # youtube processing image
+    info.thumbnails.reject!{ |t| t.url.index 'default' } # youtube processing image
     url    = info.thumbnails&.last&.url
     return unless url
     im_in  = "#{dir}/img"
@@ -249,15 +252,18 @@ class Bot::Worker
   end
 
   def convert info, fn_in, type:, probe:
-    fn_out  = "#{dir}/#{info.title}"
-    fn_out += " by #{info.uploader}" if info.uploader
-    fn_out += ".#{type.ext}"
+    fn_out  = info.title.dup
+    fn_out << " by #{info.uploader}" if info.uploader
+    fn_out << ".#{type.ext}"
     fn_out.gsub! '"', '' # Telegram doesn't accept "
+    fn_out.gsub! '/', ', ' # not escaped by shellwords
+    fn_out  = "#{dir}/#{fn_out}"
 
     edit_message msg, resp.result.message_id, text: (resp.text << "\nConverting...")
     o, e, st = send "zip_#{type.name}", fn_in, fn_out, opts, probe: probe
     if st != 0
       edit_message msg, resp.result.message_id, text: (resp.text << "\nConvert failed: #{o}\n#{e}")
+      return
     end
 
     fn_out
