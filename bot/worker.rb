@@ -205,7 +205,6 @@ class Bot::Worker
       # number files
       info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.number
 
-      require'pry';binding.pry
       url = info.url = if mult then info.webpage_url else url.to_s end
       url = Bot::UrlShortner.shortify(info) || url
       SymMash.new(
@@ -236,9 +235,7 @@ class Bot::Worker
   def thumb info, dir
     return if info.thumbnails.blank?
 
-    info.thumbnails.reject!{ |t| t.url.index 'default' } # youtube processing image
-    info.thumbnails.reject!{ |t| t.url.index 'hq' } # youtube processing image
-    url    = info.thumbnails&.last&.url
+    url    = info.thumbnails.first.url
     return unless url
     im_in  = "#{dir}/img"
     im_out = "#{dir}/#{info._filename}-thumb.jpg"
