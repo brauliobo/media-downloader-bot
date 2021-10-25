@@ -187,20 +187,25 @@ class Bot::Worker
       return
     end
 
-    infos   = Dir.glob("#{dir}/*.info.json").sort_by{ |f| File.mtime f }
-    mult    = infos.size > 1
-    infos.map.with_index do |infof, i|
-      info  = SymMash.new JSON.parse File.read infof
+    infos  = Dir.glob("#{dir}/*.info.json").sort_by{ |f| File.mtime f }
+    infos.map! do |infof|
+      info = SymMash.new JSON.parse File.read infof
       File.unlink infof # for the next Dir.glob to work properly
 
+      next unless info._filename # playlist info
+      info
+    end.compact!
+    mult   = infos.size > 1
+
+    infos.map.with_index do |info, i|
       fn    = info._filename
-      next unless fn # playlist info
       # info._filename extension isn't accurate
       fn_in = Dir.glob("#{dir}/#{File.basename fn, File.extname(fn)}*").first
 
       # number files
       info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.number
 
+      require'pry';binding.pry
       url = info.url = if mult then info.webpage_url else url.to_s end
       url = Bot::UrlShortner.shortify(info) || url
       SymMash.new(
@@ -229,6 +234,8 @@ class Bot::Worker
   end
 
   def thumb info, dir
+    return if info.thumbnails.blank?
+
     info.thumbnails.reject!{ |t| t.url.index 'default' } # youtube processing image
     info.thumbnails.reject!{ |t| t.url.index 'hq' } # youtube processing image
     url    = info.thumbnails&.last&.url
