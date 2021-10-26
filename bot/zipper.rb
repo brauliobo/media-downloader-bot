@@ -12,7 +12,7 @@ module Zipper
       opts: {width: 640, quality: 30, abrate: 64},
       # aac_he_v2 doesn't work with instagram
       cmd:  <<-EOC
-nice ffmpeg -loglevel error -i %{infile} \
+nice ffmpeg -threads 12 -loglevel error -i %{infile} \
   -c:v libx264 -vf scale="%{width}:trunc(ow/a/2)*2%{vf}" -crf %{quality} \
     -maxrate:v %{maxrate} -bufsize %{bufsize} \
   -c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k \
