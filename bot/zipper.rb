@@ -38,16 +38,21 @@ EOC
     },
   )
 
-  def zip_video infile, outfile, opts = SymMash.new, probe:
+  def zip_video infile, outfile, probe:, opts: SymMash.new
     opts.reverse_merge! Types.video.opts.deep_dup
-    vstrea = probe.streams.find{ |s| s.codec_type == 'video' }
 
+    # convert input
+    opts.width   = opts.width.to_i
+    opts.quality = opts.quality.to_i
+    opts.abrate  = opts.abrate.to_i
+
+    vstrea = probe.streams.find{ |s| s.codec_type == 'video' }
     if opts.vf&.index 'transpose'
     else # portrait image
       opts.width /= 2 if vstrea.width < vstrea.height
     end
     # lower resolution
-    opts.width = vstrea.width if opts.width < vstrea.width
+    opts.width = vstrea.width if vstrea.width < opts.width
 
     vf = ",#{opts.vf}" if opts.vf.present?
 
@@ -74,7 +79,7 @@ EOC
     Open3.capture3 cmd
   end
 
-  def zip_audio infile, outfile, opts = SymMash.new, probe:
+  def zip_audio infile, outfile, probe:, opts: SymMash.new
     opts.reverse_merge! Types.audio.opts.deep_dup
     cmd = Types.audio.cmd % {
       infile:  escape(infile),
