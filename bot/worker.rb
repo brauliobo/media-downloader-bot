@@ -4,11 +4,14 @@ class Bot::Worker
 
   include Zipper
 
-  DURATION_THLD = 35
+  VID_DURATION_THLD = 35
+  AUD_DURATION_THLD = 80
 
-  MSG_TOO_LONG   = "\nQuality is compromised as the video is too long to fit the #{SIZE_MB_LIMIT}MB upload limit on Telegram Bots"
-  MSG_VD_TOO_BIG = "\nVideo over #{SIZE_MB_LIMIT}MB Telegram Bot's limit, converting to audio..."
-  MSG_TOO_BIG    = "\nFile over #{SIZE_MB_LIMIT}MB Telegram Bot's limit"
+  VID_TOO_LONG   = "\nQuality is compromised as the video is too long to fit the #{SIZE_MB_LIMIT}MB upload limit on Telegram Bots"
+  AUD_TOO_LONG   = "\nQuality is compromised as the audio is too long to fit the #{SIZE_MB_LIMIT}MB upload limit on Telegram Bots"
+
+  VID_TOO_BIG = "\nVideo over #{SIZE_MB_LIMIT}MB Telegram Bot's limit, converting to audio..."
+  TOO_BIG     = "\nFile over #{SIZE_MB_LIMIT}MB Telegram Bot's limit"
 
   # missing mimes
   Rack::Mime::MIME_TYPES['.opus'] = 'audio/ogg'
@@ -86,12 +89,19 @@ class Bot::Worker
     mtype  = Rack::Mime.mime_type File.extname fn_in
     type   = if mtype.index 'video' then Types.video elsif mtype.index 'audio' then Types.audio end
     type   = Types.audio if opts.audio
-    if type == Types.video and durat > DURATION_THLD.minutes.to_i
-      edit_message msg, resp.result.message_id, text: (resp.text << MSG_TOO_LONG)
-    end
     unless type
       edit_message msg, resp.result.message_id, text: "Unknown type for #{fn_in}"
       return
+    end
+
+    # FIXME: specify different levels depending on length
+    if type == Types.video and durat > VID_DURATION_THLD.minutes.to_i
+      opts.width = 480
+      edit_message msg, resp.result.message_id, text: (resp.text << VID_TOO_LONG)
+    end
+    if type == Types.audio and durat > AUD_DURATION_THLD.minutes.to_i
+      opts.bitrate = 64
+      edit_message msg, resp.result.message_id, text: (resp.text << AUD_TOO_LONG)
     end
 
     if skip_convert? type, iprobe, opts
@@ -100,18 +110,18 @@ class Bot::Worker
       fn_out = convert info, fn_in, type: type, probe: iprobe
       return unless fn_out
     end
-    mbsize = File.size(fn_out) / 2**20
 
-    # duration check above can fail, fallback to size check
+    # check telegram bot's upload limit
+    mbsize = File.size(fn_out) / 2**20
     if type == Types.video and mbsize >= SIZE_MB_LIMIT
-      edit_message msg, resp.result.message_id, text: (resp.text << MSG_VD_TOO_BIG)
+      edit_message msg, resp.result.message_id, text: (resp.text << VID_TOO_BIG)
       type   = Types.audio
       fn_out = convert info, fn_in, type: type, probe: iprobe
       mbsize = File.size(fn_out) / 2**20
     end
     # still too big as audio...
     if mbsize >= SIZE_MB_LIMIT
-      edit_message msg, resp.result.message_id, text: (resp.text << MSG_TOO_BIG)
+      edit_message msg, resp.result.message_id, text: (resp.text << TOO_BIG)
       return
     end
 
@@ -265,7 +275,7 @@ class Bot::Worker
     fn_out  = "#{dir}/#{fn_out}"
 
     edit_message msg, resp.result.message_id, text: (resp.text << "\nConverting...")
-    o, e, st = send "zip_#{type.name}", fn_in, fn_out, opts, probe: probe
+    o, e, st = send "zip_#{type.name}", fn_in, fn_out, opts: opts, probe: probe
     if st != 0
       edit_message msg, resp.result.message_id, text: (resp.text << "\nConvert failed: #{o}\n#{e}")
       return
