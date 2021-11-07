@@ -44,17 +44,17 @@ class Bot::Worker
       if msg.text.present?
         @url  = URI.parse args.shift
         return unless url.is_a? URI::HTTP
-        @resp = send_message msg, "Downloading..."
+        @resp = send_message msg, me("Downloading...")
 
         inputs  = url_download url, opts
         break if inputs.blank?
 
       elsif msg.audio.present? or msg.video.present?
-        @resp = send_message msg, "Downloading..."
+        @resp = send_message msg, me("Downloading...")
         inputs << file_download(msg)
       end
 
-      inputs.api_peach.select! do |i|
+      inputs.api_peach(:select!) do |i|
         ni = handle_input i, opts
         @resp = nil unless ni
         ni
@@ -90,18 +90,18 @@ class Bot::Worker
     type   = if mtype.index 'video' then Types.video elsif mtype.index 'audio' then Types.audio end
     type   = Types.audio if opts.audio
     unless type
-      edit_message msg, resp.result.message_id, text: "Unknown type for #{fn_in}"
+      edit_message msg, resp.result.message_id, text: me("Unknown type for #{fn_in}")
       return
     end
 
     # FIXME: specify different levels depending on length
     if type == Types.video and durat > VID_DURATION_THLD.minutes.to_i
       opts.width = 480
-      edit_message msg, resp.result.message_id, text: (resp.text << VID_TOO_LONG)
+      edit_message msg, resp.result.message_id, text: (resp.text << me(VID_TOO_LONG))
     end
     if type == Types.audio and durat > AUD_DURATION_THLD.minutes.to_i
       opts.bitrate = 64
-      edit_message msg, resp.result.message_id, text: (resp.text << AUD_TOO_LONG)
+      edit_message msg, resp.result.message_id, text: (resp.text << me(AUD_TOO_LONG))
     end
 
     if skip_convert? type, iprobe, opts
@@ -114,14 +114,14 @@ class Bot::Worker
     # check telegram bot's upload limit
     mbsize = File.size(fn_out) / 2**20
     if type == Types.video and mbsize >= SIZE_MB_LIMIT
-      edit_message msg, resp.result.message_id, text: (resp.text << VID_TOO_BIG)
+      edit_message msg, resp.result.message_id, text: (resp.text << me(VID_TOO_BIG))
       type   = Types.audio
       fn_out = convert info, fn_in, type: type, probe: iprobe
       mbsize = File.size(fn_out) / 2**20
     end
     # still too big as audio...
     if mbsize >= SIZE_MB_LIMIT
-      edit_message msg, resp.result.message_id, text: (resp.text << TOO_BIG)
+      edit_message msg, resp.result.message_id, text: (resp.text << me(TOO_BIG))
       return
     end
 
@@ -141,15 +141,15 @@ class Bot::Worker
 
     text = ''
     if opts.caption or type == Types.video
-      text  = "_#{e info.title}_"
-      text << "\nby #{e info.uploader}" if info.uploader
+      text  = "_#{me info.title}_"
+      text << "\nby #{me info.uploader}" if info.uploader
     end
-    text << "\n\n#{e input.url}" if input.url
+    text << "\n\n#{me input.url}" if input.url
 
     oprobe = probe_for fn_out
     vstrea = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
 
-    edit_message msg, resp.result.message_id, text: (resp.text << "\nSending...")
+    edit_message msg, resp.result.message_id, text: (resp.text << me("\nSending..."))
     fn_io   = Faraday::UploadIO.new fn_out, type.mime
     ret_msg = input.ret_msg = {
       type:        type.name,
@@ -274,10 +274,10 @@ class Bot::Worker
     fn_out.gsub! '/', ', ' # not escaped by shellwords
     fn_out  = "#{dir}/#{fn_out}"
 
-    edit_message msg, resp.result.message_id, text: (resp.text << "\nConverting...")
+    edit_message msg, resp.result.message_id, text: (resp.text << me("\nConverting..."))
     o, e, st = send "zip_#{type.name}", fn_in, fn_out, opts: opts, probe: probe
     if st != 0
-      edit_message msg, resp.result.message_id, text: (resp.text << "\nConvert failed: #{o}\n#{e}")
+      edit_message msg, resp.result.message_id, text: (resp.text << me("\nConvert failed: #{o}\n#{e}"))
       return
     end
 
