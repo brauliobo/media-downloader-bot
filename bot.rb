@@ -24,7 +24,7 @@ class Bot
   delegate :api, to: :bot
 
   include Helpers
-  self.error_delete_time = nil
+  self.error_delete_time = 3.hours
 
   def initialize token
     @token = token
@@ -64,7 +64,7 @@ https://soundcloud.com/br-ulio-bhavamitra/sets/didi-gunamrta caption number
 EOS
 
   def send_help msg
-    send_message msg, START_MSG
+    send_message msg, mnfe(START_MSG)
   end
 
   def react msg
