@@ -44,24 +44,23 @@ class Bot::Worker
       if msg.text.present?
         @url  = URI.parse args.shift
         return unless url.is_a? URI::HTTP
-        @resp = send_message msg, me("Downloading...")
+        @resp = send_message msg, me('Downloading...')
 
         inputs  = url_download url, opts
         break if inputs.blank?
 
       elsif msg.audio.present? or msg.video.present?
-        @resp = send_message msg, me("Downloading...")
+        @resp = send_message msg, me('Downloading...')
         inputs << file_download(msg)
       end
 
-      inputs.api_peach(:select!) do |i|
-        ni = handle_input i, opts
-        @resp = nil unless ni
-        ni
+      inputs.api_peach do |i|
+        handle_input i, opts
       rescue => e
         input_error e, i
       end
 
+      inputs.select!{ |i| i.fn_out }
       inputs.reverse! if opts.reverse
 
       inputs.each do |i|
