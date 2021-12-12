@@ -143,6 +143,7 @@ class Bot::Worker
       text  = "_#{me info.title}_"
       text << "\nby #{me info.uploader}" if info.uploader
     end
+    text << "\n\n_#{me info.description}_" if opts.description and info.description
     text << "\n\n#{me input.url}" if input.url
 
     oprobe = probe_for fn_out
