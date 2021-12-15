@@ -46,8 +46,8 @@ class Bot::Worker
         return unless url.is_a? URI::HTTP
         @resp = send_message msg, me('Downloading...')
 
-        inputs  = url_download url, opts
-        break if inputs.blank?
+        inputs = url_download url, opts
+        return @resp = nil if inputs.blank?
 
       elsif msg.audio.present? or msg.video.present?
         @resp = send_message msg, me('Downloading...')
