@@ -194,6 +194,7 @@ class Bot::Worker
     _o, e, st = Open3.capture3 cmd, chdir: dir
     if st != 0
       edit_message msg, resp.result.message_id, text: "Download failed:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
+      admin_report msg, e, status: 'Download failed'
       return
     end
 
@@ -278,6 +279,7 @@ class Bot::Worker
     o, e, st = send "zip_#{type.name}", fn_in, fn_out, opts: opts, probe: probe
     if st != 0
       edit_message msg, resp.result.message_id, text: (resp.text << me("\nConvert failed: #{o}\n#{e}"))
+      admin_report msg, "#{o}\n#{e}", status: 'Convert failed'
       return
     end
 
