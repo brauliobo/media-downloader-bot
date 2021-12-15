@@ -88,15 +88,24 @@ class Bot
 
     def report_error msg, e, context: nil
       return unless msg
-      msg_ct = if msg.respond_to? :text then msg.text else msg.data end
-      error  = "<b>msg</b>: #{he msg_ct}"
+      error  = ''
       error << "\n\n<b>context</b>: #{he context}" if context
       error << "\n\n<b>error</b>: <pre>#{he e.message}\n"
       error << "#{he e.backtrace.join "\n"}</pre>"
 
       STDERR.puts "error: #{error}"
       send_message msg, error, parse_mode: 'HTML', delete_both: error_delete_time
-      send_message admin_msg, error, parse_mode: 'HTML' if ADMIN_CHAT_ID != msg.chat.id
+      admin_report msg, error
+    end
+
+    def admin_report msg, _error, status: 'error'
+      return if ADMIN_CHAT_ID != msg.chat.id
+
+      msg_ct = if msg.respond_to? :text then msg.text else msg.data end
+      error  = "<b>msg</b>: #{he msg_ct}"
+      error << "\n\n<b>#{status}</b>: <pre>#{he _error}\n"
+
+      send_message admin_msg, error, parse_mode: 'HTML'
     end
 
     def fake_msg chat_id
