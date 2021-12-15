@@ -103,7 +103,7 @@ class Bot
 
       msg_ct = if msg.respond_to? :text then msg.text else msg.data end
       error  = "<b>msg</b>: #{he msg_ct}"
-      error << "\n\n<b>#{status}</b>: <pre>#{he _error}\n"
+      error << "\n\n<b>#{status}</b>: <pre>#{he _error}</pre>\n"
 
       send_message admin_msg, error, parse_mode: 'HTML'
     end
