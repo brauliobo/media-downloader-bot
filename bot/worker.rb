@@ -7,11 +7,10 @@ class Bot::Worker
   VID_DURATION_THLD = 35
   AUD_DURATION_THLD = 80
 
-  VID_TOO_LONG   = "\nQuality is compromised as the video is too long to fit the #{SIZE_MB_LIMIT}MB upload limit on Telegram Bots"
-  AUD_TOO_LONG   = "\nQuality is compromised as the audio is too long to fit the #{SIZE_MB_LIMIT}MB upload limit on Telegram Bots"
-
-  VID_TOO_BIG = "\nVideo over #{SIZE_MB_LIMIT}MB Telegram Bot's limit, converting to audio..."
-  TOO_BIG     = "\nFile over #{SIZE_MB_LIMIT}MB Telegram Bot's limit"
+  VID_TOO_LONG = "\nQuality is compromised as the video is too long to fit the #{SIZE_MB_LIMIT}MB upload limit on Telegram Bots"
+  AUD_TOO_LONG = "\nQuality is compromised as the audio is too long to fit the #{SIZE_MB_LIMIT}MB upload limit on Telegram Bots"
+  VID_TOO_BIG  = "\nVideo over #{SIZE_MB_LIMIT}MB Telegram Bot's limit, converting to audio..."
+  TOO_BIG      = "\nFile over #{SIZE_MB_LIMIT}MB Telegram Bot's limit"
 
   # missing mimes
   Rack::Mime::MIME_TYPES['.opus'] = 'audio/ogg'
@@ -82,7 +81,6 @@ class Bot::Worker
     fn_in  = input.fn_in
     info   = input.info
     iprobe = probe_for fn_in
-    vstrea = iprobe&.streams&.find{ |s| s.codec_type == 'video' }
     durat  = iprobe.format.duration.to_i
 
     mtype  = Rack::Mime.mime_type File.extname fn_in
@@ -270,6 +268,7 @@ class Bot::Worker
   def convert info, fn_in, type:, probe:
     fn_out  = info.title.dup
     fn_out << " by #{info.uploader}" if info.uploader
+    fn_out  = fn_out.first 80 # /tmp can't have big filename
     fn_out << ".#{type.ext}"
     fn_out.gsub! '"', '' # Telegram doesn't accept "
     fn_out.gsub! '/', ', ' # not escaped by shellwords
