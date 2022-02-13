@@ -94,11 +94,11 @@ class Bot::Worker
 
     # FIXME: specify different levels depending on length
     if type == Types.video and durat > VID_DURATION_THLD.minutes.to_i
-      opts.width = 480
+      opts.width ||= 480
       edit_message msg, resp.result.message_id, text: (resp.text << me(VID_TOO_LONG))
     end
     if type == Types.audio and durat > AUD_DURATION_THLD.minutes.to_i
-      opts.bitrate = 64
+      opts.bitrate ||= 0.98 * 8 * SIZE_MB_LIMIT / durat
       edit_message msg, resp.result.message_id, text: (resp.text << me(AUD_TOO_LONG))
     end
 
