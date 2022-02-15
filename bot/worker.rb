@@ -261,6 +261,7 @@ class Bot::Worker
   end
 
   def skip_convert? type, probe, opts
+    return if opts.bitrate # custom bitrate
     stream = probe.streams.first
     return true if type.name == :audio and stream.codec_name == 'aac' and stream.bit_rate.to_i/1000 < Types.audio.opts.bitrate
     false
