@@ -1,7 +1,7 @@
 [Unit]
 Description=media-downloader-bot
 After=network-online.target
-Wants=network-online.target systemd-networkd-wait-online.service
+Wants=network-online.target
 
 [Service]
 CPUQuota=600%
