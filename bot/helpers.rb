@@ -42,6 +42,7 @@ class Bot
       server.add_unix_listener socket
       puts "Server listening at #{socket}"
       server.run
+      [:INT, :TERM].each { |sig| trap(sig) { server.stop } }
     end
 
     ADMIN_CHAT_ID  = ENV['ADMIN_CHAT_ID']&.to_i
@@ -119,7 +120,7 @@ class Bot
 
       STDERR.puts "error: #{error}"
       send_message msg, error, parse_mode: 'HTML', delete_both: error_delete_time
-      admin_report msg, error
+      admin_report msg, error unless from_admin? msg
     end
 
     def admin_report msg, _error, status: 'error'
