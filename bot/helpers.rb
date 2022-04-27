@@ -1,8 +1,13 @@
+require 'puma'
+require 'roda'
+
 class Bot
   module Helpers
 
     extend ActiveSupport::Concern
     included do
+      class_attribute :bot_name
+
       class_attribute :error_delete_time
       self.error_delete_time = 30.seconds
 
@@ -18,6 +23,25 @@ class Bot
           puts "deleting #{id}"
         end
       end
+    end
+
+    class WebApp < Roda
+       plugin :indifferent_params
+       route do |r|
+          r.on 'admin_message' do
+            r.post do
+              ret = $bot.send_message $bot.admin_msg, r.params[:m], **r.params.to_h.symbolize_keys
+              ret.to_h.to_json
+            end
+          end
+       end
+    end
+
+    def start_webserver socket: "/tmp/#{bot_name}.socket"
+      server = Puma::Server.new WebApp.freeze.app, Puma::Events.strings
+      server.add_unix_listener socket
+      puts "Server listening at #{socket}"
+      server.run
     end
 
     ADMIN_CHAT_ID  = ENV['ADMIN_CHAT_ID']&.to_i

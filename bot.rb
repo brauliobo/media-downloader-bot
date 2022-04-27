@@ -24,6 +24,8 @@ class Bot
   delegate :api, to: :bot
 
   include Helpers
+  self.bot_name = 'media_downloader_bot'
+
   self.error_delete_time = 3.hours
 
   def initialize token
@@ -36,6 +38,7 @@ class Bot
       @bot = bot
 
       puts 'bot: started, listening'
+      start_webserver
       @bot.listen do |msg|
         Thread.new do
           next unless msg.is_a? Telegram::Bot::Types::Message
