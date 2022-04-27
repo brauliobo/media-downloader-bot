@@ -79,6 +79,8 @@ class Bot::Worker
   end
 
   def handle_input input, opts
+    return input.merge! fn_out: 'fake' if opts.simulate
+
     fn_in  = input.fn_in
     info   = input.info
     iprobe = probe_for fn_in
@@ -101,6 +103,8 @@ class Bot::Worker
       opts.bitrate ||= 0.98 * 8 * (SIZE_MB_LIMIT*1000) / durat
       edit_message msg, resp.result.message_id, text: (resp.text << me(AUD_TOO_LONG))
     end
+
+    binding.pry if ENV['PRY_BEFORE_CONVERT']
 
     if skip_convert? type, iprobe, opts
       fn_out = fn_in
@@ -137,13 +141,8 @@ class Bot::Worker
     info   = input.info
     durat  = input.durat
 
-    text = ''
-    if opts.caption or type == Types.video
-      text  = "_#{me info.title}_"
-      text << "\nby #{me info.uploader}" if info.uploader
-    end
-    text << "\n\n_#{me info.description}_" if opts.description and info.description
-    text << "\n\n#{me input.url}" if input.url
+    caption = msg_caption info, type, input
+    return send_message msg, caption if opts.simulate
 
     oprobe = probe_for fn_out
     vstrea = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
@@ -161,7 +160,18 @@ class Bot::Worker
       thumb:       thumb(info, dir),
       supports_streaming: true,
     }
-    send_message msg, text, ret_msg
+    send_message msg, caption, ret_msg
+  end
+
+  def msg_caption info, type, input
+    text = ''
+    if opts.caption or type == Types.video
+      text  = "_#{me info.title}_"
+      text << "\nby #{me info.uploader}" if info.uploader
+    end
+    text << "\n\n_#{me info.description}_" if opts.description and info.description
+    text << "\n\n#{me input.url}" if input.url
+    text
   end
 
   def tag fn, info
@@ -183,6 +193,7 @@ class Bot::Worker
     cmd << " --cache-dir #{dir}"
     cmd << " -o 'input-%(playlist_index)s.%(ext)s'"
     cmd << ' -x' if opts.audio
+    cmd << ' -s' if opts.simulate
     opts.slice(*DOWN_OPTS).each do |k,v|
       v.gsub! "'", "\'"
       cmd << " --#{k} '#{v}'"
@@ -190,7 +201,7 @@ class Bot::Worker
     # user-agent can slowdown on youtube
     #cmd << " --user-agent '#{USER_AGENT}'" unless url.host.index 'facebook'
 
-    _o, e, st = Open3.capture3 cmd, chdir: dir
+    o, e, st = Open3.capture3 cmd, chdir: dir
     if st != 0
       edit_message msg, resp.result.message_id, text: "Download failed:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
       admin_report msg, e, status: 'Download failed'
