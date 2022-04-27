@@ -149,7 +149,7 @@ class Bot
       text
     end
 
-    MARKDOWN_NON_FORMAT = %w[\# [ ] ( ) ~ # + - = | { } . ! < >]
+    MARKDOWN_NON_FORMAT = %w[\# / [ ] ( ) ~ # + - = | { } . ! < >]
     MARKDOWN_FORMAT     = %w[* _ `]
     MARKDOWN_ALL        = MARKDOWN_FORMAT + MARKDOWN_NON_FORMAT
     def me t
