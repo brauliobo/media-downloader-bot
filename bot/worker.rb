@@ -54,6 +54,7 @@ class Bot::Worker
         inputs << file_download(msg)
       end
 
+      edit_message msg, resp.result.message_id, text: (resp.text << me("\nConverting..."))
       inputs.api_peach do |i|
         handle_input i, opts
       rescue => e
@@ -63,6 +64,7 @@ class Bot::Worker
       inputs.select!{ |i| i.fn_out }
       inputs.reverse! if opts.reverse
 
+      edit_message msg, resp.result.message_id, text: (resp.text << me("\nSending..."))
       inputs.each do |i|
         upload i
       rescue => e
@@ -147,7 +149,6 @@ class Bot::Worker
     oprobe = probe_for fn_out
     vstrea = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
 
-    edit_message msg, resp.result.message_id, text: (resp.text << me("\nSending..."))
     fn_io   = Faraday::UploadIO.new fn_out, type.mime
     ret_msg = input.ret_msg = {
       type:        type.name,
@@ -194,6 +195,8 @@ class Bot::Worker
     cmd << " -o 'input-%(playlist_index)s.%(ext)s'"
     cmd << ' -x' if opts.audio
     cmd << ' -s' if opts.simulate
+    #cmd << " --cookies #{opts.cookie}" if opts.cookie 
+    #cmd << " --cookies-from-browser #{opts.cookie}" if opts.cookie and from_admin? msg # FIXME: depends on unit user
     opts.slice(*DOWN_OPTS).each do |k,v|
       v.gsub! "'", "\'"
       cmd << " --#{k} '#{v}'"
@@ -287,7 +290,6 @@ class Bot::Worker
     fn_out.gsub! '/', ', ' # not escaped by shellwords
     fn_out  = "#{dir}/#{fn_out}"
 
-    edit_message msg, resp.result.message_id, text: (resp.text << me("\nConverting..."))
     o, e, st = send "zip_#{type.name}", fn_in, fn_out, opts: opts, probe: probe
     if st != 0
       edit_message msg, resp.result.message_id, text: (resp.text << me("\nConvert failed: #{o}\n#{e}"))
