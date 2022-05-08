@@ -171,7 +171,7 @@ class Bot::Worker
       text  = "_#{me info.title}_"
       text << "\nby #{me info.uploader}" if info.uploader
     end
-    text << "\n\n_#{me info.description}_" if opts.description and info.description
+    text << "\n\n_#{me info.description.strip}_" if opts.description and info.description.strip.presence
     text << "\n\n#{me input.url}" if input.url
     text
   end
