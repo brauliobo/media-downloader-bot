@@ -62,6 +62,7 @@ class Bot::Worker
       end
 
       inputs.select!{ |i| i.fn_out }
+      inputs.sort_by!{ |i| i.info.title } if opts.sort
       inputs.reverse! if opts.reverse
 
       edit_message msg, resp.result.message_id, text: (resp.text << me("\nSending..."))
@@ -195,6 +196,7 @@ class Bot::Worker
     cmd << " -o 'input-%(playlist_index)s.%(ext)s'"
     cmd << ' -x' if opts.audio
     cmd << ' -s' if opts.simulate
+    cmd << " --playlist-end #{opts.limit.to_i}" if opts.limit
     #cmd << " --cookies #{opts.cookie}" if opts.cookie 
     #cmd << " --cookies-from-browser #{opts.cookie}" if opts.cookie and from_admin? msg # FIXME: depends on unit user
     opts.slice(*DOWN_OPTS).each do |k,v|
