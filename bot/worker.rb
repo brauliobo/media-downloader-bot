@@ -1,4 +1,5 @@
 require 'taglib'
+require 'chronic_duration'
 
 class Bot::Worker
 
@@ -88,6 +89,7 @@ class Bot::Worker
     info   = input.info
     iprobe = probe_for fn_in
     durat  = iprobe.format.duration.to_i
+    durat -= ChronicDuration.parse opts.ss if opts.ss
 
     mtype  = Rack::Mime.mime_type File.extname fn_in
     type   = if mtype.index 'video' then Types.video elsif mtype.index 'audio' then Types.audio end
