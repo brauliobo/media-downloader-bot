@@ -12,11 +12,10 @@ module Zipper
       opts: {width: 640, quality: 25, abrate: 64},
       # aac_he_v2 doesn't work with instagram
       cmd:  <<-EOC
-nice ffmpeg -threads 12 -loglevel error -i %{infile} \
+nice ffmpeg -y -threads 12 -loglevel error -i %{infile} \
   -c:v libx264 -vf scale="%{width}:trunc(ow/a/2)*2%{vf}" -crf %{quality} \
     -maxrate:v %{maxrate} -bufsize %{bufsize} \
-  -c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k \
-  -y %{outfile}
+  -c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k 
 EOC
     },
     audio: {
@@ -25,16 +24,9 @@ EOC
       mime: 'audio/aac',
       opts: {bitrate: 80},
       cmd:  <<-EOC
-nice ffmpeg -loglevel error -i %{infile} \
-  -c:a libfdk_aac -profile:a aac_he -b:a %{bitrate}k \
-  -vn -y %{outfile}
+nice ffmpeg -vn -y -loglevel error -i %{infile} \
+  -c:a libfdk_aac -profile:a aac_he -b:a %{bitrate}k 
 EOC
-# Opus in Telegram Bots are considered voice messages
-#      ext:  :opus,
-#      cmd:  <<-EOC
-#ffmpeg -loglevel quiet -i %{infile} -f wav - |
-#opusenc --bitrate %{bitrate} --quiet - %{outfile}
-#EOC
     },
   )
 
@@ -66,7 +58,6 @@ EOC
 
     cmd = Types.video.cmd % {
       infile:  escape(infile),
-      outfile: escape(outfile),
       width:   opts.width,
       quality: opts.quality,
       abrate:  opts.abrate,
@@ -74,9 +65,10 @@ EOC
       bufsize: bufsize,
       vf:      vf,
     }
+    apply_opts cmd
+    cmd << " #{escape outfile}"
 
-    binding.pry if ENV['PRY_ZIPPER']
-    Open3.capture3 cmd
+    run cmd
   end
 
   def zip_audio infile, outfile, probe:, opts: SymMash.new
@@ -86,7 +78,20 @@ EOC
       outfile: escape(outfile),
       bitrate: opts.bitrate,
     }
+    apply_opts cmd
+    cmd << " #{escape outfile}"
+
+    run cmd
+  end
+  
+  def run cmd
+    binding.pry if ENV['PRY_ZIPPER']
     Open3.capture3 cmd
+  end
+
+  def apply_opts cmd
+    cmd.strip!
+    cmd << " -ss #{opts.ss}" if opts.ss.match(/\d?\d:\d\d/)
   end
 
   def escape f
