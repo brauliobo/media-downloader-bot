@@ -91,7 +91,7 @@ EOC
 
   def apply_opts cmd
     cmd.strip!
-    cmd << " -ss #{opts.ss}" if opts.ss.match(/\d?\d:\d\d/)
+    cmd << " -ss #{opts.ss}" if opts.ss&.match(/\d?\d:\d\d/)
   end
 
   def escape f
