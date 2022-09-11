@@ -62,16 +62,16 @@ class Bot
         i.fn_out = i.fn_in
       else
         i.fn_out = convert i
-        return unless fn_out
+        return unless i.fn_out
       end
 
       # check telegram bot's upload limit
-      mbsize = File.size(fn_out) / 2**20
+      mbsize = File.size(i.fn_out) / 2**20
       if i.type == Types.video and mbsize >= SIZE_MB_LIMIT
         edit_message msg, resp.result.message_id, text: (resp.text << me(VID_TOO_BIG))
         i.type   = Types.audio
         i.fn_out = convert i
-        mbsize   = File.size(fn_out) / 2**20
+        mbsize   = File.size(i.fn_out) / 2**20
       end
       # still too big as audio...
       if mbsize >= SIZE_MB_LIMIT
@@ -79,7 +79,7 @@ class Bot
         return
       end
 
-      tag fn_out, i.info
+      tag i.fn_out, i.info
 
       i
     end

@@ -1,8 +1,11 @@
 class Bot::Worker
 
+  include Zipper
+
   attr_reader :bot
   attr_reader :msg
   attr_reader :dir
+  attr_reader :opts
 
   attr_accessor :resp
 
@@ -43,7 +46,7 @@ class Bot::Worker
         input_error e, i
       end
 
-      opts = inputs.first.opts
+      @opts = inputs.first.opts
 
       inputs.select!{ |i| i.fn_out }
       inputs.sort_by!{ |i| i.info.title } if opts.sort
@@ -72,8 +75,7 @@ class Bot::Worker
     durat  = input.durat
     opts   = input.opts
 
-    caption = msg_caption info, type, input
-    require'pry';binding.pry
+    caption = msg_caption input
     return send_message msg, caption if opts.simulate
 
     oprobe = Bot::Prober.for fn_out
@@ -94,14 +96,14 @@ class Bot::Worker
     send_message msg, caption, ret_msg
   end
 
-  def msg_caption info, type, input
+  def msg_caption i
     text = ''
-    if opts.caption or type == Types.video
-      text  = "_#{me info.title}_"
-      text << "\nby #{me info.uploader}" if info.uploader
+    if opts.caption or i.type == Types.video
+      text  = "_#{me i.info.title}_"
+      text << "\nby #{me i.info.uploader}" if i.info.uploader
     end
-    text << "\n\n_#{me info.description.strip}_" if opts.description and info.description.strip.presence
-    text << "\n\n#{me input.url}" if input.url
+    text << "\n\n_#{me i.info.description.strip}_" if opts.description and i.info.description.strip.presence
+    text << "\n\n#{me i.url}" if i.url
     text
   end
 
