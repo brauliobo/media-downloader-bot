@@ -16,6 +16,10 @@ require_relative 'exts/peach'
 require_relative 'bot/helpers'
 require_relative 'bot/zipper'
 require_relative 'bot/url_shortner'
+require_relative 'bot/prober'
+require_relative 'bot/processor'
+require_relative 'bot/file_processor'
+require_relative 'bot/url_processor'
 require_relative 'bot/worker'
 
 class Bot
@@ -38,7 +42,7 @@ class Bot
       @bot = bot
 
       puts 'bot: started, listening'
-      start_webserver
+      #start_webserver
       @bot.listen do |msg|
         Thread.new do
           next unless msg.is_a? Telegram::Bot::Types::Message
