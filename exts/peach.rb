@@ -6,9 +6,8 @@ module Enumerable
 
     return each(&block) if threads == 1
 
-    pool      = Concurrent::FixedThreadPool.new threads
-    # catch_each can't be used as catchblock needs to be used inside pool.post
-    ret       = each do |*args|
+    pool = Concurrent::FixedThreadPool.new threads
+    ret  = send method do |*args|
       pool.post do
         Thread.current.priority = priority if priority
         block.call(*args)

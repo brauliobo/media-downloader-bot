@@ -65,7 +65,7 @@ EOC
       bufsize: bufsize,
       vf:      vf,
     }
-    apply_opts cmd
+    apply_opts cmd, opts
     cmd << " #{escape outfile}"
 
     run cmd
@@ -78,7 +78,7 @@ EOC
       outfile: escape(outfile),
       bitrate: opts.bitrate,
     }
-    apply_opts cmd
+    apply_opts cmd, opts
     cmd << " #{escape outfile}"
 
     run cmd
@@ -89,7 +89,7 @@ EOC
     Open3.capture3 cmd
   end
 
-  def apply_opts cmd
+  def apply_opts cmd, opts
     cmd.strip!
     cmd << " -ss #{opts.ss}" if opts.ss&.match(/\d?\d:\d\d/)
   end
