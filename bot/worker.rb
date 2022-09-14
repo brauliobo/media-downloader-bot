@@ -7,8 +7,6 @@ class Bot::Worker
   attr_reader :dir
   attr_reader :opts
 
-  attr_accessor :resp
-
   delegate_missing_to :bot
 
   def initialize bot, msg
@@ -22,7 +20,7 @@ class Bot::Worker
       procs  = []
       inputs = []
 
-      @resp = send_message msg, me('Downloading...')
+      msg.resp = send_message msg, me('Downloading...')
       if msg.audio.present? or msg.video.present?
         procs << Bot::FileProcessor.new(bot, msg, dir)
       else
@@ -31,14 +29,14 @@ class Bot::Worker
         end
       end
 
-      procs.each.with_index.peach do |p, i|
+      procs.each.with_index.api_peach do |p, i|
         inputs[i] = p.download
       end
       inputs.flatten!
       inputs.compact!
-      return @resp = nil if inputs.blank?
+      return msg.resp = nil if inputs.blank?
 
-      edit_message msg, resp.result.message_id, text: (resp.text << me("\nConverting..."))
+      edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me("\nConverting..."))
       inputs.api_peach do |i|
         p = Bot::Processor.new bot, msg, dir
         p.handle_input i
@@ -52,7 +50,7 @@ class Bot::Worker
       inputs.sort_by!{ |i| i.info.title } if opts.sort
       inputs.reverse! if opts.reverse
 
-      edit_message msg, resp.result.message_id, text: (resp.text << me("\nSending..."))
+      edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me("\nSending..."))
       inputs.each do |i|
         upload i
       rescue => e
@@ -60,7 +58,7 @@ class Bot::Worker
       end
     end
 
-    @resp
+    msg.resp
   end
 
   def input_error e, i

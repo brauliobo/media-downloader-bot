@@ -42,18 +42,18 @@ class Bot
       i.type = if mtype.index 'video' then Types.video elsif mtype.index 'audio' then Types.audio end
       i.type = Types.audio if i.opts.audio
       unless i.type
-        edit_message msg, resp.result.message_id, text: me("Unknown type for #{i.fn_in}")
+        edit_message msg, msg.resp.result.message_id, text: me("Unknown type for #{i.fn_in}")
         return
       end
 
       # FIXME: specify different levels depending on length
       if i.type == Types.video and i.durat > VID_DURATION_THLD.minutes.to_i
         i.opts.width ||= 480
-        edit_message msg, resp.result.message_id, text: (resp.text << me(VID_TOO_LONG))
+        edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(VID_TOO_LONG))
       end
       if i.type == Types.audio and i.durat > AUD_DURATION_THLD.minutes.to_i
         i.opts.bitrate ||= 0.98 * 8 * (SIZE_MB_LIMIT*1000) / i.durat
-        edit_message msg, resp.result.message_id, text: (resp.text << me(AUD_TOO_LONG))
+        edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(AUD_TOO_LONG))
       end
 
       binding.pry if ENV['PRY_BEFORE_CONVERT']
@@ -68,14 +68,14 @@ class Bot
       # check telegram bot's upload limit
       mbsize = File.size(i.fn_out) / 2**20
       if i.type == Types.video and mbsize >= SIZE_MB_LIMIT
-        edit_message msg, resp.result.message_id, text: (resp.text << me(VID_TOO_BIG))
+        edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(VID_TOO_BIG))
         i.type   = Types.audio
         i.fn_out = convert i
         mbsize   = File.size(i.fn_out) / 2**20
       end
       # still too big as audio...
       if mbsize >= SIZE_MB_LIMIT
-        edit_message msg, resp.result.message_id, text: (resp.text << me(TOO_BIG))
+        edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(TOO_BIG))
         return
       end
 
@@ -111,7 +111,7 @@ class Bot
 
       o, e, st = send "zip_#{i.type.name}", i.fn_in, fn_out, opts: i.opts, probe: i.probe
       if st != 0
-        edit_message msg, resp.result.message_id, text: (resp.text << me("\nConvert failed: #{o}\n#{e}"))
+        edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me("\nConvert failed: #{o}\n#{e}"))
         admin_report msg, "#{o}\n#{e}", status: 'Convert failed'
         return
       end
