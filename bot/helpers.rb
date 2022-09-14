@@ -81,6 +81,10 @@ class Bot
       raise
     end
 
+    class ::Telegram::Bot::Types::Message
+      attr_accessor :resp
+    end
+
     def send_message msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **params
       _text = text
       text  = parse_text text, parse_mode: parse_mode

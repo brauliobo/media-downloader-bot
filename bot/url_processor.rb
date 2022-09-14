@@ -25,7 +25,7 @@ class Bot
     def download 
       cmd  = DOWN_CMD % {url: url.to_s}
       cmd << " --cache-dir #{dir}"
-      cmd << " -o 'input-%(playlist_index)s.%(ext)s'"
+      cmd << " -o 'input-#{object_id}-%(playlist_index)s.%(ext)s'"
       cmd << ' -x' if opts.audio
       cmd << ' -s' if opts.simulate
       cmd << " --playlist-end #{opts.limit.to_i}" if opts.limit
@@ -40,10 +40,12 @@ class Bot
 
       o, e, st = Open3.capture3 cmd, chdir: dir
       if st != 0
-        edit_message msg, resp.result.message_id, text: "Download failed:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
+        edit_message msg, msg.resp.result.message_id, text: "Download failed:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
         admin_report msg, e, status: 'Download failed'
         return
       end
+      # ensure files were renamed in time
+      sleep 1
 
       infos  = Dir.glob("#{dir}/*.info.json").sort_by{ |f| File.mtime f }
       infos.map! do |infof|
