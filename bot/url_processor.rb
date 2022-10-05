@@ -2,7 +2,7 @@ class Bot
   class UrlProcessor < Processor
 
     attr_reader :args
-    attr_reader :url
+    attr_reader :uri, :url
     attr_reader :opts
 
     DOWN_BIN   = "yt-dlp"
@@ -15,7 +15,8 @@ class Bot
 
       @line = line
       @args = line.split(/\s+/)
-      @url  = URI.parse @args.shift
+      @uri  = URI.parse @args.shift
+      @url  = uri.to_s
       @opts = @args.each.with_object SymMash.new do |a, h|
         k,v = a.split '=', 2
         h[k] = v || 1
@@ -23,7 +24,7 @@ class Bot
     end
 
     def download 
-      cmd  = DOWN_CMD % {url: url.to_s}
+      cmd  = DOWN_CMD % {url: url}
       cmd << " --cache-dir #{dir}"
       cmd << " -o 'input-#{object_id}-%(playlist_index)s.%(ext)s'"
       cmd << ' -x' if opts.audio
@@ -36,7 +37,7 @@ class Bot
         cmd << " --#{k} '#{v}'"
       end
       # user-agent can slowdown on youtube
-      #cmd << " --user-agent '#{USER_AGENT}'" unless url.host.index 'facebook'
+      #cmd << " --user-agent '#{USER_AGENT}'" unless uri.host.index 'facebook'
 
       o, e, st = Open3.capture3 cmd, chdir: dir
       if st != 0
@@ -65,7 +66,7 @@ class Bot
         # number files
         info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.number
 
-        url = info.url = if mult then info.webpage_url else url.to_s end
+        url = info.url = if mult then info.webpage_url else self.url end
         url = Bot::UrlShortner.shortify(info) || url
         SymMash.new(
           fn_in: fn_in,
