@@ -6,7 +6,8 @@ class Bot
     attr_reader :opts
 
     DOWN_BIN   = "yt-dlp"
-    DOWN_CMD   = "#{DOWN_BIN} --write-info-json --no-clean-infojson '%{url}'"
+    DOWN_ARGS  = "--ignore-errors --write-info-json --no-clean-infojson"
+    DOWN_CMD   = "#{DOWN_BIN} #{DOWN_ARGS} '%{url}'"
     USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36'
     DOWN_OPTS  = %i[referer]
 
@@ -40,7 +41,7 @@ class Bot
       #cmd << " --user-agent '#{USER_AGENT}'" unless uri.host.index 'facebook'
 
       o, e, st = Open3.capture3 cmd, chdir: dir
-      if st != 0
+      if st != 0 and !opts.continue
         edit_message msg, msg.resp.result.message_id, text: "Download failed:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
         admin_report msg, e, status: 'Download failed'
         return
