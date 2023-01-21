@@ -44,13 +44,12 @@ class Bot::Worker
         input_error e, i
       end
 
-      @opts = inputs.first.opts
+      edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me("\nSending..."))
 
-      inputs.select!{ |i| i.fn_out }
+      @opts = inputs.first.opts
       inputs.sort_by!{ |i| i.info.title } if opts.sort
       inputs.reverse! if opts.reverse
-
-      edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me("\nSending..."))
+      inputs.select!{ |i| i.fn_out }
       inputs.each do |i|
         upload i
       rescue => e
