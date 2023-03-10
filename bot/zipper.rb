@@ -8,7 +8,9 @@ module Zipper
   INPUT_OPTS = if CUDA then '-hwaccel cuda -hwaccel_output_format cuda' else '' end
   X264_CODEC = if CUDA then 'h264_nvenc' else 'libx264' end
   SCALE_KEY  = if CUDA then 'scale_cuda' else 'scale' end
-  QUALITY    = if CUDA then 30 else 25 end
+  QUALITY    = if CUDA then 33 else 25 end # to keep similar size
+  # -spatial_aq:v 1 is too slow
+  VIDEO_OPTS = if CUDA then '-profile:v high -tune:v hq -level 4.1 -rc:v vbr -rc-lookahead:v 32 -aq-strength:v 15' else '' end
 
   Types = SymMash.new(
     video: {
@@ -19,7 +21,7 @@ module Zipper
       # aac_he_v2 doesn't work with instagram
       cmd:  <<-EOC
 nice ffmpeg -y -threads 12 -loglevel error #{INPUT_OPTS} -i %{infile} \
-  -c:v #{X264_CODEC} -vf #{SCALE_KEY}="%{width}:trunc(ow/a/2)*2%{vf}" \
+  -c:v #{X264_CODEC} -vf #{SCALE_KEY}="%{width}:trunc(ow/a/2)*2%{vf}" #{VIDEO_OPTS} \
   -cq:v %{quality} -maxrate:v %{maxrate} -bufsize %{bufsize} \
   -c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k 
 EOC
