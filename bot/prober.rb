@@ -5,7 +5,8 @@ class Bot
 
     def self.for file
       probe = `#{PROBE_CMD % {file: Shellwords.escape(file)}}`
-      probe = JSON.parse probe if probe.present?
+      raise 'probe failed' if probe.blank?
+      probe = JSON.parse probe
       probe = SymMash.new probe
     end
 
