@@ -4,7 +4,7 @@ module Zipper
 
   SIZE_MB_LIMIT = 50
 
-  CUDA       = true
+  CUDA       = false # slower while mining
   INPUT_OPTS = if CUDA then '-hwaccel cuda -hwaccel_output_format cuda' else '' end
   X264_CODEC = if CUDA then 'h264_nvenc' else 'libx264' end
   SCALE_KEY  = if CUDA then 'scale_npp' else 'scale' end
