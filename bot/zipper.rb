@@ -4,11 +4,11 @@ module Zipper
 
   SIZE_MB_LIMIT = 50
 
-  CUDA       = false # slower while mining
-  INPUT_OPTS = if CUDA then '-hwaccel cuda -hwaccel_output_format cuda' else '' end
-  X264_CODEC = if CUDA then 'h264_nvenc' else 'libx264' end
-  SCALE_KEY  = if CUDA then 'scale_npp' else 'scale' end
-  QUALITY    = if CUDA then 33 else 25 end # to keep similar size
+  CUDA         = false # slower while mining
+  H264_OPTS    = if CUDA then '-hwaccel cuda -hwaccel_output_format cuda' else '' end
+  H264_CODEC   = if CUDA then 'h264_nvenc' else 'libx264' end
+  SCALE_KEY    = if CUDA then 'scale_npp' else 'scale' end
+  H264_QUALITY = if CUDA then 33 else 25 end # to keep similar size
 
   # -spatial_aq:v 1 is too slow
   VIDEO_OPTS  = if CUDA then '-profile:v high -tune:v hq -level 4.1 -rc:v vbr -rc-lookahead:v 32 -aq-strength:v 15' else '' end
@@ -17,25 +17,24 @@ module Zipper
   Types = SymMash.new(
     video: {
       name:    :video,
-      default: :h264,
+      default: :av1,
       h264: {
         ext:  :mp4,
         mime: 'video/mp4',
-        opts: {width: 640, quality: QUALITY, abrate: 64},
+        opts: {width: 640, quality: H264_QUALITY, abrate: 64},
         cmd:  <<-EOC
-nice ffmpeg -y -threads 12 -loglevel error #{INPUT_OPTS} -i %{infile} #{VIDEO_OPTS} \
-  -c:v #{X264_CODEC} -cq:v %{quality} -maxrate:v %{maxrate} -bufsize %{bufsize} \
+nice ffmpeg -y -threads 12 -loglevel error #{H264_OPTS} -i %{infile} #{VIDEO_OPTS} \
+  -c:v #{H264_CODEC} -cq:v %{quality} -maxrate:v %{maxrate} -bufsize %{bufsize} \
   -c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k 
         EOC
       },
       av1: {
         ext:  :mp4,
         mime: 'video/mp4',
-        opts: {width: 640, quality: QUALITY, abrate: 64},
+        opts: {width: 720, quality: 40, abrate: 64},
         cmd:  <<-EOC
 nice ffmpeg -y -threads 12 -loglevel error -i %{infile} #{VIDEO_OPTS} \
-  -c:v libaom-av1 -movflags +faststart -crf %{quality} \
-  -b:v %{maxrate} -maxrate:v %{maxrate} -bufsize %{bufsize} \
+  -c:v libsvtav1 -movflags +faststart -crf %{quality} -b:v %{maxrate} \
   -c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k 
         EOC
       },
