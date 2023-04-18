@@ -9,37 +9,66 @@ module Zipper
   X264_CODEC = if CUDA then 'h264_nvenc' else 'libx264' end
   SCALE_KEY  = if CUDA then 'scale_npp' else 'scale' end
   QUALITY    = if CUDA then 33 else 25 end # to keep similar size
+
   # -spatial_aq:v 1 is too slow
-  VIDEO_OPTS = if CUDA then '-profile:v high -tune:v hq -level 4.1 -rc:v vbr -rc-lookahead:v 32 -aq-strength:v 15' else '' end
+  VIDEO_OPTS  = if CUDA then '-profile:v high -tune:v hq -level 4.1 -rc:v vbr -rc-lookahead:v 32 -aq-strength:v 15' else '' end
+  VIDEO_OPTS << "-vf #{SCALE_KEY}=\"%{width}:trunc(ow/a/2)*2%{vf}\""
 
   Types = SymMash.new(
     video: {
-      name: :video,
-      ext:  :mp4,
-      mime: 'video/mp4',
-      opts: {width: 640, quality: QUALITY, abrate: 64},
-      # aac_he_v2 doesn't work with instagram
-      cmd:  <<-EOC
-nice ffmpeg -y -threads 12 -loglevel error #{INPUT_OPTS} -i %{infile} \
-  -c:v #{X264_CODEC} -vf #{SCALE_KEY}="%{width}:trunc(ow/a/2)*2%{vf}" #{VIDEO_OPTS} \
-  -cq:v %{quality} -maxrate:v %{maxrate} -bufsize %{bufsize} \
+      name:    :video,
+      default: :h264,
+      h264: {
+        ext:  :mp4,
+        mime: 'video/mp4',
+        opts: {width: 640, quality: QUALITY, abrate: 64},
+        cmd:  <<-EOC
+nice ffmpeg -y -threads 12 -loglevel error #{INPUT_OPTS} -i %{infile} #{VIDEO_OPTS} \
+  -c:v #{X264_CODEC} -cq:v %{quality} -maxrate:v %{maxrate} -bufsize %{bufsize} \
   -c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k 
-EOC
+        EOC
+      },
+      av1: {
+        ext:  :mp4,
+        mime: 'video/mp4',
+        opts: {width: 640, quality: QUALITY, abrate: 64},
+        cmd:  <<-EOC
+nice ffmpeg -y -threads 12 -loglevel error -i %{infile} #{VIDEO_OPTS} \
+  -c:v libaom-av1 -movflags +faststart -crf %{quality} \
+  -b:v %{maxrate} -maxrate:v %{maxrate} -bufsize %{bufsize} \
+  -c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k 
+        EOC
+      },
     },
+
     audio: {
-      name: :audio,
-      ext:  :m4a,
-      mime: 'audio/aac',
-      opts: {bitrate: 80},
-      cmd:  <<-EOC
+      name:    :audio,
+      default: :aac,
+      aac: {
+        ext:  :m4a,
+        mime: 'audio/aac',
+        opts: {bitrate: 80},
+        # aac_he_v2 doesn't work with instagram
+        cmd:  <<-EOC
 nice ffmpeg -vn -y -loglevel error -i %{infile} \
   -c:a libfdk_aac -profile:a aac_he -b:a %{bitrate}k 
-EOC
+        EOC
+      },
+      # Opus in Telegram Bots are considered voice messages
+      opus: {
+        ext:  :opus,
+        mime: 'audio/aac',
+        opts: {bitrate: 80},
+        cmd:  <<-EOC
+ffmpeg -loglevel quiet -i %{infile} -f wav - |
+  opusenc --bitrate %{bitrate} --quiet - %{outfile}
+        EOC
+      },
     },
   )
 
   def zip_video infile, outfile, probe:, opts: SymMash.new
-    opts.reverse_merge! Types.video.opts.deep_dup
+    opts.reverse_merge! opts.format.opts.deep_dup
 
     # convert input
     opts.width   = opts.width.to_i
@@ -64,7 +93,7 @@ EOC
     maxrate -= opts.abrate if maxrate > opts.abrate
     maxrate  = "#{maxrate}k"
 
-    cmd = Types.video.cmd % {
+    cmd = opts.format.cmd % {
       infile:  escape(infile),
       width:   opts.width,
       quality: opts.quality,
@@ -80,8 +109,10 @@ EOC
   end
 
   def zip_audio infile, outfile, probe:, opts: SymMash.new
-    opts.reverse_merge! Types.audio.opts.deep_dup
-    cmd = Types.audio.cmd % {
+    require'pry';binding.pry
+    opts.reverse_merge! opts.format.opts.deep_dup
+
+    cmd = opts.format.cmd % {
       infile:  escape(infile),
       outfile: escape(outfile),
       bitrate: opts.bitrate,
