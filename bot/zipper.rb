@@ -108,7 +108,6 @@ ffmpeg -loglevel quiet -i %{infile} -f wav - |
   end
 
   def zip_audio infile, outfile, probe:, opts: SymMash.new
-    require'pry';binding.pry
     opts.reverse_merge! opts.format.opts.deep_dup
 
     cmd = opts.format.cmd % {
