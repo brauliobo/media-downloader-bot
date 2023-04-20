@@ -1,0 +1,17 @@
+#!/usr/bin/env ruby
+
+require_relative '../bot'
+
+include Zipper
+
+i      = SymMash.new fn_in: ARGV[0], opts: {}
+prc    = Bot::Processor.probe i
+fn_out = ARGV[1]
+i.opts.format = i.type[i.opts.format || i.type[:default]]
+
+o, e, st = send "zip_#{i.type.name}", i.fn_in, fn_out,
+  opts: i.opts, probe: i.probe
+if st != 0
+  raise e
+end
+
