@@ -90,10 +90,12 @@ class Bot
     end
 
     def tag fn, info
+      return # using FFmpeg
       TagLib::FileRef.open fn do |f|
         return if f&.tag.nil?
-        f.tag.title  = info.title
-        f.tag.artist = info.uploader
+        f.tag.title   = info.title
+        f.tag.artist  = info.uploader
+        f.tag.comment = info.info.original_url
         f.save
       end
     end
@@ -109,8 +111,12 @@ class Bot
       i.format = i.type[i.opts.format || i.type[:default]]
       i.opts.format = i.format
 
-      i.metadata = i.slice :url, :title
-      i.metadata.source_file = i.fn_in
+      m = SymMash.new
+      m.artist = i.info.uploader
+      m.title  = i.info.title
+      m.file   = File.basename i.fn_in
+      m.url    = i.url
+      i.opts.metadata = m
 
       fn_out  = i.info.title.dup
       fn_out << " by #{i.info.uploader}" if i.info.uploader
