@@ -11,10 +11,10 @@ module Zipper
   H264_QUALITY = if CUDA then 33 else 25 end # to keep similar size
 
   # -spatial_aq:v 1 is too slow
-  VIDEO_PRE_OPTS  = if CUDA then '-profile:v high -tune:v hq -level 4.1 -rc:v vbr -rc-lookahead:v 32 -aq-strength:v 15' else '' end
-  VIDEO_PRE_OPTS << "-vf #{SCALE_KEY}=\"%{width}:trunc(ow/a/2)*2%{vf}\""
-  VIDEO_POST_OPTS = "-movflags +faststart -movflags use_metadata_tags"
-  VIDEO_POST_OPTS << "%{metadata}"
+  VIDEO_PRE_OPTS   = if CUDA then '-profile:v high -tune:v hq -level 4.1 -rc:v vbr -rc-lookahead:v 32 -aq-strength:v 15' else '' end
+  VIDEO_PRE_OPTS  << " -vf #{SCALE_KEY}=\"%{width}:trunc(ow/a/2)*2%{vf}\""
+  VIDEO_POST_OPTS  = "-movflags +faststart -movflags use_metadata_tags"
+  VIDEO_POST_OPTS << " %{metadata}"
 
   Types = SymMash.new(
     video: {
@@ -26,8 +26,7 @@ module Zipper
         opts: {width: 640, quality: H264_QUALITY, abrate: 64},
         cmd:  <<-EOC
 nice ffmpeg -y -threads 12 -loglevel error #{H264_OPTS} -i %{infile} #{VIDEO_PRE_OPTS} \
-  -c:v #{H264_CODEC} -cq:v %{quality} -maxrate:v %{maxrate} -bufsize %{bufsize} \
-  #{VIDEO_POST_OPTS} \
+  -c:v #{H264_CODEC} -cq:v %{quality} -maxrate:v %{maxrate} -bufsize %{bufsize} #{VIDEO_POST_OPTS} \
   -c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k 
         EOC
       },
@@ -37,8 +36,7 @@ nice ffmpeg -y -threads 12 -loglevel error #{H264_OPTS} -i %{infile} #{VIDEO_PRE
         opts: {width: 720, quality: 40, abrate: 64},
         cmd:  <<-EOC
 nice ffmpeg -y -threads 12 -loglevel error -i %{infile} #{VIDEO_PRE_OPTS} \
-  -c:v libsvtav1 -crf %{quality} -svtav1-params tbr=%{maxrate} \
-  #{VIDEO_POST_OPTS} \
+  -c:v libsvtav1 -crf %{quality} -svtav1-params tbr=%{maxrate} #{VIDEO_POST_OPTS} \
   -c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k 
         EOC
       },
@@ -96,9 +94,6 @@ ffmpeg -loglevel quiet -i %{infile} -f wav - |
     maxrate -= opts.abrate if maxrate > opts.abrate
     maxrate  = "#{maxrate}k"
 
-    opts.metadata ||= {}
-    metadata = opts.metadata.map{ |k,v| "-metadata #{escape k}=#{escape v}" }.join ' '
-
     cmd = opts.format.cmd % {
       infile:   escape(infile),
       width:    opts.width,
@@ -106,7 +101,7 @@ ffmpeg -loglevel quiet -i %{infile} -f wav - |
       abrate:   opts.abrate,
       maxrate:  maxrate,
       bufsize:  bufsize,
-      metadata: metadata,
+      metadata: metadata_args(opts.metadata),
       vf:       vf,
     }
     apply_opts cmd, opts
@@ -118,13 +113,10 @@ ffmpeg -loglevel quiet -i %{infile} -f wav - |
   def zip_audio infile, outfile, probe:, opts: SymMash.new
     opts.reverse_merge! opts.format.opts.deep_dup
 
-    opts.metadata ||= {}
-    metadata = opts.metadata.map{ |k,v| "-metadata #{escape k}=#{escape v}" }.join ' '
-
     cmd = opts.format.cmd % {
       infile:   escape(infile),
       bitrate:  opts.bitrate,
-      metadata: opts.meta
+      metadata: metadata_args(opts.metadata),
     }
 
     apply_opts cmd, opts
@@ -132,9 +124,16 @@ ffmpeg -loglevel quiet -i %{infile} -f wav - |
 
     run cmd
   end
+
+  protected 
+
+  def metadata_args metadata
+    (metadata || {}).map{ |k,v| "-metadata #{escape k}=#{escape v}" }.join ' '
+  end
   
   def run cmd
     binding.pry if ENV['PRY_ZIPPER']
+    puts cmd if ENV['PRINT_CMD']
     Open3.capture3 cmd
   end
 

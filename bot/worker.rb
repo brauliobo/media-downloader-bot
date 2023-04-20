@@ -9,13 +9,16 @@ class Bot::Worker
 
   delegate_missing_to :bot
 
+  class_attribute :tmpdir
+  self.tmpdir = ENV['TMPDIR'] || Dir.tmpdir
+
   def initialize bot, msg
     @bot = bot
     @msg = msg
   end
 
   def process
-    Dir.mktmpdir "mdb-" do |dir|
+    Dir.mktmpdir "mdb-", tmpdir do |dir|
       @dir   = dir
       procs  = []
       inputs = []
