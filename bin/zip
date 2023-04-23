@@ -11,7 +11,7 @@ Bot::UrlProcessor.add_opt opts, ARGV.pop while !File.exists? ARGV[-1]
 path = ARGV
 path.peach do |f|
   dir    = "#{File.dirname f}/converted"
-  Dir.mkdir dir unless File.directory? dir
+  Dir.mkdir dir rescue nil
 
   i      = SymMash.new fn_in: f, opts: opts
   prc    = Bot::Processor.probe i
