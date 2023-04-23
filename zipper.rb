@@ -92,7 +92,7 @@ nice ffmpeg -vn -y -loglevel error -i %{infile} \
     duration = probe.format.duration.to_i
     audsize  = (duration * opts.abrate/8) / 1000
     bufsize  = "#{SIZE_MB_LIMIT - audsize}M"
-    maxrate  = 8 * (0.90 * SIZE_MB_LIMIT * 1000).to_i / duration
+    maxrate  = 8 * (0.99 * SIZE_MB_LIMIT * 1000).to_i / duration
     maxrate -= opts.abrate if maxrate > opts.abrate
     maxrate  = "#{maxrate}k"
 
