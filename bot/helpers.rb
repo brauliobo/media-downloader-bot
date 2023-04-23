@@ -118,7 +118,7 @@ class Bot
     def report_error msg, e, context: nil
       return unless msg
       error  = ''
-      error << "\n\n<b>context</b>: #{he context}" if context
+      error << "\n\n<b>context</b>: #{he(context).first(100)}" if context
       error << "\n\n<b>error</b>: <pre>#{he e.message}\n"
       error << "#{he e.backtrace.join "\n"}</pre>"
 
@@ -154,7 +154,7 @@ class Bot
       text
     end
 
-    MARKDOWN_NON_FORMAT = %w[\# / [ ] ( ) ~ # + - = | { } . ! < >]
+    MARKDOWN_NON_FORMAT = %w[\# / [ ] ( ) " ~ # + - = | { } . ! < >]
     MARKDOWN_FORMAT     = %w[* _ `]
     MARKDOWN_ALL        = MARKDOWN_FORMAT + MARKDOWN_NON_FORMAT
     def me t
