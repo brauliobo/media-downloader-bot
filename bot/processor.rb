@@ -1,4 +1,3 @@
-require 'taglib'
 require 'chronic_duration'
 
 class Bot
@@ -87,16 +86,9 @@ class Bot
 
       i
     end
-
+    
     def tag fn, info
       return # using FFmpeg
-      TagLib::FileRef.open fn do |f|
-        return if f&.tag.nil?
-        f.tag.title   = info.title
-        f.tag.artist  = info.uploader
-        f.tag.comment = info.info.original_url
-        f.save
-      end
     end
 
     def skip_convert? type, probe, opts

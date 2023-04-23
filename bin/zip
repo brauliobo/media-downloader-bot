@@ -20,6 +20,7 @@ path.peach do |f|
 
   o, e, st = send "zip_#{i.type.name}", i.fn_in, fn_out,
     opts: i.opts, probe: i.probe
+  Tagger.copy f, fn_out
   if st != 0
     raise e
   end

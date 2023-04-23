@@ -97,7 +97,7 @@ nice ffmpeg -vn -y -loglevel error -i %{infile} \
     maxrate  = "#{maxrate}k"
 
     cmd = opts.format.cmd % {
-      infile:   escape(infile),
+      infile:   Sh.escape(infile),
       width:    opts.width,
       quality:  opts.quality,
       abrate:   opts.abrate,
@@ -107,45 +107,35 @@ nice ffmpeg -vn -y -loglevel error -i %{infile} \
       vf:       vf,
     }
     apply_opts cmd, opts
-    cmd << " #{escape outfile}"
+    cmd << " #{Sh.escape outfile}"
 
-    run cmd
+    Sh.run cmd
   end
 
   def zip_audio infile, outfile, probe:, opts: SymMash.new
     opts.reverse_merge! opts.format.opts.deep_dup
 
     cmd = opts.format.cmd % {
-      infile:   escape(infile),
+      infile:   Sh.escape(infile),
       bitrate:  opts.bitrate,
       metadata: metadata_args(opts.metadata),
     }
 
     apply_opts cmd, opts
-    cmd << " #{escape outfile}"
+    cmd << " #{Sh.escape outfile}"
 
-    run cmd
+    Sh.run cmd
   end
 
   protected 
 
   def metadata_args metadata
-    (metadata || {}).map{ |k,v| "-metadata #{escape k}=#{escape v}" }.join ' '
+    (metadata || {}).map{ |k,v| "-metadata #{Sh.escape k}=#{Sh.escape v}" }.join ' '
   end
   
-  def run cmd
-    binding.pry if ENV['PRY_ZIPPER']
-    puts cmd if ENV['PRINT_CMD']
-    Open3.capture3 cmd
-  end
-
   def apply_opts cmd, opts
     cmd.strip!
     cmd << " -ss #{opts.ss}" if opts.ss&.match(/\d?\d:\d\d/)
-  end
-
-  def escape f
-    Shellwords.escape f
   end
 
 end
