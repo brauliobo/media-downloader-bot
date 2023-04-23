@@ -1,8 +1,10 @@
 require 'bundler/setup'
 require 'active_support/all'
-require 'dotenv'
 require 'telegram/bot'
-Dotenv.load! '.env'
+Dir.chdir File.dirname __FILE__ do
+  require 'dotenv'
+  Dotenv.load! '.env'
+end
 
 require 'tmpdir'
 require 'shellwords'
