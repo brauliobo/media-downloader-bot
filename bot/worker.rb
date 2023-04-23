@@ -93,7 +93,7 @@ class Bot::Worker
       thumb:       thumb(info, dir),
       supports_streaming: true,
     }
-    send_message msg, caption, ret_msg
+    send_message msg, caption, **ret_msg
   end
 
   def msg_caption i
