@@ -11,6 +11,11 @@ class Bot
     USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36'
     DOWN_OPTS  = %i[referer]
 
+    def self.add_opt h, o
+      k,v = o.split '=', 2
+      h[k] = v || 1
+    end
+
     def initialize bot, msg, dir, line
       super bot, msg, dir
 
@@ -19,8 +24,7 @@ class Bot
       @uri  = URI.parse @args.shift
       @url  = uri.to_s
       @opts = @args.each.with_object SymMash.new do |a, h|
-        k,v = a.split '=', 2
-        h[k] = v || 1
+        self.class.add_opt h, a
       end
     end
 
