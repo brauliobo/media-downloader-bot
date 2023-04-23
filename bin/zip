@@ -5,15 +5,23 @@ require_relative '../bot'
 ENV['PRINT_CMD'] = '1'
 include Zipper
 
-i      = SymMash.new fn_in: ARGV[0], opts: {metadata: {}}
-prc    = Bot::Processor.probe i
-fn_out = ARGV[1]
-i.opts.metadata.url = 'youtu.be/7vhgfImhXIg'
-i.opts.format = i.type[i.opts.format || i.type[:default]]
+opts = SymMash.new metadata: {}
+Bot::UrlProcessor.add_opt opts, ARGV.pop while !File.exists? ARGV[-1]
 
-o, e, st = send "zip_#{i.type.name}", i.fn_in, fn_out,
-  opts: i.opts, probe: i.probe
-if st != 0
-  raise e
+path = ARGV
+path.peach do |f|
+  dir    = "#{File.dirname f}/converted"
+  Dir.mkdir dir unless File.directory? dir
+
+  i      = SymMash.new fn_in: f, opts: opts
+  prc    = Bot::Processor.probe i
+  format = i.opts.format = i.type[i.opts.format || i.type[:default]]
+  fn_out = "#{dir}/#{File.basename f, File.extname(f)}.#{format.ext}"
+
+  o, e, st = send "zip_#{i.type.name}", i.fn_in, fn_out,
+    opts: i.opts, probe: i.probe
+  if st != 0
+    raise e
+  end
+
 end
-

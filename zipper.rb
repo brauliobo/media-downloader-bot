@@ -13,8 +13,10 @@ module Zipper
   # -spatial_aq:v 1 is too slow
   VIDEO_PRE_OPTS   = if CUDA then '-profile:v high -tune:v hq -level 4.1 -rc:v vbr -rc-lookahead:v 32 -aq-strength:v 15' else '' end
   VIDEO_PRE_OPTS  << " -vf #{SCALE_KEY}=\"%{width}:trunc(ow/a/2)*2%{vf}\""
+
+  POST_OPTS        = " -map_metadata 0 -id3v2_version 3 -write_id3v1 1 %{metadata}"
   VIDEO_POST_OPTS  = "-movflags +faststart -movflags use_metadata_tags"
-  VIDEO_POST_OPTS << " %{metadata}"
+  VIDEO_POST_OPTS << " #{POST_OPTS}"
 
   Types = SymMash.new(
     video: {
@@ -36,7 +38,7 @@ nice ffmpeg -y -threads 12 -loglevel error #{H264_OPTS} -i %{infile} #{VIDEO_PRE
         opts: {width: 720, quality: 40, abrate: 64},
         cmd:  <<-EOC
 nice ffmpeg -y -threads 12 -loglevel error -i %{infile} #{VIDEO_PRE_OPTS} \
-  -c:v libsvtav1 -crf %{quality} -svtav1-params tbr=%{maxrate} #{VIDEO_POST_OPTS} \
+  -c:v libsvtav1 -crf %{quality} -svtav1-params mbr=%{maxrate} #{VIDEO_POST_OPTS} \
   -c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k 
         EOC
       },
@@ -52,7 +54,7 @@ nice ffmpeg -y -threads 12 -loglevel error -i %{infile} #{VIDEO_PRE_OPTS} \
         # aac_he_v2 doesn't work with instagram
         cmd:  <<-EOC
 nice ffmpeg -vn -y -loglevel error -i %{infile} \
-  -c:a libfdk_aac -profile:a aac_he -b:a %{bitrate}k 
+  -c:a libfdk_aac -profile:a aac_he -b:a %{bitrate}k #{POST_OPTS}
         EOC
       },
       # Opus in Telegram Bots are considered voice messages
@@ -61,8 +63,8 @@ nice ffmpeg -vn -y -loglevel error -i %{infile} \
         mime: 'audio/aac',
         opts: {bitrate: 80},
         cmd:  <<-EOC
-ffmpeg -loglevel quiet -i %{infile} -f wav - |
-  opusenc --bitrate %{bitrate} --quiet - 
+nice ffmpeg -vn -y -loglevel error -i %{infile} \
+  -c:a libopus -b:a %{bitrate}k #{POST_OPTS}
         EOC
       },
     },

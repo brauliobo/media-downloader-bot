@@ -35,7 +35,6 @@ class Bot
       i
     end
 
-
     def initialize bot, msg, dir
       @bot = bot
       @msg = msg
