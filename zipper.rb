@@ -1,5 +1,3 @@
-require 'open3'
-
 module Zipper
 
   SIZE_MB_LIMIT = 50
@@ -41,7 +39,7 @@ nice ffmpeg -y -threads 12 -loglevel error #{H264_OPTS} -i %{infile} #{VIDEO_PRE
         mime: 'video/mp4',
         opts: {width: 720, quality: 50, vbrate: 200, abrate: 64},
         cmd:  <<-EOC
-nice ffmpeg -y -threads 12 -loglevel error -i %{infile} #{VIDEO_PRE_OPTS} \
+nice ffmpeg -y -threads 12 -loglevel error -i %{infile} #{VP9_PRE_OPTS} \
   -c:v libsvt_vp9 -cq:v %{quality} -b:v %{maxrate}k #{VIDEO_POST_OPTS} \
   -c:a libopus -b:a %{abrate}k
         EOC
