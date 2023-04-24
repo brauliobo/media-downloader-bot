@@ -5,8 +5,9 @@ class Bot
     attr_reader :uri, :url
     attr_reader :opts
 
+    MAX_RES    = 1080
     DOWN_BIN   = "yt-dlp"
-    DOWN_ARGS  = "--ignore-errors --write-info-json --no-clean-infojson"
+    DOWN_ARGS  = "-S 'res:#{MAX_RES}' --ignore-errors --write-info-json --no-clean-infojson"
     DOWN_CMD   = "#{DOWN_BIN} #{DOWN_ARGS} '%{url}'"
     USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36'
     DOWN_OPTS  = %i[referer]
