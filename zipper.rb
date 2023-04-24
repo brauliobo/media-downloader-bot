@@ -13,6 +13,7 @@ module Zipper
   # -spatial_aq:v 1 is too slow
   VIDEO_PRE_OPTS   = if CUDA then '-profile:v high -tune:v hq -level 4.1 -rc:v vbr -rc-lookahead:v 32 -aq-strength:v 15' else '' end
   VIDEO_PRE_OPTS  << " -vf #{SCALE_KEY}=\"%{width}:trunc(ow/a/2)*2%{vf}\""
+  VP9_PRE_OPTS     = " -vf #{SCALE_KEY}=\"%{width}:trunc(ow/a/8)*8%{vf}\""
 
   POST_OPTS        = " -map_metadata 0 -id3v2_version 3 -write_id3v1 1 %{metadata}"
   VIDEO_POST_OPTS  = "-movflags +faststart -movflags use_metadata_tags"
@@ -22,6 +23,7 @@ module Zipper
     video: {
       name:    :video,
       default: :h264,
+
       h264: {
         ext:  :mp4,
         mime: 'video/mp4',
@@ -32,13 +34,28 @@ nice ffmpeg -y -threads 12 -loglevel error #{H264_OPTS} -i %{infile} #{VIDEO_PRE
   -c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k 
         EOC
       },
+
+      # FIXME: Can't control file size
+      vp9: {
+        ext:  :mp4,
+        mime: 'video/mp4',
+        opts: {width: 720, quality: 50, vbrate: 200, abrate: 64},
+        cmd:  <<-EOC
+nice ffmpeg -y -threads 12 -loglevel error -i %{infile} #{VIDEO_PRE_OPTS} \
+  -c:v libsvt_vp9 -cq:v %{quality} -b:v %{maxrate}k #{VIDEO_POST_OPTS} \
+  -c:a libopus -b:a %{abrate}k
+        EOC
+      },
+
+      # Doesn't work on iOS :(
+      # MBR reduces quality too much, https://gitlab.com/AOMediaCodec/SVT-AV1/-/issues/2065
       av1: {
         ext:  :mp4,
         mime: 'video/mp4',
-        opts: {width: 720, quality: 40, abrate: 64},
+        opts: {width: 720, quality: 40, vbrate: 200, abrate: 64},
         cmd:  <<-EOC
 nice ffmpeg -y -threads 12 -loglevel error -i %{infile} #{VIDEO_PRE_OPTS} \
-  -c:v libsvtav1 -crf %{quality} -svtav1-params mbr=%{maxrate} #{VIDEO_POST_OPTS} \
+  -c:v libsvtav1 -crf %{quality} -b:v %{vbrate}k -svtav1-params mbr=%{maxrate} #{VIDEO_POST_OPTS} \
   -c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k 
         EOC
       },
@@ -47,6 +64,7 @@ nice ffmpeg -y -threads 12 -loglevel error -i %{infile} #{VIDEO_PRE_OPTS} \
     audio: {
       name:    :audio,
       default: :aac,
+
       aac: {
         ext:  :m4a,
         mime: 'audio/aac',
@@ -57,6 +75,7 @@ nice ffmpeg -vn -y -loglevel error -i %{infile} \
   -c:a libfdk_aac -profile:a aac_he -b:a %{bitrate}k #{POST_OPTS}
         EOC
       },
+
       # Opus in Telegram Bots are considered voice messages
       opus: {
         ext:  :opus,
@@ -101,6 +120,7 @@ nice ffmpeg -vn -y -loglevel error -i %{infile} \
       width:    opts.width,
       quality:  opts.quality,
       abrate:   opts.abrate,
+      vbrate:   opts.vbrate,
       maxrate:  maxrate,
       bufsize:  bufsize,
       metadata: metadata_args(opts.metadata),
