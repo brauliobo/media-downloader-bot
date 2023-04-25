@@ -1,7 +1,7 @@
 module Zipper
 
   SIZE_MB_LIMIT = 50
-  PERCENT       = 0.98 # 2% less
+  PERCENT       = 0.98 # 2% less, 1% less proved to exceed limit
 
   CUDA         = false # slower while mining
   H264_OPTS    = if CUDA then '-hwaccel cuda -hwaccel_output_format cuda' else '' end
@@ -30,7 +30,7 @@ module Zipper
         cmd:  <<-EOC
 nice ffmpeg -y -threads 12 -loglevel error #{H264_OPTS} -i %{infile} #{VIDEO_PRE_OPTS} \
   -c:v #{H264_CODEC} -cq:v %{quality} -maxrate:v %{maxrate} -bufsize %{bufsize} #{VIDEO_POST_OPTS} \
-  -c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k 
+  -c:a libopus -b:a %{abrate}k
         EOC
       },
 
@@ -55,7 +55,7 @@ nice ffmpeg -y -threads 12 -loglevel error -i %{infile} #{VP9_PRE_OPTS} \
         cmd:  <<-EOC
 nice ffmpeg -y -threads 12 -loglevel error -i %{infile} #{VIDEO_PRE_OPTS} \
   -c:v libsvtav1 -crf %{quality} -b:v %{vbrate}k -svtav1-params mbr=%{maxrate} #{VIDEO_POST_OPTS} \
-  -c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k 
+  -c:a libopus -b:a %{abrate}k
         EOC
       },
     },
