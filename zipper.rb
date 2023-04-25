@@ -1,7 +1,7 @@
 module Zipper
 
   SIZE_MB_LIMIT = 50
-  PERCENT       = 0.98 # 2% less, 1% less proved to exceed limit
+  PERCENT       = 0.97 # 3% less, up to 2% less proved to exceed limit (without Opus as audio 2% is enough)
 
   CUDA         = false # slower while mining
   H264_OPTS    = if CUDA then '-hwaccel cuda -hwaccel_output_format cuda' else '' end
@@ -62,7 +62,17 @@ nice ffmpeg -y -threads 12 -loglevel error -i %{infile} #{VIDEO_PRE_OPTS} \
 
     audio: {
       name:    :audio,
-      default: :aac,
+      default: :opus,
+
+      opus: {
+        ext:  :opus,
+        mime: 'audio/aac',
+        opts: {bitrate: 80},
+        cmd:  <<-EOC
+nice ffmpeg -vn -y -loglevel error -i %{infile} \
+  -c:a libopus -b:a %{bitrate}k #{POST_OPTS}
+        EOC
+      },
 
       aac: {
         ext:  :m4a,
@@ -72,17 +82,6 @@ nice ffmpeg -y -threads 12 -loglevel error -i %{infile} #{VIDEO_PRE_OPTS} \
         cmd:  <<-EOC
 nice ffmpeg -vn -y -loglevel error -i %{infile} \
   -c:a libfdk_aac -profile:a aac_he -b:a %{bitrate}k #{POST_OPTS}
-        EOC
-      },
-
-      # Opus in Telegram Bots are considered voice messages
-      opus: {
-        ext:  :opus,
-        mime: 'audio/aac',
-        opts: {bitrate: 80},
-        cmd:  <<-EOC
-nice ffmpeg -vn -y -loglevel error -i %{infile} \
-  -c:a libopus -b:a %{bitrate}k #{POST_OPTS}
         EOC
       },
     },
