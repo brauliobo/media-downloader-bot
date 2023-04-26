@@ -28,7 +28,7 @@ module Zipper
         mime: 'video/mp4',
         opts: {width: 640, quality: H264_QUALITY, abrate: 64},
         cmd:  <<-EOC
-nice ffmpeg -y -threads 12 -loglevel error #{H264_OPTS} -i %{infile} #{VIDEO_PRE_OPTS} \
+nice ffmpeg -y -threads 12 -loglevel error #{H264_OPTS} -i %{infile} %{inputs} #{VIDEO_PRE_OPTS} \
   -c:v #{H264_CODEC} -cq:v %{quality} -maxrate:v %{maxrate} -bufsize %{bufsize} #{VIDEO_POST_OPTS} \
   -c:a libopus -b:a %{abrate}k
         EOC
@@ -40,7 +40,7 @@ nice ffmpeg -y -threads 12 -loglevel error #{H264_OPTS} -i %{infile} #{VIDEO_PRE
         mime: 'video/mp4',
         opts: {width: 720, quality: 50, vbrate: 200, abrate: 64},
         cmd:  <<-EOC
-nice ffmpeg -y -threads 12 -loglevel error -i %{infile} #{VP9_PRE_OPTS} \
+nice ffmpeg -y -threads 12 -loglevel error -i %{infile} %{inputs} #{VP9_PRE_OPTS} \
   -c:v libsvt_vp9 -cq:v %{quality} -b:v %{maxrate}k #{VIDEO_POST_OPTS} \
   -c:a libopus -b:a %{abrate}k
         EOC
@@ -53,7 +53,7 @@ nice ffmpeg -y -threads 12 -loglevel error -i %{infile} #{VP9_PRE_OPTS} \
         mime: 'video/mp4',
         opts: {width: 720, quality: 40, vbrate: 200, abrate: 64},
         cmd:  <<-EOC
-nice ffmpeg -y -threads 12 -loglevel error -i %{infile} #{VIDEO_PRE_OPTS} \
+nice ffmpeg -y -threads 12 -loglevel error -i %{infile} %{inputs} #{VIDEO_PRE_OPTS} \
   -c:v libsvtav1 -crf %{quality} -b:v %{vbrate}k -svtav1-params mbr=%{maxrate} #{VIDEO_POST_OPTS} \
   -c:a libopus -b:a %{abrate}k
         EOC
@@ -69,7 +69,7 @@ nice ffmpeg -y -threads 12 -loglevel error -i %{infile} #{VIDEO_PRE_OPTS} \
         mime: 'audio/aac',
         opts: {bitrate: 80},
         cmd:  <<-EOC
-nice ffmpeg -vn -y -loglevel error -i %{infile} \
+nice ffmpeg -vn -y -loglevel error -i %{infile} %{inputs} \
   -c:a libopus -b:a %{bitrate}k #{POST_OPTS}
         EOC
       },
@@ -80,7 +80,7 @@ nice ffmpeg -vn -y -loglevel error -i %{infile} \
         opts: {bitrate: 80},
         # aac_he_v2 doesn't work with instagram
         cmd:  <<-EOC
-nice ffmpeg -vn -y -loglevel error -i %{infile} \
+nice ffmpeg -vn -y -loglevel error -i %{infile} %{inputs} \
   -c:a libfdk_aac -profile:a aac_he -b:a %{bitrate}k #{POST_OPTS}
         EOC
       },
@@ -88,7 +88,10 @@ nice ffmpeg -vn -y -loglevel error -i %{infile} \
   )
 
   def zip_video infile, outfile, probe:, opts: SymMash.new
+    inputs = ''
     opts.reverse_merge! opts.format.opts.deep_dup
+
+    #inputs = "-i #{Sh.escape opts.cover} -map 1 -map 0" if opts.cover
 
     # convert input
     opts.width   = opts.width.to_i
@@ -115,6 +118,7 @@ nice ffmpeg -vn -y -loglevel error -i %{infile} \
 
     cmd = opts.format.cmd % {
       infile:   Sh.escape(infile),
+      inputs:   inputs,
       width:    opts.width,
       quality:  opts.quality,
       abrate:   opts.abrate,
@@ -125,16 +129,23 @@ nice ffmpeg -vn -y -loglevel error -i %{infile} \
       vf:       vf,
     }
     apply_opts cmd, opts
+
+    # ignored by Telegram which only uses thumb parameter
+    # also make the filesize a bit bigger
+    #cmd << ' -c:0 png -disposition:0 attached_pic' if opts.cover
+
     cmd << " #{Sh.escape outfile}"
 
     Sh.run cmd
   end
 
   def zip_audio infile, outfile, probe:, opts: SymMash.new
+    inputs = ''
     opts.reverse_merge! opts.format.opts.deep_dup
 
     cmd = opts.format.cmd % {
       infile:   Sh.escape(infile),
+      inputs:   inputs,
       bitrate:  opts.bitrate,
       metadata: metadata_args(opts.metadata),
     }

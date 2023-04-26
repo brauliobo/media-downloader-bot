@@ -101,6 +101,7 @@ class Bot
     def convert i
       i.format = i.type[i.opts.format || i.type[:default]]
       i.opts.format = i.format
+      i.opts.cover  = i.info.thumbnail
 
       m = SymMash.new
       m.artist = i.info.uploader
