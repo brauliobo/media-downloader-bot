@@ -108,10 +108,8 @@ class Bot::Worker
   end
 
   def thumb info, dir
-    return if info.thumbnails.blank?
+    return if (url = info.thumbnail).blank?
 
-    url    = info.thumbnails.first.url
-    return unless url
     im_in  = "#{dir}/img"
     im_out = "#{dir}/#{info._filename}-thumb.jpg"
 
