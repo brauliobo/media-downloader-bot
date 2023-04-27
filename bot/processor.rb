@@ -6,7 +6,7 @@ class Bot
     Types = Zipper::Types
 
     VID_DURATION_THLD = 35
-    AUD_DURATION_THLD = 80
+    AUD_DURATION_THLD = 1000 * Zipper.size_mb_limit / (Zipper::Types.audio.opus.opts.bitrate / 8) / 60
 
     VID_TOO_LONG = "\nQuality is compromised as the video is too long to fit the #{Zipper.size_mb_limit}MB upload limit on Telegram Bots"
     AUD_TOO_LONG = "\nQuality is compromised as the audio is too long to fit the #{Zipper.size_mb_limit}MB upload limit on Telegram Bots"
