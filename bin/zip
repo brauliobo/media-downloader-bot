@@ -3,10 +3,11 @@
 require_relative '../bot'
 
 ENV['PRINT_CMD'] = '1'
-include Zipper
 
 opts = SymMash.new metadata: {}
 Bot::UrlProcessor.add_opt opts, ARGV.pop while !File.exists? ARGV[-1]
+
+Zipper.size_mb_limit = nil
 
 path = ARGV
 path.peach do |f|
@@ -18,7 +19,7 @@ path.peach do |f|
   format = i.opts.format = i.type[i.opts.format || i.type[:default]]
   fn_out = "#{dir}/#{File.basename f, File.extname(f)}.#{format.ext}"
 
-  o, e, st = send "zip_#{i.type.name}", i.fn_in, fn_out,
+  o, e, st = Zipper.send "zip_#{i.type.name}", i.fn_in, fn_out,
     opts: i.opts, probe: i.probe
   Tagger.copy f, fn_out
   if st != 0

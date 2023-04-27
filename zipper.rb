@@ -1,6 +1,8 @@
-module Zipper
+class Zipper
 
-  SIZE_MB_LIMIT = 50
+  class_attribute :size_mb_limit
+  self.size_mb_limit = 50
+
   PERCENT       = 0.97 # 3% less, up to 2% less proved to exceed limit (without Opus as audio 2% is enough)
 
   CUDA         = false # slower while mining
@@ -24,24 +26,26 @@ module Zipper
       default: :h264,
 
       h264: {
-        ext:  :mp4,
-        mime: 'video/mp4',
-        opts: {width: 640, quality: H264_QUALITY, abrate: 64},
-        cmd:  <<-EOC
+        ext:    :mp4,
+        mime:   'video/mp4',
+        opts:   {width: 640, quality: H264_QUALITY, abrate: 64},
+        vcopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
+        cmd: <<-EOC
 nice ffmpeg -y -threads 12 -loglevel error #{H264_OPTS} -i %{infile} %{inputs} #{VIDEO_PRE_OPTS} \
-  -c:v #{H264_CODEC} -cq:v %{quality} -maxrate:v %{maxrate} -bufsize %{bufsize} #{VIDEO_POST_OPTS} \
+  -c:v #{H264_CODEC} -cq:v %{quality} %{vcopts} #{VIDEO_POST_OPTS} \
   -c:a libopus -b:a %{abrate}k
         EOC
       },
 
       # FIXME: Can't control file size
       vp9: {
-        ext:  :mp4,
-        mime: 'video/mp4',
-        opts: {width: 720, quality: 50, vbrate: 200, abrate: 64},
+        ext:    :mp4,
+        mime:   'video/mp4',
+        opts:   {width: 720, quality: 50, vbrate: 200, abrate: 64},
+        vcopts: "-b:v %{maxrate}k",
         cmd:  <<-EOC
 nice ffmpeg -y -threads 12 -loglevel error -i %{infile} %{inputs} #{VP9_PRE_OPTS} \
-  -c:v libsvt_vp9 -cq:v %{quality} -b:v %{maxrate}k #{VIDEO_POST_OPTS} \
+  -c:v libsvt_vp9 -cq:v %{quality} %{vcopts} #{VIDEO_POST_OPTS} \
   -c:a libopus -b:a %{abrate}k
         EOC
       },
@@ -49,12 +53,13 @@ nice ffmpeg -y -threads 12 -loglevel error -i %{infile} %{inputs} #{VP9_PRE_OPTS
       # Doesn't work on iOS :(
       # MBR reduces quality too much, https://gitlab.com/AOMediaCodec/SVT-AV1/-/issues/2065
       av1: {
-        ext:  :mp4,
-        mime: 'video/mp4',
-        opts: {width: 720, quality: 40, vbrate: 200, abrate: 64},
+        ext:    :mp4,
+        mime:   'video/mp4',
+        opts:   {width: 720, quality: 40, vbrate: 200, abrate: 64},
+        vcopts: "-b:v %{vbrate}k -svtav1-params mbr=%{maxrate}",
         cmd:  <<-EOC
 nice ffmpeg -y -threads 12 -loglevel error -i %{infile} %{inputs} #{VIDEO_PRE_OPTS} \
-  -c:v libsvtav1 -crf %{quality} -b:v %{vbrate}k -svtav1-params mbr=%{maxrate} #{VIDEO_POST_OPTS} \
+  -c:v libsvtav1 -crf %{quality} %{vcopts}  #{VIDEO_POST_OPTS} \
   -c:a libopus -b:a %{abrate}k
         EOC
       },
@@ -87,7 +92,7 @@ nice ffmpeg -vn -y -loglevel error -i %{infile} %{inputs} \
     },
   )
 
-  def zip_video infile, outfile, probe:, opts: SymMash.new
+  def self.zip_video infile, outfile, probe:, opts: SymMash.new
     inputs = ''
     opts.reverse_merge! opts.format.opts.deep_dup
 
@@ -108,13 +113,16 @@ nice ffmpeg -vn -y -loglevel error -i %{infile} %{inputs} \
 
     vf = ",#{opts.vf}" if opts.vf.present?
 
-    # max bitrate to fit SIZE_MB_LIMIT
-    duration = probe.format.duration.to_i
-    audsize  = (duration * opts.abrate/8) / 1000
-    bufsize  = "#{SIZE_MB_LIMIT - audsize}M"
-    maxrate  = 8 * (PERCENT * SIZE_MB_LIMIT * 1000).to_i / duration
-    maxrate -= opts.abrate if maxrate > opts.abrate
-    maxrate  = "#{maxrate}k"
+    if size_mb_limit
+      # max bitrate to fit size_mb_limit
+      duration = probe.format.duration.to_i
+      audsize  = (duration * opts.abrate/8) / 1000
+      bufsize  = "#{size_mb_limit - audsize}M"
+      maxrate  = 8 * (PERCENT * size_mb_limit * 1000).to_i / duration
+      maxrate -= opts.abrate if maxrate > opts.abrate
+      maxrate  = "#{maxrate}k"
+      vcopts   = opts.format.vcopts % {maxrate:, bufsize:}
+    end
 
     cmd = opts.format.cmd % {
       infile:   Sh.escape(infile),
@@ -123,8 +131,7 @@ nice ffmpeg -vn -y -loglevel error -i %{infile} %{inputs} \
       quality:  opts.quality,
       abrate:   opts.abrate,
       vbrate:   opts.vbrate,
-      maxrate:  maxrate,
-      bufsize:  bufsize,
+      vcopts:   vcopts,
       metadata: metadata_args(opts.metadata),
       vf:       vf,
     }
@@ -139,7 +146,7 @@ nice ffmpeg -vn -y -loglevel error -i %{infile} %{inputs} \
     Sh.run cmd
   end
 
-  def zip_audio infile, outfile, probe:, opts: SymMash.new
+  def self.zip_audio infile, outfile, probe:, opts: SymMash.new
     inputs = ''
     opts.reverse_merge! opts.format.opts.deep_dup
 
@@ -158,11 +165,11 @@ nice ffmpeg -vn -y -loglevel error -i %{infile} %{inputs} \
 
   protected 
 
-  def metadata_args metadata
+  def self.metadata_args metadata
     (metadata || {}).map{ |k,v| "-metadata #{Sh.escape k}=#{Sh.escape v}" }.join ' '
   end
   
-  def apply_opts cmd, opts
+  def self.apply_opts cmd, opts
     cmd.strip!
     cmd << " -ss #{opts.ss}" if opts.ss&.match(/\d?\d:\d\d/)
   end
