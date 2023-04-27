@@ -3,15 +3,15 @@ require 'chronic_duration'
 class Bot
   class Processor
 
-    include Zipper
+    Types = Zipper::Types
 
     VID_DURATION_THLD = 35
     AUD_DURATION_THLD = 80
 
-    VID_TOO_LONG = "\nQuality is compromised as the video is too long to fit the #{SIZE_MB_LIMIT}MB upload limit on Telegram Bots"
-    AUD_TOO_LONG = "\nQuality is compromised as the audio is too long to fit the #{SIZE_MB_LIMIT}MB upload limit on Telegram Bots"
-    VID_TOO_BIG  = "\nVideo over #{SIZE_MB_LIMIT}MB Telegram Bot's limit, converting to audio..."
-    TOO_BIG      = "\nFile over #{SIZE_MB_LIMIT}MB Telegram Bot's limit"
+    VID_TOO_LONG = "\nQuality is compromised as the video is too long to fit the #{Zipper.size_mb_limit}MB upload limit on Telegram Bots"
+    AUD_TOO_LONG = "\nQuality is compromised as the audio is too long to fit the #{Zipper.size_mb_limit}MB upload limit on Telegram Bots"
+    VID_TOO_BIG  = "\nVideo over #{Zipper.size_mb_limit}MB Telegram Bot's limit, converting to audio..."
+    TOO_BIG      = "\nFile over #{Zipper.size_mb_limit}MB Telegram Bot's limit"
 
     # missing mimes
     Rack::Mime::MIME_TYPES['.opus'] = 'audio/ogg'
@@ -55,29 +55,24 @@ class Bot
         edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(VID_TOO_LONG))
       end
       if i.type == Types.audio and i.durat > AUD_DURATION_THLD.minutes.to_i
-        i.opts.bitrate ||= 0.98 * 8 * (SIZE_MB_LIMIT*1000) / i.durat
+        i.opts.bitrate ||= 0.98 * 8 * (Zipper.size_mb_limit*1000) / i.durat
         edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(AUD_TOO_LONG))
       end
 
       binding.pry if ENV['PRY_BEFORE_CONVERT']
 
-      if skip_convert? i.type, i.probe, i.opts
-        i.fn_out = i.fn_in
-      else
-        i.fn_out = convert i
-        return unless i.fn_out
-      end
+      return unless i.fn_out = convert(i)
 
       # check telegram bot's upload limit
       mbsize = File.size(i.fn_out) / 2**20
-      if i.type == Types.video and mbsize >= SIZE_MB_LIMIT
+      if i.type == Types.video and mbsize >= Zipper.size_mb_limit
         edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(VID_TOO_BIG))
         i.type   = Types.audio
         i.fn_out = convert i
         mbsize   = File.size(i.fn_out) / 2**20
       end
       # still too big as audio...
-      if mbsize >= SIZE_MB_LIMIT
+      if mbsize >= Zipper.size_mb_limit
         edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(TOO_BIG))
         return
       end
@@ -91,16 +86,8 @@ class Bot
       return # using FFmpeg
     end
 
-    def skip_convert? type, probe, opts
-      return if opts.bitrate # custom bitrate
-      stream = probe.streams.first
-      return true if type.name == :audio and stream.codec_name == 'aac' and stream.bit_rate.to_i/1000 < Types.audio.opts.bitrate
-      false
-    end
-
     def convert i
-      i.format = i.type[i.opts.format || i.type[:default]]
-      i.opts.format = i.format
+      i.opts.format = i.format = i.type[i.opts.format || i.type[:default]]
       i.opts.cover  = i.info.thumbnail
 
       m = SymMash.new
@@ -118,7 +105,7 @@ class Bot
       fn_out.gsub! '/', ', ' # not escaped by shellwords
       fn_out  = "#{dir}/#{fn_out}"
 
-      o, e, st = send "zip_#{i.type.name}", i.fn_in, fn_out, opts: i.opts, probe: i.probe
+      o, e, st = Zipper.send "zip_#{i.type.name}", i.fn_in, fn_out, opts: i.opts, probe: i.probe
       if st != 0
         edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me("\nConvert failed: #{o}\n#{e}"))
         admin_report msg, "#{o}\n#{e}", status: 'Convert failed'

@@ -1,7 +1,5 @@
 class Bot::Worker
 
-  include Zipper
-
   attr_reader :bot
   attr_reader :msg
   attr_reader :dir
@@ -98,7 +96,7 @@ class Bot::Worker
 
   def msg_caption i
     text = ''
-    if opts.caption or i.type == Types.video
+    if opts.caption or i.type == Zipper::Types.video
       text  = "_#{me i.info.title}_"
       text << "\nby #{me i.info.uploader}" if i.info.uploader
     end
