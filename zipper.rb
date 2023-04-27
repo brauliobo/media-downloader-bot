@@ -72,7 +72,7 @@ nice ffmpeg -y -threads 12 -loglevel error -i %{infile} %{inputs} #{VIDEO_PRE_OP
       opus: {
         ext:  :opus,
         mime: 'audio/aac',
-        opts: {bitrate: 80},
+        opts: {bitrate: 96},
         cmd:  <<-EOC
 nice ffmpeg -vn -y -loglevel error -i %{infile} %{inputs} \
   -c:a libopus -b:a %{bitrate}k #{POST_OPTS}
@@ -82,7 +82,7 @@ nice ffmpeg -vn -y -loglevel error -i %{infile} %{inputs} \
       aac: {
         ext:  :m4a,
         mime: 'audio/aac',
-        opts: {bitrate: 80},
+        opts: {bitrate: 96},
         # aac_he_v2 doesn't work with instagram
         cmd:  <<-EOC
 nice ffmpeg -vn -y -loglevel error -i %{infile} %{inputs} \
