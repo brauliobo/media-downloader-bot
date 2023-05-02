@@ -3,7 +3,7 @@ class Zipper
   class_attribute :size_mb_limit
   self.size_mb_limit = 50
 
-  PERCENT       = 0.97 # 3% less, up to 2% less proved to exceed limit (without Opus as audio 2% is enough)
+  PERCENT       = 0.95 # 3% less, up to 2% less proved to exceed limit (without Opus as audio 2% is enough)
 
   CUDA         = false # slower while mining
   H264_OPTS    = if CUDA then '-hwaccel cuda -hwaccel_output_format cuda' else '' end
@@ -20,6 +20,12 @@ class Zipper
   VIDEO_POST_OPTS  = "-movflags +faststart -movflags use_metadata_tags"
   VIDEO_POST_OPTS << " #{POST_OPTS}"
 
+  ENC_OPUS = "-c:a libopus -b:a %{abrate}k"
+  # aac_he_v2 doesn't work with instagram
+  ENC_AAC  = "-c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k"
+
+  FFMPEG   = "nice ffmpeg -y -threads 12 -loglevel error"
+
   Types = SymMash.new(
     video: {
       name:    :video,
@@ -31,9 +37,8 @@ class Zipper
         opts:   {width: 640, quality: H264_QUALITY, abrate: 64},
         vcopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
         cmd: <<-EOC
-nice ffmpeg -y -threads 12 -loglevel error #{H264_OPTS} -i %{infile} %{inputs} #{VIDEO_PRE_OPTS} \
-  -c:v #{H264_CODEC} -cq:v %{quality} %{vcopts} #{VIDEO_POST_OPTS} \
-  -c:a libopus -b:a %{abrate}k
+#{FFMPEG} #{H264_OPTS} -i %{infile} %{inputs} #{VIDEO_PRE_OPTS} \
+  -c:v #{H264_CODEC} -cq:v %{quality} %{vcopts} #{VIDEO_POST_OPTS} #{ENC_OPUS}
         EOC
       },
 
@@ -44,9 +49,8 @@ nice ffmpeg -y -threads 12 -loglevel error #{H264_OPTS} -i %{infile} %{inputs} #
         opts:   {width: 720, quality: 50, vbrate: 200, abrate: 64},
         vcopts: "-b:v %{maxrate}k",
         cmd:  <<-EOC
-nice ffmpeg -y -threads 12 -loglevel error -i %{infile} %{inputs} #{VP9_PRE_OPTS} \
-  -c:v libsvt_vp9 -cq:v %{quality} %{vcopts} #{VIDEO_POST_OPTS} \
-  -c:a libopus -b:a %{abrate}k
+#{FFMPEG} -i %{infile} %{inputs} #{VP9_PRE_OPTS} \
+  -c:v libsvt_vp9 -cq:v %{quality} %{vcopts} #{VIDEO_POST_OPTS} #{ENC_OPUS}
         EOC
       },
 
@@ -58,9 +62,8 @@ nice ffmpeg -y -threads 12 -loglevel error -i %{infile} %{inputs} #{VP9_PRE_OPTS
         opts:   {width: 720, quality: 40, vbrate: 200, abrate: 64},
         vcopts: "-b:v %{vbrate}k -svtav1-params mbr=%{maxrate}",
         cmd:  <<-EOC
-nice ffmpeg -y -threads 12 -loglevel error -i %{infile} %{inputs} #{VIDEO_PRE_OPTS} \
-  -c:v libsvtav1 -crf %{quality} %{vcopts}  #{VIDEO_POST_OPTS} \
-  -c:a libopus -b:a %{abrate}k
+#{FFMPEG} -i %{infile} %{inputs} #{VIDEO_PRE_OPTS} \
+  -c:v libsvtav1 -crf %{quality} %{vcopts}  #{VIDEO_POST_OPTS} #{ENC_OPUS}
         EOC
       },
     },
@@ -73,21 +76,14 @@ nice ffmpeg -y -threads 12 -loglevel error -i %{infile} %{inputs} #{VIDEO_PRE_OP
         ext:  :opus,
         mime: 'audio/aac',
         opts: {bitrate: 96},
-        cmd:  <<-EOC
-nice ffmpeg -vn -y -loglevel error -i %{infile} %{inputs} \
-  -c:a libopus -b:a %{bitrate}k #{POST_OPTS}
-        EOC
+        cmd:  "#{FFMPEG} -vn -i %{infile} %{inputs} #{ENC_OPUS} #{POST_OPTS}"
       },
 
       aac: {
         ext:  :m4a,
         mime: 'audio/aac',
         opts: {bitrate: 96},
-        # aac_he_v2 doesn't work with instagram
-        cmd:  <<-EOC
-nice ffmpeg -vn -y -loglevel error -i %{infile} %{inputs} \
-  -c:a libfdk_aac -profile:a aac_he -b:a %{bitrate}k #{POST_OPTS}
-        EOC
+        cmd:  "#{FFMPEG} -vn -i %{infile} %{inputs} #{ENC_AAC} #{POST_OPTS}"
       },
     },
   )
@@ -96,7 +92,7 @@ nice ffmpeg -vn -y -loglevel error -i %{infile} %{inputs} \
     inputs = ''
     opts.reverse_merge! opts.format.opts.deep_dup
 
-    #inputs = "-i #{Sh.escape opts.cover} -map 1 -map 0" if opts.cover
+    #inputs = "-i #{Sh.escape opts.thumb} -map 1 -map 0" if opts.thumb
 
     # convert input
     opts.width   = opts.width.to_i
@@ -137,12 +133,10 @@ nice ffmpeg -vn -y -loglevel error -i %{infile} %{inputs} \
     }
     apply_opts cmd, opts
 
-    # ignored by Telegram which only uses thumb parameter
-    # also make the filesize a bit bigger
-    #cmd << ' -c:0 png -disposition:0 attached_pic' if opts.cover
+    # FIXME: exceeding file size
+    #cmd << ' -c:0 png -disposition:0 attached_pic' if opts.thumb
 
     cmd << " #{Sh.escape outfile}"
-
     Sh.run cmd
   end
 
@@ -150,16 +144,20 @@ nice ffmpeg -vn -y -loglevel error -i %{infile} %{inputs} \
     inputs = ''
     opts.reverse_merge! opts.format.opts.deep_dup
 
+    #inputs = "-i #{Sh.escape opts.thumb} -map 0 -map 1" if opts.thumb
+
     cmd = opts.format.cmd % {
       infile:   Sh.escape(infile),
       inputs:   inputs,
-      bitrate:  opts.bitrate,
+      abrate:   opts.bitrate,
       metadata: metadata_args(opts.metadata),
     }
-
     apply_opts cmd, opts
-    cmd << " #{Sh.escape outfile}"
 
+    #FIXME width needs to be a multiple of 2
+    #cmd << ' -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)"' if opts.thumb
+
+    cmd << " #{Sh.escape outfile}"
     Sh.run cmd
   end
 

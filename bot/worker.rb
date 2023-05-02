@@ -79,6 +79,8 @@ class Bot::Worker
     oprobe = Bot::Prober.for fn_out
     vstrea = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
 
+    thumb  = Faraday::UploadIO.new input.thumb, 'image/jpeg' if input.thumb
+
     fn_io   = Faraday::UploadIO.new fn_out, type.mime
     ret_msg = input.ret_msg = {
       type:        type.name,
@@ -88,7 +90,7 @@ class Bot::Worker
       height:      vstrea&.height,
       title:       info.title,
       performer:   info.uploader,
-      thumb:       thumb(info, dir),
+      thumb:       thumb,
       supports_streaming: true,
     }
     send_message msg, caption, **ret_msg
@@ -103,26 +105,6 @@ class Bot::Worker
     text << "\n\n_#{me i.info.description.strip}_" if opts.description and i.info.description.strip.presence
     text << "\n\n#{me i.url}" if i.url
     text
-  end
-
-  def thumb info, dir
-    return if (url = info.thumbnail).blank?
-
-    im_in  = "#{dir}/img"
-    im_out = "#{dir}/#{info._filename}-thumb.jpg"
-
-    File.write im_in, http.get(url).body
-    system "convert #{im_in} -resize x320 -define jpeg:extent=190kb #{im_out}"
-
-    Faraday::UploadIO.new im_out, 'image/jpeg'
-
-  rescue => e # continue on errors
-    report_error msg, e
-    nil
-  end
-
-  def http
-    Mechanize.new
   end
 
 end

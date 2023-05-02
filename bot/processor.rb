@@ -5,8 +5,8 @@ class Bot
 
     Types = Zipper::Types
 
-    VID_DURATION_THLD = 35
-    AUD_DURATION_THLD = 1000 * Zipper.size_mb_limit / (Zipper::Types.audio.opus.opts.bitrate / 8) / 60
+    VID_DURATION_THLD = if Zipper.size_mb_limit then 35 else Float::INFINITY end
+    AUD_DURATION_THLD = if Zipper.size_mb_limit then 1000 * Zipper.size_mb_limit / (Zipper::Types.audio.opus.opts.bitrate / 8) / 60 else Float::INFINITY end
 
     VID_TOO_LONG = "\nQuality is compromised as the video is too long to fit the #{Zipper.size_mb_limit}MB upload limit on Telegram Bots"
     AUD_TOO_LONG = "\nQuality is compromised as the audio is too long to fit the #{Zipper.size_mb_limit}MB upload limit on Telegram Bots"
@@ -55,12 +55,13 @@ class Bot
         edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(VID_TOO_LONG))
       end
       if i.type == Types.audio and i.durat > AUD_DURATION_THLD.minutes.to_i
-        i.opts.bitrate ||= 0.98 * 8 * (Zipper.size_mb_limit*1000) / i.durat
+        i.opts.bitrate ||= Zipper::PERCENT * 8 * (Zipper.size_mb_limit*1000) / i.durat
         edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(AUD_TOO_LONG))
       end
 
       binding.pry if ENV['PRY_BEFORE_CONVERT']
 
+      i.thumb = i.opts.thumb = thumb i.info
       return unless i.fn_out = convert(i)
 
       # check telegram bot's upload limit
@@ -84,6 +85,21 @@ class Bot
     
     def tag fn, info
       return # using FFmpeg
+    end
+
+    def thumb info
+      return if (url = info.thumbnail).blank?
+
+      im_in  = "#{dir}/img"
+      im_out = "#{dir}/#{info._filename}-thumb.jpg"
+
+      File.write im_in, http.get(url).body
+      system "convert #{im_in} -resize x320 -define jpeg:extent=190kb #{im_out}"
+
+      im_out
+    rescue => e # continue on errors
+      report_error msg, e
+      nil
     end
 
     def convert i
@@ -113,6 +129,12 @@ class Bot
       end
 
       fn_out
+    end
+
+    protected
+
+    def http
+      Mechanize.new
     end
 
   end
