@@ -4,8 +4,8 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-CPUQuota=600%
-User=daemon
+CPUQuota=900%
+DynamicUser=yes
 WorkingDirectory=/home/braulio/Projects/media-downloader-bot
 ExecStart=/home/braulio/.rvm/wrappers/ruby-3.1.2/bundle exec bin/bot
 Environment="TOKEN=xxx"
