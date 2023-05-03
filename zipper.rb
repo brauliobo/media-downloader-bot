@@ -16,7 +16,7 @@ class Zipper
   VIDEO_PRE_OPTS  << " -vf #{SCALE_KEY}=\"%{width}:trunc(ow/a/2)*2%{vf}\""
   VP9_PRE_OPTS     = " -vf #{SCALE_KEY}=\"%{width}:trunc(ow/a/8)*8%{vf}\""
 
-  POST_OPTS        = " -map_metadata 0 -id3v2_version 3 -write_id3v1 1 %{metadata}"
+  POST_OPTS        = " -map_metadata 0 -id3v2_version 3 -write_id3v1 1 -metadata downloaded_with=t.me/media_downloader_2bot %{metadata}"
   VIDEO_POST_OPTS  = "-movflags +faststart -movflags use_metadata_tags"
   VIDEO_POST_OPTS << " #{POST_OPTS}"
 
@@ -37,7 +37,7 @@ class Zipper
         opts:   {width: 640, quality: H264_QUALITY, abrate: 64},
         vcopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
         cmd: <<-EOC
-#{FFMPEG} #{H264_OPTS} -i %{infile} %{inputs} #{VIDEO_PRE_OPTS} \
+#{FFMPEG} #{H264_OPTS} -i %{infile} #{VIDEO_PRE_OPTS} \
   -c:v #{H264_CODEC} -cq:v %{quality} %{vcopts} #{VIDEO_POST_OPTS} #{ENC_OPUS}
         EOC
       },
@@ -49,7 +49,7 @@ class Zipper
         opts:   {width: 720, quality: 50, vbrate: 200, abrate: 64},
         vcopts: "-b:v %{maxrate}k",
         cmd:  <<-EOC
-#{FFMPEG} -i %{infile} %{inputs} #{VP9_PRE_OPTS} \
+#{FFMPEG} -i %{infile} #{VP9_PRE_OPTS} \
   -c:v libsvt_vp9 -cq:v %{quality} %{vcopts} #{VIDEO_POST_OPTS} #{ENC_OPUS}
         EOC
       },
@@ -62,7 +62,7 @@ class Zipper
         opts:   {width: 720, quality: 40, vbrate: 200, abrate: 64},
         vcopts: "-b:v %{vbrate}k -svtav1-params mbr=%{maxrate}",
         cmd:  <<-EOC
-#{FFMPEG} -i %{infile} %{inputs} #{VIDEO_PRE_OPTS} \
+#{FFMPEG} -i %{infile} #{VIDEO_PRE_OPTS} \
   -c:v libsvtav1 -crf %{quality} %{vcopts}  #{VIDEO_POST_OPTS} #{ENC_OPUS}
         EOC
       },
@@ -76,23 +76,20 @@ class Zipper
         ext:  :opus,
         mime: 'audio/aac',
         opts: {bitrate: 96},
-        cmd:  "#{FFMPEG} -vn -i %{infile} %{inputs} #{ENC_OPUS} #{POST_OPTS}"
+        cmd:  "#{FFMPEG} -vn -i %{infile} #{ENC_OPUS} #{POST_OPTS}"
       },
 
       aac: {
         ext:  :m4a,
         mime: 'audio/aac',
         opts: {bitrate: 96},
-        cmd:  "#{FFMPEG} -vn -i %{infile} %{inputs} #{ENC_AAC} #{POST_OPTS}"
+        cmd:  "#{FFMPEG} -vn -i %{infile} #{ENC_AAC} #{POST_OPTS}"
       },
     },
   )
 
   def self.zip_video infile, outfile, probe:, opts: SymMash.new
-    inputs = ''
     opts.reverse_merge! opts.format.opts.deep_dup
-
-    #inputs = "-i #{Sh.escape opts.thumb} -map 1 -map 0" if opts.thumb
 
     # convert input
     opts.width   = opts.width.to_i
@@ -109,8 +106,7 @@ class Zipper
 
     vf = ",#{opts.vf}" if opts.vf.present?
 
-    if size_mb_limit
-      # max bitrate to fit size_mb_limit
+    if size_mb_limit # max bitrate to fit size_mb_limit
       duration = probe.format.duration.to_i
       audsize  = (duration * opts.abrate/8) / 1000
       bufsize  = "#{size_mb_limit - audsize}M"
@@ -122,7 +118,6 @@ class Zipper
 
     cmd = opts.format.cmd % {
       infile:   Sh.escape(infile),
-      inputs:   inputs,
       width:    opts.width,
       quality:  opts.quality,
       abrate:   opts.abrate,
@@ -133,29 +128,19 @@ class Zipper
     }
     apply_opts cmd, opts
 
-    # FIXME: exceeding file size
-    #cmd << ' -c:0 png -disposition:0 attached_pic' if opts.thumb
-
     cmd << " #{Sh.escape outfile}"
     Sh.run cmd
   end
 
   def self.zip_audio infile, outfile, probe:, opts: SymMash.new
-    inputs = ''
     opts.reverse_merge! opts.format.opts.deep_dup
-
-    #inputs = "-i #{Sh.escape opts.thumb} -map 0 -map 1" if opts.thumb
 
     cmd = opts.format.cmd % {
       infile:   Sh.escape(infile),
-      inputs:   inputs,
       abrate:   opts.bitrate,
       metadata: metadata_args(opts.metadata),
     }
     apply_opts cmd, opts
-
-    #FIXME width needs to be a multiple of 2
-    #cmd << ' -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)"' if opts.thumb
 
     cmd << " #{Sh.escape outfile}"
     Sh.run cmd
