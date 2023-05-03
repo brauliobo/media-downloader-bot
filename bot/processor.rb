@@ -78,13 +78,14 @@ class Bot
         return
       end
 
-      tag i.fn_out, i.info
+      tag i
 
       i
     end
     
-    def tag fn, info
-      return # using FFmpeg
+    def tag i
+      Tagger.add_cover i.fn_out, i.thumb if i.type == Types.audio
+      # ... the rest is using FFmpeg
     end
 
     def thumb info
