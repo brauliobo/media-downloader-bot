@@ -40,6 +40,16 @@ class Bot
       @msg = msg || bot.fake_msg
     end
 
+    def input_from_file f, opts
+      SymMash.new(
+        fn_in: f,
+        opts:  opts,
+        info:  {
+          title: File.basename(f, File.extname(f)),
+        },
+      )
+    end
+
     def handle_input i
       return input.merge! fn_out: 'fake' if i.opts.simulate
 
@@ -88,7 +98,7 @@ class Bot
     end
     
     def tag i
-      Tagger.add_cover i.fn_out, i.thumb if i.type == Types.audio
+      Tagger.add_cover i.fn_out, i.thumb if i.thumb and i.type == Types.audio
       # ... the rest is using FFmpeg
     end
 

@@ -34,7 +34,7 @@ path.peach do |u|
     prc.handle_input i
   else
     prc = klass.new dir, bot
-    i   = SymMash.new fn_in: u, opts: opts
+    i   = prc.input_from_file u, opts
     prc.handle_input i
 
     Tagger.copy u, i.fn_out
