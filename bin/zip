@@ -4,26 +4,39 @@ require_relative '../bot'
 
 ENV['PRINT_CMD'] = '1'
 
-opts = SymMash.new metadata: {}
-Bot::UrlProcessor.add_opt opts, ARGV.pop while !File.exists? ARGV[-1]
+opts  = SymMash.new metadata: {}
+lopts = []
+while !File.exists?(ARGV[-1]) and ARGV[-1] !~ URI::regexp
+  opt = ARGV.pop
+  lopts.push opt
+  Bot::UrlProcessor.add_opt opts, opt
+end
 
 Zipper.size_mb_limit = nil
 
+class Stdout
+  include Bot::Helpers
+  mock
+end
+bot = Stdout.new
+
 path = ARGV
-path.peach do |f|
-  dir    = "#{File.dirname f}/converted"
+path.peach do |u|
+  klass = if u =~ URI::regexp then Bot::UrlProcessor else Bot::Processor end
+  dir   = if u =~ URI::regexp then Dir.pwd else File.dirname u end
+  dir   = "#{dir}/converted"
   Dir.mkdir dir rescue nil
 
-  i      = SymMash.new fn_in: f, opts: opts
-  prc    = Bot::Processor.probe i
-  format = i.opts.format = i.type[i.opts.format || i.type[:default]]
-  fn_out = "#{dir}/#{File.basename f, File.extname(f)}.#{format.ext}"
+  if klass == Bot::UrlProcessor
+    lin = "#{u} #{lopts.join ' '}"
+    prc = klass.new dir, lin, bot
+    i   = prc.download.first
+    prc.handle_input i
+  else
+    prc = klass.new dir, bot
+    i   = SymMash.new fn_in: u, opts: opts
+    prc.handle_input i
 
-  o, e, st = Zipper.send "zip_#{i.type.name}", i.fn_in, fn_out,
-    opts: i.opts, probe: i.probe
-  Tagger.copy f, fn_out
-  if st != 0
-    raise e
+    Tagger.copy u, i.fn_out
   end
-
 end

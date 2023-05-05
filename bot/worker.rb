@@ -23,15 +23,15 @@ class Bot::Worker
 
       msg.resp = send_message msg, me('Downloading...')
       if msg.audio.present? or msg.video.present?
-        procs << Bot::FileProcessor.new(bot, msg, dir)
+        procs << Bot::FileProcessor.new(dir, bot, msg)
       else
         procs = msg.text.split("\n").flat_map do |l|
-          Bot::UrlProcessor.new bot, msg, dir, l
+          Bot::UrlProcessor.new dir, l, bot, msg
         end
       end
 
       procs.each.with_index.api_peach do |p, i|
-        inputs[i] = p.download
+        inputs[i] = p.download if p.respond_to? :download
       end
       inputs.flatten!
       inputs.compact!
@@ -39,7 +39,7 @@ class Bot::Worker
 
       edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me("\nConverting..."))
       inputs.api_peach do |i|
-        p = Bot::Processor.new bot, msg, dir
+        p = Bot::Processor.new dir, bot, msg
         p.handle_input i
       rescue => e
         input_error e, i

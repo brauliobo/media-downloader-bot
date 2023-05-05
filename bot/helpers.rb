@@ -137,8 +137,8 @@ class Bot
       send_message admin_msg, error, parse_mode: 'HTML'
     end
 
-    def fake_msg chat_id
-      SymMash.new chat: {id: chat_id}
+    def fake_msg chat_id=nil
+      SymMash.new chat: {id: chat_id}, resp: {result: {}, text: ''}
     end
     def admin_msg
       fake_msg ADMIN_CHAT_ID
