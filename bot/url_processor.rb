@@ -74,12 +74,7 @@ class Bot
 
         url = info.url = if mult then info.webpage_url else self.url end
         url = Bot::UrlShortner.shortify(info) || url
-        SymMash.new(
-          fn_in: fn_in,
-          url:   url,
-          info:  info,
-          opts:  opts,
-        )
+        input_from_file(fn_in, opts).merge url: url, info: info
       end.compact
     end
 

@@ -1,6 +1,9 @@
+Thread.report_on_exception = true
+Thread.abort_on_exception  = true
+
 module Enumerable
 
-  def peach method = :each, threads: nil, priority: nil, wait: true, &block
+  def peach method = :each, threads: nil, priority: nil, reraise: false, wait: true, &block
     block   ||= -> *args {}
     threads ||= (ENV['THREADS'] || '10').to_i
 
@@ -12,7 +15,8 @@ module Enumerable
         Thread.current.priority = priority if priority
         block.call(*args)
       rescue => e
-        puts "error: #{e.message}"
+        raise if reraise
+        puts "error: #{e.message} \n#{e.backtrace.join "\n"}"
       end
     end
 

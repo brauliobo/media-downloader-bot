@@ -22,6 +22,9 @@ class Bot
         define_method :delete_message do |msg, id, text: nil, **params|
           puts "deleting #{id}"
         end
+        define_method :report_error do |msg, e, context: nil|
+          raise e
+        end
       end
     end
 
@@ -138,7 +141,7 @@ class Bot
     end
 
     def fake_msg chat_id=nil
-      SymMash.new chat: {id: chat_id}, resp: {result: {}, text: ''}
+      SymMash.new from: {id: nil}, chat: {id: chat_id}, resp: {result: {}, text: ''}
     end
     def admin_msg
       fake_msg ADMIN_CHAT_ID
