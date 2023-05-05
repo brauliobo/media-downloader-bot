@@ -17,8 +17,8 @@ class Bot
       h[k] = v || 1
     end
 
-    def initialize bot, msg, dir, line
-      super bot, msg, dir
+    def initialize dir, line, bot, msg=nil
+      super dir, bot, msg
 
       @line = line
       @args = line.split(/\s+/)

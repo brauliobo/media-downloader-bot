@@ -16,7 +16,8 @@ class Zipper
   VIDEO_PRE_OPTS  << " -vf #{SCALE_KEY}=\"%{width}:trunc(ow/a/2)*2%{vf}\""
   VP9_PRE_OPTS     = " -vf #{SCALE_KEY}=\"%{width}:trunc(ow/a/8)*8%{vf}\""
 
-  POST_OPTS        = " -map_metadata 0 -id3v2_version 3 -write_id3v1 1 -metadata downloaded_with=t.me/media_downloader_2bot %{metadata}"
+  META             = "-metadata downloaded_with=t.me/media_downloader_2bot"
+  POST_OPTS        = " -map_metadata 0 -id3v2_version 3 -write_id3v1 1 #{META} %{metadata}"
   VIDEO_POST_OPTS  = "-movflags +faststart -movflags use_metadata_tags"
   VIDEO_POST_OPTS << " #{POST_OPTS}"
 

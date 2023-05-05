@@ -34,10 +34,10 @@ class Bot
       i
     end
 
-    def initialize bot, msg, dir
-      @bot = bot
-      @msg = msg
+    def initialize dir, bot, msg=nil
       @dir = dir
+      @bot = bot
+      @msg = msg || bot.fake_msg
     end
 
     def handle_input i
@@ -49,14 +49,16 @@ class Bot
         return
       end
 
-      # FIXME: specify different levels depending on length
-      if i.type == Types.video and i.durat > VID_DURATION_THLD.minutes.to_i
-        i.opts.width ||= 480
-        edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(VID_TOO_LONG))
-      end
-      if i.type == Types.audio and i.durat > AUD_DURATION_THLD.minutes.to_i
-        i.opts.bitrate ||= Zipper::PERCENT * 8 * (Zipper.size_mb_limit*1000) / i.durat
-        edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(AUD_TOO_LONG))
+      if Zipper.size_mb_limit
+        # FIXME: specify different levels depending on length
+        if i.type == Types.video and i.durat > VID_DURATION_THLD.minutes.to_i
+          i.opts.width ||= 480
+          edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(VID_TOO_LONG))
+        end
+        if i.type == Types.audio and i.durat > AUD_DURATION_THLD.minutes.to_i
+          i.opts.bitrate ||= Zipper::PERCENT * 8 * (Zipper.size_mb_limit*1000) / i.durat
+          edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(AUD_TOO_LONG))
+        end
       end
 
       binding.pry if ENV['PRY_BEFORE_CONVERT']
@@ -65,17 +67,19 @@ class Bot
       return unless i.fn_out = convert(i)
 
       # check telegram bot's upload limit
-      mbsize = File.size(i.fn_out) / 2**20
-      if i.type == Types.video and mbsize >= Zipper.size_mb_limit
-        edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(VID_TOO_BIG))
-        i.type   = Types.audio
-        i.fn_out = convert i
-        mbsize   = File.size(i.fn_out) / 2**20
-      end
-      # still too big as audio...
-      if mbsize >= Zipper.size_mb_limit
-        edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(TOO_BIG))
-        return
+      if Zipper.size_mb_limit
+        mbsize = File.size(i.fn_out) / 2**20
+        if i.type == Types.video and mbsize >= Zipper.size_mb_limit
+          edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(VID_TOO_BIG))
+          i.type   = Types.audio
+          i.fn_out = convert i
+          mbsize   = File.size(i.fn_out) / 2**20
+        end
+        # still too big as audio...
+        if mbsize >= Zipper.size_mb_limit
+          edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(TOO_BIG))
+          return
+        end
       end
 
       tag i
