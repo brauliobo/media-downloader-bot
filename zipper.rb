@@ -8,22 +8,23 @@ class Zipper
   CUDA         = false # slower while mining
   H264_OPTS    = if CUDA then '-hwaccel cuda -hwaccel_output_format cuda' else '' end
   H264_CODEC   = if CUDA then 'h264_nvenc' else 'libx264' end
-  SCALE_KEY    = if CUDA then 'scale_npp' else 'scale' end
   H264_QUALITY = if CUDA then 33 else 25 end # to keep similar size
+  SCALE_KEY    = if CUDA then 'scale_npp' else 'scale' end
 
-  # -spatial_aq:v 1 is too slow
-  VIDEO_PRE_OPTS   = if CUDA then '-profile:v high -tune:v hq -level 4.1 -rc:v vbr -rc-lookahead:v 32 -aq-strength:v 15' else '' end
-  VIDEO_PRE_OPTS  << " -vf #{SCALE_KEY}=\"%{width}:trunc(ow/a/2)*2%{vf}\""
-  VP9_PRE_OPTS     = " -vf #{SCALE_KEY}=\"%{width}:trunc(ow/a/8)*8%{vf}\""
+  VIDEO_PRE_OPTS = " -vf #{SCALE_KEY}=\"%{width}:trunc(ow/a/2)*2%{vf}\""
+  VP9_PRE_OPTS   = " -vf #{SCALE_KEY}=\"%{width}:trunc(ow/a/8)*8%{vf}\""
 
   META             = "-metadata downloaded_with=t.me/media_downloader_2bot"
   POST_OPTS        = " -map_metadata 0 -id3v2_version 3 -write_id3v1 1 #{META} %{metadata}"
   VIDEO_POST_OPTS  = "-movflags +faststart -movflags use_metadata_tags"
   VIDEO_POST_OPTS << " #{POST_OPTS}"
+  VIDEO_POST_OPTS << '-profile:v high -tune:v hq -level 4.1 -rc:v vbr -rc-lookahead:v 32 -aq-strength:v 15' if CUDA 
 
   ENC_OPUS = "-c:a libopus -b:a %{abrate}k"
   # aac_he_v2 doesn't work with instagram
   ENC_AAC  = "-c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k"
+
+  SUB_STYLE = 'Fontname=Roboto,OutlineColour=&H40000000,BorderStyle=3'
 
   FFMPEG   = "nice ffmpeg -y -threads 12 -loglevel error"
 
@@ -38,7 +39,7 @@ class Zipper
         opts:   {width: 640, quality: H264_QUALITY, abrate: 64},
         vcopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
         cmd: <<-EOC
-#{FFMPEG} #{H264_OPTS} -i %{infile} #{VIDEO_PRE_OPTS} \
+#{FFMPEG} #{H264_OPTS} -i %{infile} #{VIDEO_PRE_OPTS} %{iopts} \
   -c:v #{H264_CODEC} -cq:v %{quality} %{vcopts} #{VIDEO_POST_OPTS} #{ENC_OPUS}
         EOC
       },
@@ -50,7 +51,7 @@ class Zipper
         opts:   {width: 720, quality: 50, vbrate: 200, abrate: 64},
         vcopts: "-b:v %{maxrate}k",
         cmd:  <<-EOC
-#{FFMPEG} -i %{infile} #{VP9_PRE_OPTS} \
+#{FFMPEG} -i %{infile} #{VP9_PRE_OPTS} %{iopts} \
   -c:v libsvt_vp9 -cq:v %{quality} %{vcopts} #{VIDEO_POST_OPTS} #{ENC_OPUS}
         EOC
       },
@@ -63,7 +64,7 @@ class Zipper
         opts:   {width: 720, quality: 40, vbrate: 200, abrate: 64},
         vcopts: "-b:v %{vbrate}k -svtav1-params mbr=%{maxrate}",
         cmd:  <<-EOC
-#{FFMPEG} -i %{infile} #{VIDEO_PRE_OPTS} \
+#{FFMPEG} -i %{infile} #{VIDEO_PRE_OPTS} %{iopts} \
   -c:v libsvtav1 -crf %{quality} %{vcopts}  #{VIDEO_POST_OPTS} #{ENC_OPUS}
         EOC
       },
@@ -92,6 +93,10 @@ class Zipper
   def self.zip_video infile, outfile, probe:, opts: SymMash.new
     opts.reverse_merge! opts.format.opts.deep_dup
 
+    iopts = ''
+    sub   = probe.streams.find{ |s| s.codec_type == 'subtitle' }
+    iopts = "-vf \"subtitles=#{Sh.escape infile}:si=0:force_style='#{SUB_STYLE}'\"" if sub
+
     # convert input
     opts.width   = opts.width.to_i
     opts.quality = opts.quality.to_i
@@ -119,6 +124,7 @@ class Zipper
 
     cmd = opts.format.cmd % {
       infile:   Sh.escape(infile),
+      iopts:    iopts,
       width:    opts.width,
       quality:  opts.quality,
       abrate:   opts.abrate,

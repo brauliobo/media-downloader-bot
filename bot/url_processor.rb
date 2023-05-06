@@ -31,6 +31,7 @@ class Bot
 
     def download 
       cmd  = DOWN_CMD % {url: url}
+      cmd << " --embed-subs"
       cmd << " --cache-dir #{dir}"
       cmd << " -o 'input-#{object_id}-%(playlist_index)s.%(ext)s'"
       cmd << ' -x' if opts.audio
