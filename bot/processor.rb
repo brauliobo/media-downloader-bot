@@ -118,7 +118,9 @@ class Bot
     end
 
     def convert i
-      i.opts.format = i.format = i.type[i.opts.format || i.type[:default]]
+      format   = i.opts.format || i.type[:default]
+      format   = :aac if format == :opus and i.durat < 120 # telegram consider small opus as voice
+      i.format = i.opts.format = i.type[format]
       i.opts.cover  = i.info.thumbnail
 
       m = SymMash.new
