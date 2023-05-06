@@ -74,8 +74,9 @@ class Bot
 
         url = info.url = if mult then info.webpage_url else self.url end
         url = Bot::UrlShortner.shortify(info) || url
+
         input_from_file(fn_in, opts).merge url: url, info: info
-      end.compact
+      end
     end
 
   end
