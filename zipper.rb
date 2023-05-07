@@ -97,9 +97,9 @@ class Zipper
     sub = probe.streams.find{ |s| s.codec_type == 'subtitle' }
     vf << ",subtitles=#{Sh.escape infile}:si=0:force_style='#{SUB_STYLE}'" if sub
 
-    if speed = Sh.escape opts.speed&.to_f
-      vf    << ",setpts=PTS*1/#{speed}"
-      oopts << " -af atempo=#{speed}"
+    if speed = opts.speed&.to_f
+      vf    << ",setpts=PTS*1/#{Sh.escape speed}"
+      oopts << " -af atempo=#{Sh.escape speed}"
     end
 
     vf << ",#{opts.vf}" if opts.vf.present?
@@ -149,8 +149,8 @@ class Zipper
     iopts = ''; oopts = ''
     opts.reverse_merge! opts.format.opts.deep_dup
 
-    if speed = Sh.escape opts.speed&.to_f
-      iopts << " -af atempo=#{speed}"
+    if speed = opts.speed&.to_f
+      iopts << " -af atempo=#{Sh.escape speed}"
     end
 
     cmd = opts.format.cmd % {
