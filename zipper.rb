@@ -11,8 +11,8 @@ class Zipper
   H264_QUALITY = if CUDA then 33 else 25 end # to keep similar size
   SCALE_KEY    = if CUDA then 'scale_npp' else 'scale' end
 
-  VIDEO_PRE_OPTS = " -vf #{SCALE_KEY}=\"%{width}:trunc(ow/a/2)*2%{vf}\""
-  VP9_PRE_OPTS   = " -vf #{SCALE_KEY}=\"%{width}:trunc(ow/a/8)*8%{vf}\""
+  SCALE_M2 = "#{SCALE_KEY}='%{width}:trunc(ow/a/2)*2'"
+  SCALE_M8 = "#{SCALE_KEY}='%{width}:trunc(ow/a/8)*8'"
 
   META             = "-metadata downloaded_with=t.me/media_downloader_2bot"
   POST_OPTS        = " -map_metadata 0 -id3v2_version 3 -write_id3v1 1 #{META} %{metadata}"
@@ -39,7 +39,7 @@ class Zipper
         opts:   {width: 640, quality: H264_QUALITY, abrate: 64},
         vcopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
         cmd: <<-EOC
-#{FFMPEG} #{H264_OPTS} -i %{infile} #{VIDEO_PRE_OPTS} %{iopts} \
+#{FFMPEG} #{H264_OPTS} -i %{infile} -vf "#{SCALE_M2}%{vf}"  \
   -c:v #{H264_CODEC} -cq:v %{quality} %{vcopts} #{VIDEO_POST_OPTS} #{ENC_OPUS}
         EOC
       },
@@ -51,7 +51,7 @@ class Zipper
         opts:   {width: 720, quality: 50, vbrate: 200, abrate: 64},
         vcopts: "-b:v %{maxrate}k",
         cmd:  <<-EOC
-#{FFMPEG} -i %{infile} #{VP9_PRE_OPTS} %{iopts} \
+#{FFMPEG} -i %{infile} -vf "#{SCALE_M8}%{vf}" \
   -c:v libsvt_vp9 -cq:v %{quality} %{vcopts} #{VIDEO_POST_OPTS} #{ENC_OPUS}
         EOC
       },
@@ -64,7 +64,7 @@ class Zipper
         opts:   {width: 720, quality: 40, vbrate: 200, abrate: 64},
         vcopts: "-b:v %{vbrate}k -svtav1-params mbr=%{maxrate}",
         cmd:  <<-EOC
-#{FFMPEG} -i %{infile} #{VIDEO_PRE_OPTS} %{iopts} \
+#{FFMPEG} -i %{infile} -vf "#{SCALE_M2}%{vf}" \
   -c:v libsvtav1 -crf %{quality} %{vcopts}  #{VIDEO_POST_OPTS} #{ENC_OPUS}
         EOC
       },
@@ -93,9 +93,10 @@ class Zipper
   def self.zip_video infile, outfile, probe:, opts: SymMash.new
     opts.reverse_merge! opts.format.opts.deep_dup
 
-    iopts = ''
-    sub   = probe.streams.find{ |s| s.codec_type == 'subtitle' }
-    iopts = "-vf \"subtitles=#{Sh.escape infile}:si=0:force_style='#{SUB_STYLE}'\"" if sub
+    vf  = ''
+    sub = probe.streams.find{ |s| s.codec_type == 'subtitle' }
+    vf << ",subtitles=#{Sh.escape infile}:si=0:force_style='#{SUB_STYLE}'" if sub
+    vf << ",#{opts.vf}" if opts.vf.present?
 
     # convert input
     opts.width   = opts.width.to_i
@@ -110,8 +111,6 @@ class Zipper
     # lower resolution
     opts.width = vstrea.width if vstrea.width < opts.width
 
-    vf = ",#{opts.vf}" if opts.vf.present?
-
     if size_mb_limit # max bitrate to fit size_mb_limit
       duration = probe.format.duration.to_i
       audsize  = (duration * opts.abrate/8) / 1000
@@ -124,7 +123,6 @@ class Zipper
 
     cmd = opts.format.cmd % {
       infile:   Sh.escape(infile),
-      iopts:    iopts,
       width:    opts.width,
       quality:  opts.quality,
       abrate:   opts.abrate,
