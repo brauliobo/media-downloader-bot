@@ -77,6 +77,7 @@ class Bot
         fn_in   = Dir.glob("#{dir}/#{File.basename fn, File.extname(fn)}.{#{KNOWN_EXTS}}").first
         fn_in ||= Dir.glob("#{dir}/#{File.basename fn, File.extname(fn)}.*").first
 
+        info.title = info.track if info.track # e.g. bandcamp
         # number files
         info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.number
 
