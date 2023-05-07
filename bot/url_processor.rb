@@ -29,10 +29,12 @@ class Bot
       end
     end
 
+    KNOWN_EXTS = "webm,mp4,m4a,opus"
+
     def download 
       cmd  = DOWN_CMD % {url: url}
       cmd << " --embed-subs"
-      cmd << " --cache-dir #{dir}"
+      cmd << " --cache-dir #{dir}/cache"
       cmd << " -o 'input-#{object_id}-%(playlist_index)s.%(ext)s'"
       cmd << ' -x' if opts.audio
       cmd << ' -s' if opts.simulate
@@ -68,7 +70,7 @@ class Bot
       infos.map.with_index do |info, i|
         fn    = info._filename
         # info._filename extension isn't accurate
-        fn_in = Dir.glob("#{dir}/#{File.basename fn, File.extname(fn)}*").first
+        fn_in = Dir.glob("#{dir}/#{File.basename fn, File.extname(fn)}.{#{KNOWN_EXTS}}").first
 
         # number files
         info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.number
