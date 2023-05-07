@@ -36,7 +36,7 @@ class Zipper
       h264: {
         ext:    :mp4,
         mime:   'video/mp4',
-        opts:   {width: 640, quality: H264_QUALITY, abrate: 64},
+        opts:   {width: 720, quality: H264_QUALITY, abrate: 64},
         vcopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
         cmd: <<-EOC
 #{FFMPEG} #{H264_OPTS} -i %{infile} -vf "#{SCALE_M2}%{vf}"  \
