@@ -39,8 +39,8 @@ class Zipper
         opts:   {width: 720, quality: H264_QUALITY, abrate: 64},
         vcopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
         cmd: <<-EOC
-#{FFMPEG} #{H264_OPTS} -i %{infile} -vf "#{SCALE_M2}%{vf}"  \
-  -c:v #{H264_CODEC} -cq:v %{quality} %{vcopts} #{VIDEO_POST_OPTS} #{ENC_OPUS}
+#{FFMPEG} #{H264_OPTS} -i %{infile} -vf "#{SCALE_M2}%{vf}" %{iopts} \
+  -c:v #{H264_CODEC} -cq:v %{quality} %{vcopts} #{ENC_OPUS} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
 
@@ -51,8 +51,8 @@ class Zipper
         opts:   {width: 720, quality: 50, vbrate: 200, abrate: 64},
         vcopts: "-b:v %{maxrate}k",
         cmd:  <<-EOC
-#{FFMPEG} -i %{infile} -vf "#{SCALE_M8}%{vf}" \
-  -c:v libsvt_vp9 -cq:v %{quality} %{vcopts} #{VIDEO_POST_OPTS} #{ENC_OPUS}
+#{FFMPEG} -i %{infile} -vf "#{SCALE_M8}%{vf}" %{iopts} \
+  -c:v libsvt_vp9 -cq:v %{quality} %{vcopts} #{ENC_OPUS} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
 
@@ -64,8 +64,8 @@ class Zipper
         opts:   {width: 720, quality: 40, vbrate: 200, abrate: 64},
         vcopts: "-b:v %{vbrate}k -svtav1-params mbr=%{maxrate}",
         cmd:  <<-EOC
-#{FFMPEG} -i %{infile} -vf "#{SCALE_M2}%{vf}" \
-  -c:v libsvtav1 -crf %{quality} %{vcopts}  #{VIDEO_POST_OPTS} #{ENC_OPUS}
+#{FFMPEG} -i %{infile} -vf "#{SCALE_M2}%{vf}" %{iopts} \
+  -c:v libsvtav1 -crf %{quality} %{vcopts} #{ENC_OPUS} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
     },
@@ -78,24 +78,30 @@ class Zipper
         ext:  :opus,
         mime: 'audio/aac',
         opts: {bitrate: 96},
-        cmd:  "#{FFMPEG} -vn -i %{infile} #{ENC_OPUS} #{POST_OPTS}"
+        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{ENC_OPUS} #{POST_OPTS} %{oopts}"
       },
 
       aac: {
         ext:  :m4a,
         mime: 'audio/aac',
         opts: {bitrate: 96},
-        cmd:  "#{FFMPEG} -vn -i %{infile} #{ENC_AAC} #{POST_OPTS}"
+        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{ENC_AAC} #{POST_OPTS} %{oopts}" 
       },
     },
   )
 
   def self.zip_video infile, outfile, probe:, opts: SymMash.new
+    vf = ''; iopts = ''; oopts = ''
     opts.reverse_merge! opts.format.opts.deep_dup
 
-    vf  = ''
     sub = probe.streams.find{ |s| s.codec_type == 'subtitle' }
     vf << ",subtitles=#{Sh.escape infile}:si=0:force_style='#{SUB_STYLE}'" if sub
+
+    if speed = Sh.escape opts.speed&.to_f
+      vf    << ",setpts=PTS*1/#{speed}"
+      oopts << " -af atempo=#{speed}"
+    end
+
     vf << ",#{opts.vf}" if opts.vf.present?
 
     # convert input
@@ -123,13 +129,15 @@ class Zipper
 
     cmd = opts.format.cmd % {
       infile:   Sh.escape(infile),
+      vf:       vf,
+      iopts:    iopts,
+      oopts:    oopts,
       width:    opts.width,
       quality:  opts.quality,
       abrate:   opts.abrate,
       vbrate:   opts.vbrate,
       vcopts:   vcopts,
       metadata: metadata_args(opts.metadata),
-      vf:       vf,
     }
     apply_opts cmd, opts
 
@@ -138,10 +146,17 @@ class Zipper
   end
 
   def self.zip_audio infile, outfile, probe:, opts: SymMash.new
+    iopts = ''; oopts = ''
     opts.reverse_merge! opts.format.opts.deep_dup
+
+    if speed = Sh.escape opts.speed&.to_f
+      iopts << " -af atempo=#{speed}"
+    end
 
     cmd = opts.format.cmd % {
       infile:   Sh.escape(infile),
+      iopts:    iopts,
+      oopts:    oopts,
       abrate:   opts.bitrate,
       metadata: metadata_args(opts.metadata),
     }
