@@ -66,23 +66,23 @@ class Bot::Worker
     report_error msg, e, context: i.inspect
   end
 
-  def upload input
-    fn_out = input.fn_out
-    type   = input.type
-    info   = input.info
-    durat  = input.durat
-    opts   = input.opts
+  def upload i
+    oprobe = i.oprobe = Prober.for i.fn_out
+    fn_out = i.fn_out
+    type   = i.type
+    info   = i.info
+    durat  = i.oprobe.format.duration.to_i # speed may change from input
+    opts   = i.opts
 
-    caption = msg_caption input
+    caption = msg_caption i
     return send_message msg, caption if opts.simulate
 
-    oprobe = Bot::Prober.for fn_out
     vstrea = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
 
-    thumb  = Faraday::UploadIO.new input.thumb, 'image/jpeg' if input.thumb
+    thumb  = Faraday::UploadIO.new i.thumb, 'image/jpeg' if i.thumb
 
     fn_io   = Faraday::UploadIO.new fn_out, type.mime
-    ret_msg = input.ret_msg = {
+    ret_msg = i.ret_msg = {
       type:        type.name,
       type.name => fn_io,
       duration:    durat,

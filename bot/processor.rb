@@ -118,8 +118,11 @@ class Bot
     end
 
     def convert i
+      speed    = i.opts.speed&.to_f
+      durat    = i.durat
+      durat   /= speed if speed
       format   = i.opts.format || i.type[:default]
-      format   = :aac if format == :opus and i.durat < 120 # telegram consider small opus as voice
+      format   = :aac if format == :opus and durat < 120 # telegram consider small opus as voice
       i.format = i.opts.format = i.type[format]
       i.opts.cover  = i.info.thumbnail
 
