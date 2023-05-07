@@ -39,7 +39,7 @@ class Bot
       cmd << " --playlist-end #{opts.limit.to_i}" if opts.limit
 
       cmd << ' -x' if opts.audio
-      cmd << ' -f mp3-320' if url.index 'bandcamp.com' # FIXME: it is choosing flac
+      cmd << ' -f mp3-320/best' if url.index 'bandcamp.com' # FIXME: it is choosing flac
 
       cmd << " -o 'input-#{object_id}-%(playlist_index)s.%(ext)s'"
 
