@@ -35,16 +35,20 @@ class Bot
       cmd  = DOWN_CMD % {url: url}
       cmd << " --embed-subs"
       cmd << " --cache-dir #{dir}/cache"
-      cmd << " -o 'input-#{object_id}-%(playlist_index)s.%(ext)s'"
-      cmd << ' -x' if opts.audio
       cmd << ' -s' if opts.simulate
       cmd << " --playlist-end #{opts.limit.to_i}" if opts.limit
-      #cmd << " --cookies #{opts.cookie}" if opts.cookie 
-      #cmd << " --cookies-from-browser #{opts.cookie}" if opts.cookie and from_admin? msg # FIXME: depends on unit user
+
+      cmd << ' -x' if opts.audio
+      cmd << ' -f mp3-320' if url.index 'bandcamp.com' # FIXME: it is choosing flac
+
+      cmd << " -o 'input-#{object_id}-%(playlist_index)s.%(ext)s'"
+
       opts.slice(*DOWN_OPTS).each do |k,v|
         v.gsub! "'", "\'"
         cmd << " --#{k} '#{v}'"
       end
+      #cmd << " --cookies #{opts.cookie}" if opts.cookie
+      #cmd << " --cookies-from-browser #{opts.cookie}" if opts.cookie and from_admin? msg # FIXME: depends on unit user
       # user-agent can slowdown on youtube
       #cmd << " --user-agent '#{USER_AGENT}'" unless uri.host.index 'facebook'
 
@@ -70,7 +74,8 @@ class Bot
       infos.map.with_index do |info, i|
         fn    = info._filename
         # info._filename extension isn't accurate
-        fn_in = Dir.glob("#{dir}/#{File.basename fn, File.extname(fn)}.{#{KNOWN_EXTS}}").first
+        fn_in   = Dir.glob("#{dir}/#{File.basename fn, File.extname(fn)}.{#{KNOWN_EXTS}}").first
+        fn_in ||= Dir.glob("#{dir}/#{File.basename fn, File.extname(fn)}.*").first
 
         # number files
         info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.number
