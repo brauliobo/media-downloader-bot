@@ -6,12 +6,12 @@ Wants=network-online.target
 [Service]
 CPUQuota=900%
 LimitNOFILE=1001001
-LimitNOFILESoft=1001001
 
 DynamicUser=yes
 WorkingDirectory=/home/braulio/Projects/media-downloader-bot
 ExecStart=/home/braulio/.rvm/wrappers/ruby-3.1.2/bundle exec bin/bot
 Environment="TOKEN=xxx"
+Environment=THREADS=16
 Restart=always
 RestartSec=1
 StartLimitInterval=0
