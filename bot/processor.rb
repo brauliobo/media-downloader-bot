@@ -127,6 +127,7 @@ class Bot
     end
 
     def portrait? info
+      return unless info.width
       info.width < info.height
     end
 
