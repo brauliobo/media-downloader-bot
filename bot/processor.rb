@@ -102,19 +102,32 @@ class Bot
       # ... the rest is using FFmpeg
     end
 
+    THUMB_MAX_HEIGHT = 320
+    THUMB_RESIZE_CMD = "convert %{in} %{opts} -define jpeg:extent=190kb %{out}"
+
     def thumb info
       return if (url = info.thumbnail).blank?
 
       im_in  = "#{dir}/img"
       im_out = "#{dir}/#{info._filename}-thumb.jpg"
-
       File.write im_in, http.get(url).body
-      system "convert #{im_in} -resize x320 -define jpeg:extent=190kb #{im_out}"
+
+      opts = if portrait? info
+        w,h = THUMB_MAX_HEIGHT * info.width/info.height, THUMB_MAX_HEIGHT
+        "-resize #{w}x#{h}\^ -gravity Center -extent #{w}x#{h}"
+      else
+        "-resize x#{THUMB_MAX_HEIGHT}"
+      end
+      Sh.run THUMB_RESIZE_CMD % {in: im_in, out: im_out, opts: opts}
 
       im_out
     rescue => e # continue on errors
       report_error msg, e
       nil
+    end
+
+    def portrait? info
+      info.width < info.height
     end
 
     def convert i
