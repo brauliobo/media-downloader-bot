@@ -21,7 +21,7 @@ class Zipper
   VIDEO_POST_OPTS << '-profile:v high -tune:v hq -level 4.1 -rc:v vbr -rc-lookahead:v 32 -aq-strength:v 15' if CUDA 
 
   ENC_OPUS = "-c:a libopus -b:a %{abrate}k"
-  if `ffmpeg -codecs | grep fdk_aac`.present?
+  if `ffmpeg -encoders | grep fdk_aac`.present?
     # aac_he_v2 doesn't work with instagram
     ENC_AAC = "-c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k"
   else
