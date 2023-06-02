@@ -27,6 +27,7 @@ class Zipper
   else
     ENC_AAC = "-c:a aac -b:a %{abrate}k"
   end
+  ENC_MP3 = "-c:a libmp3lame -b:a %{abrate}k"
 
   SUB_STYLE = 'Fontname=Roboto,OutlineColour=&H40000000,BorderStyle=3'
 
@@ -91,6 +92,13 @@ class Zipper
         mime: 'audio/aac',
         opts: {bitrate: 96},
         cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{ENC_AAC} #{POST_OPTS} %{oopts}" 
+      },
+
+      mp3: {
+        ext:  :mp3,
+        mime: 'audio/mp3',
+        opts: {bitrate: 128},
+        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{ENC_MP3} #{POST_OPTS} %{oopts}" 
       },
     },
   )
