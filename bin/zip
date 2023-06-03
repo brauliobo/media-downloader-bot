@@ -1,17 +1,18 @@
 #!/usr/bin/env ruby
 
-Dir.chdir File.expand_path "#{File.dirname File.realpath __FILE__}/.."
-
-require_relative '../bot'
+Dir.chdir File.expand_path "#{File.dirname File.realpath __FILE__}/.." do
+  require_relative '../bot'
+end
 
 ENV['PRINT_CMD'] = '1'
 
 opts  = SymMash.new metadata: {}
 lopts = []
-while !File.exists?(ARGV[-1]) and ARGV[-1] !~ URI::regexp
+while ARGV[-1] and !File.exists?(ARGV[-1]) and ARGV[-1] !~ URI::regexp
   opt = ARGV.pop
   lopts.push opt
   Bot::UrlProcessor.add_opt opts, opt
+  require'pry';binding.pry
 end
 
 Zipper.size_mb_limit = nil
