@@ -1,5 +1,7 @@
 #!/usr/bin/env ruby
 
+Dir.chdir File.expand_path "#{File.dirname File.realpath __FILE__}/.."
+
 require_relative '../bot'
 
 ENV['PRINT_CMD'] = '1'
