@@ -46,7 +46,7 @@ class Zipper
         vcopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
         cmd: <<-EOC
 #{FFMPEG} #{H264_OPTS} -i %{infile} -vf "#{SCALE_M2}%{vf}" %{iopts} \
-  -c:v #{H264_CODEC} -cq:v %{quality} %{vcopts} #{ENC_OPUS} #{VIDEO_POST_OPTS} %{oopts}
+  -c:v #{H264_CODEC} -cq:v %{quality} %{vcopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
 
@@ -58,7 +58,7 @@ class Zipper
         vcopts: "-b:v %{maxrate}k",
         cmd:  <<-EOC
 #{FFMPEG} -i %{infile} -vf "#{SCALE_M8}%{vf}" %{iopts} \
-  -c:v libsvt_vp9 -cq:v %{quality} %{vcopts} #{ENC_OPUS} #{VIDEO_POST_OPTS} %{oopts}
+  -c:v libsvt_vp9 -cq:v %{quality} %{vcopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
 
@@ -71,7 +71,7 @@ class Zipper
         vcopts: "-b:v %{vbrate}k -svtav1-params mbr=%{maxrate}",
         cmd:  <<-EOC
 #{FFMPEG} -i %{infile} -vf "#{SCALE_M2}%{vf}" %{iopts} \
-  -c:v libsvtav1 -crf %{quality} %{vcopts} #{ENC_OPUS} #{VIDEO_POST_OPTS} %{oopts}
+  -c:v libsvtav1 -crf %{quality} %{vcopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
     },
@@ -147,7 +147,7 @@ class Zipper
       oopts:    oopts,
       width:    opts.width,
       quality:  opts.quality,
-      abrate:   opts.abrate,
+      acodec:   acodec_opts(opts.acodec, opts.abrate),
       vbrate:   opts.vbrate,
       vcopts:   vcopts,
       metadata: metadata_args(opts.metadata),
@@ -180,6 +180,14 @@ class Zipper
   end
 
   protected 
+
+  def self.acodec_opts acodec, abrate
+    case acodec&.to_sym
+    when :aac then ENC_AAC
+    when :mp3 then ENC_MP3
+    else ENC_OPUS
+    end % {abrate:}
+  end
 
   def self.metadata_args metadata
     (metadata || {}).map{ |k,v| "-metadata #{Sh.escape k}=#{Sh.escape v}" }.join ' '
