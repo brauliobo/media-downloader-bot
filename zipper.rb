@@ -3,7 +3,8 @@ class Zipper
   class_attribute :size_mb_limit
   self.size_mb_limit = 50
 
-  PERCENT       = 0.95 # 3% less, up to 2% less proved to exceed limit (without Opus as audio 2% is enough)
+  VID_PERCENT  = 0.99
+  OPUS_PERCENT = 0.96
 
   CUDA         = false # slower while mining
   H264_OPTS    = if CUDA then '-hwaccel cuda -hwaccel_output_format cuda' else '' end
@@ -42,7 +43,7 @@ class Zipper
       h264: {
         ext:    :mp4,
         mime:   'video/mp4',
-        opts:   {width: 720, quality: H264_QUALITY, abrate: 64},
+        opts:   {width: 720, quality: H264_QUALITY, abrate: 64, apercent: OPUS_PERCENT},
         vcopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
         cmd: <<-EOC
 #{FFMPEG} #{H264_OPTS} -i %{infile} -vf "#{SCALE_M2}%{vf}" %{iopts} \
@@ -54,7 +55,7 @@ class Zipper
       vp9: {
         ext:    :mp4,
         mime:   'video/mp4',
-        opts:   {width: 720, quality: 50, vbrate: 200, abrate: 64},
+        opts:   {width: 720, quality: 50, vbrate: 200, abrate: 64, apercent: OPUS_PERCENT},
         vcopts: "-b:v %{maxrate}k",
         cmd:  <<-EOC
 #{FFMPEG} -i %{infile} -vf "#{SCALE_M8}%{vf}" %{iopts} \
@@ -67,7 +68,7 @@ class Zipper
       av1: {
         ext:    :mp4,
         mime:   'video/mp4',
-        opts:   {width: 720, quality: 40, vbrate: 200, abrate: 64},
+        opts:   {width: 720, quality: 40, vbrate: 200, abrate: 64, apercent: OPUS_PERCENT},
         vcopts: "-b:v %{vbrate}k -svtav1-params mbr=%{maxrate}",
         cmd:  <<-EOC
 #{FFMPEG} -i %{infile} -vf "#{SCALE_M2}%{vf}" %{iopts} \
@@ -83,25 +84,29 @@ class Zipper
       opus: {
         ext:  :opus,
         mime: 'audio/aac',
-        opts: {bitrate: 96},
+        opts: {bitrate: 96, percent: OPUS_PERCENT},
         cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{ENC_OPUS} #{POST_OPTS} %{oopts}"
       },
 
       aac: {
         ext:  :m4a,
         mime: 'audio/aac',
-        opts: {bitrate: 96},
+        opts: {bitrate: 96, percent: 0.98},
         cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{ENC_AAC} #{POST_OPTS} %{oopts}" 
       },
 
       mp3: {
         ext:  :mp3,
         mime: 'audio/mp3',
-        opts: {bitrate: 128},
+        opts: {bitrate: 128, percent: 1},
         cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{ENC_MP3} #{POST_OPTS} %{oopts}" 
       },
     },
   )
+
+  def self.max_audio_duration br
+    1000 * Zipper.size_mb_limit / (br / 8) / 60
+  end
 
   def self.zip_video infile, outfile, probe:, opts: SymMash.new
     vf = ''; iopts = ''; oopts = ''
@@ -111,8 +116,9 @@ class Zipper
     vf << ",subtitles=#{Sh.escape infile}:si=0:force_style='#{SUB_STYLE}'" if sub
 
     if speed = opts.speed&.to_f
-      vf    << ",setpts=PTS*1/#{Sh.escape speed}"
-      oopts << " -af atempo=#{Sh.escape speed}"
+      vf    << ",setpts=PTS*1/#{speed}"
+      oopts << " -af atempo=#{speed}"
+    else speed = 1
     end
 
     vf << ",#{opts.vf}" if opts.vf.present?
@@ -131,10 +137,12 @@ class Zipper
     opts.width = vstrea.width if vstrea.width < opts.width
 
     if size_mb_limit # max bitrate to fit size_mb_limit
-      duration = probe.format.duration.to_i
-      audsize  = (duration * opts.abrate/8) / 1000
+      opts.abrate = (opts.apercent * opts.abrate).round
+
+      duration = probe.format.duration.to_f / speed
+      audsize  = (duration * opts.abrate.to_f/8) / 1000
       bufsize  = "#{size_mb_limit - audsize}M"
-      maxrate  = 8 * (PERCENT * size_mb_limit * 1000).to_i / duration
+      maxrate  = 8 * (VID_PERCENT * size_mb_limit * 1000).to_i / duration
       maxrate -= opts.abrate if maxrate > opts.abrate
       maxrate  = "#{maxrate}k"
       vcopts   = opts.format.vcopts % {maxrate:, bufsize:}
@@ -163,7 +171,13 @@ class Zipper
     opts.reverse_merge! opts.format.opts.deep_dup
 
     if speed = opts.speed&.to_f
-      iopts << " -af atempo=#{Sh.escape speed}"
+      iopts << " -af atempo=#{speed}"
+    else speed = 1
+    end
+
+    if size_mb_limit # max bitrate to fit size_mb_limit
+      duration = probe.format.duration.to_f / speed
+      opts.bitrate = (opts.percent * 8*size_mb_limit*1000).to_f / duration if max_audio_duration(opts.bitrate) < duration / 60
     end
 
     cmd = opts.format.cmd % {
