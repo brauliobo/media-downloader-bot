@@ -15,7 +15,7 @@ while ARGV[-1] and !File.exists?(ARGV[-1]) and ARGV[-1] !~ URI::regexp
   require'pry';binding.pry
 end
 
-Zipper.size_mb_limit = nil
+Zipper.size_mb_limit = ENV['SIZE_MB_LIMIT']&.to_i
 
 class Stdout
   include Bot::Helpers

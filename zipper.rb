@@ -44,10 +44,10 @@ class Zipper
         ext:    :mp4,
         mime:   'video/mp4',
         opts:   {width: 720, quality: H264_QUALITY, abrate: 64, apercent: OPUS_PERCENT},
-        vcopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
+        szopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
         cmd: <<-EOC
 #{FFMPEG} #{H264_OPTS} -i %{infile} -vf "#{SCALE_M2}%{vf}" %{iopts} \
-  -c:v #{H264_CODEC} -cq:v %{quality} %{vcopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
+  -c:v #{H264_CODEC} -cq:v %{quality} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
 
@@ -56,10 +56,10 @@ class Zipper
         ext:    :mp4,
         mime:   'video/mp4',
         opts:   {width: 720, quality: 50, vbrate: 200, abrate: 64, apercent: OPUS_PERCENT},
-        vcopts: "-b:v %{maxrate}k",
+        szopts: "-b:v %{maxrate}",
         cmd:  <<-EOC
 #{FFMPEG} -i %{infile} -vf "#{SCALE_M8}%{vf}" %{iopts} \
-  -c:v libsvt_vp9 -cq:v %{quality} %{vcopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
+  -c:v libsvt_vp9 -cq:v %{quality} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
 
@@ -69,10 +69,10 @@ class Zipper
         ext:    :mp4,
         mime:   'video/mp4',
         opts:   {width: 720, quality: 40, vbrate: 200, abrate: 64, apercent: OPUS_PERCENT},
-        vcopts: "-b:v %{vbrate}k -svtav1-params mbr=%{maxrate}",
+        szopts: "-b:v %{vbrate}k -svtav1-params mbr=%{maxrate}",
         cmd:  <<-EOC
 #{FFMPEG} -i %{infile} -vf "#{SCALE_M2}%{vf}" %{iopts} \
-  -c:v libsvtav1 -crf %{quality} %{vcopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
+  -c:v libsvtav1 -crf %{quality} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
     },
@@ -137,15 +137,15 @@ class Zipper
     opts.width = vstrea.width if vstrea.width < opts.width
 
     if size_mb_limit # max bitrate to fit size_mb_limit
-      opts.abrate = (opts.apercent * opts.abrate).round
-
       duration = probe.format.duration.to_f / speed
       audsize  = (duration * opts.abrate.to_f/8) / 1000
-      bufsize  = "#{size_mb_limit - audsize}M"
-      maxrate  = 8 * (VID_PERCENT * size_mb_limit * 1000).to_i / duration
-      maxrate -= opts.abrate if maxrate > opts.abrate
+      vidsize  = (size_mb_limit - audsize).to_i
+      bufsize  = "#{vidsize}M"
+
+      maxrate  = 8*(VID_PERCENT * vidsize * 1000).to_i / duration
       maxrate  = "#{maxrate}k"
-      vcopts   = opts.format.vcopts % {maxrate:, bufsize:}
+      opts.abrate = (opts.apercent * opts.abrate).round
+      szopts   = opts.format.szopts % {maxrate:, bufsize:}
     end
 
     cmd = opts.format.cmd % {
@@ -157,7 +157,7 @@ class Zipper
       quality:  opts.quality,
       acodec:   acodec_opts(opts.acodec, opts.abrate),
       vbrate:   opts.vbrate,
-      vcopts:   vcopts,
+      szopts:   szopts,
       metadata: metadata_args(opts.metadata),
     }
     apply_opts cmd, opts
