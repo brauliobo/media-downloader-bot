@@ -15,8 +15,9 @@ class Bot
 
     # missing mimes
     Rack::Mime::MIME_TYPES['.opus'] = 'audio/ogg'
-    Rack::Mime::MIME_TYPES['.mkv']  = 'video/x-matroska'
+    Rack::Mime::MIME_TYPES['.flac'] = 'audio/x-flac'
     Rack::Mime::MIME_TYPES['.caf']  = 'audio/x-caf'
+    Rack::Mime::MIME_TYPES['.mkv']  = 'video/x-matroska'
 
     attr_reader :bot
     attr_reader :msg
