@@ -53,10 +53,10 @@ class Bot
       #cmd << " --user-agent '#{USER_AGENT}'" unless uri.host.index 'facebook'
 
       o, e, st = Open3.capture3 cmd, chdir: dir
-      if st != 0 and !opts.continue
-        edit_message msg, msg.resp.result.message_id, text: "Download failed:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
-        admin_report msg, e, status: 'Download failed'
-        return
+      if st != 0
+        edit_message msg, msg.resp.result.message_id, text: "Download errors:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
+        admin_report msg, e, status: 'Download errors'
+        # continue with inputs available
       end
       # ensure files were renamed in time
       sleep 1
