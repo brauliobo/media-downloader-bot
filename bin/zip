@@ -12,7 +12,6 @@ while ARGV[-1] and !File.exists?(ARGV[-1]) and ARGV[-1] !~ URI::regexp
   opt = ARGV.pop
   lopts.push opt
   Bot::UrlProcessor.add_opt opts, opt
-  require'pry';binding.pry
 end
 
 Zipper.size_mb_limit = ENV['SIZE_MB_LIMIT']&.to_i
