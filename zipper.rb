@@ -4,7 +4,7 @@ class Zipper
   self.size_mb_limit = 50
 
   VID_PERCENT  = 0.99
-  OPUS_PERCENT = 0.96
+  OPUS_PERCENT = 0.95
 
   CUDA         = false # slower while mining
   H264_OPTS    = if CUDA then '-hwaccel cuda -hwaccel_output_format cuda' else '' end
@@ -210,6 +210,7 @@ class Zipper
   def self.apply_opts cmd, opts
     cmd.strip!
     cmd << " -ss #{opts.ss}" if opts.ss&.match(/\d?\d:\d\d/)
+    cmd << " -to #{opts.to}" if opts.to&.match(/\d?\d:\d\d/)
   end
 
 end
