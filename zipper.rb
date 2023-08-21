@@ -108,9 +108,14 @@ class Zipper
     1000 * Zipper.size_mb_limit / (br / 8) / 60
   end
 
+  VID_DURATION_THLD = if size_mb_limit then 25 else Float::INFINITY end
+  AUD_DURATION_THLD = if size_mb_limit then max_audio_duration Types.audio.opus.opts.bitrate else Float::INFINITY end
+
+  VID_WIDTH_REDUC = SymMash.new width: 120, minutes: 5
+
   def self.zip_video infile, outfile, probe:, opts: SymMash.new
-    vf = ''; iopts = ''; oopts = ''
-    opts.reverse_merge! opts.format.opts.deep_dup
+    vf = ''; iopts = ''; oopts = ''; dopts = opts.format.opts
+    opts.reverse_merge! dopts
 
     sub = probe.streams.find{ |s| s.codec_type == 'subtitle' }
     vf << ",subtitles=#{Sh.escape infile}:si=0:force_style='#{SUB_STYLE}'" if sub
@@ -138,6 +143,15 @@ class Zipper
 
     if size_mb_limit # max bitrate to fit size_mb_limit
       duration = probe.format.duration.to_f / speed
+      minutes  = (duration / 60).ceil
+
+      # reduce resolution
+      if minutes > VID_DURATION_THLD and opts.width > dopts.width/3
+        reduc,intv = VID_WIDTH_REDUC.values_at :width, :minutes
+        opts.width = opts.width - reduc * ((minutes - VID_DURATION_THLD).to_f / intv).ceil
+        opts.width = dopts.width/3 if opts.width < dopts.width/3 
+      end
+
       audsize  = (duration * opts.abrate.to_f/8) / 1000
       vidsize  = (size_mb_limit - audsize).to_i
       bufsize  = "#{vidsize}M"
