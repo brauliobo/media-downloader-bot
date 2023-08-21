@@ -5,9 +5,6 @@ class Bot
 
     Types = Zipper::Types
 
-    VID_DURATION_THLD = if Zipper.size_mb_limit then 35 else Float::INFINITY end
-    AUD_DURATION_THLD = if Zipper.size_mb_limit then Zipper.max_audio_duration Zipper::Types.audio.opus.opts.bitrate else Float::INFINITY end
-
     VID_TOO_LONG = "\nQuality is compromised as the video is too long to fit the #{Zipper.size_mb_limit}MB upload limit on Telegram Bots"
     AUD_TOO_LONG = "\nQuality is compromised as the audio is too long to fit the #{Zipper.size_mb_limit}MB upload limit on Telegram Bots"
     VID_TOO_BIG  = "\nVideo over #{Zipper.size_mb_limit}MB Telegram Bot's limit, converting to audio..."
@@ -61,12 +58,10 @@ class Bot
       end
 
       if Zipper.size_mb_limit
-        # FIXME: specify different levels depending on length
-        if i.type == Types.video and i.durat > VID_DURATION_THLD.minutes.to_i
-          i.opts.width ||= 480
+        if i.type == Types.video and i.durat > Zipper::VID_DURATION_THLD.minutes.to_i
           edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(VID_TOO_LONG))
         end
-        if i.type == Types.audio and i.durat > AUD_DURATION_THLD.minutes.to_i
+        if i.type == Types.audio and i.durat > Zipper::AUD_DURATION_THLD.minutes.to_i
           edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(AUD_TOO_LONG))
         end
       end
