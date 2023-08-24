@@ -34,7 +34,8 @@ class Bot
     def download 
       cmd  = DOWN_CMD % {url: url}
       cmd << " --embed-subs"
-      cmd << " --cache-dir #{dir}/cache"
+      cmd << " --paths #{tmp}"
+      cmd << " --cache-dir #{tmp}/cache"
       cmd << ' -s' if opts.simulate
       cmd << " --playlist-end #{opts.limit.to_i}" if opts.limit
 
@@ -52,6 +53,7 @@ class Bot
       # user-agent can slowdown on youtube
       #cmd << " --user-agent '#{USER_AGENT}'" unless uri.host.index 'facebook'
 
+      puts cmd if ENV['PRINT_CMD']
       o, e, st = Open3.capture3 cmd, chdir: dir
       if st != 0
         edit_message msg, msg.resp.result.message_id, text: "Download errors:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
@@ -61,7 +63,7 @@ class Bot
       # ensure files were renamed in time
       sleep 1
 
-      infos  = Dir.glob("#{dir}/*.info.json").sort_by{ |f| File.mtime f }
+      infos  = Dir.glob("#{tmp}/*.info.json").sort_by{ |f| File.mtime f }
       infos.map! do |infof|
         info = SymMash.new JSON.parse File.read infof
         File.unlink infof # for the next Dir.glob to work properly
@@ -74,8 +76,8 @@ class Bot
       infos.map.with_index do |info, i|
         fn    = info._filename
         # info._filename extension isn't accurate
-        fn_in   = Dir.glob("#{dir}/#{File.basename fn, File.extname(fn)}.{#{KNOWN_EXTS}}").first
-        fn_in ||= Dir.glob("#{dir}/#{File.basename fn, File.extname(fn)}.*").first
+        fn_in   = Dir.glob("#{tmp}/#{File.basename fn, File.extname(fn)}.{#{KNOWN_EXTS}}").first
+        fn_in ||= Dir.glob("#{tmp}/#{File.basename fn, File.extname(fn)}.*").first
 
         info.title = info.track if info.track # e.g. bandcamp
         # number files

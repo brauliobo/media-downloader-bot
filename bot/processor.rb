@@ -18,7 +18,7 @@ class Bot
 
     attr_reader :bot
     attr_reader :msg
-    attr_reader :dir
+    attr_reader :dir, :tmp
 
     delegate_missing_to :bot
 
@@ -34,8 +34,13 @@ class Bot
 
     def initialize dir, bot, msg=nil
       @dir = dir
+      @tmp = Dir.mktmpdir 'input-', dir
       @bot = bot
       @msg = msg || bot.fake_msg
+    end
+
+    def cleanup
+      FileUtils.remove_entry tmp
     end
 
     def input_from_file f, opts
@@ -49,6 +54,7 @@ class Bot
     end
 
     def handle_input i
+      raise 'no input provided' unless i
       return input.merge! fn_out: 'fake' if i.opts.simulate
 
       self.class.probe i
@@ -103,8 +109,8 @@ class Bot
     def thumb info
       return if (url = info.thumbnail).blank?
 
-      im_in  = "#{dir}/img"
-      im_out = "#{dir}/#{info._filename}-thumb.jpg"
+      im_in  = "#{tmp}/img"
+      im_out = "#{tmp}/#{info._filename}-thumb.jpg"
       File.write im_in, http.get(url).body
 
       opts = if portrait? info

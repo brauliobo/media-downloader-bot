@@ -41,6 +41,7 @@ class Bot::Worker
       inputs.api_peach do |i|
         p = Bot::Processor.new dir, bot, msg
         p.handle_input i
+        p.cleanup
       rescue => e
         input_error e, i
       end
