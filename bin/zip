@@ -28,18 +28,17 @@ path.peach do |u|
   dir   = if u =~ URI::regexp then Dir.pwd else File.dirname u end
   dir   = "#{dir}/converted"
   Dir.mkdir dir rescue nil
-  Dir.mktmpdir "mdb-", dir do |dir|
-    if klass == Bot::UrlProcessor
-      lin = "#{u} #{lopts.join ' '}"
-      prc = klass.new dir, lin, bot
-      i   = prc.download.first
-      prc.handle_input i
-    else
-      prc = klass.new dir, bot
-      i   = prc.input_from_file u, opts
-      prc.handle_input i
 
-      Tagger.copy u, i.fn_out
-    end
+  if klass == Bot::UrlProcessor
+    lin = "#{u} #{lopts.join ' '}"
+    prc = klass.new dir, lin, bot
+    i   = prc.download.first
+    prc.handle_input i
+  else
+    prc = klass.new dir, bot
+    i   = prc.input_from_file u, opts
+    prc.handle_input i
+
+    Tagger.copy u, i.fn_out
   end
 end
