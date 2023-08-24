@@ -110,7 +110,7 @@ class Bot
       return if (url = info.thumbnail).blank?
 
       im_in  = "#{tmp}/img"
-      im_out = "#{tmp}/#{info._filename}-thumb.jpg"
+      im_out = "#{info._filename}-thumb.jpg"
       File.write im_in, http.get(url).body
 
       opts = if portrait? info
