@@ -4,7 +4,6 @@ class Zipper
   self.size_mb_limit = 50
 
   VID_PERCENT  = 0.99
-  OPUS_PERCENT = 0.95
 
   CUDA         = false # slower while mining
   H264_OPTS    = if CUDA then '-hwaccel cuda -hwaccel_output_format cuda' else '' end
@@ -21,15 +20,25 @@ class Zipper
   VIDEO_POST_OPTS << " #{POST_OPTS}"
   VIDEO_POST_OPTS << '-profile:v high -tune:v hq -level 4.1 -rc:v vbr -rc-lookahead:v 32 -aq-strength:v 15' if CUDA 
 
-  ENC_OPUS = '-c:a libopus -b:a %{abrate}k'
-  if `ffmpeg -encoders 2>&1 > /dev/null | grep fdk_aac`.present?
-    # aac_he_v2 doesn't work with instagram
-    ENC_AAC = '-c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k'
-  else
-    ENC_AAC = '-c:a aac -b:a %{abrate}k'
-  end
-  ENC_MP3 = '-c:a libmp3lame -abr 1 -b:a %{abrate}k'
+  FDK_AAC = `ffmpeg -encoders 2>&1 > /dev/null | grep fdk_aac`.present?
 
+  AUDIO_ENC = SymMash.new(
+    opus: {
+      percent: 0.95,
+      encode:  '-c:a libopus -b:a %{abrate}k',
+    },
+    aac:  {
+      percent: 0.99,
+      # aac_he_v2 doesn't work with instagram
+      encode: if FDK_AAC
+              then '-c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k'
+              else '-c:a aac -b:a %{abrate}k' end
+    },
+    mp3:  {
+      percent: 0.99,
+      encode:  '-c:a libmp3lame -abr 1 -b:a %{abrate}k',
+    },
+  )
   SUB_STYLE = 'Fontname=Roboto,OutlineColour=&H40000000,BorderStyle=3'
 
   THREADS = ENV['THREADS']&.to_i || 16
@@ -43,7 +52,7 @@ class Zipper
       h264: {
         ext:    :mp4,
         mime:   'video/mp4',
-        opts:   {width: 720, quality: H264_QUALITY, abrate: 64, apercent: OPUS_PERCENT},
+        opts:   {width: 720, quality: H264_QUALITY, abrate: 64, acodec: :aac}, #whatsapp can't handle opus in h264
         szopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
         cmd: <<-EOC
 #{FFMPEG} #{H264_OPTS} -i %{infile} -vf "#{SCALE_M2}%{vf}" %{iopts} \
@@ -55,7 +64,7 @@ class Zipper
       vp9: {
         ext:    :mp4,
         mime:   'video/mp4',
-        opts:   {width: 720, quality: 50, vbrate: 200, abrate: 64, apercent: OPUS_PERCENT},
+        opts:   {width: 720, quality: 50, vbrate: 200, abrate: 64, acodec: :opus},
         szopts: "-b:v %{maxrate}",
         cmd:  <<-EOC
 #{FFMPEG} -i %{infile} -vf "#{SCALE_M8}%{vf}" %{iopts} \
@@ -68,7 +77,7 @@ class Zipper
       av1: {
         ext:    :mp4,
         mime:   'video/mp4',
-        opts:   {width: 720, quality: 40, vbrate: 200, abrate: 64, apercent: OPUS_PERCENT},
+        opts:   {width: 720, quality: 40, vbrate: 200, abrate: 64, acodec: :opus},
         szopts: "-b:v %{vbrate}k -svtav1-params mbr=%{maxrate}",
         cmd:  <<-EOC
 #{FFMPEG} -i %{infile} -vf "#{SCALE_M2}%{vf}" %{iopts} \
@@ -84,22 +93,22 @@ class Zipper
       opus: {
         ext:  :opus,
         mime: 'audio/aac',
-        opts: {bitrate: 96, percent: OPUS_PERCENT},
-        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{ENC_OPUS} #{POST_OPTS} %{oopts}"
+        opts: {bitrate: 96},
+        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{AUDIO_ENC.opus} #{POST_OPTS} %{oopts}"
       },
 
       aac: {
         ext:  :m4a,
         mime: 'audio/aac',
-        opts: {bitrate: 96, percent: 0.98},
-        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{ENC_AAC} #{POST_OPTS} %{oopts}" 
+        opts: {bitrate: 96},
+        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{AUDIO_ENC.aac} #{POST_OPTS} %{oopts}" 
       },
 
       mp3: {
         ext:  :mp3,
         mime: 'audio/mp3',
-        opts: {bitrate: 128, percent: 1},
-        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{ENC_MP3} #{POST_OPTS} %{oopts}" 
+        opts: {bitrate: 128},
+        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{AUDIO_ENC.mp3} #{POST_OPTS} %{oopts}" 
       },
     },
   )
@@ -158,7 +167,6 @@ class Zipper
 
       maxrate  = 8*(VID_PERCENT * vidsize * 1000).to_i / duration
       maxrate  = "#{maxrate}k"
-      opts.abrate = (opts.apercent * opts.abrate).round
       szopts   = opts.format.szopts % {maxrate:, bufsize:}
     end
 
@@ -169,7 +177,7 @@ class Zipper
       oopts:    oopts,
       width:    opts.width,
       quality:  opts.quality,
-      acodec:   acodec_opts(opts.acodec, opts.abrate),
+      acodec:   acodec_opts(opts),
       vbrate:   opts.vbrate,
       szopts:   szopts,
       metadata: metadata_args(opts.metadata),
@@ -209,12 +217,10 @@ class Zipper
 
   protected 
 
-  def self.acodec_opts acodec, abrate
-    case acodec&.to_sym
-    when :aac then ENC_AAC
-    when :mp3 then ENC_MP3
-    else ENC_OPUS
-    end % {abrate:}
+  def self.acodec_opts opts
+    enc = AUDIO_ENC[opts.acodec&.to_sym] || AUDIO_ENC.opus
+    opts.abrate = (enc.percent * opts.abrate).round
+    enc.encode % {abrate: opts.abrate}
   end
 
   def self.metadata_args metadata
