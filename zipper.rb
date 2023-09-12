@@ -11,35 +11,36 @@ class Zipper
   H264_QUALITY = if CUDA then 33 else 25 end # to keep similar size
   SCALE_KEY    = if CUDA then 'scale_npp' else 'scale' end
 
-  SCALE_M2 = "#{SCALE_KEY}='%{width}:trunc(ow/a/2)*2'"
-  SCALE_M8 = "#{SCALE_KEY}='%{width}:trunc(ow/a/8)*8'"
+  SCALE_M2 = "#{SCALE_KEY}='%{width}:trunc(ow/a/2)*2'".freeze
+  SCALE_M8 = "#{SCALE_KEY}='%{width}:trunc(ow/a/8)*8'".freeze
 
-  META             = "-metadata downloaded_with=t.me/media_downloader_2bot"
-  POST_OPTS        = " -map_metadata 0 -id3v2_version 3 -write_id3v1 1 #{META} %{metadata}"
+  META             = "-metadata downloaded_with=t.me/media_downloader_2bot".freeze
+  POST_OPTS        = " -map_metadata 0 -id3v2_version 3 -write_id3v1 1 #{META} %{metadata}".freeze
   VIDEO_POST_OPTS  = "-movflags +faststart -movflags use_metadata_tags"
   VIDEO_POST_OPTS << " #{POST_OPTS}"
   VIDEO_POST_OPTS << '-profile:v high -tune:v hq -level 4.1 -rc:v vbr -rc-lookahead:v 32 -aq-strength:v 15' if CUDA 
+  VIDEO_POST_OPTS.freeze
 
   FDK_AAC = `ffmpeg -encoders 2>&1 > /dev/null | grep fdk_aac`.present?
 
   AUDIO_ENC = SymMash.new(
     opus: {
       percent: 0.95,
-      encode:  '-c:a libopus -b:a %{abrate}k',
+      encode:  '-c:a libopus -b:a %{abrate}k'.freeze,
     },
     aac:  {
       percent: 0.99,
       # aac_he_v2 doesn't work with instagram
       encode: if FDK_AAC
-              then '-c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k'
-              else '-c:a aac -b:a %{abrate}k' end
+              then '-c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k'.freeze
+              else '-c:a aac -b:a %{abrate}k'.freeze end
     },
     mp3:  {
       percent: 0.99,
-      encode:  '-c:a libmp3lame -abr 1 -b:a %{abrate}k',
+      encode:  '-c:a libmp3lame -abr 1 -b:a %{abrate}k'.freeze,
     },
   )
-  SUB_STYLE = 'Fontname=Roboto,OutlineColour=&H40000000,BorderStyle=3'
+  SUB_STYLE = 'Fontname=Roboto,OutlineColour=&H40000000,BorderStyle=3'.freeze
 
   THREADS = ENV['THREADS']&.to_i || 16
   FFMPEG  = "nice ffmpeg -y -threads #{THREADS} -loglevel error"
@@ -93,22 +94,22 @@ class Zipper
       opus: {
         ext:  :opus,
         mime: 'audio/aac',
-        opts: {bitrate: 96},
-        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{AUDIO_ENC.opus} #{POST_OPTS} %{oopts}"
+        opts: {bitrate: 96, percent: AUDIO_ENC.opus.percent},
+        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{AUDIO_ENC.opus.encode} #{POST_OPTS} %{oopts}"
       },
 
       aac: {
         ext:  :m4a,
         mime: 'audio/aac',
-        opts: {bitrate: 96},
-        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{AUDIO_ENC.aac} #{POST_OPTS} %{oopts}" 
+        opts: {bitrate: 96, percent: AUDIO_ENC.aac.percent},
+        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{AUDIO_ENC.aac.encode} #{POST_OPTS} %{oopts}"
       },
 
       mp3: {
         ext:  :mp3,
         mime: 'audio/mp3',
-        opts: {bitrate: 128},
-        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{AUDIO_ENC.mp3} #{POST_OPTS} %{oopts}" 
+        opts: {bitrate: 128, percent: AUDIO_ENC.mp3.percent},
+        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{AUDIO_ENC.mp3.encode} #{POST_OPTS} %{oopts}"
       },
     },
   )
@@ -170,6 +171,10 @@ class Zipper
       szopts   = opts.format.szopts % {maxrate:, bufsize:}
     end
 
+    aenc   = AUDIO_ENC[opts.acodec&.to_sym] || AUDIO_ENC.opus
+    opts.abrate = (aenc.percent * opts.abrate).round if size_mb_limit
+    acodec = aenc.encode % {abrate: opts.abrate}
+
     cmd = opts.format.cmd % {
       infile:   Sh.escape(infile),
       vf:       vf,
@@ -177,7 +182,7 @@ class Zipper
       oopts:    oopts,
       width:    opts.width,
       quality:  opts.quality,
-      acodec:   acodec_opts(opts),
+      acodec:   acodec,
       vbrate:   opts.vbrate,
       szopts:   szopts,
       metadata: metadata_args(opts.metadata),
@@ -216,12 +221,6 @@ class Zipper
   end
 
   protected 
-
-  def self.acodec_opts opts
-    enc = AUDIO_ENC[opts.acodec&.to_sym] || AUDIO_ENC.opus
-    opts.abrate = (enc.percent * opts.abrate).round
-    enc.encode % {abrate: opts.abrate}
-  end
 
   def self.metadata_args metadata
     (metadata || {}).map{ |k,v| "-metadata #{Sh.escape k}=#{Sh.escape v}" }.join ' '
