@@ -121,7 +121,8 @@ class Zipper
   VID_DURATION_THLD = if size_mb_limit then 25 else Float::INFINITY end
   AUD_DURATION_THLD = if size_mb_limit then max_audio_duration Types.audio.opus.opts.bitrate else Float::INFINITY end
 
-  VID_WIDTH_REDUC = SymMash.new width: 120, minutes: 5
+  # reduce width for every minutes interval exceeding VID_DURATION_THLD
+  VID_WIDTH_REDUC = SymMash.new width: 80, minutes: 5
 
   def self.zip_video infile, outfile, probe:, opts: SymMash.new
     vf = ''; iopts = ''; oopts = ''; dopts = opts.format.opts
