@@ -3,6 +3,7 @@ class Zipper
   class_attribute :size_mb_limit
   self.size_mb_limit = 50
 
+  VID_WIDTH    = 640
   VID_PERCENT  = 0.99
 
   CUDA         = false # slower while mining
@@ -53,7 +54,7 @@ class Zipper
       h264: {
         ext:    :mp4,
         mime:   'video/mp4',
-        opts:   {width: 720, quality: H264_QUALITY, abrate: 64, acodec: :aac}, #whatsapp can't handle opus in h264
+        opts:   {width: VID_WIDTH, quality: H264_QUALITY, abrate: 64, acodec: :aac}, #whatsapp can't handle opus in h264
         szopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
         cmd: <<-EOC
 #{FFMPEG} #{H264_OPTS} -i %{infile} -vf "#{SCALE_M2}%{vf}" %{iopts} \
@@ -65,7 +66,7 @@ class Zipper
       vp9: {
         ext:    :mp4,
         mime:   'video/mp4',
-        opts:   {width: 720, quality: 50, vbrate: 200, abrate: 64, acodec: :opus},
+        opts:   {width: VID_WIDTH, quality: 50, vbrate: 200, abrate: 64, acodec: :opus},
         szopts: "-b:v %{maxrate}",
         cmd:  <<-EOC
 #{FFMPEG} -i %{infile} -vf "#{SCALE_M8}%{vf}" %{iopts} \
@@ -78,7 +79,7 @@ class Zipper
       av1: {
         ext:    :mp4,
         mime:   'video/mp4',
-        opts:   {width: 720, quality: 40, vbrate: 200, abrate: 64, acodec: :opus},
+        opts:   {width: VID_WIDTH, quality: 40, vbrate: 200, abrate: 64, acodec: :opus},
         szopts: "-b:v %{vbrate}k -svtav1-params mbr=%{maxrate}",
         cmd:  <<-EOC
 #{FFMPEG} -i %{infile} -vf "#{SCALE_M2}%{vf}" %{iopts} \
