@@ -98,6 +98,7 @@ class Bot::Worker
   end
 
   def msg_caption i
+    return '' if opts.nocaption
     text = ''
     if opts.caption or i.type == Zipper::Types.video
       text  = "_#{me i.info.title}_"
