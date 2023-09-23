@@ -79,10 +79,12 @@ class Bot
         fn_in   = Dir.glob("#{tmp}/#{File.basename fn, File.extname(fn)}.{#{KNOWN_EXTS}}").first
         fn_in ||= Dir.glob("#{tmp}/#{File.basename fn, File.extname(fn)}.*").first
 
-        info.title = info.description if info.webpage_url.index 'instagram.com'
         info.title = info.track if info.track # e.g. bandcamp
+        info.title = info.description if info.webpage_url.index 'instagram.com'
         # number files
         info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.number
+
+        info.title = Bot::Helpers.limit info.title, percent: 90
 
         url = info.url = if mult then info.webpage_url else self.url end
         url = Bot::UrlShortner.shortify(info) || url
