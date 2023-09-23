@@ -4,6 +4,14 @@ require 'roda'
 class Bot
   module Helpers
 
+    MAX_CAPTION = 1024
+
+    def self.limit i, size: MAX_CAPTION, percent: 100
+      size = size * percent.to_f/100 if percent
+      return i.first size if i.size > size
+      i
+    end
+
     extend ActiveSupport::Concern
     included do
       class_attribute :bot_name
@@ -153,8 +161,7 @@ class Bot
 
     def parse_text text, parse_mode:
       return unless text
-      text = text.first 4090 if text.size > 4096
-      text
+      Helpers.limit text
     end
 
     MARKDOWN_NON_FORMAT = %w[\# / [ ] ( ) " ~ # + - = | { } . ! < >]
