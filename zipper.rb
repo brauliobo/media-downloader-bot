@@ -24,7 +24,7 @@ class Zipper
   VIDEO_POST_OPTS << '-profile:v high -tune:v hq -level 4.1 -rc:v vbr -rc-lookahead:v 32 -aq-strength:v 15' if CUDA 
   VIDEO_POST_OPTS.freeze
 
-  FDK_AAC = `ffmpeg -encoders 2>&1 > /dev/null | grep fdk_aac`.present?
+  FDK_AAC = `ffmpeg -encoders 2>/dev/null | grep fdk_aac`.present?
 
   AUDIO_ENC = SymMash.new(
     opus: {
@@ -84,7 +84,7 @@ class Zipper
         opts:   {width: VID_WIDTH, quality: 40, vbrate: 200, abrate: 64, acodec: :opus},
         szopts: "-b:v %{vbrate}k -svtav1-params mbr=%{maxrate}",
         cmd:  <<-EOC
-#{FFMPEG} -i %{infile} -vf "#{VF_SCALE_M2},#{VF_STD}%{vf}" #{VFR_OPTS} -r 30 %{iopts} \
+#{FFMPEG} -i %{infile} -vf "#{VF_SCALE_M2},#{VF_STD}%{vf}" #{VFR_OPTS} %{iopts} \
   -c:v libsvtav1 -crf %{quality} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
@@ -141,6 +141,13 @@ class Zipper
     end
 
     vf << ",#{opts.vf}" if opts.vf.present?
+
+    # FIXME: conflict with MP4 vsync vfr
+    iopts << "-r #{opts.maxfr.to_i}" if opts.maxfr
+
+    # Workaround for "Channel layout change is not supported"
+    # https://www.atlas-informatik.ch/multimediaXpert/Convert.en.html
+    iopts << "-ac #{opts.ac.to_i}" if opts.ac
 
     # convert input
     opts.width   = opts.width.to_i
