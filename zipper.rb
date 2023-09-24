@@ -12,8 +12,10 @@ class Zipper
   H264_QUALITY = if CUDA then 33 else 25 end # to keep similar size
   SCALE_KEY    = if CUDA then 'scale_npp' else 'scale' end
 
-  SCALE_M2 = "#{SCALE_KEY}='%{width}:trunc(ow/a/2)*2'".freeze
-  SCALE_M8 = "#{SCALE_KEY}='%{width}:trunc(ow/a/8)*8'".freeze
+  VFR_OPTS    = '-vsync vfr'
+  VF_STD      = 'mpdecimate'
+  VF_SCALE_M2 = "#{SCALE_KEY}='%{width}:trunc(ow/a/2)*2'".freeze
+  VF_SCALE_M8 = "#{SCALE_KEY}='%{width}:trunc(ow/a/8)*8'".freeze
 
   META             = "-metadata downloaded_with=t.me/media_downloader_2bot".freeze
   POST_OPTS        = " -map_metadata 0 -id3v2_version 3 -write_id3v1 1 #{META} %{metadata}".freeze
@@ -57,7 +59,7 @@ class Zipper
         opts:   {width: VID_WIDTH, quality: H264_QUALITY, abrate: 64, acodec: :aac}, #whatsapp can't handle opus in h264
         szopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
         cmd: <<-EOC
-#{FFMPEG} #{H264_OPTS} -i %{infile} -vf "#{SCALE_M2}%{vf}" %{iopts} \
+#{FFMPEG} #{H264_OPTS} -i %{infile} -vf "#{VF_SCALE_M2},#{VF_STD}%{vf}" #{VFR_OPTS} %{iopts} \
   -c:v #{H264_CODEC} -cq:v %{quality} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
@@ -69,7 +71,7 @@ class Zipper
         opts:   {width: VID_WIDTH, quality: 50, vbrate: 200, abrate: 64, acodec: :opus},
         szopts: "-b:v %{maxrate}",
         cmd:  <<-EOC
-#{FFMPEG} -i %{infile} -vf "#{SCALE_M8}%{vf}" %{iopts} \
+#{FFMPEG} -i %{infile} -vf "#{VF_SCALE_M8},#{VF_STD}%{vf}" #{VFR_OPTS} %{iopts} \
   -c:v libsvt_vp9 -cq:v %{quality} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
@@ -82,7 +84,7 @@ class Zipper
         opts:   {width: VID_WIDTH, quality: 40, vbrate: 200, abrate: 64, acodec: :opus},
         szopts: "-b:v %{vbrate}k -svtav1-params mbr=%{maxrate}",
         cmd:  <<-EOC
-#{FFMPEG} -i %{infile} -vf "#{SCALE_M2}%{vf}" %{iopts} \
+#{FFMPEG} -i %{infile} -vf "#{VF_SCALE_M2},#{VF_STD}%{vf}" #{VFR_OPTS} -r 30 %{iopts} \
   -c:v libsvtav1 -crf %{quality} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
