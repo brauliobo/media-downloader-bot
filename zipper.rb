@@ -168,9 +168,10 @@ class Zipper
 
       # reduce resolution
       if minutes > VID_DURATION_THLD and opts.width > dopts.width/3
-        reduc,intv = VID_WIDTH_REDUC.values_at :width, :minutes
-        opts.width = opts.width - reduc * ((minutes - VID_DURATION_THLD).to_f / intv).ceil
-        opts.width = dopts.width/3 if opts.width < dopts.width/3 
+        reduc,intv  = VID_WIDTH_REDUC.values_at :width, :minutes
+        opts.width  = opts.width - reduc * ((minutes - VID_DURATION_THLD).to_f / intv).ceil
+        opts.width  = dopts.width/3 if opts.width < dopts.width/3
+        opts.width -= 1 if opts.width % 2 == 1
       end
 
       audsize  = (duration * opts.abrate.to_f/8) / 1000
