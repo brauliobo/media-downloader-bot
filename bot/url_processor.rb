@@ -31,7 +31,7 @@ class Bot
 
     KNOWN_EXTS = "webm,mp4,m4a,opus"
 
-    def download 
+    def download
       cmd  = DOWN_CMD % {url: url}
       cmd << " --embed-subs"
       cmd << " --paths #{tmp}"
@@ -81,7 +81,6 @@ class Bot
 
         info.title = info.track if info.track # e.g. bandcamp
         info.title = info.description || info.title if info.webpage_url.index 'instagram.com'
-        # number files
         info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.number
 
         info.title = Bot::Helpers.limit info.title, percent: 90
