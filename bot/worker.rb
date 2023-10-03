@@ -38,9 +38,9 @@ class Bot::Worker
       return msg.resp = nil if inputs.blank?
 
       edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me("\nConverting..."))
-      inputs.api_peach do |i|
+      inputs.each.with_index.api_peach do |i, pos|
         p = Bot::Processor.new dir, bot, msg
-        p.handle_input i
+        p.handle_input i, pos: pos+1
         p.cleanup
       rescue => e
         input_error e, i

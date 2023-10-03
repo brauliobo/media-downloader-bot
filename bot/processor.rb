@@ -40,6 +40,7 @@ class Bot
     end
 
     def cleanup
+      return if ENV['TMPDIR']
       FileUtils.remove_entry tmp
     end
 
@@ -53,7 +54,7 @@ class Bot
       )
     end
 
-    def handle_input i
+    def handle_input i, pos: nil
       raise 'no input provided' unless i
       return input.merge! fn_out: 'fake' if i.opts.simulate
 
@@ -75,7 +76,7 @@ class Bot
       binding.pry if ENV['PRY_BEFORE_CONVERT']
 
       i.thumb = i.opts.thumb = thumb i.info
-      return unless i.fn_out = convert(i)
+      return unless i.fn_out = convert(i, pos: pos)
 
       # check telegram bot's upload limit
       if Zipper.size_mb_limit
@@ -83,7 +84,7 @@ class Bot
         if i.type == Types.video and mbsize >= Zipper.size_mb_limit
           edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(VID_TOO_BIG))
           i.type   = Types.audio
-          i.fn_out = convert i
+          i.fn_out = convert i, pos: pos
           mbsize   = File.size(i.fn_out) / 2**20
         end
         # still too big as audio...
@@ -132,7 +133,7 @@ class Bot
       info.width < info.height
     end
 
-    def convert i
+    def convert i, pos: nil
       speed    = i.opts.speed&.to_f
       durat    = i.durat
       durat   /= speed if speed
@@ -150,6 +151,7 @@ class Bot
       i.opts.metadata = m
 
       fn_out  = i.info.title.dup
+      fn_out  = "#{pos} #{fn_out}" if pos # avoid filename conflict on multiline
       fn_out << " by #{i.info.uploader}" if i.info.uploader
       fn_out  = fn_out.first 80 # /tmp can't have big filename
       fn_out << ".#{i.format.ext}"
