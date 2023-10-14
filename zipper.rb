@@ -56,7 +56,7 @@ class Zipper
       h264: {
         ext:    :mp4,
         mime:   'video/mp4',
-        opts:   {width: VID_WIDTH, quality: H264_QUALITY, abrate: 64, acodec: :aac}, #whatsapp can't handle opus in h264
+        opts:   {width: VID_WIDTH, quality: H264_QUALITY, abrate: 64, acodec: :aac, percent: VID_PERCENT}, #whatsapp can't handle opus in h264
         szopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
         cmd: <<-EOC
 #{FFMPEG} #{H264_OPTS} -i %{infile} -vf "#{VF_SCALE_M2},#{VF_STD}%{vf}" #{VFR_OPTS} %{iopts} \
@@ -64,15 +64,17 @@ class Zipper
         EOC
       },
 
-      # FIXME: Can't control file size
+      # VP9 doesn't seem to respect low bitrates:
+      # - it can't control file size in quality mode,
+      # - target bitrate mode also not ensuring desired bitrate
       vp9: {
         ext:    :mp4,
         mime:   'video/mp4',
-        opts:   {width: VID_WIDTH, quality: 50, vbrate: 200, abrate: 64, acodec: :opus},
-        szopts: "-b:v %{maxrate}",
+        opts:   {width: VID_WIDTH, vbrate: 835, abrate: 64, acodec: :aac, percent: 0.97},
+        szopts: "-rc vbr -b:v %{maxrate}",
         cmd:  <<-EOC
 #{FFMPEG} -i %{infile} -vf "#{VF_SCALE_M8},#{VF_STD}%{vf}" #{VFR_OPTS} %{iopts} \
-  -c:v libsvt_vp9 -cq:v %{quality} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
+  -c:v libsvt_vp9 %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
 
@@ -81,7 +83,7 @@ class Zipper
       av1: {
         ext:    :mp4,
         mime:   'video/mp4',
-        opts:   {width: VID_WIDTH, quality: 40, vbrate: 200, abrate: 64, acodec: :opus},
+        opts:   {width: VID_WIDTH, quality: 40, vbrate: 200, abrate: 64, acodec: :opus, percent: VID_PERCENT},
         szopts: "-b:v %{vbrate}k -svtav1-params mbr=%{maxrate}",
         cmd:  <<-EOC
 #{FFMPEG} -i %{infile} -vf "#{VF_SCALE_M2},#{VF_STD}%{vf}" #{VFR_OPTS} %{iopts} \
@@ -178,7 +180,8 @@ class Zipper
       vidsize  = (size_mb_limit - audsize).to_i
       bufsize  = "#{vidsize}M"
 
-      maxrate  = 8*(VID_PERCENT * vidsize * 1000).to_i / duration
+      maxrate  = (8*(opts.percent * vidsize * 1000) / duration).to_i
+      maxrate  = opts.vbrate if opts.vbrate and maxrate > opts.vbrate
       maxrate  = "#{maxrate}k"
       szopts   = opts.format.szopts % {maxrate:, bufsize:}
     end
