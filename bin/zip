@@ -22,7 +22,7 @@ class Stdout
 end
 bot = Stdout.new
 
-path = ARGV
+path = if ARGV.size > 1 then ARGV else ARGV.first.split "\n" end
 path.peach do |u|
   klass = if u =~ URI::regexp then Bot::UrlProcessor else Bot::Processor end
   dir   = if u =~ URI::regexp then Dir.pwd else File.dirname u end
@@ -32,8 +32,9 @@ path.peach do |u|
   if klass == Bot::UrlProcessor
     lin = "#{u} #{lopts.join ' '}"
     prc = klass.new dir, lin, bot
-    i   = prc.download.first
-    prc.handle_input i
+    prc.download.peach do |i|
+      prc.handle_input i
+    end
   else
     prc = klass.new dir, bot
     i   = prc.input_from_file u, opts
@@ -42,3 +43,4 @@ path.peach do |u|
     Tagger.copy u, i.fn_out
   end
 end
+
