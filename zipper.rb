@@ -29,7 +29,7 @@ class Zipper
   AUDIO_ENC = SymMash.new(
     opus: {
       percent: 0.95,
-      encode:  '-c:a libopus -b:a %{abrate}k'.freeze,
+      encode:  '-ac 2 -c:a libopus -b:a %{abrate}k'.freeze,
     },
     aac:  {
       percent: 0.99,
