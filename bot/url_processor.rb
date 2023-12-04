@@ -29,7 +29,7 @@ class Bot
       end
     end
 
-    KNOWN_EXTS = "webm,mp4,m4a,opus"
+    KNOWN_EXTS = "webm,mp4,m4a,opus,mkv"
 
     def download
       cmd  = DOWN_CMD % {url: url}
@@ -74,9 +74,10 @@ class Bot
       mult   = infos.size > 1
 
       infos.map.with_index do |info, i|
-        fn    = info._filename
-        # info._filename extension isn't accurate
-        fn_in   = Dir.glob("#{tmp}/#{File.basename fn, File.extname(fn)}.{#{KNOWN_EXTS}}").first
+        # info._filename extension isn't always accurate
+        fn      = info._filename
+        fn_in   = fn if File.exists? fn
+        fn_in ||= Dir.glob("#{tmp}/#{File.basename fn, File.extname(fn)}.{#{KNOWN_EXTS}}").first
         fn_in ||= Dir.glob("#{tmp}/#{File.basename fn, File.extname(fn)}.*").first
 
         info.title = info.track if info.track # e.g. bandcamp
