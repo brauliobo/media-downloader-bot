@@ -111,8 +111,8 @@ class Bot
     def thumb info
       return if (url = info.thumbnail).blank?
 
-      im_in  = "#{tmp}/img"
-      im_out = "#{info._filename}-thumb.jpg"
+      im_in  = "#{info._filename}-ithumb.jpg"
+      im_out = "#{info._filename}-othumb.jpg"
       File.write im_in, http.get(url).body
 
       opts = if portrait? info

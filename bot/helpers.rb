@@ -128,10 +128,15 @@ class Bot
 
     def report_error msg, e, context: nil
       return unless msg
-      error  = ''
-      error << "\n\n<b>context</b>: #{he(context).first(100)}" if context
-      error << "\n\n<b>error</b>: <pre>#{he e.message}\n"
-      error << "#{he e.backtrace.join "\n"}</pre>"
+
+      if e.is_a? StandardError
+        error  = ''
+        error << "\n\n<b>context</b>: #{he(context).first(100)}" if context
+        error << "\n\n<b>error</b>: <pre>#{he e.message}\n"
+        error << "#{he e.backtrace.join "\n"}</pre>"
+      else
+        error  = e.to_s
+      end
 
       STDERR.puts "error: #{error}"
       send_message msg, error, parse_mode: 'HTML', delete_both: error_delete_time
