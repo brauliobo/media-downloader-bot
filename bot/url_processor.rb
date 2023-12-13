@@ -7,8 +7,8 @@ class Bot
 
     MAX_RES    = 1080
     DOWN_BIN   = "yt-dlp"
-    DOWN_ARGS  = "-S 'res:#{MAX_RES}' --ignore-errors --write-info-json --no-clean-infojson"
-    DOWN_CMD   = "#{DOWN_BIN} #{DOWN_ARGS} '%{url}'"
+    DOWN_ARGS  = "-S 'res:#{MAX_RES}' --ignore-errors "
+    DOWN_CMD   = "#{DOWN_BIN} #{DOWN_ARGS}"
     USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36'
     DOWN_OPTS  = %i[referer]
 
@@ -31,39 +31,44 @@ class Bot
 
     KNOWN_EXTS = "webm,mp4,m4a,opus,mkv"
 
-    def download
-      cmd  = DOWN_CMD % {url: url}
-      cmd << " --embed-subs"
-      cmd << " --paths #{tmp}"
-      cmd << " --cache-dir #{tmp}/cache"
-      cmd << ' -s' if opts.simulate
-      cmd << " --playlist-end #{opts.limit.to_i}" if opts.limit
+    def base_cmd url: self.url
+      @base_cmd ||= self.then do
+        bcmd  = DOWN_CMD
+        bcmd << " --embed-subs"
+        bcmd << " --paths #{tmp}"
+        bcmd << " --cache-dir #{tmp}/cache"
+        bcmd << ' -s' if opts.simulate
 
-      cmd << ' -x' if opts.audio
-      cmd << ' -f mp3-320/best' if url.index 'bandcamp.com' # FIXME: it is choosing flac
+        opts.limit ||= 50 if opts.after
+        bcmd << " --playlist-end #{opts.limit.to_i}" if opts.limit
 
-      cmd << " -o 'input-#{object_id}-%(playlist_index)s.%(ext)s'"
+        bcmd << ' -x' if opts.audio
+        bcmd << ' -f mp3-320/best' if url.index 'bandcamp.com' # FIXME: it is choosing flac
 
-      opts.slice(*DOWN_OPTS).each do |k,v|
-        v.gsub! "'", "\'"
-        cmd << " --#{k} '#{v}'"
+        opts.slice(*DOWN_OPTS).each do |k,v|
+          v.gsub! "'", "\'"
+          bcmd << " --#{k} '#{v}'"
+        end
+
+        #bcmd << " --cookies #{opts.cookie}" if opts.cookie
+        #bcmd << " --cookies-from-browser #{opts.cookie}" if opts.cookie and from_admin? msg # FIXME: depends on unit user
+        # user-agent can slowdown on youtube
+        #bcmd << " --user-agent '#{USER_AGENT}'" unless uri.host.index 'facebook'
+
+        bcmd
       end
-      #cmd << " --cookies #{opts.cookie}" if opts.cookie
-      #cmd << " --cookies-from-browser #{opts.cookie}" if opts.cookie and from_admin? msg # FIXME: depends on unit user
-      # user-agent can slowdown on youtube
-      #cmd << " --user-agent '#{USER_AGENT}'" unless uri.host.index 'facebook'
+    end
 
-      puts cmd if ENV['PRINT_CMD']
-      o, e, st = Open3.capture3 cmd, chdir: dir
+    def download
+      cmd  = base_cmd + " --write-info-json --no-clean-infojson --skip-download '#{url}'"
+      o, e, st = Sh.run cmd, chdir: dir
       if st != 0
-        edit_message msg, msg.resp.result.message_id, text: "Download errors:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
-        admin_report msg, e, status: 'Download errors'
+        edit_message msg, msg.resp.result.message_id, text: "Metadata errors:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
+        admin_report msg, e, status: 'Metadata errors'
         # continue with inputs available
       end
-      # ensure files were renamed in time
-      sleep 1
 
-      infos  = Dir.glob("#{tmp}/*.info.json").sort_by{ |f| File.mtime f }
+      infos = Dir.glob("#{tmp}/*.info.json").sort_by{ |f| File.mtime f }
       infos.map! do |infof|
         info = SymMash.new JSON.parse File.read infof
         File.unlink infof # for the next Dir.glob to work properly
@@ -71,14 +76,24 @@ class Bot
         next unless info._filename # playlist info
         info
       end.compact!
-      mult   = infos.size > 1
 
-      infos.map.with_index do |info, i|
-        # info._filename extension isn't always accurate
-        fn      = info._filename
-        fn_in   = fn if File.exists? fn
-        fn_in ||= Dir.glob("#{tmp}/#{File.basename fn, File.extname(fn)}.{#{KNOWN_EXTS}}").first
-        fn_in ||= Dir.glob("#{tmp}/#{File.basename fn, File.extname(fn)}.*").first
+      if opts.after
+        ai = infos.index{ |i| i.display_id == opts.after }
+        return report_error msg, "Can't find after id", context: i.inspect unless ai
+        infos = infos[0..(ai-1)]
+      end
+
+      mult = infos.size > 1
+
+      l = []
+      infos.each.with_index.api_peach do |info, i|
+        ourl = info.url = if mult then info.webpage_url else self.url end
+        url  = Bot::UrlShortner.shortify(info) || ourl
+
+        fn  = "input-#{i}"
+        cmd = base_cmd + " -o '#{fn}.%(ext)s' '#{ourl}'"
+        o, e, st = Sh.run cmd, chdir: dir
+        next unless st == 0
 
         info.title = info.track if info.track # e.g. bandcamp
         info.title = info.description || info.title if info.webpage_url.index 'instagram.com'
@@ -86,11 +101,14 @@ class Bot
 
         info.title = Bot::Helpers.limit info.title, percent: 90
 
-        url = info.url = if mult then info.webpage_url else self.url end
-        url = Bot::UrlShortner.shortify(info) || url
+        info._filename = fn_in = Dir.glob("#{tmp}/#{fn}.*").first
 
-        input_from_file(fn_in, opts).merge url: url, info: info
+        next report_error msg, "Can't find file #{fn_in}", context: fn_in unless File.exists? fn_in
+
+        i = input_from_file(fn_in, opts).merge url: url, info: info
+        l << i
       end
+      l
     end
 
   end
