@@ -41,6 +41,7 @@ path.peach do |u|
     prc.handle_input i
 
     Tagger.copy u, i.fn_out
+    prc.cleanup
   end
 end
 
