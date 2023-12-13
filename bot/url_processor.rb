@@ -7,8 +7,8 @@ class Bot
 
     MAX_RES    = 1080
     DOWN_BIN   = "yt-dlp"
-    DOWN_ARGS  = "-S 'res:#{MAX_RES}' --ignore-errors "
-    DOWN_CMD   = "#{DOWN_BIN} #{DOWN_ARGS}"
+    DOWN_ARGS  = "-S 'res:#{MAX_RES}' --ignore-errors"
+    DOWN_CMD   = "#{DOWN_BIN} #{DOWN_ARGS}".freeze
     USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36'
     DOWN_OPTS  = %i[referer]
 
@@ -26,36 +26,6 @@ class Bot
       @url  = uri.to_s
       @opts = @args.each.with_object SymMash.new do |a, h|
         self.class.add_opt h, a
-      end
-    end
-
-    KNOWN_EXTS = "webm,mp4,m4a,opus,mkv"
-
-    def base_cmd
-      @base_cmd ||= self.then do
-        bcmd  = DOWN_CMD
-        bcmd << " --embed-subs"
-        bcmd << " --paths #{tmp}"
-        bcmd << " --cache-dir #{tmp}/cache"
-        bcmd << ' -s' if opts.simulate
-
-        opts.limit ||= 50 if opts.after
-        bcmd << " --playlist-end #{opts.limit.to_i}" if opts.limit
-
-        bcmd << ' -x' if opts.audio
-        bcmd << ' -f mp3-320/best' if url.index 'bandcamp.com' # FIXME: it is choosing flac
-
-        opts.slice(*DOWN_OPTS).each do |k,v|
-          v.gsub! "'", "\'"
-          bcmd << " --#{k} '#{v}'"
-        end
-
-        #bcmd << " --cookies #{opts.cookie}" if opts.cookie
-        #bcmd << " --cookies-from-browser #{opts.cookie}" if opts.cookie and from_admin? msg # FIXME: depends on unit user
-        # user-agent can slowdown on youtube
-        #bcmd << " --user-agent '#{USER_AGENT}'" unless uri.host.index 'facebook'
-
-        bcmd
       end
     end
 
@@ -108,6 +78,36 @@ class Bot
         l << i
       end
       l
+    end
+
+    protected
+
+    def base_cmd
+      @base_cmd ||= self.then do
+        bcmd  = DOWN_CMD.dup
+        bcmd << " --embed-subs"
+        bcmd << " --paths #{tmp}"
+        bcmd << " --cache-dir #{tmp}/cache"
+        bcmd << ' -s' if opts.simulate
+
+        opts.limit ||= 50 if opts.after
+        bcmd << " --playlist-end #{opts.limit.to_i}" if opts.limit
+
+        bcmd << ' -x' if opts.audio
+        bcmd << ' -f mp3-320/best' if url.index 'bandcamp.com' # FIXME: it is choosing flac
+
+        opts.slice(*DOWN_OPTS).each do |k,v|
+          v.gsub! "'", "\'"
+          bcmd << " --#{k} '#{v}'"
+        end
+
+        #bcmd << " --cookies #{opts.cookie}" if opts.cookie
+        #bcmd << " --cookies-from-browser #{opts.cookie}" if opts.cookie and from_admin? msg # FIXME: depends on unit user
+        # user-agent can slowdown on youtube
+        #bcmd << " --user-agent '#{USER_AGENT}'" unless uri.host.index 'facebook'
+
+        bcmd
+      end
     end
 
   end
