@@ -133,7 +133,7 @@ class Bot
         error  = ''
         error << "\n\n<b>context</b>: #{he(context).first(100)}" if context
         error << "\n\n<b>error</b>: <pre>#{he e.message}\n"
-        error << "#{he e.backtrace.join "\n"}</pre>"
+        error << "#{he clean_bc(e.backtrace).join "\n"}</pre>"
       else
         error  = e.to_s
       end
@@ -141,6 +141,16 @@ class Bot
       STDERR.puts "error: #{error}"
       send_message msg, error, parse_mode: 'HTML', delete_both: error_delete_time
       admin_report msg, error unless from_admin? msg
+    rescue
+      send_message msg, he(error), parse_mode: 'HTML', delete_both: error_delete_time
+    end
+
+    def clean_bc bc
+      @bc ||= self.then do
+        bcl = ActiveSupport::BacktraceCleaner.new
+        bcl.add_filter{ |line| line.gsub Dir.pwd, '' }
+        bcl
+      end.clean bc
     end
 
     def admin_report msg, _error, status: 'error'
