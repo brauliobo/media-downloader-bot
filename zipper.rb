@@ -60,7 +60,7 @@ class Zipper
         szopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
         cmd: <<-EOC
 #{FFMPEG} #{H264_OPTS} -i %{infile} -vf "#{VF_SCALE_M2},#{VF_STD}%{vf}" #{VFR_OPTS} %{iopts} \
-  -c:v #{H264_CODEC} -cq:v %{quality} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
+  -c:v #{H264_CODEC} -crf %{quality} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
 
