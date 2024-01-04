@@ -30,7 +30,7 @@ class Bot
     end
 
     def download
-      cmd  = base_cmd + " --write-info-json --no-clean-infojson --skip-download '#{url}'"
+      cmd  = base_cmd + " --write-info-json --no-clean-infojson --skip-download -o 'info-%{playlist_index}.%(ext)s' '#{url}'"
       o, e, st = Sh.run cmd, chdir: dir
       if st != 0
         edit_message msg, msg.resp.result.message_id, text: "Metadata errors:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
@@ -91,6 +91,7 @@ class Bot
         bcmd << ' -s' if opts.simulate
 
         opts.limit ||= 50 if opts.after
+        opts.limit   = 50 if opts.limit and opts.limit.to_i > 50 and !from_admin?(msg)
         bcmd << " --playlist-end #{opts.limit.to_i}" if opts.limit
 
         bcmd << ' -x' if opts.audio
