@@ -30,7 +30,7 @@ class Bot
     end
 
     def download
-      cmd  = base_cmd + " --write-info-json --no-clean-infojson --skip-download -o 'info-%{playlist_index}.%(ext)s' '#{url}'"
+      cmd  = base_cmd + " --write-info-json --no-clean-infojson --skip-download -o 'info-%(playlist_index)s.%(ext)s' '#{url}'"
       o, e, st = Sh.run cmd, chdir: dir
       if st != 0
         edit_message msg, msg.resp.result.message_id, text: "Metadata errors:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
