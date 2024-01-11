@@ -13,7 +13,6 @@ class Zipper
   SCALE_KEY    = if CUDA then 'scale_npp' else 'scale' end
 
   VFR_OPTS    = '-vsync vfr'
-  VF_STD      = 'mpdecimate'
   VF_SCALE_M2 = "#{SCALE_KEY}='%{width}:trunc(ow/a/2)*2'".freeze
   VF_SCALE_M8 = "#{SCALE_KEY}='%{width}:trunc(ow/a/8)*8'".freeze
 
@@ -59,7 +58,7 @@ class Zipper
         opts:   {width: VID_WIDTH, quality: H264_QUALITY, abrate: 64, acodec: :aac, percent: VID_PERCENT}, #whatsapp can't handle opus in h264
         szopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
         cmd: <<-EOC
-#{FFMPEG} #{H264_OPTS} -i %{infile} -vf "#{VF_SCALE_M2},#{VF_STD}%{vf}" #{VFR_OPTS} %{iopts} \
+#{FFMPEG} #{H264_OPTS} -i %{infile} -vf "#{VF_SCALE_M2}%{vf}" #{VFR_OPTS} %{iopts} \
   -c:v #{H264_CODEC} -crf %{quality} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
@@ -73,7 +72,7 @@ class Zipper
         opts:   {width: VID_WIDTH, vbrate: 835, abrate: 64, acodec: :aac, percent: 0.97},
         szopts: "-rc vbr -b:v %{maxrate}",
         cmd:  <<-EOC
-#{FFMPEG} -i %{infile} -vf "#{VF_SCALE_M8},#{VF_STD}%{vf}" #{VFR_OPTS} %{iopts} \
+#{FFMPEG} -i %{infile} -vf "#{VF_SCALE_M8}%{vf}" #{VFR_OPTS} %{iopts} \
   -c:v libsvt_vp9 %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
@@ -86,7 +85,7 @@ class Zipper
         opts:   {width: VID_WIDTH, quality: 40, vbrate: 200, abrate: 64, acodec: :opus, percent: VID_PERCENT},
         szopts: "-b:v %{vbrate}k -svtav1-params mbr=%{maxrate}",
         cmd:  <<-EOC
-#{FFMPEG} -i %{infile} -vf "#{VF_SCALE_M2},#{VF_STD}%{vf}" #{VFR_OPTS} %{iopts} \
+#{FFMPEG} -i %{infile} -vf "#{VF_SCALE_M2}%{vf}" #{VFR_OPTS} %{iopts} \
   -c:v libsvtav1 -crf %{quality} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
@@ -142,6 +141,7 @@ class Zipper
     else speed = 1
     end
 
+    vf << ",mpdecimate" unless opts.nompdecimate
     vf << ",#{opts.vf}" if opts.vf.present?
 
     # FIXME: conflict with MP4 vsync vfr
