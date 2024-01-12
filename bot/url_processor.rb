@@ -65,6 +65,8 @@ class Bot
         o, e, st = Sh.run cmd, chdir: dir
         next unless st == 0
 
+        Dir.glob("#{tmp}/*.live_chat.json").each{ |f| File.unlink f }
+
         info.title = info.track if info.track # e.g. bandcamp
         info.title = info.description || info.title if info.webpage_url.index 'instagram.com'
         info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.number
