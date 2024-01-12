@@ -7,7 +7,7 @@ class Bot
 
     MAX_RES    = 1080
     DOWN_BIN   = "yt-dlp"
-    DOWN_ARGS  = "-S 'res:#{MAX_RES}' --ignore-errors"
+    DOWN_ARGS  = "-S 'res:#{MAX_RES}' --ignore-errors --compat-options no-live-chat"
     DOWN_CMD   = "#{DOWN_BIN} #{DOWN_ARGS}".freeze
     USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36'
     DOWN_OPTS  = %i[referer]
@@ -64,8 +64,6 @@ class Bot
         cmd = base_cmd + " -o '#{fn}.%(ext)s' '#{ourl}'"
         o, e, st = Sh.run cmd, chdir: dir
         next unless st == 0
-
-        Dir.glob("#{tmp}/*.live_chat.json").each{ |f| File.unlink f }
 
         info.title = info.track if info.track # e.g. bandcamp
         info.title = info.description || info.title if info.webpage_url.index 'instagram.com'
