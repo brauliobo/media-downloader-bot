@@ -1,5 +1,3 @@
-require 'taglib'
-
 class Tagger
 
   # FIXME: only works for audio, it removes other tags from video
@@ -19,16 +17,6 @@ class Tagger
     cmd << " -c \"cd #{Sh.escape File.dirname fn_out}\" -c \"select #{Sh.escape File.basename fn_out}\""
     cmd << " -c paste -c save"
     Sh.run cmd
-  end
-
-  def self.tag fn, info
-    TagLib::FileRef.open fn do |f|
-      return if f&.tag.nil?
-      f.tag.title   = info.title
-      f.tag.artist  = info.uploader
-      f.tag.comment = info.info.original_url
-      f.save
-    end
   end
 
   protected
