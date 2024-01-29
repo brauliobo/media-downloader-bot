@@ -14,8 +14,6 @@ gem 'mechanize'
 
 gem 'telegram-bot-ruby'
 
-gem 'taglib-ruby'
-
 group :development do
   gem 'pry'
 end
