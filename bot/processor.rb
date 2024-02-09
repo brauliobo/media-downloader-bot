@@ -61,16 +61,16 @@ class Bot
 
       self.class.probe i
       unless i.type
-        edit_message msg, msg.resp.result.message_id, text: me("Unknown type for #{i.fn_in}")
+        edit_message msg, msg.resp.message_id, text: me("Unknown type for #{i.fn_in}")
         return
       end
 
       if Zipper.size_mb_limit
         if i.type == Types.video and i.durat > Zipper::VID_DURATION_THLD.minutes.to_i
-          edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(VID_TOO_LONG))
+          edit_message msg, msg.resp.message_id, text: (msg.resp.text << me(VID_TOO_LONG))
         end
         if i.type == Types.audio and i.durat > Zipper::AUD_DURATION_THLD.minutes.to_i
-          edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(AUD_TOO_LONG))
+          edit_message msg, msg.resp.message_id, text: (msg.resp.text << me(AUD_TOO_LONG))
         end
       end
 
@@ -83,14 +83,14 @@ class Bot
       if Zipper.size_mb_limit
         mbsize = File.size(i.fn_out) / 2**20
         if i.type == Types.video and mbsize >= Zipper.size_mb_limit
-          edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(VID_TOO_BIG))
+          edit_message msg, msg.resp.message_id, text: (msg.resp.text << me(VID_TOO_BIG))
           i.type   = Types.audio
           i.fn_out = convert i, pos: pos
           mbsize   = File.size(i.fn_out) / 2**20
         end
         # still too big as audio...
         if mbsize >= Zipper.size_mb_limit
-          edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me(TOO_BIG))
+          edit_message msg, msg.resp.message_id, text: (msg.resp.text << me(TOO_BIG))
           return
         end
       end
@@ -162,7 +162,7 @@ class Bot
 
       o, e, st = Zipper.send "zip_#{i.type.name}", i.fn_in, fn_out, opts: i.opts, probe: i.probe
       if st != 0
-        edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me("\nConvert failed: #{o}\n#{e}"))
+        edit_message msg, msg.resp.message_id, text: (msg.resp.text << me("\nConvert failed: #{o}\n#{e}"))
         admin_report msg, "#{o}\n#{e}", status: 'Convert failed'
         return
       end

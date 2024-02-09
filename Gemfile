@@ -1,5 +1,7 @@
 source 'https://rubygems.org'
 
+ruby File.read('.ruby-version')
+
 gem 'activesupport'
 gem 'dotenv'
 gem 'hashie'

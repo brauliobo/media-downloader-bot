@@ -33,7 +33,7 @@ class Bot
       cmd  = base_cmd + " --write-info-json --no-clean-infojson --skip-download -o 'info-%(playlist_index)s.%(ext)s' '#{url}'"
       o, e, st = Sh.run cmd, chdir: dir
       if st != 0
-        edit_message msg, msg.resp.result.message_id, text: "Metadata errors:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
+        edit_message msg, msg.resp.message_id, text: "Metadata errors:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
         admin_report msg, e, status: 'Metadata errors'
         # continue with inputs available
       end
@@ -72,7 +72,7 @@ class Bot
 
         info._filename = fn_in = Dir.glob("#{tmp}/#{fn}.*").first
 
-        next report_error msg, "Can't find file #{fn_in}", context: fn_in unless File.exists? fn_in
+        next report_error msg, "Can't find file #{fn_in}", context: fn_in unless File.exist? fn_in
 
         i = input_from_file(fn_in, opts).merge url: url, info: info
         l << i

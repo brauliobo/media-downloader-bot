@@ -89,10 +89,11 @@ EOS
   end
 
   def download msg
+    msg    = SymMash.new msg.to_h
     worker = Worker.new self, msg
     resp   = worker.process
   ensure
-    delete_message msg, resp.result.message_id, wait: nil if resp
+    delete_message msg, resp.message_id, wait: nil if resp
   end
 
 end

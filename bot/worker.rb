@@ -22,6 +22,7 @@ class Bot::Worker
       inputs = []
 
       msg.resp = send_message msg, me('Downloading...')
+
       if msg.audio.present? or msg.video.present?
         procs << Bot::FileProcessor.new(dir, bot, msg)
       else
@@ -37,7 +38,7 @@ class Bot::Worker
       inputs.compact!
       return msg.resp = nil if inputs.blank?
 
-      edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me("\nConverting..."))
+      edit_message msg, msg.resp.message_id, text: (msg.resp.text << me("\nConverting..."))
       inputs.each.with_index.api_peach do |i, pos|
         p = Bot::Processor.new dir, bot, msg
         p.handle_input i, pos: pos+1
@@ -46,7 +47,7 @@ class Bot::Worker
         input_error e, i
       end
 
-      edit_message msg, msg.resp.result.message_id, text: (msg.resp.text << me("\nSending..."))
+      edit_message msg, msg.resp.message_id, text: (msg.resp.text << me("\nSending..."))
 
       @opts = inputs.first.opts
       inputs.sort_by!{ |i| i.info.title } if opts[:sort]
