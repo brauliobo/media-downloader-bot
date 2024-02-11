@@ -6,6 +6,10 @@ class Bot
 
     MAX_CAPTION = 1024
 
+    RETRY_ERRORS = [
+      Faraday::ConnectionFailed,
+    ]
+
     def self.limit i, size: MAX_CAPTION, percent: 100
       size = size * percent.to_f/100 if percent
       return i.first size if i.size > size
@@ -113,7 +117,10 @@ class Bot
       delete_message msg, msg.message_id, wait: delete_both if delete_both
 
       resp
+    rescue *RETRY_ERRORS
+      retry
     rescue => e
+      retry if e.message.index 'Internal Server Error'
       binding.pry if ENV['PRY_SEND_MESSAGE']
       raise
     end
@@ -132,7 +139,7 @@ class Bot
       if e.is_a? StandardError
         error  = ''
         error << "\n\n<b>context</b>: #{he(context).first(100)}" if context
-        error << "\n\n<b>error</b>: <pre>#{he e.message}\n"
+        error << "\n\n<b>error</b>: <pre>#{e.class}: #{he e.message}\n"
         error << "#{he clean_bc(e.backtrace).join "\n"}</pre>"
       else
         error  = e.to_s
@@ -148,7 +155,7 @@ class Bot
     def clean_bc bc
       @bc ||= self.then do
         bcl = ActiveSupport::BacktraceCleaner.new
-        bcl.add_filter{ |line| line.gsub Dir.pwd, '' }
+        bcl.add_filter{ |line| line.gsub "#{Dir.pwd}/", '' }
         bcl
       end.clean bc
     end
