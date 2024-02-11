@@ -119,6 +119,7 @@ PLATFORMS
 
 DEPENDENCIES
   activesupport
+  addressable
   chronic
   chronic_duration
   dotenv
