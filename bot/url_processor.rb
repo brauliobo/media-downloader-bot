@@ -22,8 +22,8 @@ class Bot
       super dir, bot, msg
 
       @line = line
-      @args = line.split(/\s+/)
-      @uri  = URI.parse @args.shift
+      @args = line.split(/[[:space:]]+/)
+      @uri  = Addressable::URI.parse @args.shift
       @url  = uri.to_s
       @opts = @args.each.with_object SymMash.new do |a, h|
         self.class.add_opt h, a

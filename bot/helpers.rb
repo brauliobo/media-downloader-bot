@@ -8,6 +8,8 @@ class Bot
 
     RETRY_ERRORS = [
       Faraday::ConnectionFailed,
+      Faraday::TimeoutError,
+      Net::OpenTimeout, Net::WriteTimeout,
     ]
 
     def self.limit i, size: MAX_CAPTION, percent: 100

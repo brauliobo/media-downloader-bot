@@ -7,6 +7,7 @@ gem 'dotenv'
 gem 'hashie'
 gem 'chronic'
 gem 'chronic_duration'
+gem 'addressable'
 
 gem 'rack' # for better mime type
 gem 'roda'
