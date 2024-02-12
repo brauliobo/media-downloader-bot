@@ -8,7 +8,7 @@ class Bot
     MAX_RES    = 1080
     DOWN_BIN   = "yt-dlp"
     DOWN_ARGS  = "-S 'res:#{MAX_RES}' --ignore-errors"
-    DOWN_ARGS << " --compat-options no-live-chat --match-filter 'live_status != is_upcoming'"
+    DOWN_ARGS << " --compat-options no-live-chat"
     DOWN_CMD   = "#{DOWN_BIN} #{DOWN_ARGS}".freeze
     USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36'
     DOWN_OPTS  = %i[referer]
@@ -32,6 +32,7 @@ class Bot
 
     def download
       cmd  = base_cmd + " --write-info-json --no-clean-infojson --skip-download -o 'info-%(playlist_index)s.%(ext)s' '#{url}'"
+      cmd << " --match-filter 'live_status != is_upcoming'" if url.match /youtu\.?be/
       o, e, st = Sh.run cmd, chdir: dir
       if st != 0
         @st.error "#{i.info.title}: metadata errors:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
