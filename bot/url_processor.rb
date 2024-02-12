@@ -18,8 +18,8 @@ class Bot
       h[k] = v || 1
     end
 
-    def initialize dir, line, bot, msg=nil
-      super dir, bot, msg
+    def initialize line:, **params
+      super **params
 
       @line = line
       @args = line.split(/[[:space:]]+/)
@@ -34,7 +34,7 @@ class Bot
       cmd  = base_cmd + " --write-info-json --no-clean-infojson --skip-download -o 'info-%(playlist_index)s.%(ext)s' '#{url}'"
       o, e, st = Sh.run cmd, chdir: dir
       if st != 0
-        edit_message msg, msg.resp.message_id, text: "Metadata errors:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
+        @st.error "#{i.info.title}: metadata errors:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
         admin_report msg, e, status: 'Metadata errors'
         # continue with inputs available
       end
@@ -61,15 +61,19 @@ class Bot
         ourl = info.url = if mult then info.webpage_url else self.url end
         url  = Bot::UrlShortner.shortify(info) || ourl
 
-        fn  = "input-#{i}"
-        cmd = base_cmd + " -o '#{fn}.%(ext)s' '#{ourl}'"
-        o, e, st = Sh.run cmd, chdir: dir
-        next unless st == 0
-
         info.title = info.track if info.track # e.g. bandcamp
         info.title = info.description || info.title if info.webpage_url.index 'instagram.com'
         info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.number
         info.title = Bot::Helpers.limit info.title, percent: 90
+
+        fn = "input-#{i}"
+        st = nil
+        @st.add "#{info.title}: downloading" do |line|
+          cmd = base_cmd + " -o '#{fn}.%(ext)s' '#{ourl}'"
+          o, e, st = Sh.run cmd, chdir: dir
+          line.keep = false unless st == 0
+        end
+        next unless st == 0
 
         info._filename = fn_in = Dir.glob("#{tmp}/#{fn}.*").first
 
