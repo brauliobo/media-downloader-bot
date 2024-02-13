@@ -38,6 +38,7 @@ path.peach do |u|
     prc.download.peach do |i|
       prc.download_one i
       prc.handle_input i
+      prc.cleanup
     end
   else
     prc = klass.new dir, bot
