@@ -23,56 +23,47 @@ class Bot::Worker
       procs  = []
       inputs = []
 
-      msg.resp = send_message msg, me('Downloading...')
       @st = Bot::Status.new do |text|
         edit_message msg, msg.resp.message_id, text: me(text)
       end
 
       popts = {dir:, bot:, msg:, st: @st}
-      if msg.audio.present? or msg.video.present?
-        procs << Bot::FileProcessor.new(**popts)
-      else
-        procs = msg.text.split("\n").flat_map do |l|
-          Bot::UrlProcessor.new line: l, **popts
-        end
+      klass = if msg.audio.present? or msg.video.present? then Bot::FileProcessor else Bot::UrlProcessor end
+      procs = msg.text.split("\n").flat_map do |l|
+        klass.new line: l, **popts
       end
 
-      procs.each.with_index.api_peach do |p, i|
-        inputs[i] = p.download if p.respond_to? :download
+      msg.resp = send_message msg, me('Downloading metadata...')
+      procs.each.with_index do |p, i|
+        inputs[i] = p.download
       end
       inputs.flatten!
-      inputs.compact!
-      return msg.resp = nil if inputs.blank?
-
-      inputs.each.with_index.api_peach do |i, pos|
-        @st.add "Converting #{i.info.title}" do |line|
-          p = Bot::Processor.new stline: line, **popts
-          p.handle_input i, pos: pos+1
-          p.cleanup
-        end
-      rescue => e
-        input_error e, i
-      end
 
       @opts = inputs.first.opts
       inputs.sort_by!{ |i| i.info.title } if opts[:sort]
       inputs.reverse! if opts[:reverse]
-      inputs.select!{ |i| i.fn_out }
-      inputs.each do |i|
-        @st.add "Sending #{i.info.title}" do |st|
+
+      inputs.each.with_index.api_peach do |i, pos|
+        @st.add "#{i.info.title}: downloading" do |stline|
+          p = klass.new line: i.line, stline: stline, **popts
+
+          p.download_one i, pos: pos+1 if p.respond_to? :download_one
+          next if stline.error?
+
+          stline.update "#{i.info.title}: converting"
+          p.handle_input i, pos: pos+1
+          next if stline.error?
+
+          stline.update "#{i.info.title}: uploading"
           upload i
+
+          p.cleanup
         end
-      rescue => e
-        input_error e, i
       end
+
+      return msg.resp = nil if inputs.blank?
     end
-
     msg.resp
-  end
-
-  def input_error e, i
-    i&.except! :info
-    report_error msg, e, context: i.inspect
   end
 
   def upload i

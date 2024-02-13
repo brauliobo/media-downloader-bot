@@ -15,7 +15,12 @@ class Bot
         tap{ self.keep = true }
       end
 
+      def error?
+        @error
+      end
+
       def error text
+        @error = true
         keep.update text
       end
     end

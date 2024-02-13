@@ -1,10 +1,6 @@
 class Bot
   class UrlProcessor < Processor
 
-    attr_reader :args
-    attr_reader :uri, :url
-    attr_reader :opts
-
     MAX_RES    = 1080
     DOWN_BIN   = "yt-dlp"
     DOWN_ARGS  = "-S 'res:#{MAX_RES}' --ignore-errors"
@@ -18,25 +14,13 @@ class Bot
       h[k] = v || 1
     end
 
-    def initialize line:, **params
-      super **params
-
-      @line = line
-      @args = line.split(/[[:space:]]+/)
-      @uri  = Addressable::URI.parse @args.shift
-      @url  = uri.to_s
-      @opts = @args.each.with_object SymMash.new do |a, h|
-        self.class.add_opt h, a
-      end
-    end
-
     def download
       cmd  = base_cmd + " --write-info-json --no-clean-infojson --skip-download -o 'info-%(playlist_index)s.%(ext)s' '#{url}'"
       cmd << " --match-filter 'live_status != is_upcoming'" if url.match /youtu\.?be/
+
       o, e, st = Sh.run cmd, chdir: dir
       if st != 0
         @st.error "#{i.info.title}: metadata errors:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
-        admin_report msg, e, status: 'Metadata errors'
         # continue with inputs available
       end
 
@@ -51,14 +35,12 @@ class Bot
 
       if opts.after
         ai = infos.index{ |i| i.display_id == opts.after }
-        return report_error msg, "Can't find after id", context: i.inspect unless ai
+        return @st.error "Can't find after id" unless ai
         infos = infos[0..(ai-1)]
       end
 
       mult = infos.size > 1
-
-      l = []
-      infos.each.with_index.api_peach do |info, i|
+      infos.map do |info|
         ourl = info.url = if mult then info.webpage_url else self.url end
         url  = Bot::UrlShortner.shortify(info) || ourl
 
@@ -67,23 +49,26 @@ class Bot
         info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.number
         info.title = Bot::Helpers.limit info.title, percent: 90
 
-        fn = "input-#{i}"
-        st = nil
-        @st.add "#{info.title}: downloading" do |line|
-          cmd = base_cmd + " -o '#{fn}.%(ext)s' '#{ourl}'"
-          o, e, st = Sh.run cmd, chdir: dir
-          line.keep = false unless st == 0
-        end
-        next unless st == 0
-
-        info._filename = fn_in = Dir.glob("#{tmp}/#{fn}.*").first
-
-        next report_error msg, "Can't find file #{fn_in}", context: fn_in unless File.exist? fn_in
-
-        i = input_from_file(fn_in, opts).merge url: url, info: info
-        l << i
+        SymMash.new(
+          url:  ourl,
+          opts: opts,
+          info: info,
+        )
       end
-      l
+    end
+
+    def download_one i, pos: nil
+      fn = "input-#{pos}"
+      st = nil
+      cmd = base_cmd + " -o '#{fn}.%(ext)s' '#{i.url}'"
+      o, e, st = Sh.run cmd, chdir: dir
+      return @st.error "#{i.info.title}: download error #{e}" unless st == 0
+
+      fn_in = i.info._filename = i.fn_in = Dir.glob("#{tmp}/#{fn}.*").first
+
+      return @st.error "#{info.title}: can't find file #{fn_in}" unless File.exist? fn_in
+
+      true
     end
 
     protected
