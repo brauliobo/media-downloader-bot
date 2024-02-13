@@ -8,7 +8,7 @@ ENV['PRINT_CMD'] = '1'
 
 opts  = SymMash.new metadata: {}
 lopts = []
-while ARGV[-1] and !File.exists?(ARGV[-1]) and ARGV[-1] !~ URI::regexp
+while ARGV[-1] and !File.exist?(ARGV[-1]) and ARGV[-1] !~ URI::regexp
   opt = ARGV.pop
   lopts.push opt
   Bot::UrlProcessor.add_opt opts, opt
@@ -21,6 +21,9 @@ class Stdout
   mock
 end
 bot = Stdout.new
+st  = Bot::Status.new do |line|
+  puts line
+end
 
 path = if ARGV.size > 1 then ARGV else ARGV.first.split "\n" end
 path.peach do |u|
@@ -30,9 +33,10 @@ path.peach do |u|
   Dir.mkdir dir rescue nil
 
   if klass == Bot::UrlProcessor
-    lin = "#{u} #{lopts.join ' '}"
-    prc = klass.new dir, lin, bot
+    line = "#{u} #{lopts.join ' '}"
+    prc  = klass.new(dir:, line:, bot:, st:)
     prc.download.peach do |i|
+      prc.download_one i
       prc.handle_input i
     end
   else
