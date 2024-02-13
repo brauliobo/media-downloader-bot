@@ -22,6 +22,10 @@ class Bot
     attr_reader :st
     attr_reader :dir, :tmp
 
+    attr_reader :args
+    attr_reader :url
+    attr_reader :opts
+
     delegate_missing_to :bot
 
     def self.probe i
@@ -34,13 +38,23 @@ class Bot
       i
     end
 
-    def initialize dir:, bot:, msg: nil, st: nil, stline: nil
-      @dir = dir
-      @tmp = Dir.mktmpdir 'input-', dir
-      @bot = bot
-      @msg = msg || bot.fake_msg
-      @st  = st || stline.status
-      @stl = stline
+    def initialize dir:, bot:,
+      msg: nil, line: nil,
+      st: nil, stline: nil, **params
+
+      @dir  = dir
+      @tmp  = Dir.mktmpdir 'input-', dir
+      @bot  = bot
+      @msg  = msg || bot.fake_msg
+      @st   = st || stline.status
+      @stl  = stline
+
+      @line = line || msg.text
+      @args = @line.split(/[[:space:]]+/)
+      @url  = (Addressable::URI.parse @args.shift).to_s if @args.first =~ URI::regexp
+      @opts = @args.each.with_object SymMash.new do |a, h|
+        self.class.add_opt h, a
+      end
     end
 
     def cleanup
