@@ -50,7 +50,7 @@ class Bot
         info.title = Bot::Helpers.limit info.title, percent: 90
 
         SymMash.new(
-          url:  ourl,
+          url:  url,
           opts: opts,
           info: info,
         )
