@@ -45,8 +45,11 @@ class Bot
       ret
     end
 
-    def update
-      @block.call formatted
+    def error text, *args, **params
+      @block.call text, *args, **params
+    end
+    def update *args, **params
+      @block.call formatted, *args, **params
     end
 
     def formatted
