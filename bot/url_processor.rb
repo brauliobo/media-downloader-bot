@@ -20,7 +20,7 @@ class Bot
 
       o, e, st = Sh.run cmd, chdir: dir
       if st != 0
-        @st.error "#{i.info.title}: metadata errors:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
+        @st.error "Metadata errors:\n<pre>#{he e}</pre>", parse_mode: 'HTML'
         # continue with inputs available
       end
 
