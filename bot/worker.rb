@@ -23,8 +23,9 @@ class Bot::Worker
       procs  = []
       inputs = []
 
-      @st = Bot::Status.new do |text|
-        edit_message msg, msg.resp.message_id, text: me(text)
+      @st = Bot::Status.new do |text, *args, **params|
+        text = me text unless params[:parse_mode]
+        edit_message msg, msg.resp.message_id, *args, text: text, **params
       end
 
       popts = {dir:, bot:, msg:, st: @st}
@@ -39,7 +40,7 @@ class Bot::Worker
       end
       inputs.flatten!
 
-      @opts = inputs.first.opts
+      @opts = inputs.first&.opts || SymMash.new
       inputs.sort_by!{ |i| i.info.title } if opts[:sort]
       inputs.reverse! if opts[:reverse]
 
