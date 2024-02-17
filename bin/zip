@@ -41,7 +41,7 @@ path.peach do |u|
       prc.cleanup
     end
   else
-    prc = klass.new dir, bot
+    prc = klass.new(dir:, bot:, st:)
     i   = prc.input_from_file u, opts
     prc.handle_input i
 

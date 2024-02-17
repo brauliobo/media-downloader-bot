@@ -49,6 +49,7 @@ class Bot
       @st   = st || stline.status
       @stl  = stline
 
+      return unless line or msg
       @line = line || msg.text
       @args = @line.split(/[[:space:]]+/)
       @url  = (Addressable::URI.parse @args.shift).to_s if @args.first =~ URI::regexp
