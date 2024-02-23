@@ -2,7 +2,7 @@ class Bot
   class Status < Array
 
     class Line < SimpleDelegator
-      attr_accessor :status, :keep
+      attr_accessor :status, :kept
 
       def update text
         self.tap do
@@ -12,7 +12,7 @@ class Bot
       end
 
       def keep
-        tap{ self.keep = true }
+        tap{ @kept = true }
       end
 
       def error?
@@ -38,7 +38,7 @@ class Bot
 
       ret = yield line
 
-      return ret if line.keep
+      return ret if line.kept
       delete line 
       update
 
