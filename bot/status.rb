@@ -49,6 +49,7 @@ class Bot
       @block.call text, *args, **params
     end
     def update *args, **params
+      return if blank?
       @block.call formatted, *args, **params
     end
 

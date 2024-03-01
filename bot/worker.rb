@@ -40,13 +40,16 @@ class Bot::Worker
       end
       inputs.flatten!
 
+      inputs.uniq!{ |i| i.info.display_id }
       @opts = inputs.first&.opts || SymMash.new
       inputs.sort_by!{ |i| i.info.title } if opts[:sort]
       inputs.reverse! if opts[:reverse]
 
+      ordered = opts[:sort] || opts[:ordered]
+
       inputs.each.with_index.api_peach do |i, pos|
         @st.add "#{i.info.title}: downloading" do |stline|
-          p = klass.new line: i.line, stline: stline, **popts
+          i.p = p = klass.new line: i.line, stline: stline, **popts
 
           p.download_one i, pos: pos+1 if p.respond_to? :download_one
           next if stline.error?
@@ -55,12 +58,19 @@ class Bot::Worker
           p.handle_input i, pos: pos+1
           next if stline.error?
 
+          next if ordered
           stline.update "#{i.info.title}: uploading"
           upload i
-
           p.cleanup
         end
       end
+
+      inputs.each do |i|
+        @st.add "#{i.info.title}: uploading" do |stline|
+          upload i
+          i.p.cleanup
+        end
+      end if ordered
 
       return msg.resp = nil if inputs.blank?
     end

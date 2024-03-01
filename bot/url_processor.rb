@@ -40,7 +40,7 @@ class Bot
       end
 
       mult = infos.size > 1
-      infos.map do |info|
+      infos.map.with_index do |info, i|
         ourl = info.url = if mult then info.webpage_url else self.url end
         url  = Bot::UrlShortner.shortify(info) || ourl
 
