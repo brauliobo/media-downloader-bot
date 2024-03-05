@@ -45,7 +45,7 @@ class Bot::Worker
       inputs.sort_by!{ |i| i.info.title } if opts[:sort]
       inputs.reverse! if opts[:reverse]
 
-      ordered = opts[:sort] || opts[:ordered]
+      ordered = opts[:sort] || opts[:number] || opts[:ordered]
 
       inputs.each.with_index.api_peach do |i, pos|
         @st.add "#{i.info.title}: downloading" do |stline|
