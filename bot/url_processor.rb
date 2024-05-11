@@ -1,6 +1,10 @@
 class Bot
   class UrlProcessor < Processor
 
+    # max number of videos and audios for non-admins to download
+    VL = 10
+    AL = nil
+
     MAX_RES    = 1080
     DOWN_BIN   = "yt-dlp"
     DOWN_ARGS  = "-S 'res:#{MAX_RES}' --ignore-errors"
@@ -82,9 +86,10 @@ class Bot
         bcmd << " --cache-dir #{tmp}/cache"
         bcmd << ' -s' if opts.simulate
 
-        opts.limit ||= 50 if opts.after
-        opts.limit   = 50 if opts.limit and opts.limit.to_i > 50 and !from_admin?(msg)
-        bcmd << " --playlist-end #{opts.limit.to_i}" if opts.limit
+        ml = if opts.audio then AL else VL end
+        opts.limit ||= ml if opts.after
+        opts.limit   = ml if ml and opts.limit and opts.limit.to_i > ml and !from_admin?(msg)
+        bcmd << " --playlist-end #{opts.limit.to_i}" if opts.limit.to_i > 0
 
         bcmd << ' -x' if opts.audio
         bcmd << ' -f mp3-320/best' if url.index 'bandcamp.com' # FIXME: it is choosing flac

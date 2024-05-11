@@ -33,7 +33,7 @@ class Zipper
       encode:  '-ac 2 -c:a libopus -b:a %{abrate}k'.freeze,
     },
     aac:  {
-      percent: 0.99,
+      percent: 0.98,
       # aac_he_v2 doesn't work with instagram
       encode: if FDK_AAC
               then '-c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k'.freeze
