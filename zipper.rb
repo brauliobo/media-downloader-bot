@@ -121,7 +121,7 @@ class Zipper
   )
 
   def self.max_audio_duration br
-    1000 * Zipper.size_mb_limit / (br / 8) / 60
+    1000 * Zipper.size_mb_limit / (br.to_i / 8) / 60
   end
 
   VID_DURATION_THLD = if size_mb_limit then 25 else Float::INFINITY end
