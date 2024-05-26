@@ -21,7 +21,7 @@ class Bot
     def download
       cmd  = base_cmd + " --write-info-json --no-clean-infojson --skip-download -o 'info-%(playlist_index)s.%(ext)s' '#{url}'"
       cmd << " --match-filter 'live_status != is_upcoming'" if url.match /youtu\.?be/
-      cmd << " --match-filter 'age_limit < 18'" unless url.index 'instagram.com'
+      cmd << " --age-limit 18"
 
       o, e, st = Sh.run cmd, chdir: dir
       if st != 0
