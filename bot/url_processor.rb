@@ -67,11 +67,11 @@ class Bot
       st = nil
       cmd = base_cmd + " -o '#{fn}.%(ext)s' '#{i.url}'"
       o, e, st = Sh.run cmd, chdir: dir
-      return @stline.error "#{i.info.title}: download error #{e}" unless st == 0
+      return @st.error "#{i.info.title}: download error #{e}" unless st == 0
 
       fn_in = i.info._filename = i.fn_in = Dir.glob("#{tmp}/#{fn}.*").first
 
-      return @stline.error "#{info.title}: can't find file #{fn_in}" unless File.exist? fn_in
+      return @st.error "#{info.title}: can't find file #{fn_in}" unless File.exist? fn_in
 
       true
     end
