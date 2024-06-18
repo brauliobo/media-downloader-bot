@@ -45,7 +45,8 @@ class Bot::Worker
       inputs.sort_by!{ |i| i.info.title } if opts[:sort]
       inputs.reverse! if opts[:reverse]
 
-      ordered = opts[:sort] || opts[:number] || opts[:ordered]
+      ordered  = opts[:sort] || opts[:number] || opts[:ordered] || opts[:reverse]
+      up_queue = inputs.size.times.to_a
 
       inputs.each.with_index.api_peach do |i, pos|
         @st.add "#{i.info.title}: downloading" do |stline|
@@ -58,19 +59,16 @@ class Bot::Worker
           p.handle_input i, pos: pos+1
           next if stline.error?
 
-          next if ordered
+          stline.update "#{i.info.title}: queued to upload"
+          sleep 0.1 while up_queue.first != pos if ordered
           stline.update "#{i.info.title}: uploading"
           upload i
+
+        ensure
           p.cleanup
+          up_queue.delete pos
         end
       end
-
-      inputs.each do |i|
-        @st.add "#{i.info.title}: uploading" do |stline|
-          upload i
-          i.p.cleanup
-        end
-      end if ordered
 
       return msg.resp = nil if inputs.blank?
     end
