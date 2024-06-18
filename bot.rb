@@ -86,7 +86,7 @@ EOS
 
     download msg
   rescue => e
-    report_error msg, e
+    report_error msg, e rescue nil
   end
 
   def download msg
