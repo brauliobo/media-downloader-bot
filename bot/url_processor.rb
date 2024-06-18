@@ -22,6 +22,7 @@ class Bot
       cmd  = base_cmd + " --write-info-json --no-clean-infojson --skip-download -o 'info-%(playlist_index)s.%(ext)s' '#{url}'"
       cmd << " --match-filter 'live_status != is_upcoming'" if url.match /youtu\.?be/
       cmd << " --age-limit 18"
+      cmd << " --extractor-args 'youtube:lang=#{opts.lang}'" if opts.lang
 
       o, e, st = Sh.run cmd, chdir: dir
       if st != 0
