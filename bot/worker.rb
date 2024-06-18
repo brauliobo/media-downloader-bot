@@ -59,7 +59,7 @@ class Bot::Worker
           p.handle_input i, pos: pos+1
           next if stline.error?
 
-          stline.update "#{i.info.title}: queued to upload"
+          stline.update "#{i.info.title}: queued to upload" if ordered
           sleep 0.1 while up_queue.first != pos if ordered
           stline.update "#{i.info.title}: uploading"
           upload i
