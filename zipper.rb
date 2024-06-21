@@ -147,11 +147,13 @@ class Zipper
     vf << ",#{opts.vf}" if opts.vf.present?
 
     # FIXME: conflict with MP4 vsync vfr
-    iopts << "-r #{opts.maxfr.to_i}" if opts.maxfr
+    iopts << " -r #{opts.maxfr.to_i}" if opts.maxfr
+
+    iopts << " -ar #{opts.ar.to_i}" if opts.ar
 
     # Workaround for "Channel layout change is not supported"
     # https://www.atlas-informatik.ch/multimediaXpert/Convert.en.html
-    iopts << "-ac #{opts.ac.to_i}" if opts.ac
+    iopts << " -ac #{opts.ac.to_i}" if opts.ac
 
     # convert input
     opts.width   = opts.width.to_i
@@ -218,6 +220,9 @@ class Zipper
       iopts << " -af atempo=#{speed}"
     else speed = 1
     end
+
+    iopts << " -ar #{opts.freq.to_i}" if opts.freq
+    iopts << " -ac #{opts.ac.to_i}" if opts.ac
 
     if size_mb_limit # max bitrate to fit size_mb_limit
       duration = probe.format.duration.to_f / speed
