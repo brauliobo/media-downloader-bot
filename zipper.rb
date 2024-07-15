@@ -47,7 +47,7 @@ class Zipper
   SUB_STYLE = 'Fontname=Roboto,OutlineColour=&H40000000,BorderStyle=3'.freeze
 
   THREADS = ENV['THREADS']&.to_i || 16
-  FFMPEG  = "nice ffmpeg -y -threads #{THREADS} -loglevel error"
+  FFMPEG  = "nice -n 19 ffmpeg -y -threads #{THREADS} -loglevel error"
 
   Types = SymMash.new(
     video: {
