@@ -15,7 +15,7 @@ gem 'puma'
 
 gem 'mechanize'
 
-gem 'telegram-bot-ruby'
+gem 'telegram-bot-ruby', git: 'git@github.com:brauliobo/telegram-bot-ruby.git'
 
 group :development do
   gem 'pry'
