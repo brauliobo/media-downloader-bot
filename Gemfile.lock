@@ -100,6 +100,7 @@ GEM
       mini_portile2 (~> 2.8.2)
       racc (~> 1.4)
     numerizer (0.1.1)
+    pg (1.5.7)
     pry (0.14.2)
       coderay (~> 1.1)
       method_source (~> 1.0)
@@ -112,6 +113,8 @@ GEM
       rack
     rubyntlm (0.6.5)
       base64
+    sequel (5.83.0)
+      bigdecimal
     tzinfo (2.0.6)
       concurrent-ruby (~> 1.0)
     uri (0.13.0)
@@ -131,10 +134,12 @@ DEPENDENCIES
   dotenv
   hashie
   mechanize
+  pg
   pry
   puma
   rack
   roda
+  sequel
   telegram-bot-ruby!
 
 RUBY VERSION

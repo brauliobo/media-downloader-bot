@@ -13,6 +13,9 @@ gem 'rack' # for better mime type
 gem 'roda'
 gem 'puma'
 
+gem 'pg'
+gem 'sequel'
+
 gem 'mechanize'
 
 gem 'telegram-bot-ruby', git: 'git@github.com:brauliobo/telegram-bot-ruby.git'
