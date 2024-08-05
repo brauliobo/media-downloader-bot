@@ -87,21 +87,30 @@ class Bot::Worker
     return send_message msg, caption if opts.simulate
 
     vstrea = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
-
     thumb  = Faraday::UploadIO.new i.thumb, 'image/jpeg' if i.thumb
-
-    fn_io   = Faraday::UploadIO.new fn_out, type.mime
-    ret_msg = i.ret_msg = {
-      type:        type.name,
-      type.name => fn_io,
-      duration:    durat,
-      width:       vstrea&.width,
-      height:      vstrea&.height,
-      title:       info.title,
-      performer:   info.uploader,
-      thumb:       thumb,
+    fn_io  = Faraday::UploadIO.new fn_out, i.opts.format.mime
+    paid   = ENV['PAID'] || msg.from.id.in?([6884159818])
+    typek  = if paid then :media else type.name end
+    media  = SymMash.new(
+      type:      type.name,
+      typek =>   fn_io,
+      duration:  durat,
+      width:     vstrea&.width,
+      height:    vstrea&.height,
+      thumb:     thumb,
+      title:     info.title,
+      performer: info.uploader,
       supports_streaming: true,
-    }
+    )
+    ret_msg = i.ret_msg = SymMash.new star_count: (20 if paid)
+    if paid
+      file = media.media
+      media.media = 'attach://file'
+      ret_msg.merge! media: [media], type: :paid_media, file: file
+    else ret_msg.merge! media end
+
+    pp ret_msg if ENV['DEBUG']
+    caption = 'paid' if paid
     send_message msg, caption, **ret_msg
   end
 
