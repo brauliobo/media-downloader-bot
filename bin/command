@@ -7,7 +7,7 @@ bot = Bot.new nil
 msg = ARGV[0]
 puts "reacting to message: #{msg}"
 bot.react SymMash.new(
-  from: {id: nil},
+  from: {id: 1},
   text: msg,
   chat: {},
 )

@@ -12,6 +12,9 @@ require 'rack/mime'
 require 'mechanize'
 require 'pry' rescue nil # fails with systemd
 
+require 'sequel'
+require_relative 'sequel'
+
 require_relative 'exts/sym_mash'
 require_relative 'exts/peach'
 
@@ -19,6 +22,7 @@ require_relative 'sh'
 require_relative 'zipper'
 require_relative 'tagger'
 require_relative 'prober'
+
 require_relative 'bot/status'
 require_relative 'bot/helpers'
 require_relative 'bot/url_shortner'
@@ -26,6 +30,10 @@ require_relative 'bot/processor'
 require_relative 'bot/file_processor'
 require_relative 'bot/url_processor'
 require_relative 'bot/worker'
+
+if !$0.index 'sequel'
+  require_relative 'bot/session'
+end
 
 class Bot
 
