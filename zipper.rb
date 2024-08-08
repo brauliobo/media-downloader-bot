@@ -128,7 +128,8 @@ class Zipper
   AUD_DURATION_THLD = if size_mb_limit then max_audio_duration Types.audio.opus.opts.bitrate else Float::INFINITY end
 
   # reduce width for every minutes interval exceeding VID_DURATION_THLD
-  VID_WIDTH_REDUC = SymMash.new width: 80, minutes: 5
+  VID_WIDTH_REDUC = SymMash.new width: 80, minutes: 10
+  AUD_BRATE_REDUC = SymMash.new brate:  4, minutes: 8
 
   def self.zip_video infile, outfile, probe:, opts: SymMash.new
     vf = ''; iopts = ''; oopts = ''; dopts = opts.format.opts
@@ -175,9 +176,15 @@ class Zipper
       # reduce resolution
       if minutes > VID_DURATION_THLD and opts.width > dopts.width/3
         reduc,intv  = VID_WIDTH_REDUC.values_at :width, :minutes
-        opts.width  = opts.width - reduc * ((minutes - VID_DURATION_THLD).to_f / intv).ceil
+        opts.width -= reduc * ((minutes - VID_DURATION_THLD).to_f / intv).ceil
         opts.width  = dopts.width/3 if opts.width < dopts.width/3
         opts.width -= 1 if opts.width % 2 == 1
+      end
+      # reduce audio bitrate
+      if minutes > VID_DURATION_THLD and opts.abrate > dopts.abrate/2
+        reduc,intv   = AUD_BRATE_REDUC.values_at :brate, :minutes
+        opts.abrate -= reduc * ((minutes - VID_DURATION_THLD).to_f / intv).ceil
+        opts.abrate  = dopts.abrate/2 if opts.abrate < dopts.abrate/2
       end
 
       audsize  = (duration * opts.abrate.to_f/8) / 1000
