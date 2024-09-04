@@ -1,7 +1,11 @@
 [Unit]
 Description=media-downloader-bot
-After=network-online.target
-Wants=network-online.target
+#After=network-online.target
+#Wants=network-online.target
+
+After=network-online.target vpnspace-openvpn.service
+Wants=network-online.target vpnspace-openvpn.service
+Requires=vpnspace-openvpn.service
 
 [Service]
 CPUQuota=900%
@@ -9,7 +13,12 @@ LimitNOFILE=1001001
 
 DynamicUser=yes
 WorkingDirectory=/home/braulio/Projects/media-downloader-bot
+
+NetworkNamespacePath=/var/run/netns/vpnspace
+#ExecStartPre=/usr/bin/curl ifconfig.co
+
 ExecStart=/home/braulio/.rvm/wrappers/ruby-3.3.0/bundle exec bin/bot
+
 Environment="TOKEN=xxx"
 Environment=THREADS=16
 Restart=always
