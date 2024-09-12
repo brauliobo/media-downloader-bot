@@ -15,7 +15,7 @@ def db_config_for p = :DB
     test:            true,
   }
 end
-DB = Sequel.connect db_config_for(:DB)
+DB = Sequel.connect db_config_for(:DB) rescue nil
 
 Sequel.extension :core_extensions
 
@@ -28,15 +28,17 @@ Sequel.extension :pg_array_ops
 Sequel.extension :pg_json_ops
 Sequel.extension :pg_json
 
-Sequel::Model.db.extension :pg_array
-Sequel::Model.db.extension :pg_json
+if DB
+  Sequel::Model.db.extension :pg_array
+  Sequel::Model.db.extension :pg_json
+end
 
 Sequel::Model.strict_param_setting = false
 
 Sequel.extension :symbol_aref
 Sequel.split_symbols = true
 
-if ENV['DEBUG']
+if DB and ENV['DEBUG']
   DB.sql_log_level = :debug
   DB.loggers << Logger.new($stdout)
 end
