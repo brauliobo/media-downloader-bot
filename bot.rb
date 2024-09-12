@@ -31,7 +31,7 @@ require_relative 'bot/file_processor'
 require_relative 'bot/url_processor'
 require_relative 'bot/worker'
 
-if !$0.index 'sequel'
+if !$0.index('sequel') and DB
   require_relative 'bot/session'
 end
 
