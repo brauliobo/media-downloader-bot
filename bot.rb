@@ -12,9 +12,6 @@ require 'rack/mime'
 require 'mechanize'
 require 'pry' rescue nil # fails with systemd
 
-require 'sequel'
-require_relative 'sequel'
-
 require_relative 'exts/sym_mash'
 require_relative 'exts/peach'
 
@@ -31,8 +28,15 @@ require_relative 'bot/file_processor'
 require_relative 'bot/url_processor'
 require_relative 'bot/worker'
 
-if !$0.index('sequel') and DB
-  require_relative 'bot/session'
+if ENV['DB']
+  require 'sequel'
+  require_relative 'sequel'
+  require_relative 'bot/session' if !$0.index('sequel') and DB
+end
+
+if ENV['WHISPER']
+  require 'whisper.cpp'
+  require_relative 'subtitler'
 end
 
 class Bot

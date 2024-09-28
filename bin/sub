@@ -1,0 +1,13 @@
+#!/usr/bin/env ruby
+
+ENV['WHISPER'] = '1'
+
+Dir.chdir File.expand_path "#{File.dirname File.realpath __FILE__}/.." do
+  require_relative '../bot'
+end
+
+sleep 1 until Subtitler.model
+
+file = ARGV[0]
+sub  = Subtitler.transcribe file
+puts sub
