@@ -9,16 +9,20 @@ gem 'chronic'
 gem 'chronic_duration'
 gem 'addressable'
 
+gem 'telegram-bot-ruby', git: 'git@github.com:brauliobo/telegram-bot-ruby.git'
+
 gem 'rack' # for better mime type
 gem 'roda'
 gem 'puma'
 
-gem 'pg'
-gem 'sequel'
+if ENV['DB']
+  gem 'pg'
+  gem 'sequel'
+end
 
 gem 'mechanize'
 
-gem 'telegram-bot-ruby', git: 'git@github.com:brauliobo/telegram-bot-ruby.git'
+gem 'whisper.cpp' if ENV['WHISPER']
 
 group :development do
   gem 'pry'
