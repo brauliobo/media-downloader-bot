@@ -10,15 +10,17 @@ require 'tmpdir'
 require 'shellwords'
 require 'rack/mime'
 require 'mechanize'
+require 'srt'
 require 'pry' rescue nil # fails with systemd
 
 require_relative 'exts/sym_mash'
 require_relative 'exts/peach'
 
-require_relative 'sh'
 require_relative 'zipper'
-require_relative 'tagger'
 require_relative 'prober'
+require_relative 'sh'
+require_relative 'tagger'
+require_relative 'translator'
 
 require_relative 'bot/status'
 require_relative 'bot/helpers'

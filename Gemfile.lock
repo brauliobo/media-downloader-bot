@@ -61,6 +61,7 @@ GEM
       multipart-post (~> 2)
     faraday-net_http (3.1.1)
       net-http
+    ffi (1.17.0)
     hashie (5.0.0)
     http-cookie (1.0.6)
       domain_name (~> 0.5)
@@ -100,6 +101,7 @@ GEM
       mini_portile2 (~> 2.8.2)
       racc (~> 1.4)
     numerizer (0.1.1)
+    pg (1.5.8)
     pry (0.14.2)
       coderay (~> 1.1)
       method_source (~> 1.0)
@@ -112,11 +114,16 @@ GEM
       rack
     rubyntlm (0.6.5)
       base64
+    sequel (5.84.0)
+      bigdecimal
+    srt (0.1.5)
     tzinfo (2.0.6)
       concurrent-ruby (~> 1.0)
     uri (0.13.0)
     webrick (1.8.2)
     webrobots (0.1.2)
+    whisper.cpp (0.1.0)
+      ffi (~> 1.15)
     zeitwerk (2.6.17)
 
 PLATFORMS
@@ -131,11 +138,15 @@ DEPENDENCIES
   dotenv
   hashie
   mechanize
+  pg
   pry
   puma
   rack
   roda
+  sequel
+  srt
   telegram-bot-ruby!
+  whisper.cpp
 
 RUBY VERSION
    ruby 3.3.0p0
