@@ -52,7 +52,7 @@ class Zipper
   }.map{ |k,v| "#{k}=#{v}" }.join(',')
 
   THREADS = ENV['THREADS']&.to_i || 16
-  FFMPEG  = "nice -n 19 ffmpeg -y -threads #{THREADS} -loglevel error"
+  FFMPEG  = "ffmpeg -y -threads #{THREADS} -loglevel error"
 
   Types = SymMash.new(
     video: {
@@ -322,8 +322,9 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
   end
 
   def apply_subtitle
-    subs  = probe.streams.select{ |s| s.codec_type == 'subtitle' }
-    return if subs.blank? and opts.lang.blank?
+    subs = probe.streams.select{ |s| s.codec_type == 'subtitle' }
+    return if subs.blank? and !opts.lang and !opts.subs
+
     subs.each{ |s| s.lang = ISO_639.find_by_code(s.tags.language).alpha2 }
 
     if subs.present? and index = (subs.index{ |s| opts.lang == s.lang } || 0)

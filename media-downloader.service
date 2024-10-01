@@ -11,6 +11,7 @@ Wants=network-online.target
 CPUQuota=900%
 LimitNOFILE=1001001
 DynamicUser=yes
+Nice=19
 
 #NetworkNamespacePath=/var/run/netns/vpnspace
 #BindToDevice=vlan2
