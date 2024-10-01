@@ -44,7 +44,12 @@ class Zipper
       encode:  '-c:a libmp3lame -abr 1 -b:a %{abrate}k'.freeze,
     },
   )
-  SUB_STYLE = 'Fontname=Roboto,OutlineColour=&H40000000,BorderStyle=3'.freeze
+  SUB_STYLE = {
+    Fontsize:      20,
+    Fontname:      'Roboto',
+    OutlineColour: '&H40000000',
+    BorderStyle:   3,
+  }.map{ |k,v| "#{k}=#{v}" }.join(',')
 
   THREADS = ENV['THREADS']&.to_i || 16
   FFMPEG  = "nice -n 19 ffmpeg -y -threads #{THREADS} -loglevel error"
