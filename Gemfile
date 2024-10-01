@@ -8,6 +8,8 @@ gem 'hashie'
 gem 'chronic'
 gem 'chronic_duration'
 
+gem 'iso-639'
+
 gem 'telegram-bot-ruby', git: 'git@github.com:brauliobo/telegram-bot-ruby.git'
 
 gem 'rack' # for better mime type
