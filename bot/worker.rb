@@ -105,6 +105,11 @@ class Bot
       fn_io  = Faraday::UploadIO.new fn_out, i.opts.format.mime
       paid   = ENV['PAID'] || msg.from.id.in?([6884159818])
       typek  = if paid then :media else type.name end
+
+      if info.language and opts.lang
+        info.title = Translator.translate info.title, from: info.language, to: opts.lang
+      end
+
       media  = SymMash.new(
         type:      type.name,
         typek =>   fn_io,
@@ -133,7 +138,7 @@ class Bot
       text = ''
       if opts.caption or i.type == Zipper::Types.video
         text  = "_#{me i.info.title}_"
-        text << "\nby #{me i.info.uploader}" if i.info.uploader
+        text << "\n#{me i.info.uploader}" if i.info.uploader
       end
       text << "\n\n_#{me i.info.description.strip}_" if opts.description and i.info.description.strip.presence
       text << "\n\n#{me i.url}" if i.url
