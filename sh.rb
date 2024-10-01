@@ -7,7 +7,7 @@ class Sh
   end
 
   def self.run cmd, *args, **params
-    puts cmd if ENV['PRINT_CMD']
+    STDERR.puts cmd if ENV['PRINT_CMD']
     Open3.capture3 cmd, *args, **params
   end
 

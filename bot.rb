@@ -6,12 +6,15 @@ Dir.chdir File.dirname __FILE__ do
   Dotenv.load! '.env'
 end
 
+require 'pry' rescue nil # fails with systemd
+
 require 'tmpdir'
 require 'shellwords'
 require 'rack/mime'
 require 'mechanize'
+
 require 'srt'
-require 'pry' rescue nil # fails with systemd
+require 'iso-639'
 
 require_relative 'exts/sym_mash'
 require_relative 'exts/peach'

@@ -110,7 +110,7 @@ class Translator
 
     i = 0
     srt.lines.each do |line|
-      line.text = line.text.map{ |segment| tlines[i += 1] }
+      line.text = line.text.map{ |segment| tlines[i].tap{ i+= 1 } }
     end
 
     srt.to_s
