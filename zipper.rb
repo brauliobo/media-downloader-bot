@@ -176,8 +176,8 @@ class Zipper
     apply_audio_rate
     apply_audio_channels
 
-    apply_speed
     apply_subtitle
+    apply_speed
     szopts = apply_video_size_limits
 
     aenc   = AUDIO_ENC[opts.acodec&.to_sym] || AUDIO_ENC.opus
