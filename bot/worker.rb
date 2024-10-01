@@ -97,6 +97,10 @@ class Bot
       durat  = i.oprobe.format.duration.to_i # speed may change from input
       opts   = i.opts
 
+      if info.language and opts.lang
+        info.title = Translator.translate info.title, from: info.language, to: opts.lang
+      end
+
       caption = msg_caption i
       return send_message msg, caption if opts.simulate
 
@@ -105,10 +109,6 @@ class Bot
       fn_io  = Faraday::UploadIO.new fn_out, i.opts.format.mime
       paid   = ENV['PAID'] || msg.from.id.in?([6884159818])
       typek  = if paid then :media else type.name end
-
-      if info.language and opts.lang
-        info.title = Translator.translate info.title, from: info.language, to: opts.lang
-      end
 
       media  = SymMash.new(
         type:      type.name,
