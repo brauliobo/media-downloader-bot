@@ -170,13 +170,14 @@ class Zipper
   def zip_video
     @type = :video
 
-    apply_subtitle
+    check_width
     reduce_framerate
     limit_framerate
-
     apply_audio_rate
     apply_audio_channels
-    check_width
+
+    apply_speed
+    apply_subtitle
     szopts = apply_video_size_limits
 
     aenc   = AUDIO_ENC[opts.acodec&.to_sym] || AUDIO_ENC.opus
@@ -204,11 +205,10 @@ class Zipper
   def zip_audio
     @type = :audio
 
-    apply_speed
-
     apply_audio_rate
     apply_audio_channels
 
+    apply_speed
     apply_audio_size_limit
 
     cmd = opts.format.cmd % {
@@ -262,14 +262,14 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
   def apply_audio_size_limit
     return unless size_mb_limit
 
-    duration = probe.format.duration.to_f / speed
+    duration = probe.format.duration.to_f / opts.speed
     opts.bitrate = (opts.percent * 8*size_mb_limit*1000).to_f / duration if max_audio_duration(opts.bitrate) < duration / 60
   end
 
   def apply_video_size_limits
     return unless size_mb_limit
 
-    duration = probe.format.duration.to_f / speed
+    duration = probe.format.duration.to_f / opts.speed
     minutes  = (duration / 60).ceil
 
     # reduce resolution
