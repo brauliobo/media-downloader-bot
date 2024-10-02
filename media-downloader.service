@@ -12,6 +12,8 @@ CPUQuota=900%
 LimitNOFILE=1001001
 DynamicUser=yes
 Nice=19
+RuntimeDirectory=media_downloader_bot
+RuntimeDirectoryMode=0755
 
 #NetworkNamespacePath=/var/run/netns/vpnspace
 #BindToDevice=vlan2
