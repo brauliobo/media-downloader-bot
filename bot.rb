@@ -12,6 +12,7 @@ require 'tmpdir'
 require 'shellwords'
 require 'rack/mime'
 require 'mechanize'
+require 'net_http_unix'
 
 require 'srt'
 require 'iso-639'
