@@ -106,7 +106,7 @@ class Translator
   def self.translate_srt srt, from:, to:
     srt    = SRT::File.parse_string srt
     lines  = srt.lines.flat_map{ |line| line.text }
-    tlines = lines.each_slice(1000).with_object [] do |slines, stlines|
+    tlines = lines.each_slice(100).with_object [] do |slines, stlines|
       stlines.concat translate slines, from: from, to: to
     end
 
