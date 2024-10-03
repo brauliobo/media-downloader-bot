@@ -15,21 +15,21 @@ module Subtitler
     end
   end
 
-  # whisper.cpp will lock ruby, run it with fork
-  DB.disconnect if defined? DB
-  pid = fork do
-    return if File.exist? SOCKET_PATH # reuse another server
-    Process.setproctitle 'whisper.cpp'
-    $model = Whisper::Model.new MODEL
-    server = Puma::Server.new Api.freeze.app
-    server.add_unix_listener SOCKET_PATH
-    server.run.join
+  def self.start
+    DB.disconnect if defined? DB
+    # whisper.cpp will lock ruby, run it with fork
+    fork do
+      Process.setproctitle 'whisper.cpp'
+      $model = Whisper::Model.new MODEL
+      server = Puma::Server.new Api.freeze.app
+      server.add_unix_listener SOCKET_PATH
+      puts SOCKET_PATH
+      server.run.join
+    ensure
+      File.unlink SOCKET_PATH
+    end unless File.exist? SOCKET_PATH # reuse another server
   end
-  at_exit do
-    Process.kill :KILL, pid
-  ensure
-    File.unlink SOCKET_PATH
-  end
+  start
 
   def self.transcribe path
     client_post path: path
