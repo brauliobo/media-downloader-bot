@@ -268,7 +268,7 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
     return unless size_mb_limit
 
     duration = probe.format.duration.to_f / opts.speed
-    opts.bitrate = (opts.percent * 8*size_mb_limit*1000).to_f / duration if max_audio_duration(opts.bitrate) < duration / 60
+    opts.bitrate = (opts.percent * 8*size_mb_limit*1000).to_f / duration if self.class.max_audio_duration(opts.bitrate) < duration / 60
   end
 
   def apply_video_size_limits
