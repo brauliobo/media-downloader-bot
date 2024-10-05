@@ -74,10 +74,10 @@ class Zipper
         ext:    :mp4,
         mime:   'video/mp4',
         opts:   {width: VID_WIDTH, quality: H264_QUALITY, abrate: 64, acodec: :aac, percent: VID_PERCENT}, #whatsapp can't handle opus in h264
-        szopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
+        szopts: "-maxrate:v %{maxrate}",
         cmd: <<-EOC
 #{FFMPEG} -i %{infile} -vf "#{VF_SCALE_M2}%{vf}" #{VFR_OPTS} %{iopts} \
-  -c:v libx265 -crf %{quality} -preset fast %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
+  -c:v libx265 -crf %{quality} -preset superfast %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
 
