@@ -18,11 +18,15 @@ class Zipper
   VF_SCALE_M2 = "#{SCALE_KEY}='%{width}:trunc(ow/a/2)*2'".freeze
   VF_SCALE_M8 = "#{SCALE_KEY}='%{width}:trunc(ow/a/8)*8'".freeze
 
-  META             = "-metadata downloaded_with=t.me/media_downloader_2bot".freeze
-  POST_OPTS        = " -map_metadata 0 -id3v2_version 3 -write_id3v1 1 #{META} %{metadata}".freeze
-  VIDEO_POST_OPTS  = "-movflags +faststart -movflags use_metadata_tags"
-  VIDEO_POST_OPTS << " #{POST_OPTS}"
-  VIDEO_POST_OPTS << '-profile:v high -tune:v hq -level 4.1 -rc:v vbr -rc-lookahead:v 32 -aq-strength:v 15' if CUDA 
+  META_MARK  = '-metadata downloaded_with=t.me/media_downloader_2bot'.freeze
+  META_OPTS  = '-map_metadata 0 -id3v2_version 3 -movflags use_metadata_tags -write_id3v1 1'
+  META_OPTS << " #{META_MARK} %{metadata}"
+
+  AUDIO_POST_OPTS  = ''
+  AUDIO_POST_OPTS << " #{META_OPTS}" unless ENV['SKIP_META']
+  VIDEO_POST_OPTS  = '-movflags +faststart'
+  VIDEO_POST_OPTS << " #{META_OPTS}" unless ENV['SKIP_META']
+  VIDEO_POST_OPTS << ' -profile:v high -tune:v hq -level 4.1 -rc:v vbr -rc-lookahead:v 32 -aq-strength:v 15' if CUDA 
   VIDEO_POST_OPTS.freeze
 
   FDK_AAC = `ffmpeg -encoders 2>/dev/null | grep fdk_aac`.present?
@@ -117,21 +121,21 @@ class Zipper
         ext:  :opus,
         mime: 'audio/aac',
         opts: {bitrate: 96, percent: AUDIO_ENC.opus.percent},
-        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{AUDIO_ENC.opus.encode} #{POST_OPTS} %{oopts}"
+        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{AUDIO_ENC.opus.encode} #{AUDIO_POST_OPTS} %{oopts}"
       },
 
       aac: {
         ext:  :m4a,
         mime: 'audio/aac',
         opts: {bitrate: 96, percent: AUDIO_ENC.aac.percent},
-        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{AUDIO_ENC.aac.encode} #{POST_OPTS} %{oopts}"
+        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{AUDIO_ENC.aac.encode} #{AUDIO_POST_OPTS} %{oopts}"
       },
 
       mp3: {
         ext:  :mp3,
         mime: 'audio/mp3',
         opts: {bitrate: 128, percent: AUDIO_ENC.mp3.percent},
-        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{AUDIO_ENC.mp3.encode} #{POST_OPTS} %{oopts}"
+        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{AUDIO_ENC.mp3.encode} #{AUDIO_POST_OPTS} %{oopts}"
       },
     },
   )
