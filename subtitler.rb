@@ -30,6 +30,7 @@ module Subtitler
     ensure
       File.unlink SOCKET_PATH
     end if pid
+    sleep 1 until File.exist? SOCKET_PATH
   end
   start
 
