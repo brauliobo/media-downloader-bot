@@ -144,7 +144,7 @@ class Zipper
     1000 * Zipper.size_mb_limit / (br.to_i / 8) / 60
   end
 
-  VID_DURATION_THLD = if size_mb_limit then 25 else Float::INFINITY end
+  VID_DURATION_THLD = if size_mb_limit then 20 else Float::INFINITY end
   AUD_DURATION_THLD = if size_mb_limit then max_audio_duration Types.audio.opus.opts.bitrate else Float::INFINITY end
 
   # reduce width for every minutes interval exceeding VID_DURATION_THLD
@@ -362,7 +362,7 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
   def metadata_args
     (opts.metadata || {}).map{ |k,v| "-metadata #{Sh.escape k}=#{Sh.escape v}" }.join ' '
   end
-  
+
   def apply_opts cmd, opts
     cmd.strip!
     cmd << " -ss #{opts.ss}" if opts.ss&.match(TIME_REGEX)

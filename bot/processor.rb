@@ -7,7 +7,7 @@ class Bot
 
     VID_TOO_LONG = "\nQuality is compromised as the video is too long to fit the #{Zipper.size_mb_limit}MB upload limit on Telegram Bots"
     AUD_TOO_LONG = "\nQuality is compromised as the audio is too long to fit the #{Zipper.size_mb_limit}MB upload limit on Telegram Bots"
-    VID_TOO_BIG  = "\nVideo over #{Zipper.size_mb_limit}MB Telegram Bot's limit, converting to audio..."
+    VID_TOO_BIG  = "\nVideo over #{Zipper.size_mb_limit}MB Telegram Bot's limit"
     TOO_BIG      = "\nFile over #{Zipper.size_mb_limit}MB Telegram Bot's limit"
 
     # missing mimes
@@ -100,17 +100,8 @@ class Bot
       # check telegram bot's upload limit
       if Zipper.size_mb_limit
         mbsize = File.size(i.fn_out) / 2**20
-        if i.type == Types.video and mbsize >= Zipper.size_mb_limit
-          @stl.update "#{i.info.title}: #{VID_TOO_BIG}"
-          i.type   = Types.audio
-          i.fn_out = convert i, pos: pos
-          mbsize   = File.size(i.fn_out) / 2**20
-        end
-        # still too big as audio...
-        if mbsize >= Zipper.size_mb_limit
-          @stl.error "#{i.info.title}: #{TOO_BIG}"
-          return
-        end
+        return @stl.error "#{i.info.title}: #{VID_TOO_BIG}" if i.type == Types.video and mbsize >= Zipper.size_mb_limit
+        return @stl.error "#{i.info.title}: #{TOO_BIG}" if mbsize >= Zipper.size_mb_limit
       end
 
       tag i

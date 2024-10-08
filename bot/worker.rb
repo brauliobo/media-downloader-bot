@@ -84,7 +84,7 @@ class Bot
           end
         end
 
-        return msg.resp = nil if inputs.blank?
+        return msg.resp = nil if inputs.blank? or @st.keep?
       end
       msg.resp
     end
