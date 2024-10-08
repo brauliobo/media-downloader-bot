@@ -3,7 +3,7 @@ module Subtitler
   MODEL = ENV['WHISPER_MODEL']
 
   RUN_PATH    = "/run/media_downloader_bot"
-  SOCKET_PATH = if File.writable? RUN_PATH then RUN_PATH else "#{__dir__}/tmp" end + '/whisper.cpp.socket'
+  SOCKET_PATH = if File.writable? RUN_PATH then RUN_PATH else "#{__dir__}/../tmp" end + '/whisper.cpp.socket'
 
   class Api < Roda
     plugin :indifferent_params

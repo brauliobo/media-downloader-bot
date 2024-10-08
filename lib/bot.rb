@@ -1,9 +1,9 @@
 require 'bundler/setup'
 require 'active_support/all'
 require 'telegram/bot'
-Dir.chdir File.dirname __FILE__ do
+Dir.chdir __dir__ do
   require 'dotenv'
-  Dotenv.load! '.env'
+  Dotenv.load! '../.env'
 end
 
 require 'pry' rescue nil # fails with systemd

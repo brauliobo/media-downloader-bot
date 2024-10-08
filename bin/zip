@@ -3,8 +3,8 @@
 ENV['PRINT_CMD'] = '1'
 ENV['SKIP_META'] = '1'
 
-Dir.chdir File.expand_path "#{File.dirname File.realpath __FILE__}/.." do
-  require_relative '../bot'
+Dir.chdir File.expand_path "#{File.realpath __dir__}/.." do
+  require_relative '../lib/bot'
 end
 
 opts  = SymMash.new metadata: {}
