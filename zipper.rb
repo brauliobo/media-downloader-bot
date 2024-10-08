@@ -161,15 +161,16 @@ class Zipper
     self.new(infile, nil, opts: SymMash.new(format: {})).extract_srt language
   end
 
-  attr_reader :infile, :outfile, :probe
+  attr_reader :infile, :outfile, :probe, :stl
   attr_reader :iopts, :oopts, :dopts, :opts
   attr_reader :vf
   attr_reader :type
 
-  def initialize infile, outfile, probe: nil, opts: SymMash.new
+  def initialize infile, outfile, probe: nil, stl: nil, opts: SymMash.new
     @infile  = infile
     @outfile = outfile
     @probe   = probe || Prober.for(infile)
+    @stl     = stl
 
     @iopts = ''; @oopts = ''; @dopts = opts.format.opts
     @opts = opts
@@ -346,11 +347,16 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
       srt = extract_srt index
       lng = subs[index].lang
     else
+      stl&.update 'transcribing'
       res = Subtitler.transcribe infile
       srt,lng = res.output,res.language
     end
 
-    srt = Translator.translate_srt srt, from: lng, to: opts.lang if opts.lang and opts.lang != lng
+    if opts.lang and opts.lang != lng
+      stl&.update 'translating'
+      srt = Translator.translate_srt srt, from: lng, to: opts.lang
+      stl&.update 'transcoding'
+    end
 
     tmpf = Tempfile.new 'subtitle'
     tmpf.write srt

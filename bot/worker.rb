@@ -63,19 +63,19 @@ class Bot
         up_queue = inputs.size.times.to_a
 
         inputs.each.with_index.api_peach do |i, pos|
-          @st.add "#{i.info.title}: downloading" do |stline|
+          @st.add 'downloading', prefix: i.info.title do |stline|
             i.p = p = klass.new line: i.line, stline: stline, **popts
 
             p.download_one i, pos: pos+1 if p.respond_to? :download_one
             next if stline.error?
 
-            stline.update "#{i.info.title}: converting"
+            stline.update 'transcoding'
             p.handle_input i, pos: pos+1
             next if stline.error?
 
-            stline.update "#{i.info.title}: queued to upload" if ordered
+            stline.update 'queued to upload' if ordered
             sleep 0.1 while up_queue.first != pos if ordered
-            stline.update "#{i.info.title}: uploading"
+            stline.update 'uploading'
             upload i
 
           ensure
