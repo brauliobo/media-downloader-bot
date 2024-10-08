@@ -45,7 +45,7 @@ class Bot
       ret = yield line
 
       return ret if line.kept
-      delete
+      delete line
       update
 
       ret
