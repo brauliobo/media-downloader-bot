@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-require_relative '../bot'
+require_relative '../lib/bot'
 
 $bot = Bot.new ENV['TOKEN']
 $bot.start
