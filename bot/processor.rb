@@ -79,16 +79,16 @@ class Bot
 
       self.class.probe i
       unless i.type
-        @stl.error "#{i.info.title}: Unknown type for #{i.fn_in}"
+        @stl.error "Unknown type for #{i.fn_in}"
         return
       end
 
       if Zipper.size_mb_limit
         if i.type == Types.video and i.durat > Zipper::VID_DURATION_THLD.minutes.to_i
-          @stl.update "#{i.info.title}: #{VID_TOO_LONG}"
+          @stl.update VID_TOO_LONG
         end
         if i.type == Types.audio and i.durat > Zipper::AUD_DURATION_THLD.minutes.to_i
-          @stl.update "#{i.info.title}: #{AUD_TOO_LONG}"
+          @stl.update AUD_TOO_LONG
         end
       end
 
@@ -100,8 +100,8 @@ class Bot
       # check telegram bot's upload limit
       if Zipper.size_mb_limit
         mbsize = File.size(i.fn_out) / 2**20
-        return @stl.error "#{i.info.title}: #{VID_TOO_BIG}" if i.type == Types.video and mbsize >= Zipper.size_mb_limit
-        return @stl.error "#{i.info.title}: #{TOO_BIG}" if mbsize >= Zipper.size_mb_limit
+        return @stl.error VID_TOO_BIG if i.type == Types.video and mbsize >= Zipper.size_mb_limit
+        return @stl.error TOO_BIG if mbsize >= Zipper.size_mb_limit
       end
 
       tag i
@@ -169,9 +169,10 @@ class Bot
       fn_out.gsub! '/', ', ' # not escaped by shellwords
       fn_out  = "#{dir}/#{fn_out}"
 
-      o, e, st = Zipper.send "zip_#{i.type.name}", i.fn_in, fn_out, opts: i.opts, probe: i.probe
+      o, e, st = Zipper.send "zip_#{i.type.name}", i.fn_in, fn_out,
+        opts: i.opts, probe: i.probe, stl: @stl
       if st != 0
-        @stl.error "#{i.info.title}: convert failed: #{o}\n#{e}"
+        @stl.error "convert failed: #{o}\n#{e}"
         return
       end
 

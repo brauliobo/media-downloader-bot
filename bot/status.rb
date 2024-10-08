@@ -2,10 +2,20 @@ class Bot
   class Status < Array
 
     class Line < SimpleDelegator
-      attr_accessor :status, :kept
+      attr_accessor :status
+      attr_reader :prefix, :kept
+
+      def initialize line, prefix: nil, status: nil
+        super line
+        @prefix = prefix
+        @status = status
+        @status&.append self
+        update line
+      end
 
       def update text
         self.tap do
+          text = "#{prefix}: #{text}" if prefix
           __setobj__ text
           status&.update
         end
@@ -29,12 +39,8 @@ class Bot
       @block = block
     end
 
-    def add line, &block
-      line = Line.new line
-      line.status = self
-
-      append line
-      update
+    def add line, prefix: nil, &block
+      line = Line.new line, prefix:, status: self
 
       ret = yield line
 
