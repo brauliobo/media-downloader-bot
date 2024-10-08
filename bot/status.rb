@@ -46,7 +46,7 @@ class Bot
     end
 
     def keep?
-      size > 0 # lines kept 
+      any?{ |l| l.kept }
     end
 
     def error text, *args, **params
