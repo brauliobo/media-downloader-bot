@@ -39,10 +39,14 @@ class Bot
       ret = yield line
 
       return ret if line.kept
-      delete line 
+      delete
       update
 
       ret
+    end
+
+    def keep?
+      size > 0 # lines kept 
     end
 
     def error text, *args, **params
