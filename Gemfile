@@ -2,6 +2,8 @@ source 'https://rubygems.org'
 
 ruby File.read('.ruby-version')
 
+def path_for p; p if ENV['LOCAL_GEMS']; end
+
 gem 'activesupport'
 gem 'dotenv'
 gem 'hashie'
@@ -27,7 +29,7 @@ if ENV['DB']
   gem 'sequel'
 end
 
-gem 'whisper.cpp' if ENV['WHISPER']
+gem 'whisper.cpp', path: path_for('../ruby-whisper.cpp') if ENV['WHISPER']
 
 group :development do
   gem 'pry'
