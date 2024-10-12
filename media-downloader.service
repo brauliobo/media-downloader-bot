@@ -20,6 +20,7 @@ RuntimeDirectoryMode=0755
 #RestrictAddressFamilies=AF_INET AF_UNIX
 ExecStartPre=/usr/bin/curl ifconfig.co
 
+ProtectHome=yes
 WorkingDirectory=/home/braulio/Projects/media-downloader-bot
 ExecStart=/home/braulio/.rvm/wrappers/ruby-3.3.0/bundle exec bin/bot
 

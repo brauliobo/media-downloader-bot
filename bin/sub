@@ -6,7 +6,7 @@ Dir.chdir File.expand_path "#{File.realpath __dir__}/.." do
   require_relative '../lib/bot'
 end
 
-sleep 1 until Subtitler.model
+sleep 2 # wait for fork
 
 file = ARGV[0]
 sub  = Subtitler.transcribe file
