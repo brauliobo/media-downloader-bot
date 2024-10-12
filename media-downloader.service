@@ -28,6 +28,8 @@ Environment=THREADS=16
 Environment=DEBUG=1
 Environment=DB=1
 Environment=WHISPER=1
+Environment=WHISPER_GPU=1
+Environment=WHISPER_N_PROCS=3
 
 Restart=always
 RestartSec=1
