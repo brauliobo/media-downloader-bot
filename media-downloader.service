@@ -12,6 +12,7 @@ CPUQuota=900%
 LimitNOFILE=1001001
 DynamicUser=yes
 Nice=19
+ProtectHome=yes
 RuntimeDirectory=media_downloader_bot
 RuntimeDirectoryMode=0755
 
@@ -20,13 +21,12 @@ RuntimeDirectoryMode=0755
 #RestrictAddressFamilies=AF_INET AF_UNIX
 ExecStartPre=/usr/bin/curl ifconfig.co
 
-ProtectHome=yes
 WorkingDirectory=/srv/media-downloader-bot
-ExecStart=/home/braulio/.rvm/wrappers/ruby-3.3.0/bundle exec bin/bot
+ExecStart=/usr/local/rvm/wrappers/ruby-3.3.0/bundle exec bin/bot
 
 Environment="TOKEN=xxx"
-Environment=THREADS=16
-Environment=DEBUG=1
+Environment=THREADS=6
+#Environment=DEBUG=1
 Environment=DB=1
 Environment=WHISPER=1
 Environment=WHISPER_GPU=1
