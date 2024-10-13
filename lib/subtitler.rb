@@ -5,11 +5,22 @@ module Subtitler
   RUN_PATH    = "/run/media_downloader_bot"
   SOCKET_PATH = if File.writable? RUN_PATH then RUN_PATH else "#{__dir__}/../tmp" end + '/whisper.cpp.socket'
 
+  def self.init
+    $model ||= Whisper::Model.new MODEL
+    $mutex ||= Mutex.new
+  end
+  def self.local_transcribe path
+    Subtitler.init
+    $mutex.synchronize do
+      $model.transcribe_from_file path, format: 'srt'
+    end
+  end
+
   class Api < Roda
     plugin :indifferent_params
     route do |r|
       r.post do
-        res = $model.transcribe_from_file params[:path], format: 'srt'
+        res = Subtitler.local_transcribe params[:path]
         res.to_h.to_json
       end
     end
@@ -20,7 +31,7 @@ module Subtitler
     # whisper.cpp will lock ruby, run it with fork
     pid = fork do
       Process.setproctitle 'whisper.cpp'
-      $model = Whisper::Model.new MODEL
+      Subtitler.init
       server = Puma::Server.new Api.freeze.app
       server.add_unix_listener SOCKET_PATH
       server.run.join
