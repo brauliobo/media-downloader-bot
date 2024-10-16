@@ -17,6 +17,10 @@ class Bot
     Rack::Mime::MIME_TYPES['.aac']  = 'audio/x-aac'
     Rack::Mime::MIME_TYPES['.mkv']  = 'video/x-matroska'
 
+    BLOCKED_DOMAINS = %w[
+      xnxx.health
+    ]
+
     attr_reader :bot
     attr_reader :msg
     attr_reader :st
@@ -52,7 +56,10 @@ class Bot
       return unless line or msg
       @line = line || msg.text
       @args = @line.split(/[[:space:]]+/)
-      @url  = (Addressable::URI.parse @args.shift).to_s if @args.first =~ URI::regexp
+      @uri  = Addressable::URI.parse @args.shift if @args.first =~ URI::regexp
+      @url  = @uri&.to_s
+      raise 'Blocked domain' if BLOCKED_DOMAINS.any?{ |d| @uri.host.index d }
+
       @opts = @args.each.with_object SymMash.new do |a, h|
         self.class.add_opt h, a
       end
