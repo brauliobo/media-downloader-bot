@@ -1,0 +1,12 @@
+#!/usr/bin/env ruby
+
+Dir.chdir File.expand_path "#{File.realpath __dir__}/.." do
+  require_relative '../lib/bot'
+end
+
+from = ENV.fetch 'FROM_LANG'
+to   = ENV.fetch 'TO_LANG'
+
+ARGF.each_line do |line|
+  puts Translator.translate line, from: from, to: to
+end
