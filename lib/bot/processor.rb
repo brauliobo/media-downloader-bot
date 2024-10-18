@@ -18,7 +18,7 @@ class Bot
     Rack::Mime::MIME_TYPES['.mkv']  = 'video/x-matroska'
 
     BLOCKED_DOMAINS = %w[
-      xnxx.health
+      xnxx
     ]
 
     attr_reader :bot
