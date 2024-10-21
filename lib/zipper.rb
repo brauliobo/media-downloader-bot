@@ -343,7 +343,7 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
 
     subs.each{ |s| s.lang = ISO_639.find_by_code(s.tags.language).alpha2 }
 
-    if subs.present? and index = (subs.index{ |s| opts.lang == s.lang } || 0)
+    if !opts.gensubs and subs.present? and index = (subs.index{ |s| opts.lang == s.lang } || 0)
       srt = extract_srt index
       lng = subs[index].lang
     else
