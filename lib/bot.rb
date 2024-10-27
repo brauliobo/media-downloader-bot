@@ -97,10 +97,13 @@ EOS
     send_message msg, mnfe(START_MSG)
   end
 
+  BLOCKED_USERS = ENV['BLOCKED_USERS'].split.map(&:to_i)
+
   def react msg
     return if msg.text.blank? and msg.video.blank? and msg.audio.blank?
     return send_help msg if msg.text&.starts_with? '/start'
     return send_help msg if msg.text&.starts_with? '/help'
+    raise 'user blocked' if msg.from.id.in? BLOCKED_USERS
 
     download msg
   rescue => e

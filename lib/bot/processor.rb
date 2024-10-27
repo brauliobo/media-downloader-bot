@@ -17,9 +17,7 @@ class Bot
     Rack::Mime::MIME_TYPES['.aac']  = 'audio/x-aac'
     Rack::Mime::MIME_TYPES['.mkv']  = 'video/x-matroska'
 
-    BLOCKED_DOMAINS = %w[
-      xnxx
-    ]
+    BLOCKED_DOMAINS = ENV['BLOCKED_DOMAINS'].split
 
     attr_reader :bot
     attr_reader :msg
