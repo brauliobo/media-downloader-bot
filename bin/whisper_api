@@ -1,0 +1,8 @@
+#!/usr/bin/env ruby
+
+require_relative '../lib/bot'
+
+Subtitler.start_api
+
+sleep 1.day while true
+

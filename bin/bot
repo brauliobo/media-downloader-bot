@@ -2,6 +2,11 @@
 
 require_relative '../lib/bot'
 
+fork do
+  Process.setproctitle 'whisper.cpp'
+  Subtitler.start_api
+end if ENV['WHISPER']
+
 $bot = Bot.new ENV['TOKEN']
 $bot.start
 

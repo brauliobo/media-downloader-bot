@@ -1,5 +1,7 @@
 module Subtitler
 
+  mattr_accessor :local
+
   MODEL = ENV['WHISPER_MODEL']
 
   RUN_PATH    = "/run/media_downloader_bot"
@@ -26,26 +28,18 @@ module Subtitler
     end
   end
 
-  def self.start
-    DB.disconnect if defined? DB
-    # whisper.cpp will lock ruby, run it with fork
-    pid = fork do
-      Process.setproctitle 'whisper.cpp'
-      Subtitler.init
-      server = Puma::Server.new Api.freeze.app
-      server.add_unix_listener SOCKET_PATH
-      server.run.join
-    end unless File.exist? SOCKET_PATH # reuse another server
-    at_exit do
-      Process.kill :KILL, pid
-    ensure
-      File.unlink SOCKET_PATH
-    end if pid
+  def self.start_api
+    Subtitler.init
+    server = Puma::Server.new Api.freeze.app
+    server.add_unix_listener SOCKET_PATH
+    server.run.join
+
+    at_exit{ File.unlink SOCKET_PATH }
     sleep 1 until File.exist? SOCKET_PATH
   end
-  start
 
   def self.transcribe path
+    return local_transcribe path if local
     client_post path: path
   end
 
