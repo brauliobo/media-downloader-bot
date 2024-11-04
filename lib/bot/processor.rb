@@ -153,7 +153,8 @@ class Bot
       durat    = i.durat
       durat   /= speed if speed
       durat   -= ChronicDuration.parse i.opts.ss if i.opts.ss
-      format   = i.opts.format || i.type[:default]
+      format   = i.opts.format
+      format ||= if durat >= 10.minutes then i.type[:ldefault] end || i.type[:default]
       format   = :aac if format == :opus and durat <= 120+2 if Zipper.size_mb_limit # telegram consider small opus as voice
       i.format = i.opts.format = i.type[format]
       i.opts.cover  = i.info.thumbnail

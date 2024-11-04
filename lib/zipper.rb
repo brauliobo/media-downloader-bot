@@ -60,8 +60,9 @@ class Zipper
 
   Types = SymMash.new(
     video: {
-      name:    :video,
-      default: :h264,
+      name:     :video,
+      default:  :h264,
+      ldefault: :h265,
 
       h264: {
         ext:    :mp4,
