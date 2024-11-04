@@ -18,7 +18,7 @@ EOP
     def translate text, from:, to:
       to   = LANG_MAP[to.to_sym] || to
       opts = {
-        model: MODEL, format: 'json', stream: false,
+        model: MODEL, temperature: 0, format: 'json', stream: false,
         messages: [
           {role: :system, content: SYS % {lang: to}},
           *Array(text).map{ |t| {role: :user, content: t} },
