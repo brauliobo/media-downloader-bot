@@ -2,7 +2,8 @@ module Subtitler
 
   mattr_accessor :local
 
-  MODEL = ENV['WHISPER_MODEL']
+  MODEL = File.expand_path ENV['WHISPER_MODEL']
+  raise "subtitler: can't find model" unless File.exist? MODEL
 
   RUN_PATH    = "/run/media_downloader_bot"
   SOCKET_PATH = if File.writable? RUN_PATH then RUN_PATH else "#{__dir__}/../tmp" end + '/whisper.cpp.socket'
