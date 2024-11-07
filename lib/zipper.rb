@@ -75,11 +75,14 @@ class Zipper
         EOC
       },
 
-      # SVT-HEVC is discontinued
+      # - SVT-HEVC is discontinued
+      # - Performance with ultrafast preset is close to SVT-AV1
+      # - Even with much lower CRF, H265 (30 - 21mb) have much lower file size compared to SVT-AV1 (50 - 28mb),
+      # which seems to handle better lower resolution and bitrates
       h265: {
         ext:    :mp4,
         mime:   'video/mp4',
-        opts:   {width: VID_WIDTH, quality: H264_QUALITY, abrate: 64, acodec: :aac, percent: VID_PERCENT}, #whatsapp can't handle opus in h264
+        opts:   {width: VID_WIDTH, quality: H264_QUALITY+5, abrate: 64, acodec: :aac, percent: VID_PERCENT}, #whatsapp can't handle opus in h264
         szopts: "-maxrate:v %{maxrate}",
         cmd: <<-EOC
 #{FFMPEG} -i %{infile} -vf "#{VF_SCALE_M2}%{vf}" #{VFR_OPTS} %{iopts} \
@@ -87,10 +90,24 @@ class Zipper
         EOC
       },
 
+      # - MBR reduces quality too much, https://gitlab.com/AOMediaCodec/SVT-AV1/-/issues/2065
+      # - Not compatible to upload on Whatsapp Web
+      av1: {
+        ext:    :mp4,
+        mime:   'video/mp4',
+        opts:   {width: VID_WIDTH, quality: 50, abrate: 64, acodec: :opus, percent: VID_PERCENT},
+        #szopts: "-svtav1-params mbr=%{maxrate}",
+        szopts: '',
+        cmd:  <<-EOC
+#{FFMPEG} -i %{infile} -vf "#{VF_SCALE_M2}%{vf}" #{VFR_OPTS} %{iopts} \
+  -c:v libsvtav1 -crf %{quality} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
+        EOC
+      },
+
       # VP9 doesn't seem to respect low bitrates:
       # - it can't control file size in quality mode,
       # - target bitrate mode also not ensuring desired bitrate
-      # SVT-VP9 is discontinued
+      # - SVT-VP9 is discontinued
       vp9: {
         ext:    :mp4,
         mime:   'video/mp4',
@@ -102,19 +119,6 @@ class Zipper
         EOC
       },
 
-      # MBR reduces quality too much, https://gitlab.com/AOMediaCodec/SVT-AV1/-/issues/2065
-      # without MBR file size is much higher than h264
-      av1: {
-        ext:    :mp4,
-        mime:   'video/mp4',
-        opts:   {width: VID_WIDTH, quality: 40, vbrate: 200, abrate: 64, acodec: :opus, percent: VID_PERCENT},
-        #szopts: "-svtav1-params mbr=%{maxrate}",
-        szopts: '',
-        cmd:  <<-EOC
-#{FFMPEG} -i %{infile} -vf "#{VF_SCALE_M2}%{vf}" #{VFR_OPTS} %{iopts} \
-  -c:v libsvtav1 -crf %{quality} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
-        EOC
-      },
     },
 
     audio: {
