@@ -75,6 +75,7 @@ class Zipper
         EOC
       },
 
+      # SVT-HEVC is discontinued
       h265: {
         ext:    :mp4,
         mime:   'video/mp4',
@@ -82,13 +83,14 @@ class Zipper
         szopts: "-maxrate:v %{maxrate}",
         cmd: <<-EOC
 #{FFMPEG} -i %{infile} -vf "#{VF_SCALE_M2}%{vf}" #{VFR_OPTS} %{iopts} \
-  -c:v libx265 -crf %{quality} -preset superfast %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
+  -c:v libx265 -crf %{quality} -preset ultrafast %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
 
       # VP9 doesn't seem to respect low bitrates:
       # - it can't control file size in quality mode,
       # - target bitrate mode also not ensuring desired bitrate
+      # SVT-VP9 is discontinued
       vp9: {
         ext:    :mp4,
         mime:   'video/mp4',
@@ -100,13 +102,14 @@ class Zipper
         EOC
       },
 
-      # Doesn't work on iOS :(
       # MBR reduces quality too much, https://gitlab.com/AOMediaCodec/SVT-AV1/-/issues/2065
+      # without MBR file size is much higher than h264
       av1: {
         ext:    :mp4,
         mime:   'video/mp4',
         opts:   {width: VID_WIDTH, quality: 40, vbrate: 200, abrate: 64, acodec: :opus, percent: VID_PERCENT},
-        szopts: "-b:v %{vbrate}k -svtav1-params mbr=%{maxrate}",
+        #szopts: "-svtav1-params mbr=%{maxrate}",
+        szopts: '',
         cmd:  <<-EOC
 #{FFMPEG} -i %{infile} -vf "#{VF_SCALE_M2}%{vf}" #{VFR_OPTS} %{iopts} \
   -c:v libsvtav1 -crf %{quality} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
