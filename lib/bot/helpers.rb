@@ -72,13 +72,13 @@ class Bot
       sleep 1 while !net_up?
     end
 
-    def from_admin? msg
+    def from_admin? msg = self.msg
       msg.from.id == ADMIN_CHAT_ID
     end
-    def report_group? msg
+    def report_group? msg = self.msg
       msg.chat.id == REPORT_CHAT_ID
     end
-    def in_group? msg
+    def in_group? msg = self.msg
       msg.from.id == msg.chat.id
     end
 
