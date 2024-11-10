@@ -57,10 +57,12 @@ class Bot
 
     def error text, *args, **params
       @block.call text, *args, **params
+      nil
     end
     def update *args, **params
       return if blank?
       @block.call formatted, *args, **params
+      nil
     end
 
     def formatted

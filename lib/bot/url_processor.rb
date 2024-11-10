@@ -13,6 +13,9 @@ class Bot
     USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36'
     DOWN_OPTS  = %i[referer]
 
+    VID_MAX_LENGTH = 35.minutes
+    VID_MAX_NOTICE = "Can't download files bigger than 35 minutes due to bot #{Zipper.size_mb_limit}mb restriction"
+
     def self.add_opt h, o
       k,v = o.split '=', 2
       h[k] = v || 1
@@ -54,6 +57,8 @@ class Bot
         info.title = info.description || info.title if info.webpage_url.index 'instagram.com'
         info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.number
         info.title = Bot::Helpers.limit info.title, percent: 90
+
+        return @st.error VID_MAX_NOTICE if info.duration >= VID_MAX_LENGTH.to_i
 
         SymMash.new(
           url:  url,
