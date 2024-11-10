@@ -8,7 +8,9 @@ class Zipper
 
   TIME_REGEX   = /(?:\d?\d:)(?:\d?\d:)\d\d/
 
-  CUDA         = false # slower while mining
+  # - Worse quality (better for streaming)
+  # - Slower while mining (13x vs 34x on CPU)
+  CUDA         = !!ENV['CUDA']
   H264_OPTS    = if CUDA then '-hwaccel cuda -hwaccel_output_format cuda' else '' end
   H264_CODEC   = if CUDA then 'h264_nvenc' else 'libx264' end
   H264_QUALITY = if CUDA then 33 else 25 end # to keep similar size

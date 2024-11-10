@@ -54,6 +54,8 @@ class Bot
         end
         inputs.flatten!
 
+        return if inputs.first.blank? # error
+
         inputs.uniq!{ |i| i.info.display_id }
         @opts = inputs.first&.opts || SymMash.new
         inputs.sort_by!{ |i| i.info.title } if opts[:sort]
@@ -84,7 +86,7 @@ class Bot
           end
         end
 
-        return msg.resp = nil if inputs.blank? or @st.keep?
+        return if inputs.blank? or @st.keep?
       end
       msg.resp
     end
