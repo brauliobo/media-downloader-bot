@@ -1,7 +1,13 @@
-
 converted
 
 models
 
 # bundle deployment
 vendor
+
+.venv
+
+*mp4
+*webm
+*srt
+*opus
