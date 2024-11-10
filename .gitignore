@@ -5,8 +5,10 @@ models
 # bundle deployment
 vendor
 
+# envs
 .venv
 
+# media
 *mp4
 *webm
 *srt
