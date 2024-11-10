@@ -24,6 +24,9 @@ gem 'net_http_unix'
 
 gem 'srt'
 
+gem 'tdlib-schema', github: 'southbridgeio/tdlib-schema'
+gem 'tdlib-ruby', github: 'brauliobo/tdlib-ruby', path: path_for("#{ENV['HOME']}/Projects/tdlib-ruby")
+
 if ENV['DB']
   gem 'pg'
   gem 'sequel'

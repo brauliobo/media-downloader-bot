@@ -8,6 +8,24 @@ GIT
       faraday-multipart (~> 1.0)
       zeitwerk (~> 2.6)
 
+GIT
+  remote: https://github.com/brauliobo/tdlib-ruby.git
+  revision: bdb51809b7be8693d826526ca593d2627186c0f3
+  specs:
+    tdlib-ruby (3.0.4)
+      concurrent-ruby (~> 1.1)
+      dry-configurable
+      ffi (~> 1.15.0)
+      tdlib-schema
+
+GIT
+  remote: https://github.com/southbridgeio/tdlib-schema.git
+  revision: 959a735a7de7f81976b767ffb5e852069ae9c37c
+  specs:
+    tdlib-schema (1.7.0.3)
+      dry-struct (~> 1.0)
+      dry-types (~> 1.0)
+
 GEM
   remote: https://rubygems.org/
   specs:
@@ -36,6 +54,9 @@ GEM
     domain_name (0.6.20240107)
     dotenv (3.1.4)
     drb (2.2.1)
+    dry-configurable (1.2.0)
+      dry-core (~> 1.0, < 2)
+      zeitwerk (~> 2.6)
     dry-core (1.0.1)
       concurrent-ruby (~> 1.0)
       zeitwerk (~> 2.6)
@@ -64,7 +85,7 @@ GEM
       multipart-post (~> 2)
     faraday-net_http (3.3.0)
       net-http
-    ffi (1.17.0-x86_64-linux-gnu)
+    ffi (1.15.5)
     hashie (5.0.0)
     http-cookie (1.0.7)
       domain_name (~> 0.5)
@@ -106,7 +127,7 @@ GEM
     nokogiri (1.16.7-x86_64-linux)
       racc (~> 1.4)
     numerizer (0.1.1)
-    pg (1.5.8)
+    pg (1.5.9)
     pry (0.14.2)
       coderay (~> 1.1)
       method_source (~> 1.0)
@@ -120,7 +141,7 @@ GEM
     rubyntlm (0.6.5)
       base64
     securerandom (0.3.1)
-    sequel (5.85.0)
+    sequel (5.86.0)
       bigdecimal
     srt (0.1.5)
     tzinfo (2.0.6)
@@ -152,6 +173,8 @@ DEPENDENCIES
   roda
   sequel
   srt
+  tdlib-ruby!
+  tdlib-schema!
   telegram-bot-ruby!
   whisper.cpp
 
