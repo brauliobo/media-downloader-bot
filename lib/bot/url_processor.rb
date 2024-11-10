@@ -58,7 +58,7 @@ class Bot
         info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.number
         info.title = Bot::Helpers.limit info.title, percent: 90
 
-        return @st.error VID_MAX_NOTICE if info.duration >= VID_MAX_LENGTH.to_i
+        return @st.error VID_MAX_NOTICE if !from_admin?(msg) and info.duration >= VID_MAX_LENGTH.to_i
 
         SymMash.new(
           url:  url,
@@ -106,7 +106,7 @@ class Bot
         end
 
         #bcmd << " --cookies #{opts.cookie}" if opts.cookie
-        #bcmd << " --cookies-from-browser #{opts.cookie}" if opts.cookie and from_admin? msg # FIXME: depends on unit user
+        #bcmd << " --cookies-from-browser #{opts.cookie}" if opts.cookie and from_admin? # FIXME: depends on unit user
         # user-agent can slowdown on youtube
         #bcmd << " --user-agent '#{USER_AGENT}'" unless uri.host.index 'facebook'
 
