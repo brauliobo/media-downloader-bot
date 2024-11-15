@@ -58,7 +58,7 @@ class Bot
         info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.number
         info.title = Bot::Helpers.limit info.title, percent: 90
 
-        return @st.error VID_MAX_NOTICE if !from_admin?(msg) and info.duration >= VID_MAX_LENGTH.to_i
+        return @st.error VID_MAX_NOTICE if Zipper.size_mb_limit and !from_admin?(msg) and info.duration >= VID_MAX_LENGTH.to_i
 
         SymMash.new(
           url:  url,
