@@ -5,6 +5,7 @@ class Zipper
 
   VID_WIDTH    = 640
   VID_PERCENT  = 0.99
+  PRESET       = 'faster'
 
   TIME_REGEX   = /(?:\d?\d:)(?:\d?\d:)\d\d/
 
@@ -73,7 +74,7 @@ class Zipper
         szopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
         cmd: <<-EOC
 #{FFMPEG} #{H264_OPTS} -i %{infile} -vf "#{VF_SCALE_M2}%{vf}" #{VFR_OPTS} %{iopts} \
-  -c:v #{H264_CODEC} -crf %{quality} -preset veryfast %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
+  -c:v #{H264_CODEC} -crf %{quality} -preset #{PRESET} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
 
@@ -84,11 +85,11 @@ class Zipper
       h265: {
         ext:    :mp4,
         mime:   'video/mp4',
-        opts:   {width: VID_WIDTH, quality: H264_QUALITY+5, abrate: 64, acodec: :aac, percent: VID_PERCENT}, #whatsapp can't handle opus in h264
+        opts:   {width: VID_WIDTH, quality: H264_QUALITY, abrate: 64, acodec: :aac, percent: VID_PERCENT}, #whatsapp can't handle opus in h265
         szopts: "-maxrate:v %{maxrate}",
         cmd: <<-EOC
 #{FFMPEG} -i %{infile} -vf "#{VF_SCALE_M2}%{vf}" #{VFR_OPTS} %{iopts} \
-  -c:v libx265 -crf %{quality} -preset ultrafast %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
+  -c:v libx265 -crf %{quality} -preset #{PRESET} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
 
