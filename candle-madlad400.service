@@ -1,0 +1,19 @@
+[Unit]
+Description=candle-madlad400
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=braulio
+Nice=19
+
+WorkingDirectory=/srv/candle
+ExecStart=cargo run --release --example quantized-t5 --features cuda -- --model-id google/madlad400-7b-mt-bt --weight-file ./madlad400-7b-bt-model-q4k.gguf --temperature 0
+
+Environment=PATH=/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
