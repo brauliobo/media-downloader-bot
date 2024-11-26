@@ -1,5 +1,7 @@
 require_relative 'translator/nllb_serve'
 require_relative 'translator/ollama'
+require_relative 'translator/llamacpp_api'
+require_relative 'translator/madlad400'
 
 class Translator
 
@@ -7,7 +9,7 @@ class Translator
 
   extend BACKEND_CLASS
 
-  def self.translate_srt srt, from:, to:
+  def self.translate_srt srt, to:, from: nil
     srt    = SRT::File.parse_string srt
     srt.lines.reject!{ |l| l.text.blank? } # workaround whisper issue
     lines  = srt.lines.flat_map{ |line| line.text }

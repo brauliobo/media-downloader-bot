@@ -5,8 +5,8 @@ module Subtitler
   MODEL = File.expand_path ENV['WHISPER_MODEL']
   raise "subtitler: can't find model" unless File.exist? MODEL
 
-  RUN_PATH    = "/run/media_downloader_bot"
-  SOCKET_PATH = if File.writable? RUN_PATH then RUN_PATH else "#{__dir__}/../tmp" end + '/whisper.cpp.socket'
+  mattr_accessor :api
+  self.api = ENV['WHISPER_API']
 
   def self.init
     $model ||= Whisper::Model.new MODEL
@@ -32,10 +32,9 @@ module Subtitler
   def self.start_api
     Subtitler.init
     server = Puma::Server.new Api.freeze.app
-    server.add_unix_listener SOCKET_PATH
+    server.add_tcp_port URI.parse(api).port
     server.run.join
 
-    at_exit{ File.unlink SOCKET_PATH }
     sleep 1 until File.exist? SOCKET_PATH
   end
 
@@ -52,6 +51,11 @@ module Subtitler
     req.set_form_data obj
     res = @http.request req
     SymMash.new JSON.parse res.body
+  end
+
+  def self.api_open?
+    uri = URI.parse api
+    Socket.tcp(uri.host, uri.port, connect_timeout: 5){ true } rescue false
   end
 
 end
