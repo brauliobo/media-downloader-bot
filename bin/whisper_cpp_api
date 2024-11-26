@@ -1,8 +1,9 @@
 #!/usr/bin/env ruby
 
+ENV['WHISPER'] = '1'
+
 require_relative '../lib/bot'
 
-Subtitler.start_api
+Subtitler::WhisperCpp.start_api
 
-sleep 1.day while true
 

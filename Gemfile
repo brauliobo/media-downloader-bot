@@ -20,7 +20,6 @@ gem 'puma'
 
 gem 'addressable'
 gem 'mechanize'
-gem 'net_http_unix'
 
 gem 'srt'
 
