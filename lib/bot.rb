@@ -12,7 +12,7 @@ require 'tmpdir'
 require 'shellwords'
 require 'rack/mime'
 require 'mechanize'
-require 'net_http_unix'
+require 'roda'
 
 require 'srt'
 require 'iso-639'
@@ -23,6 +23,7 @@ require_relative 'exts/peach'
 require_relative 'zipper'
 require_relative 'prober'
 require_relative 'sh'
+require_relative 'subtitler'
 require_relative 'tagger'
 require_relative 'translator'
 
@@ -40,10 +41,7 @@ if ENV['DB']
   require_relative 'bot/session' if !$0.index('sequel') and DB
 end
 
-if ENV['WHISPER']
-  require 'whisper.cpp'
-  require_relative 'subtitler'
-end
+require 'whisper.cpp' if ENV['WHISPER']
 
 class Bot
 
