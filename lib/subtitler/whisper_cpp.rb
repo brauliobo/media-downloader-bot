@@ -14,6 +14,7 @@ class Subtitler
       WhisperCpp.init
       $mutex.synchronize do
         $model.transcribe_from_file path, format: 'srt'
+        sleep 1
       end
     end
 
@@ -41,9 +42,10 @@ class Subtitler
 
     class Api < Roda
       plugin :indifferent_params
+      include WhisperCpp
       route do |r|
         r.post do
-          res = WhisperCpp.local_transcribe params[:path][:tempfile].path
+          res = local_transcribe params[:path][:tempfile].path
           res.to_h.to_json
         end
       end
