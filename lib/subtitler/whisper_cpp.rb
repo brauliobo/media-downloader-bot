@@ -13,8 +13,8 @@ class Subtitler
     def local_transcribe path
       WhisperCpp.init
       $mutex.synchronize do
+        sleep 1 # try concurrency fix
         $model.transcribe_from_file path, format: 'srt'
-        sleep 1
       end
     end
 
