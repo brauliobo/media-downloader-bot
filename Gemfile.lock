@@ -121,13 +121,11 @@ GEM
     net-http-digest_auth (1.4.1)
     net-http-persistent (4.0.4)
       connection_pool (~> 2.2)
-    net_http_unix (0.2.2)
     nio4r (2.7.3)
     nkf (0.2.0)
     nokogiri (1.16.7-x86_64-linux)
       racc (~> 1.4)
     numerizer (0.1.1)
-    pg (1.5.9)
     pry (0.14.2)
       coderay (~> 1.1)
       method_source (~> 1.0)
@@ -141,15 +139,13 @@ GEM
     rubyntlm (0.6.5)
       base64
     securerandom (0.3.1)
-    sequel (5.86.0)
-      bigdecimal
     srt (0.1.5)
     tzinfo (2.0.6)
       concurrent-ruby (~> 1.0)
     uri (0.13.1)
     webrick (1.8.2)
     webrobots (0.1.2)
-    whisper.cpp (0.3.3)
+    whisper.cpp (0.3.4)
       ffi (~> 1.15)
     zeitwerk (2.7.0)
 
@@ -165,13 +161,10 @@ DEPENDENCIES
   hashie
   iso-639
   mechanize
-  net_http_unix
-  pg
   pry
   puma
   rack
   roda
-  sequel
   srt
   tdlib-ruby!
   tdlib-schema!
