@@ -3,6 +3,7 @@ require 'active_support/all'
 require 'telegram/bot'
 Dir.chdir __dir__ do
   require 'dotenv'
+  Dotenv.load  '../.env.user'
   Dotenv.load! '../.env'
 end
 
@@ -27,8 +28,10 @@ require_relative 'subtitler'
 require_relative 'tagger'
 require_relative 'translator'
 
+require_relative 'tl_bot'
+require_relative 'td_bot'
+
 require_relative 'bot/status'
-require_relative 'bot/helpers'
 require_relative 'bot/url_shortner'
 require_relative 'bot/processor'
 require_relative 'bot/file_processor'
@@ -45,33 +48,21 @@ require 'whisper.cpp' if ENV['WHISPER']
 
 class Bot
 
-  attr_reader :bot
-  delegate :api, to: :bot
+  attr_reader :bot, :tdbot
 
-  include Helpers
-  self.bot_name = 'media_downloader_bot'
+  def initialize
+  end
 
-  self.error_delete_time = 3.hours
-
-  def initialize token
-    @token = token
+  def mock_start
+    TlBot.mock
+    @bot = TlBot.new nil
   end
 
   def start
-    wait_net_up
-    Telegram::Bot::Client.run @token, logger: Logger.new(STDOUT) do |bot|
-      @bot = bot
+    #wait_net_up
 
-      puts 'bot: started, listening'
-      #start_webserver
-      @bot.listen do |msg|
-        Thread.new do
-          next unless msg.is_a? Telegram::Bot::Types::Message
-          react msg
-        end
-        Thread.new{ sleep 1 and abort } if @exit # wait for other msg processing and trigger systemd restart
-      end
-    end
+    start_td_bot
+    start_tl_bot
   end
 
   START_MSG = <<-EOS
@@ -91,13 +82,36 @@ https://web.facebook.com/groups/590968084832296/posts/920964005166034 audio
 https://soundcloud.com/br-ulio-bhavamitra/sets/didi-gunamrta caption number
 EOS
 
+  def start_td_bot
+    return if ENV['SKIP_TDBOT']
+    @tdbot = TDBot.connect
+    @tdbot.listen do |msg|
+      Thread.new do
+        react msg, bot: @tdbot
+      end
+    end
+  end
+
+  def start_tl_bot
+    return if ENV['SKIP_BOT']
+    @bot = TlBot.connect
+    @bot.listen do |msg|
+      Thread.new do
+        next unless msg.is_a? Telegram::Bot::Types::Message
+        react SymMash.new(msg.to_h), bot: @bot
+      end
+      Thread.new{ sleep 1 and abort } if @exit # wait for other msg processing and trigger systemd restart
+    end
+  end
+
   def send_help msg
-    send_message msg, mnfe(START_MSG)
+    msg.bot.send_message msg, mnfe(START_MSG)
   end
 
   BLOCKED_USERS = ENV['BLOCKED_USERS'].split.map(&:to_i)
 
-  def react msg
+  def react msg, bot: @bot
+    msg.bot = bot
     return if msg.text.blank? and msg.video.blank? and msg.audio.blank?
     return send_help msg if msg.text&.starts_with? '/start'
     return send_help msg if msg.text&.starts_with? '/help'
@@ -110,10 +124,10 @@ EOS
 
   def download msg
     msg    = SymMash.new msg.to_h
-    worker = Worker.new self, msg
+    worker = Worker.new msg.bot, msg
     resp   = worker.process
   ensure
-    delete_message msg, resp.message_id, wait: nil if resp
+    bot.delete_message msg, resp.message_id, wait: nil if resp
   end
 
 end

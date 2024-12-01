@@ -8,10 +8,10 @@ class Bot
     attr_reader :dir
     attr_reader :opts
 
-    delegate_missing_to :bot
-
     class_attribute :tmpdir
     self.tmpdir = ENV['TMPDIR'] || Dir.tmpdir
+
+    delegate_missing_to :bot
 
     def initialize bot, msg
       @bot = bot
@@ -47,7 +47,6 @@ class Bot
         procs = msg.text.split("\n").flat_map do |l|
           klass.new line: l, **popts
         end
-
         msg.resp = send_message msg, me('Downloading metadata...')
         procs.each.with_index do |p, i|
           inputs[i] = p.download

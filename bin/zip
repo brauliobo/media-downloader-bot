@@ -19,7 +19,7 @@ Zipper.size_mb_limit = ENV['SIZE_MB_LIMIT']&.to_i
 Subtitler.local = true if defined? Subtitler
 
 class Stdout
-  include Bot::Helpers
+  include TlBot::Helpers
   mock
 end
 bot = Stdout.new

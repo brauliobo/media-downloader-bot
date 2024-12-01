@@ -1,10 +1,9 @@
 #!/usr/bin/env ruby
 
 require_relative '../lib/bot'
-require_relative '../lib/td_user'
 
-TdUser.connect
+$td.bot = TDBot.connect
 
-TdUser.__binding__.pry
+TDBot.__binding__.pry
 
 sleep 1 while true

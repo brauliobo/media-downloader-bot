@@ -2,8 +2,8 @@
 
 require_relative '../lib/bot'
 
-Bot.mock
-bot = Bot.new nil
+bot = Bot.new
+bot.mock_start
 msg = ARGV[0]
 puts "reacting to message: #{msg}"
 bot.react SymMash.new(

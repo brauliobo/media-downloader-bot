@@ -1,7 +1,7 @@
 require 'puma'
 require 'roda'
 
-class Bot
+class TlBot
   module Helpers
 
     MAX_CAPTION = 1024
