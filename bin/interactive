@@ -3,7 +3,7 @@
 require_relative '../lib/bot'
 require 'pry'
 
-bot = Bot.new ENV['TOKEN']
-Thread.new{ bot.start }
-Pry.start bot
+$bot = Bot.new
+Thread.new{ $bot.start }
+Pry.start $bot
 

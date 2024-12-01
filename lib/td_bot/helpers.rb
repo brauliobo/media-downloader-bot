@@ -1,9 +1,11 @@
-module Tdlib
+class TDBot
   module Helpers
 
     TD.configure do |config|
       config.client.api_id   = ENV['TDLIB_API_ID']
       config.client.api_hash = ENV['TDLIB_API_HASH']
+      config.client.database_directory = "#{Dir.pwd}/.tdlib/db"
+      config.client.files_directory    = "#{Dir.pwd}/.tdlib/files"
     end
     TD::Api.set_log_verbosity_level 0
 
@@ -11,6 +13,32 @@ module Tdlib
     included do
       class_attribute :td, :client
       self.client = self.td = TD::Client.new timeout: 1.minute
+    end
+
+    def listen
+      client.on TD::Types::Update::NewMessage do |update|
+        msg = update.message
+        msg = SymMash.new(
+          chat: {id: msg.chat_id},
+          from: {id: msg.sender_id.user_id},
+          text: msg.content.text&.text,
+        ).merge! msg.to_h
+        yield msg
+      end
+    end
+
+    def send_message msg, text, type: 'message', chat_id: msg.chat_id
+      text    = TD::Types::FormattedText.new text: text, entities: []
+      content = TD::Types::InputMessageContent::Text.new clear_draft: false, text: text
+      rmsg    = client.send_message(
+        chat_id:               chat_id,
+        input_message_content: content,
+        reply_to:              nil,
+        options:               {},
+        reply_markup:          nil,
+        message_thread_id:     nil,
+      )
+      rmsg.wait
     end
 
     def read_state

@@ -2,6 +2,11 @@ converted
 
 models
 
+# private
+.env.user
+.tdlib/db
+.tdlib/files
+
 # bundle deployment
 vendor
 
