@@ -1,11 +1,11 @@
 class Translator
-  class LlamacppApi
+  module LlamacppApi
 
-    class_attribute :api_host
-    class_attribute :api_path
+    mattr_accessor :api_host
+    mattr_accessor :api_path
     self.api_path = '/v1/chat/completions'
 
-    class_attribute :http
+    mattr_accessor :http
     self.http = Mechanize.new
 
     def translate text, to:, from: nil
