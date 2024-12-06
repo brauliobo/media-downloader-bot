@@ -127,7 +127,7 @@ EOS
     worker = Worker.new msg.bot, msg
     resp   = worker.process
   ensure
-    bot.delete_message msg, resp.message_id, wait: nil if resp
+    msg.bot.delete_message msg, resp.message_id, wait: nil if resp
   end
 
 end

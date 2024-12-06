@@ -3,6 +3,6 @@
 require_relative '../lib/bot'
 require 'pry'
 
-bot = Bot.new ENV['TOKEN']
+bot = Bot.new
 Pry.start bot
 
