@@ -9,6 +9,7 @@ class Translator
 
     mattr_accessor :http
     self.http = Mechanize.new
+    self.http.read_timeout = 10.minutes.to_i
 
     HEADERS = { 
       'Content-Type' => 'application/json',
