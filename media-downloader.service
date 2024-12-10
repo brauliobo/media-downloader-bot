@@ -22,6 +22,7 @@ RuntimeDirectoryMode=0755
 ExecStartPre=/usr/bin/curl ifconfig.co
 
 WorkingDirectory=/srv/media-downloader-bot
+ReadWritePaths=/srv/media-downloader-bot
 ExecStart=/usr/local/rvm/wrappers/ruby-3.3.6/bundle exec bin/bot
 
 Environment="TL_BOT_TOKEN=xxx"

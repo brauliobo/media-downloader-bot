@@ -1,6 +1,4 @@
 require 'bundler/setup'
-require 'active_support/all'
-require 'telegram/bot'
 Dir.chdir __dir__ do
   require 'dotenv'
   Dotenv.load  '../.env.user'
@@ -9,6 +7,8 @@ end
 
 require 'pry' rescue nil # fails with systemd
 
+require 'active_support/all'
+require 'telegram/bot'
 require 'tmpdir'
 require 'shellwords'
 require 'rack/mime'
@@ -44,8 +44,6 @@ if ENV['DB']
   require_relative 'bot/session' if !$0.index('sequel') and DB
 end
 
-require 'whisper.cpp' if ENV['WHISPER']
-
 class Bot
 
   attr_reader :bot, :tdbot
@@ -59,8 +57,6 @@ class Bot
   end
 
   def start
-    #wait_net_up
-
     start_td_bot
     start_tl_bot
   end
