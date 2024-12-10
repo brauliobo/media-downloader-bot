@@ -3,6 +3,7 @@
 ENV['WHISPER'] = '1'
 
 require_relative '../lib/bot'
+require 'whisper.cpp'
 
 Subtitler::WhisperCpp.start_api
 
