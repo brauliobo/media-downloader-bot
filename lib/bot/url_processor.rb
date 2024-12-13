@@ -25,6 +25,7 @@ class Bot
       cmd  = base_cmd + " --write-info-json --no-clean-infojson --skip-download -o 'info-%(playlist_index)s.%(ext)s' '#{url}'"
       cmd << " --match-filter 'live_status != is_upcoming'" if url.match /youtu\.?be/
       cmd << " --age-limit 18"
+      # for the title
       cmd << " --extractor-args 'youtube:lang=#{opts.lang}'" if opts.lang
 
       o, e, st = Sh.run cmd, chdir: dir
@@ -87,10 +88,16 @@ class Bot
     def base_cmd
       @base_cmd ||= self.then do
         bcmd  = DOWN_CMD.dup
-        bcmd << " --embed-subs"
         bcmd << " --paths #{tmp}"
         bcmd << " --cache-dir #{tmp}/cache"
         bcmd << ' -s' if opts.simulate
+
+        videof  = 'bestvideo[ext=mp4]'
+        audiof  = 'bestaudio[ext=mp4]'
+        audiof += "[language=#{opts.lang}]" if opts.lang
+        audiof  = 'mp3-320' if url.index 'bandcamp.com' # FIXME: it is choosing flac
+
+        bcmd << " -f '#{videof}+#{audiof}/best'"
 
         ml = if opts.audio then AL else VL end
         opts.limit ||= ml if opts.after
@@ -98,7 +105,6 @@ class Bot
         bcmd << " --playlist-end #{opts.limit.to_i}" if opts.limit.to_i > 0
 
         bcmd << ' -x' if opts.audio
-        bcmd << ' -f mp3-320/best' if url.index 'bandcamp.com' # FIXME: it is choosing flac
 
         opts.slice(*DOWN_OPTS).each do |k,v|
           v.gsub! "'", "\'"

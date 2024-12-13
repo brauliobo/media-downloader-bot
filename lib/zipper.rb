@@ -173,13 +173,15 @@ class Zipper
   end
 
   attr_reader :infile, :outfile, :probe, :stl
+  attr_reader :info
   attr_reader :iopts, :oopts, :dopts, :opts
   attr_reader :vf
   attr_reader :type
 
-  def initialize infile, outfile, probe: nil, stl: nil, opts: SymMash.new
+  def initialize infile, outfile, info: nil, probe: nil, stl: nil, opts: SymMash.new
     @infile  = infile
     @outfile = outfile
+    @info    = info
     @probe   = probe || Prober.for(infile)
     @stl     = stl
 
@@ -254,6 +256,14 @@ class Zipper
 
     cmd << " #{Sh.escape outfile}"
     Sh.run cmd
+  end
+
+  def subtitle_to_srt body, ext
+    File.write "sub.#{ext}", body
+    srt, _, _ = Sh.run <<-EOC
+ffmpeg -i sub.#{ext} -c:s subrip -f srt -
+    EOC
+    srt
   end
 
   def extract_srt lang_or_index
@@ -348,16 +358,30 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
     opts.width = vstrea.width if vstrea.width < opts.width
   end
 
+  def fetch_subtitle
+    if (subs = info&.subtitles).present?
+      cads = [opts.lang, :en, subs.keys.first]
+      lng,lsub =  cads.each.with_object([]){ |s, r| break r = [s, subs[s]] if subs.key? s }
+      return if lng.blank?
+      lsub = lsub.find{ |s| s.ext == 'vtt' } || lsubs[0]
+      sub  = http.get(lsub.url).body
+      srt  = subtitle_to_srt sub, lsub.ext
+      lng  = opts.lang
+    elsif (esubs = probe.streams.select{ |s| s.codec_type == 'subtitle' }).present?
+      esubs.each{ |s| s.lang = ISO_639.find_by_code(s.tags.language).alpha2 }
+      index = esubs.index{ |s| opts.lang == s.lang } || 0
+      srt   = extract_srt index
+      lng   = esubs[index].lang
+    end
+    [srt, lng]
+  end
+
   def apply_subtitle
-    subs = probe.streams.select{ |s| s.codec_type == 'subtitle' }
-    return if subs.blank? and !opts.lang and !opts.subs
+    return if !opts.lang and !opts.subs
 
-    subs.each{ |s| s.lang = ISO_639.find_by_code(s.tags.language).alpha2 }
+    srt,lng = fetch_subtitle if !opts.gensubs
 
-    if !opts.gensubs and subs.present? and index = (subs.index{ |s| opts.lang == s.lang } || 0)
-      srt = extract_srt index
-      lng = subs[index].lang
-    else
+    if !srt
       stl&.update 'transcribing'
       res = Subtitler.transcribe infile
       srt,lng = res.output,res.language
@@ -369,11 +393,10 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
     end
     stl&.update 'transcoding'
 
-    tmpf = Tempfile.new 'subtitle'
-    tmpf.write srt
-    tmpf.flush
+    subp = 'sub.srt'
+    File.write subp, srt
 
-    vf << ",subtitles=#{Sh.escape tmpf.path}:force_style='#{SUB_STYLE}'"
+    vf << ",subtitles=#{subp}:force_style='#{SUB_STYLE}'"
   end
 
   def metadata_args
@@ -384,6 +407,10 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
     cmd.strip!
     cmd << " -ss #{opts.ss}" if opts.ss&.match(TIME_REGEX)
     cmd << " -to #{opts.to}" if opts.to&.match(TIME_REGEX)
+  end
+
+  def http
+    Mechanize.new
   end
 
 end

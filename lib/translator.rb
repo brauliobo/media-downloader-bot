@@ -9,12 +9,14 @@ class Translator
 
   extend BACKEND_CLASS
 
+  BATCH_SIZE = 50
+
   def self.translate_srt srt, to:, from: nil
     srt    = SRT::File.parse_string srt
     srt.lines.reject!{ |l| l.text.blank? } # workaround whisper issue
     lines  = srt.lines.flat_map{ |line| line.text }
-    tlines = lines.each_slice(100).with_object [] do |slines, stlines|
-      stlines.concat translate slines, from: from, to: to
+    tlines = lines.each_slice(BATCH_SIZE).with_object [] do |slines, stlines|
+      stlines.concat Array.wrap(translate slines, from: from, to: to)
     end
 
     i = 0
