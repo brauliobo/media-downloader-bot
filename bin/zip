@@ -16,7 +16,7 @@ while ARGV[-1] and !File.exist?(ARGV[-1]) and ARGV[-1] !~ URI::regexp
 end
 
 Zipper.size_mb_limit = ENV['SIZE_MB_LIMIT']&.to_i
-Subtitler.local = true if defined? Subtitler
+Subtitler.local = true if ENV['WHISPER_LOCAL']
 
 class Stdout
   include TlBot::Helpers

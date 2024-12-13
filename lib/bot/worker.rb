@@ -31,9 +31,15 @@ class Bot
       @session.save
     end
 
-    def process
+    def workdir &block
       Dir.mktmpdir "mdb-", tmpdir do |dir|
-        @dir   = dir
+        @dir = dir
+        Dir.chdir dir, &block
+      end
+    end
+
+    def process
+      workdir do
         procs  = []
         inputs = []
 

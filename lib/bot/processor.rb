@@ -176,7 +176,7 @@ class Bot
       fn_out  = "#{dir}/#{fn_out}"
 
       o, e, st = Zipper.send "zip_#{i.type.name}", i.fn_in, fn_out,
-        opts: i.opts, probe: i.probe, stl: @stl
+        opts: i.opts, probe: i.probe, stl: @stl, info: i.info
       if st != 0
         @stl.error "convert failed: #{o}\n#{e}"
         return
