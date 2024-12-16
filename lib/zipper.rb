@@ -61,6 +61,8 @@ class Zipper
   THREADS = ENV['THREADS']&.to_i || 16
   FFMPEG  = "ffmpeg -y -threads #{THREADS} -loglevel error"
 
+  INPUT_LINE = "-i %{infile} %{iopts} -vf \"#{VF_SCALE_M2}%{vf}\" #{VFR_OPTS}"
+
   Types = SymMash.new(
     video: {
       name:     :video,
@@ -73,7 +75,7 @@ class Zipper
         opts:   {width: VID_WIDTH, quality: H264_QUALITY, abrate: 64, acodec: :aac, percent: VID_PERCENT}, #whatsapp can't handle opus in h264
         szopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
         cmd: <<-EOC
-#{FFMPEG} #{H264_OPTS} -i %{infile} -vf "#{VF_SCALE_M2}%{vf}" #{VFR_OPTS} %{iopts} \
+#{FFMPEG} #{H264_OPTS} #{INPUT_LINE} \
   -c:v #{H264_CODEC} -crf %{quality} -preset #{PRESET} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
@@ -88,7 +90,7 @@ class Zipper
         opts:   {width: VID_WIDTH, quality: H264_QUALITY, abrate: 64, acodec: :aac, percent: VID_PERCENT}, #whatsapp can't handle opus in h265
         szopts: "-maxrate:v %{maxrate}",
         cmd: <<-EOC
-#{FFMPEG} -i %{infile} -vf "#{VF_SCALE_M2}%{vf}" #{VFR_OPTS} %{iopts} \
+#{FFMPEG} #{INPUT_LINE} \
   -c:v libx265 -crf %{quality} -preset #{PRESET} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
@@ -102,7 +104,7 @@ class Zipper
         #szopts: "-svtav1-params mbr=%{maxrate}",
         szopts: '',
         cmd:  <<-EOC
-#{FFMPEG} -i %{infile} -vf "#{VF_SCALE_M2}%{vf}" #{VFR_OPTS} %{iopts} \
+#{FFMPEG} #{INPUT_LINE} \
   -c:v libsvtav1 -crf %{quality} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
@@ -117,7 +119,7 @@ class Zipper
         opts:   {width: VID_WIDTH, vbrate: 835, abrate: 64, acodec: :aac, percent: 0.97},
         szopts: "-rc vbr -b:v %{maxrate}",
         cmd:  <<-EOC
-#{FFMPEG} -i %{infile} -vf "#{VF_SCALE_M8}%{vf}" #{VFR_OPTS} %{iopts} \
+#{FFMPEG} -i %{infile} %{iopts} -vf "#{VF_SCALE_M8}%{vf}" #{VFR_OPTS} \
   -c:v libsvt_vp9 %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
@@ -220,8 +222,8 @@ class Zipper
 
     cmd = opts.format.cmd % {
       infile:   Sh.escape(infile),
-      vf:       vf,
       iopts:    iopts,
+      vf:       vf,
       oopts:    oopts,
       width:    opts.width,
       quality:  opts.quality,
@@ -397,6 +399,9 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
     File.write subp, srt
 
     vf << ",subtitles=#{subp}:force_style='#{SUB_STYLE}'"
+    # add as input too so it can be extracted
+    iopts << " -i #{subp}"
+    oopts << " -c:s mov_text -metadata:s:s:0 language=#{lng} -metadata:s:s:0 title=#{lng}"
   end
 
   def metadata_args
