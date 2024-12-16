@@ -392,6 +392,7 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
     if opts.lang and opts.lang != lng
       stl&.update 'translating'
       srt = Translator.translate_srt srt, from: lng, to: opts.lang
+      lng = opts.lang
     end
     stl&.update 'transcoding'
 
