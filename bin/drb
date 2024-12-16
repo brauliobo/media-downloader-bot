@@ -1,0 +1,7 @@
+#!/usr/bin/env ruby
+
+require_relative '../lib/bot'
+
+obj = DRbObject.new_with_uri ENV['DRB_WORKER']
+Pry.start obj
+
