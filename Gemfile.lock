@@ -159,6 +159,7 @@ DEPENDENCIES
   chronic
   chronic_duration
   dotenv
+  drb
   hashie
   iso-639
   mechanize

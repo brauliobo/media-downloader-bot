@@ -14,6 +14,7 @@ require 'shellwords'
 require 'rack/mime'
 require 'mechanize'
 require 'roda'
+require 'drb/drb'
 
 require 'srt'
 require 'iso-639'
@@ -49,6 +50,7 @@ class Bot
   attr_reader :bot, :tdbot
 
   def initialize
+    DRb.start_service ENV['DRB_WORKER'], self
   end
 
   def mock_start
