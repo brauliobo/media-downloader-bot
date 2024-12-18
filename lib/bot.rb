@@ -8,7 +8,6 @@ end
 require 'pry' rescue nil # fails with systemd
 
 require 'active_support/all'
-require 'telegram/bot'
 require 'tmpdir'
 require 'shellwords'
 require 'rack/mime'
@@ -29,9 +28,6 @@ require_relative 'subtitler'
 require_relative 'tagger'
 require_relative 'translator'
 
-require_relative 'tl_bot'
-require_relative 'td_bot'
-
 require_relative 'bot/status'
 require_relative 'bot/url_shortner'
 require_relative 'bot/processor'
@@ -50,7 +46,6 @@ class Bot
   attr_reader :bot
 
   def initialize
-    DRb.start_service ENV['DRB_WORKER'], self
   end
 
   def mock_start
@@ -60,6 +55,7 @@ class Bot
 
   def fork name
     Kernel.fork do
+      DB.disconnect if defined? DB
       Process.setproctitle name
       yield
     end
@@ -90,16 +86,21 @@ EOS
 
   def start_td_bot
     return if ENV['SKIP_TDBOT']
+    require_relative 'td_bot'
+    DRb.start_service ENV['DRB_WORKER_TD'], self
+
     @bot = TDBot.connect
     @bot.listen do |msg|
       Thread.new do
         react msg
       end
     end
+    sleep 1.year while true
   end
 
   def start_tl_bot
     return if ENV['SKIP_BOT']
+    require_relative 'tl_bot'
     @bot = TlBot.connect
     @bot.listen do |msg|
       Thread.new do
