@@ -47,7 +47,7 @@ end
 
 class Bot
 
-  attr_reader :bot, :tdbot
+  attr_reader :bot
 
   def initialize
     DRb.start_service ENV['DRB_WORKER'], self
@@ -55,12 +55,20 @@ class Bot
 
   def mock_start
     TlBot.mock
-    @bot = TlBot.new nil
+    @bot = Bot.new nil
+  end
+
+  def fork name
+    Kernel.fork do
+      Process.setproctitle name
+      yield
+    end
   end
 
   def start
-    start_td_bot
-    start_tl_bot
+    fork('tdlib'){ start_td_bot }
+    fork('tlbot'){ start_tl_bot }
+    sleep 1.year while true
   end
 
   START_MSG = <<-EOS
@@ -82,10 +90,10 @@ EOS
 
   def start_td_bot
     return if ENV['SKIP_TDBOT']
-    @tdbot = TDBot.connect
-    @tdbot.listen do |msg|
+    @bot = TDBot.connect
+    @bot.listen do |msg|
       Thread.new do
-        react msg, bot: @tdbot
+        react msg
       end
     end
   end
@@ -96,7 +104,7 @@ EOS
     @bot.listen do |msg|
       Thread.new do
         next unless msg.is_a? Telegram::Bot::Types::Message
-        react SymMash.new(msg.to_h), bot: @bot
+        react SymMash.new(msg.to_h)
       end
       Thread.new{ sleep 1 and abort } if @exit # wait for other msg processing and trigger systemd restart
     end
@@ -108,7 +116,7 @@ EOS
 
   BLOCKED_USERS = ENV['BLOCKED_USERS'].split.map(&:to_i)
 
-  def react msg, bot: @bot
+  def react msg
     msg.bot = bot
     return if msg.text.blank? and msg.video.blank? and msg.audio.blank?
     return send_help msg if msg.text&.starts_with? '/start'
