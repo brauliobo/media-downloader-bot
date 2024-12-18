@@ -1,3 +1,4 @@
+require 'telegram/bot'
 require_relative 'tl_bot/helpers'
 
 class TlBot
