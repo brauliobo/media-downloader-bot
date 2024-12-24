@@ -33,6 +33,7 @@ class Subtitler
 
     def self.start_api
       init
+      require 'puma'
       server = Puma::Server.new Api.freeze.app
       server.add_tcp_listener api.host, api.port
       server.run.tap do

@@ -5,6 +5,7 @@ ENV['SKIP_META'] = '1'
 
 Dir.chdir File.expand_path "#{File.realpath __dir__}/.." do
   require_relative '../lib/bot'
+  require_relative '../lib/tl_bot'
 end
 
 opts  = SymMash.new metadata: {}
