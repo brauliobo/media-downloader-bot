@@ -101,6 +101,7 @@ EOS
   def start_tl_bot
     return if ENV['SKIP_BOT']
     require_relative 'tl_bot'
+
     @bot = TlBot.connect
     @bot.listen do |msg|
       Thread.new do
