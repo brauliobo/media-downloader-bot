@@ -54,11 +54,12 @@ class Bot
   end
 
   def fork name
-    Kernel.fork do
+    pid = Kernel.fork do
       DB.disconnect if defined? DB
       Process.setproctitle name
       yield
     end
+    Process.detach pid
   end
 
   def start
@@ -91,7 +92,7 @@ EOS
 
     @bot = TDBot.connect
     @bot.listen do |msg|
-      Thread.new do
+      fork msg.text do
         react msg
       end
     end
@@ -104,8 +105,8 @@ EOS
 
     @bot = TlBot.connect
     @bot.listen do |msg|
-      Thread.new do
-        next unless msg.is_a? Telegram::Bot::Types::Message
+      next unless msg.is_a? Telegram::Bot::Types::Message
+      fork msg.text do
         react SymMash.new(msg.to_h)
       end
       Thread.new{ sleep 1 and abort } if @exit # wait for other msg processing and trigger systemd restart
@@ -113,7 +114,7 @@ EOS
   end
 
   def send_help msg
-    msg.bot.send_message msg, mnfe(START_MSG)
+    msg.bot.send_message msg, bot.mnfe(START_MSG)
   end
 
   BLOCKED_USERS = ENV['BLOCKED_USERS'].split.map(&:to_i)
@@ -128,6 +129,7 @@ EOS
     download msg
   rescue => e
     report_error msg, e rescue nil
+    raise
   end
 
   def download msg
