@@ -32,10 +32,11 @@ class Bot
     end
 
     def workdir &block
-      Dir.mktmpdir "mdb-", tmpdir do |dir|
-        @dir = dir
-        Dir.chdir dir, &block
-      end
+      @dir = Dir.mktmpdir "mdb-", tmpdir
+      Dir.chdir dir, &block
+    ensure
+      # remove the directory.
+      FileUtils.remove_entry dir
     end
 
     def process
