@@ -1,6 +1,5 @@
 require 'puma'
 require 'roda'
-require_relative '../msg_helpers'
 
 class TlBot
   module Helpers

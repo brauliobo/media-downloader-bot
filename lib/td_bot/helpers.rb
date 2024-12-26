@@ -1,5 +1,3 @@
-require_relative '../msg_helpers'
-
 class TDBot
   module Helpers
 

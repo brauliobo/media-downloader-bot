@@ -27,6 +27,7 @@ require_relative 'sh'
 require_relative 'subtitler'
 require_relative 'tagger'
 require_relative 'translator'
+require_relative 'msg_helpers'
 
 require_relative 'bot/status'
 require_relative 'bot/url_shortner'
@@ -54,22 +55,28 @@ class Bot
   end
 
   def fork name
+    pid = Kernel.fork do
+      DB.disconnect if defined? DB
+      Process.setproctitle name
+      yield
+    end
+    Process.detach pid
+    pid
+  end
+
+  def daemon name, &block
     Thread.new do
       loop do
-        pid = Kernel.fork do
-          DB.disconnect if defined? DB
-          Process.setproctitle name
-          yield
-        end
-        Process.detach pid
+        puts "#{name}: starting"
+        pid = self.fork name, &block
         Process.wait pid
       end
     end
   end
 
   def start
-    fork('tdlib'){ start_td_bot }
-    fork('tlbot'){ start_tl_bot }
+    daemon('tdlib'){ start_td_bot }
+    daemon('tlbot'){ start_tl_bot }
     sleep 1.year while true
   end
 
