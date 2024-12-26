@@ -85,7 +85,6 @@ class Bot
             sleep 0.1 while up_queue.first != pos if ordered
             stline.update 'uploading'
             upload i
-
           ensure
             p.cleanup
             up_queue.delete pos

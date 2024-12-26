@@ -4,6 +4,7 @@ require_relative 'tl_bot/helpers'
 class TlBot
 
   include Helpers
+
   self.bot_name = 'media_downloader_bot'
   self.error_delete_time = 3.hours
 

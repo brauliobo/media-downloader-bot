@@ -1,22 +1,17 @@
 require 'puma'
 require 'roda'
+require_relative '../msg_helpers'
 
 class TlBot
   module Helpers
 
-    MAX_CAPTION = 1024
+    include MsgHelpers
 
     RETRY_ERRORS = [
       Faraday::ConnectionFailed,
       Faraday::TimeoutError,
       Net::OpenTimeout, Net::WriteTimeout,
     ]
-
-    def self.limit i, size: MAX_CAPTION, percent: 100
-      size = size * percent.to_f/100 if percent
-      return i.first size if i.size > size
-      i
-    end
 
     extend ActiveSupport::Concern
     included do
@@ -70,16 +65,6 @@ class TlBot
     end
     def wait_net_up
       sleep 1 while !net_up?
-    end
-
-    def from_admin? msg = self.msg
-      msg.from.id == ADMIN_CHAT_ID
-    end
-    def report_group? msg = self.msg
-      msg.chat.id == REPORT_CHAT_ID
-    end
-    def in_group? msg = self.msg
-      msg.from.id == msg.chat.id
     end
 
     def edit_message msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', **params
@@ -186,27 +171,6 @@ class TlBot
     def parse_text text, parse_mode:
       return unless text
       Helpers.limit text
-    end
-
-    MARKDOWN_NON_FORMAT = %w[\# / [ ] ( ) " ~ # + - = | { } . ! < >]
-    MARKDOWN_FORMAT     = %w[* _ `]
-    MARKDOWN_ALL        = MARKDOWN_FORMAT + MARKDOWN_NON_FORMAT
-    def me t
-      MARKDOWN_ALL.each{ |c| t = t.gsub c, "\\#{c}" }
-      t
-    end
-    def mnfe t
-      MARKDOWN_NON_FORMAT.each{ |c| t = t.gsub c, "\\#{c}" }
-      t
-    end
-    def mfe t
-      MARKDOWN_FORMAT.each{ |c| t = t.gsub c, "\\#{c}" }
-      t
-    end
-
-    def he t
-      return if t.blank?
-      CGI::escapeHTML t
     end
 
   end
