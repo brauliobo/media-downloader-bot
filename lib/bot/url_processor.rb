@@ -57,7 +57,7 @@ class Bot
         info.title = info.track if info.track # e.g. bandcamp
         info.title = info.description || info.title if info.webpage_url.index 'instagram.com'
         info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.number
-        info.title = TlBot::Helpers.limit info.title, percent: 90
+        info.title = MsgHelpers.limit info.title, percent: 90
 
         return @st.error VID_MAX_NOTICE if Zipper.size_mb_limit and !from_admin?(msg) and info.duration >= VID_MAX_LENGTH.to_i
 

@@ -19,10 +19,10 @@ GIT
       tdlib-schema
 
 GIT
-  remote: https://github.com/southbridgeio/tdlib-schema.git
-  revision: 959a735a7de7f81976b767ffb5e852069ae9c37c
+  remote: https://github.com/brauliobo/tdlib-schema.git
+  revision: 1f98a3437de79d97d684abec6437f38e842aa92b
   specs:
-    tdlib-schema (1.7.0.3)
+    tdlib-schema (1.7.0.4)
       dry-struct (~> 1.0)
       dry-types (~> 1.0)
 
@@ -129,7 +129,6 @@ GEM
     nokogiri (1.16.7-x86_64-linux)
       racc (~> 1.4)
     numerizer (0.1.1)
-    pg (1.5.9)
     pry (0.14.2)
       coderay (~> 1.1)
       method_source (~> 1.0)
@@ -143,8 +142,6 @@ GEM
     rubyntlm (0.6.5)
       base64
     securerandom (0.4.1)
-    sequel (5.87.0)
-      bigdecimal
     srt (0.1.5)
     tzinfo (2.0.6)
       concurrent-ruby (~> 1.0)
@@ -166,12 +163,10 @@ DEPENDENCIES
   hashie
   iso-639
   mechanize
-  pg
   pry
   puma
   rack
   roda
-  sequel
   srt
   tdlib-ruby!
   tdlib-schema!

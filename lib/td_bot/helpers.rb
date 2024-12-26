@@ -1,5 +1,9 @@
+require_relative '../msg_helpers'
+
 class TDBot
   module Helpers
+
+    include MsgHelpers
 
     TD.configure do |config|
       config.client.api_id   = ENV['TDLIB_API_ID']
@@ -23,6 +27,7 @@ class TDBot
           from: {id: msg.sender_id.user_id},
           text: msg.content.text&.text,
         ).merge! msg.to_h
+        STDERR.puts msg.text
         yield msg
       end
     end
@@ -38,7 +43,7 @@ class TDBot
         reply_markup:          nil,
         message_thread_id:     nil,
       )
-      rmsg.wait
+      rmsg.wait!
     end
 
     def read_state

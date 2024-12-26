@@ -86,7 +86,7 @@ https://soundcloud.com/br-ulio-bhavamitra/sets/didi-gunamrta caption number
 EOS
 
   def start_td_bot
-    return if ENV['SKIP_TDBOT']
+    return if ENV['SKIP_TD_BOT']
     require_relative 'td_bot'
     DRb.start_service ENV['DRB_WORKER_TD'], self
 
@@ -100,7 +100,7 @@ EOS
   end
 
   def start_tl_bot
-    return if ENV['SKIP_BOT']
+    return if ENV['SKIP_TL_BOT']
     require_relative 'tl_bot'
 
     @bot = TlBot.connect
