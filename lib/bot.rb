@@ -54,12 +54,17 @@ class Bot
   end
 
   def fork name
-    pid = Kernel.fork do
-      DB.disconnect if defined? DB
-      Process.setproctitle name
-      yield
+    Thread.new do
+      loop do
+        pid = Kernel.fork do
+          DB.disconnect if defined? DB
+          Process.setproctitle name
+          yield
+        end
+        Process.detach pid
+        Process.wait pid
+      end
     end
-    Process.detach pid
   end
 
   def start
