@@ -170,7 +170,7 @@ class TlBot
 
     def parse_text text, parse_mode:
       return unless text
-      Helpers.limit text
+      MsgHelpers.limit text
     end
 
   end
