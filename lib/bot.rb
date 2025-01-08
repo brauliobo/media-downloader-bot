@@ -36,6 +36,9 @@ require_relative 'bot/file_processor'
 require_relative 'bot/url_processor'
 require_relative 'bot/worker'
 
+# deprecated behavior
+ ActiveSupport.to_time_preserves_timezone = :zone
+
 if ENV['DB']
   require 'sequel'
   require_relative 'sequel'
