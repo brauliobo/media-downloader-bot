@@ -361,6 +361,7 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
   end
 
   def fetch_subtitle
+    # scraped subtitles
     if (subs = info&.subtitles).present?
       cads = [opts.lang, :en, subs.keys.first]
       lng,lsub =  cads.each.with_object([]){ |s, r| break r = [s, subs[s]] if subs.key? s }
@@ -368,13 +369,15 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
       lsub = lsub.find{ |s| s.ext == 'vtt' } || lsubs[0]
       sub  = http.get(lsub.url).body
       srt  = subtitle_to_srt sub, lsub.ext
-      lng  = opts.lang
+
+    # embedded subtitles
     elsif (esubs = probe.streams.select{ |s| s.codec_type == 'subtitle' }).present?
       esubs.each{ |s| s.lang = ISO_639.find_by_code(s.tags.language).alpha2 }
       index = esubs.index{ |s| opts.lang == s.lang } || 0
       srt   = extract_srt index
       lng   = esubs[index].lang
     end
+
     [srt, lng]
   end
 
