@@ -21,7 +21,7 @@ class Subtitler
     protected
 
     MODEL = File.expand_path ENV['WHISPER_MODEL']
-    raise "subtitler: can't find model" unless File.exist? MODEL
+    raise "subtitler: can't find model" unless File.exist? MODEL if ENV['WHISPER']
 
     mattr_accessor :api
     self.api = URI.parse ENV['WHISPER_API']
