@@ -51,12 +51,17 @@ class Zipper
       encode:  '-c:a libmp3lame -abr 1 -b:a %{abrate}k'.freeze,
     },
   )
-  SUB_STYLE = {
-    Fontsize:      20,
-    Fontname:      'Roboto',
-    OutlineColour: '&H40000000',
-    BorderStyle:   3,
-  }.map{ |k,v| "#{k}=#{v}" }.join(',')
+
+  SUB_STYLE = SymMash.new(
+    Fontsize:      30,
+    Fontname:      'Roboto Medium',
+    PrimaryColour: '&H00ffffff',
+    OutlineColour: '&H80000000',
+    BorderStyle:   1,
+    Alignment:     2,
+    MarginV:       32,
+    Shadow:        2
+  ).freeze
 
   THREADS = ENV['THREADS']&.to_i || 16
   FFMPEG  = "ffmpeg -y -threads #{THREADS} -loglevel error"
@@ -352,8 +357,8 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
   def check_width
     vstrea = probe.streams.find{ |s| s.codec_type == 'video' }
     if opts.vf&.index 'transpose'
-    else # portrait image
-      opts.width /= 2 if vstrea.width < vstrea.height
+    elsif vstrea.width < vstrea.height # portrait image
+      opts.width /= 2
     end
 
     # lower resolution
@@ -402,7 +407,12 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
     subp = 'sub.srt'
     File.write subp, srt
 
-    vf << ",subtitles=#{subp}:force_style='#{SUB_STYLE}'"
+    vstrea = probe.streams.find{ |s| s.codec_type == 'video' }
+    style  = SUB_STYLE.dup
+    style.Fontsize /= 2 if vstrea.width < vstrea.height # portrait image
+    style  = style.map{ |k,v| "#{k}=#{v}" }.join(',')
+
+    vf << ",subtitles=#{subp}:force_style='#{style}'"
     # add as input too so it can be extracted
     iopts << " -i #{subp}"
     oopts << " -c:s mov_text -metadata:s:s:0 language=#{lng} -metadata:s:s:0 title=#{lng}"
