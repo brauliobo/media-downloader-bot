@@ -53,14 +53,14 @@ class Zipper
   )
 
   SUB_STYLE = SymMash.new(
-    Fontsize:      30,
+    Fontsize:      20,
     Fontname:      'Roboto Medium',
     PrimaryColour: '&H00ffffff',
     OutlineColour: '&H80000000',
     BorderStyle:   1,
     Alignment:     2,
     MarginV:       32,
-    Shadow:        2
+    Shadow:        1,
   ).freeze
 
   THREADS = ENV['THREADS']&.to_i || 16
@@ -409,7 +409,7 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
 
     vstrea = probe.streams.find{ |s| s.codec_type == 'video' }
     style  = SUB_STYLE.dup
-    style.Fontsize /= 2 if vstrea.width < vstrea.height # portrait image
+    style.Fontsize *= 3.0/5 if vstrea.width < vstrea.height # portrait image
     style  = style.map{ |k,v| "#{k}=#{v}" }.join(',')
 
     vf << ",subtitles=#{subp}:force_style='#{style}'"
