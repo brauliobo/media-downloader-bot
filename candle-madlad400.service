@@ -8,10 +8,11 @@ User=braulio
 Nice=19
 
 WorkingDirectory=/srv/candle
-ExecStart=cargo run --release --example quantized-t5 --features cuda -- --model-id google/madlad400-7b-mt-bt --weight-file ./madlad400-7b-bt-model-q4k.gguf --temperature 0
+
+#ExecStart=cargo run --release --example quantized-t5 --features cuda -- --model-id google/madlad400-7b-mt-bt --weight-file ./madlad400-7b-bt-model-q4k.gguf --temperature 0
+ExecStart=/srv/candle/target/release/examples/quantized-t5 --model-id google/madlad400-7b-mt-bt --weight-file ./madlad400-7b-bt-model-q4k.gguf --temperature 0
 
 Environment=PATH=/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
 
 RestartSec=30
 
