@@ -276,8 +276,8 @@ ffmpeg -i sub.#{ext} -c:s subrip -f srt -
   def extract_srt lang_or_index
     srtfile = "#{File.basename infile, File.extname(infile)}.srt"
 
-    index = lang_or_index
-    index = probe.streams.select{ |s| s.codec_type == 'subtitle' }.index{ |s| s.tags.language == index } || 0
+    subs  = probe.streams.select{ |s| s.codec_type == 'subtitle' }
+    index = if lang_or_index.is_a? Numeric then lang_or_index else subs.index{ |s| s.tags.language == index } end
 
     srt, _, _ = Sh.run <<-EOC
 ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt -
@@ -378,9 +378,11 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
     # embedded subtitles
     elsif (esubs = probe.streams.select{ |s| s.codec_type == 'subtitle' }).present?
       esubs.each{ |s| s.lang = ISO_639.find_by_code(s.tags.language).alpha2 }
-      index = esubs.index{ |s| opts.lang == s.lang } || 0
+      index = esubs.index{ |s| opts.lang.in? [s.lang, s.tags.language, s.tags.title] }
+      return unless index
       srt   = extract_srt index
       lng   = esubs[index].lang
+      opts.lang = lng
     end
 
     [srt, lng]
@@ -389,7 +391,7 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
   def apply_subtitle
     return if !opts.lang and !opts.subs
 
-    srt,lng = fetch_subtitle if !opts.gensubs
+    srt,lng = fetch_subtitle if !opts.gensubs and opts.lang
 
     if !srt
       stl&.update 'transcribing'
