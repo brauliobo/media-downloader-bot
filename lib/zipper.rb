@@ -66,7 +66,9 @@ class Zipper
   THREADS = ENV['THREADS']&.to_i || 16
   FFMPEG  = "ffmpeg -y -threads #{THREADS} -loglevel error"
 
-  INPUT_LINE = "-i %{infile} %{iopts} -vf \"#{VF_SCALE_M2}%{vf}\" #{VFR_OPTS}"
+  FG_SEP      = ','.freeze
+  INPUT_LINE  = "-i %{infile} %{iopts} -filter_complex \"#{VF_SCALE_M2}#{FG_SEP}%{fgraph}\" #{VFR_OPTS} %{maps}"
+  INPUT8_LINE = "-i %{infile} %{iopts} -filter_complex \"#{VF_SCALE_M8}#{FG_SEP}%{fgraph}\" #{VFR_OPTS} %{maps}"
 
   Types = SymMash.new(
     video: {
@@ -124,7 +126,7 @@ class Zipper
         opts:   {width: VID_WIDTH, vbrate: 835, abrate: 64, acodec: :aac, percent: 0.97},
         szopts: "-rc vbr -b:v %{maxrate}",
         cmd:  <<-EOC
-#{FFMPEG} -i %{infile} %{iopts} -vf "#{VF_SCALE_M8}%{vf}" #{VFR_OPTS} \
+#{FFMPEG} #{INPUT8_LINE} \
   -c:v libsvt_vp9 %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
@@ -182,7 +184,8 @@ class Zipper
   attr_reader :infile, :outfile, :probe, :stl
   attr_reader :info
   attr_reader :iopts, :oopts, :dopts, :opts
-  attr_reader :vf
+  attr_reader :fgraph, :maps
+  attr_reader :duration
   attr_reader :type
 
   def initialize infile, outfile, info: nil, probe: nil, stl: nil, opts: SymMash.new
@@ -196,8 +199,10 @@ class Zipper
     @opts = opts
     @opts.reverse_merge! dopts
 
-    @vf = ''
-    @vf << ",#{opts.vf}" if opts.vf.present?
+    @fgraph = []
+    @fgraph << opts.vf if opts.vf.present?
+
+    @maps = []
 
     opts.speed   = opts.speed&.to_f
     opts.width   = opts.width&.to_i
@@ -210,6 +215,9 @@ class Zipper
 
   def zip_video
     @type = :video
+
+    opts.speed ||= 1
+    @duration    = probe.format.duration.to_f / opts.speed
 
     check_width
     reduce_framerate
@@ -228,7 +236,8 @@ class Zipper
     cmd = opts.format.cmd % {
       infile:   Sh.escape(infile),
       iopts:    iopts,
-      vf:       vf,
+      fgraph:   fgraph.join(FG_SEP),
+      maps:     maps.map{ |m| "-map #{m}" }.join(' '),
       oopts:    oopts,
       width:    opts.width,
       quality:  opts.quality,
@@ -289,7 +298,7 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
 
   def reduce_framerate
     return unless opts.nompdecimate
-    vf << ",mpdecimate"
+    fgraph << 'mpdecimate'
   end
 
   def limit_framerate
@@ -311,14 +320,12 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
   def apply_audio_size_limit
     return unless size_mb_limit
 
-    duration = probe.format.duration.to_f / opts.speed
     opts.bitrate = (opts.percent * 8*size_mb_limit*1000).to_f / duration if self.class.max_audio_duration(opts.bitrate) < duration / 60
   end
 
   def apply_video_size_limits
     return unless size_mb_limit
 
-    duration = probe.format.duration.to_f / opts.speed
     minutes  = (duration / 60).ceil
 
     # reduce resolution
@@ -347,11 +354,11 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
   end
 
   def apply_speed
-    if opts.speed
-      vf    << ",setpts=PTS*1/#{opts.speed}" if video?
-      oopts << " -af atempo=#{opts.speed}"
-    else opts.speed = 1
-    end
+    return if opts.speed == 1
+
+    fgraph << "setpts=PTS/#{opts.speed}" if video?
+    #iopts  << " -t #{duration}" # attached subtitle mess with the length of the video
+    oopts  << " -af atempo=#{opts.speed}"
   end
 
   def check_width
@@ -414,10 +421,10 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
     style.Fontsize *= 3.0/5 if vstrea.width < vstrea.height # portrait image
     style  = style.map{ |k,v| "#{k}=#{v}" }.join(',')
 
-    vf << ",subtitles=#{subp}:force_style='#{style}'"
+    fgraph << "subtitles=#{subp}:force_style='#{style}'"
     # add as input too so it can be extracted
     iopts << " -i #{subp}"
-    oopts << " -c:s mov_text -metadata:s:s:0 language=#{lng} -metadata:s:s:0 title=#{lng}"
+    oopts << " -c:s mov_text -metadata:s:s:0 language=#{lng} -metadata:s:s:0 title=#{lng}" if opts.speed == 1 # doesn't get the speed change
   end
 
   def metadata_args
