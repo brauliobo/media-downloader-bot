@@ -27,6 +27,7 @@ bot = Stdout.new
 st  = Bot::Status.new do |line|
   puts line
 end
+stl = Bot::Status::Line.new '', status: st
 
 path = if ARGV.size > 1 then ARGV else ARGV.first.split "\n" end
 path.peach do |u|
@@ -37,7 +38,7 @@ path.peach do |u|
 
   if klass == Bot::UrlProcessor
     line = "#{u} #{lopts.join ' '}"
-    prc  = klass.new(dir:, line:, bot:, st:)
+    prc  = klass.new(dir:, line:, bot:, st:, stline: stl)
     prc.download.peach do |i|
       prc.download_one i
       prc.handle_input i

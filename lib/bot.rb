@@ -53,8 +53,9 @@ class Bot
   end
 
   def mock_start
+    require_relative 'tl_bot'
     TlBot.mock
-    @bot = Bot.new nil
+    @bot = TlBot.new self
   end
 
   def fork name

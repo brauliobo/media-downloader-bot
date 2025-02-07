@@ -21,7 +21,7 @@ module MsgHelpers
     msg.from.id == msg.chat.id
   end
 
-  MARKDOWN_NON_FORMAT = %w[\# / [ ] ( ) " ~ # + - = | { } . ! < >]
+  MARKDOWN_NON_FORMAT = %w[\# / [ ] ( ) ' " ~ # + - = | { } . ! ? < >]
   MARKDOWN_FORMAT     = %w[* _ `]
   MARKDOWN_ALL        = MARKDOWN_FORMAT + MARKDOWN_NON_FORMAT
 
