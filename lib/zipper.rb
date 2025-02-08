@@ -204,10 +204,13 @@ class Zipper
 
     @maps = []
 
-    opts.speed   = opts.speed&.to_f
+    opts.speed   = opts.speed&.to_f || 1
     opts.width   = opts.width&.to_i
     opts.quality = opts.quality&.to_i
     opts.abrate  = opts.abrate&.to_i
+
+    @duration    = probe.format.duration.to_f / opts.speed
+
   end
 
   def video?; @type == :video; end
@@ -215,9 +218,6 @@ class Zipper
 
   def zip_video
     @type = :video
-
-    opts.speed ||= 1
-    @duration    = probe.format.duration.to_f / opts.speed
 
     check_width
     reduce_framerate
