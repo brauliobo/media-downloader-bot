@@ -404,6 +404,7 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
       stl&.update 'transcribing'
       res = Subtitler.transcribe infile
       srt,lng = res.output,res.language
+      info.language ||= lng # instagram doesn't have language metadata
     end
 
     if opts.lang and opts.lang != lng
