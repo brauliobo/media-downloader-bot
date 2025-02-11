@@ -80,6 +80,8 @@ class TlBot
       resp = SymMash.new JSON.parse e.response.body
       return if resp.description.match(/exactly the same as a current content/)
       raise
+    rescue
+      # ignore
     end
 
     class ::Telegram::Bot::Types::Message
@@ -108,7 +110,7 @@ class TlBot
     rescue => e
       retry if e.message.index 'Internal Server Error'
       binding.pry if ENV['PRY_SEND_MESSAGE']
-      raise
+      raise "#{e.class}: #{e.message}, msg: #{text}"
     end
 
     def delete_message msg, id, wait: 30.seconds
