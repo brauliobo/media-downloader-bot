@@ -105,7 +105,8 @@ class Bot
       opts   = i.opts
 
       if info.language and opts.lang
-        info.title = Translator.translate info.title, from: info.language, to: opts.lang
+        info.title       = Translator.translate info.title,       from: info.language, to: opts.lang
+        info.description = Translator.translate info.description, from: info.language, to: opts.lang if opts.description
       end
 
       caption = msg_caption i
