@@ -129,7 +129,6 @@ GEM
     nokogiri (1.16.7-x86_64-linux)
       racc (~> 1.4)
     numerizer (0.1.1)
-    pg (1.5.9)
     pry (0.14.2)
       coderay (~> 1.1)
       method_source (~> 1.0)
@@ -137,14 +136,12 @@ GEM
     puma (6.4.3)
       nio4r (~> 2.0)
     racc (1.8.1)
-    rack (3.1.7)
+    rack (3.1.12)
     roda (3.85.0)
       rack
     rubyntlm (0.6.5)
       base64
     securerandom (0.4.1)
-    sequel (5.87.0)
-      bigdecimal
     srt (0.1.5)
     tzinfo (2.0.6)
       concurrent-ruby (~> 1.0)
@@ -166,12 +163,10 @@ DEPENDENCIES
   hashie
   iso-639
   mechanize
-  pg
   pry
   puma
   rack
   roda
-  sequel
   srt
   tdlib-ruby!
   tdlib-schema!
