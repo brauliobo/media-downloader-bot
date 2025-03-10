@@ -145,7 +145,7 @@ GEM
     srt (0.1.5)
     tzinfo (2.0.6)
       concurrent-ruby (~> 1.0)
-    uri (0.13.1)
+    uri (0.13.2)
     webrick (1.8.2)
     webrobots (0.1.2)
     zeitwerk (2.7.0)
