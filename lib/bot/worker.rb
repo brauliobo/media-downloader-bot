@@ -1,3 +1,8 @@
+require 'faraday'
+require 'faraday/multipart'
+
+Faraday::UploadIO = Faraday::Multipart::FilePart unless defined?(Faraday::UploadIO)
+
 class Bot
   class Worker
 
@@ -33,14 +38,14 @@ class Bot
 
     def workdir &block
       @dir = Dir.mktmpdir "mdb-", tmpdir
-      Dir.chdir dir, &block
+      yield @dir
     ensure
-      # remove the directory.
       FileUtils.remove_entry dir
     end
 
     def process
-      workdir do
+      workdir do |work_dir|
+        @dir = work_dir
         procs  = []
         inputs = []
 
@@ -49,11 +54,9 @@ class Bot
           edit_message msg, msg.resp.message_id, *args, text: text, **params
         end
 
-        popts = {dir:, bot:, msg:, st: @st}
+        popts = {dir: work_dir, bot:, msg:, st: @st}
         klass = if msg.audio.present? or msg.video.present? then Bot::FileProcessor else Bot::UrlProcessor end
-        procs = msg.text.split("\n").flat_map do |l|
-          klass.new line: l, **popts
-        end
+        procs = msg.text.to_s.split("\n").reject(&:blank?).map { |l| klass.new line: l, **popts }
         msg.resp = send_message msg, me('Downloading metadata...')
         procs.each.with_index do |p, i|
           inputs[i] = p.download

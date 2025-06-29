@@ -3,6 +3,7 @@ converted
 models
 
 # private
+.bundle
 .env.user
 .tdlib/db
 .tdlib/files

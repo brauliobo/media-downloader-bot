@@ -197,6 +197,7 @@ class Zipper
 
     @iopts = ''; @oopts = ''; @dopts = opts.format.opts
     @opts = opts
+    @opts.custom_width = true if opts.width
     @opts.reverse_merge! dopts
 
     @fgraph = []
@@ -227,6 +228,7 @@ class Zipper
 
     apply_subtitle
     apply_speed
+    apply_cut
     szopts = apply_video_size_limits
 
     aenc   = AUDIO_ENC[opts.acodec&.to_sym] || AUDIO_ENC.opus
@@ -246,8 +248,8 @@ class Zipper
       szopts:   szopts,
       metadata: metadata_args,
     }
-    apply_opts cmd, opts
 
+    cmd.strip!
     cmd << " #{Sh.escape outfile}"
     Sh.run cmd
   end
@@ -260,6 +262,7 @@ class Zipper
 
     apply_speed
     apply_audio_size_limit
+    apply_cut
 
     cmd = opts.format.cmd % {
       infile:   Sh.escape(infile),
@@ -268,8 +271,8 @@ class Zipper
       abrate:   opts.bitrate,
       metadata: metadata_args,
     }
-    apply_opts cmd, opts
 
+    cmd.strip!
     cmd << " #{Sh.escape outfile}"
     Sh.run cmd
   end
@@ -325,6 +328,7 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
 
   def apply_video_size_limits
     return unless size_mb_limit
+    return if opts.custom_width
 
     minutes  = (duration / 60).ceil
 
@@ -432,10 +436,9 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
     (opts.metadata || {}).map{ |k,v| "-metadata #{Sh.escape k}=#{Sh.escape v}" }.join ' '
   end
 
-  def apply_opts cmd, opts
-    cmd.strip!
-    cmd << " -ss #{opts.ss}" if opts.ss&.match(TIME_REGEX)
-    cmd << " -to #{opts.to}" if opts.to&.match(TIME_REGEX)
+  def apply_cut
+    iopts << " -ss #{opts.ss}" if opts.ss&.match(TIME_REGEX)
+    oopts << " -to #{opts.to}" if opts.to&.match(TIME_REGEX)
   end
 
   def http
