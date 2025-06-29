@@ -17,7 +17,7 @@ class Bot
     Rack::Mime::MIME_TYPES['.aac']  = 'audio/x-aac'
     Rack::Mime::MIME_TYPES['.mkv']  = 'video/x-matroska'
 
-    BLOCKED_DOMAINS = ENV['BLOCKED_DOMAINS'].split
+    BLOCKED_DOMAINS = ENV['BLOCKED_DOMAINS'].split.map{ |u| URI.parse u }
 
     attr_reader :bot
     attr_reader :msg
@@ -56,7 +56,7 @@ class Bot
       @args = @line.split(/[[:space:]]+/)
       @uri  = Addressable::URI.parse @args.shift if @args.first =~ URI::regexp
       @url  = @uri&.to_s
-      raise 'Blocked domain' if BLOCKED_DOMAINS.any?{ |d| @uri.host.index d }
+      raise 'Blocked domain' if @uri && @uri.host && BLOCKED_DOMAINS.any?{ |d| @uri.host.index d }
 
       @opts = @args.each.with_object SymMash.new do |a, h|
         self.class.add_opt h, a

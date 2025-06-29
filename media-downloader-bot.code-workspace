@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../tdlib-ruby"
+		},
+		{
+			"path": "../tdlib-schema"
+		}
+	],
+	"settings": {}
+}

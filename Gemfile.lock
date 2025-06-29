@@ -12,15 +12,23 @@ GIT
   remote: https://github.com/brauliobo/tdlib-ruby.git
   revision: bdb51809b7be8693d826526ca593d2627186c0f3
   specs:
+
+GIT
+  remote: https://github.com/brauliobo/tdlib-schema.git
+  revision: 1f98a3437de79d97d684abec6437f38e842aa92b
+  specs:
+
+PATH
+  remote: /home/braulio/Projects/tdlib-ruby
+  specs:
     tdlib-ruby (3.0.4)
       concurrent-ruby (~> 1.1)
       dry-configurable
       ffi (~> 1.15.0)
       tdlib-schema
 
-GIT
-  remote: https://github.com/brauliobo/tdlib-schema.git
-  revision: 1f98a3437de79d97d684abec6437f38e842aa92b
+PATH
+  remote: /home/braulio/Projects/tdlib-schema
   specs:
     tdlib-schema (1.7.0.4)
       dry-struct (~> 1.0)

@@ -79,8 +79,8 @@ class Bot
   end
 
   def start
-    daemon('tdlib'){ start_td_bot }
-    daemon('tlbot'){ start_tl_bot }
+    daemon('tdlib'){ start_td_bot } unless ENV['SKIP_TD_BOT']
+    daemon('tlbot'){ start_tl_bot } unless ENV['SKIP_TL_BOT']
     sleep 1.year while true
   end
 
@@ -102,13 +102,12 @@ https://soundcloud.com/br-ulio-bhavamitra/sets/didi-gunamrta caption number
 EOS
 
   def start_td_bot
-    return if ENV['SKIP_TD_BOT']
     require_relative 'td_bot'
     DRb.start_service ENV['DRB_WORKER_TD'], self
 
     @bot = TDBot.connect
     @bot.listen do |msg|
-      fork msg.text do
+      Thread.new do # can't use fork
         react msg
       end
     end
@@ -116,7 +115,6 @@ EOS
   end
 
   def start_tl_bot
-    return if ENV['SKIP_TL_BOT']
     require_relative 'tl_bot'
 
     @bot = TlBot.connect
