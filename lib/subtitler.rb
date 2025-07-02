@@ -7,5 +7,3 @@ class Subtitler
   extend BACKEND_CLASS
 
 end
-
-
