@@ -1,3 +1,5 @@
+require 'tempfile'
+
 class Zipper
 
   class_attribute :size_mb_limit
@@ -177,8 +179,8 @@ class Zipper
   def self.zip_audio *args, **params
     self.new(*args, **params).zip_audio
   end
-  def self.extract_srt infile, language
-    self.new(infile, nil, opts: SymMash.new(format: {})).extract_srt language
+  def self.extract_vtt infile, language
+    self.new(infile, nil, opts: SymMash.new(format: {})).extract_vtt language
   end
 
   attr_reader :infile, :outfile, :probe, :stl
@@ -277,24 +279,34 @@ class Zipper
     Sh.run cmd
   end
 
-  def subtitle_to_srt body, ext
+  def subtitle_to_vtt body, ext
     File.write "sub.#{ext}", body
-    srt, _, _ = Sh.run <<-EOC
-ffmpeg -i sub.#{ext} -c:s subrip -f srt -
+    vtt, _, _ = Sh.run <<-EOC
+ffmpeg -i sub.#{ext} -c:s webvtt -f webvtt -
     EOC
-    srt
+    vtt
   end
 
-  def extract_srt lang_or_index
-    srtfile = "#{File.basename infile, File.extname(infile)}.srt"
+  def extract_vtt lang_or_index
+    vttfile = "#{File.basename infile, File.extname(infile)}.vtt"
 
     subs  = probe.streams.select{ |s| s.codec_type == 'subtitle' }
-    index = if lang_or_index.is_a? Numeric then lang_or_index else subs.index{ |s| s.tags.language == index } end
+    index = if lang_or_index.is_a? Numeric then lang_or_index else subs.index{ |s| s.tags.language == lang_or_index } end
 
-    srt, _, _ = Sh.run <<-EOC
-ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt -
+    vtt, _, _ = Sh.run <<-EOC
+ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s webvtt -f webvtt -
     EOC
-    srt
+    vtt
+  end
+
+  def self.audio_to_wav path
+    wpath = 'audio.wav'
+
+    cmd = ['ffmpeg', '-i', Sh.escape(path), '-y', Sh.escape(wpath)].join(' ')
+    _, _, st = Sh.run cmd
+    raise 'ffmpeg failed' unless st.success?
+
+    wpath
   end
 
   protected
@@ -384,42 +396,48 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s srt -f srt 
       return if lng.blank?
       lsub = lsub.find{ |s| s.ext == 'vtt' } || lsubs[0]
       sub  = http.get(lsub.url).body
-      srt  = subtitle_to_srt sub, lsub.ext
+      vtt  = subtitle_to_vtt sub, lsub.ext
 
     # embedded subtitles
     elsif (esubs = probe.streams.select{ |s| s.codec_type == 'subtitle' }).present?
       esubs.each{ |s| s.lang = ISO_639.find_by_code(s.tags.language).alpha2 }
       index = esubs.index{ |s| opts.lang.in? [s.lang, s.tags.language, s.tags.title] }
       return unless index
-      srt   = extract_srt index
+      vtt   = extract_vtt index
       lng   = esubs[index].lang
       opts.lang = lng
     end
 
-    [srt, lng]
+    [vtt, lng]
   end
 
   def apply_subtitle
     return if !opts.lang and !opts.subs
 
-    srt,lng = fetch_subtitle if !opts.gensubs and opts.lang
+    vtt,lng = fetch_subtitle if !opts.gensubs and opts.lang
 
-    if !srt
+    if !vtt
       stl&.update 'transcribing'
       res = Subtitler.transcribe infile
-      srt,lng = res.output,res.language
+      tsp,lng = res.output, res.lang
       info.language ||= lng # instagram doesn't have language metadata
     end
 
     if opts.lang and opts.lang != lng
       stl&.update 'translating'
-      srt = Translator.translate_srt srt, from: lng, to: opts.lang
+      if tsp
+        tsp = Subtitler.translate tsp, from: lng, to: opts.lang
+        vtt = Subtitler.vtt_convert tsp
+      else
+        vtt = Translator.translate_vtt vtt, from: lng, to: opts.lang
+      end
+
       lng = opts.lang
     end
     stl&.update 'transcoding'
 
-    subp = 'sub.srt'
-    File.write subp, srt
+    subp = 'sub.vtt'
+    File.write subp, vtt
 
     vstrea = probe.streams.find{ |s| s.codec_type == 'video' }
     style  = SUB_STYLE.dup

@@ -32,8 +32,6 @@ if ENV['DB']
   gem 'sequel'
 end
 
-gem 'whisper.cpp', path: path_for('../ruby-whisper.cpp') if ENV['WHISPER']
-
 group :development do
   gem 'pry'
 end

@@ -113,7 +113,7 @@ class Bot
 
       i
     end
-    
+
     def tag i
       Tagger.add_cover i.fn_out, i.thumb if i.thumb and i.type == Types.audio
       # ... the rest is using FFmpeg
@@ -175,11 +175,13 @@ class Bot
       fn_out.gsub! '/', ', ' # not escaped by shellwords
       fn_out  = "#{dir}/#{fn_out}"
 
-      o, e, st = Zipper.send "zip_#{i.type.name}", i.fn_in, fn_out,
-        opts: i.opts, probe: i.probe, stl: @stl, info: i.info
-      if st != 0
-        @stl.error "convert failed: #{o}\n#{e}"
-        return
+      Dir.chdir dir do
+        o, e, st = Zipper.send "zip_#{i.type.name}", i.fn_in, fn_out,
+          opts: i.opts, probe: i.probe, stl: @stl, info: i.info
+        if st != 0
+          @stl.error "convert failed: #{o}\n#{e}"
+          return
+        end
       end
 
       fn_out
