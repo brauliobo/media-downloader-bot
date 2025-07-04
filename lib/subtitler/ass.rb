@@ -12,6 +12,42 @@ class Subtitler
       Shadow:        1,
     ).freeze
 
+    SECONDARY_COLOUR = '&H0000ffff'.freeze # yellow
+
+    HEADER_TEMPLATE = <<~ASS_HEADER.freeze
+      [Script Info]
+      ScriptType: v4.00+
+      Collisions: Normal
+      PlayResX: 384
+      PlayResY: 288
+      WrapStyle: 0
+      ScaledBorderAndShadow: yes
+
+      [V4+ Styles]
+      Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
+      Style: Default,%{Fontname},%{Fontsize},%{PrimaryColour},#{SECONDARY_COLOUR},%{OutlineColour},&H00000000,0,0,0,0,100,100,0,0,%{BorderStyle},0,%{Shadow},%{Alignment},10,10,%{MarginV},1
+
+      [Events]
+      Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+    ASS_HEADER
+
+    HIGHLIGHT_STYLE = '{\\bord2\\shad0\\be1\\3c&H000000&\\4c&H00ffff&}'.freeze
+
+    # Convert VTT timestamp to seconds
+    def self.parse_time t
+      return 0.0 unless (m = t.match(/(?:(\d+):)?(\d{2}):(\d{2})\.(\d{3})/))
+      h = (m[1] || 0).to_i; (h*3600) + m[2].to_i*60 + m[3].to_i + m[4].to_i/1000.0
+    end
+
+    # Format seconds to ASS time (H:MM:SS.CS)
+    def self.ass_time sec
+      cs = ((sec = sec.to_f) - sec.floor)*100
+      total = sec.floor
+      h, remainder = total.divmod 3600
+      m, s = remainder.divmod 60
+      "%d:%02d:%02d.%02d" % [h, m, s, cs.round]
+    end
+
     def self.from_vtt vtt, portrait: false, mode: :instagram
       require 'cgi'
 
@@ -19,31 +55,6 @@ class Subtitler
       vtt = vtt.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
       vtt = vtt.sub(/^\uFEFF/, '')
       vtt = vtt.sub(/^WEBVTT.*?(\r?\n){2}/m, '')
-
-      # Helper to parse VTT/ISO time into seconds
-      parse_time = lambda do |t|
-        if m = t.match(/(?:(\d+):)?(\d{2}):(\d{2})\.(\d{3})/)
-          h   = (m[1] || 0).to_i
-          min = m[2].to_i
-          s   = m[3].to_i
-          ms  = m[4].to_i
-          h * 3600 + min * 60 + s + ms / 1000.0
-        else
-          0.0
-        end
-      end
-
-      # Helper to format seconds into ASS time (H:MM:SS.CS)
-      format_time = lambda do |sec|
-        sec = sec.to_f
-        cs  = ((sec - sec.floor) * 100).round
-        cs  = 0 if cs == 100 # carry
-        total = sec.floor
-        h  = total / 3600
-        m  = (total % 3600) / 60
-        s  = total % 60
-        "%d:%02d:%02d.%02d" % [h, m, s, cs]
-      end
 
       cues = []
       lines = vtt.split(/\r?\n/)
@@ -73,31 +84,14 @@ class Subtitler
         cues << { start: start_str.strip, end: end_str.strip, text: cue_text }
       end
 
-      # Build ASS header using STYLE constants
+      # Build ASS header using STYLE constants and template
       style = STYLE.dup
       style.Fontsize = (style.Fontsize * (portrait ? 0.6 : 1)).round
-      # For instagram mode, add a style for background highlight
-      highlight_style = '{\\bord2\\shad0\\be1\\3c&H000000&\\4c&H00ffff&}'
-      header = <<~ASS_HEADER
-        [Script Info]
-        ScriptType: v4.00+
-        Collisions: Normal
-        PlayResX: 384
-        PlayResY: 288
-        WrapStyle: 0
-        ScaledBorderAndShadow: yes
-
-        [V4+ Styles]
-        Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
-        Style: Default,#{style.Fontname},#{style.Fontsize},#{style.PrimaryColour},&H0000ffff,#{style.OutlineColour},&H00000000,0,0,0,0,100,100,0,0,#{style.BorderStyle},0,#{style.Shadow},#{style.Alignment},10,10,#{style.MarginV},1
-
-        [Events]
-        Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-      ASS_HEADER
+      header = HEADER_TEMPLATE % style
 
       ass_events = cues.flat_map do |cue|
-        s_sec = parse_time.call(cue[:start])
-        e_sec = parse_time.call(cue[:end])
+        s_sec = parse_time(cue[:start])
+        e_sec = parse_time(cue[:end])
         raw = CGI.unescapeHTML(cue[:text])
         raw.gsub!(/\r?\n/, '\\N')
 
@@ -108,9 +102,9 @@ class Subtitler
           while index < segments.size
             time_str = segments[index]
             word_text = segments[index + 1] || ''
-            w_start = parse_time.call(time_str)
+            w_start = parse_time(time_str)
             next_time_str = segments[index + 2]
-            w_end = next_time_str ? parse_time.call(next_time_str) : e_sec
+            w_end = next_time_str ? parse_time(next_time_str) : e_sec
             word_times << [w_start, w_end, word_text.strip]
             index += 2
           end
@@ -120,33 +114,21 @@ class Subtitler
             word_times.each_with_index.map do |(w_start, w_end, word), idx|
               text = all_words.each_with_index.map { |w,i|
                 if i == idx
-                  "{\\c&H00ffff&}#{highlight_style}#{w}{\\r}{\\c&Hffffff&}"
+                  "{\\c&H00ffff&}#{HIGHLIGHT_STYLE}#{w}{\\r}{\\c&Hffffff&}"
                 else
                   w
                 end
               }.join(' ')
-              "Dialogue: 0,#{format_time.call(w_start)},#{format_time.call(w_end)},Default,,0,0,0,,#{text}"
+              "Dialogue: 0,#{ass_time(w_start)},#{ass_time(w_end)},Default,,0,0,0,,#{text}"
             end
           when :karaoke
             # fallback to old karaoke effect
             dur_cs = word_times.map { |w_start, w_end, _| ((w_end-w_start)*100).round }
             karaoke_text = all_words.each_with_index.map { |w,i| "{\\k#{dur_cs[i]}}#{w}" }.join(' ')
-            ["Dialogue: 0,#{format_time.call(s_sec)},#{format_time.call(e_sec)},Default,,0,0,0,,#{karaoke_text}"]
-          else
-            # fallback to instagram
-            word_times.each_with_index.map do |(w_start, w_end, word), idx|
-              text = all_words.each_with_index.map { |w,i|
-                if i == idx
-                  "{\\c&H00ffff&}#{highlight_style}#{w}{\\r}{\\c&Hffffff&}"
-                else
-                  w
-                end
-              }.join(' ')
-              "Dialogue: 0,#{format_time.call(w_start)},#{format_time.call(w_end)},Default,,0,0,0,,#{text}"
-            end
+            ["Dialogue: 0,#{ass_time(s_sec)},#{ass_time(e_sec)},Default,,0,0,0,,#{karaoke_text}"]
           end
         else
-          ["Dialogue: 0,#{format_time.call(s_sec)},#{format_time.call(e_sec)},Default,,0,0,0,,#{raw}"]
+          ["Dialogue: 0,#{ass_time(s_sec)},#{ass_time(e_sec)},Default,,0,0,0,,#{raw}"]
         end
       end.join("\n")
 
