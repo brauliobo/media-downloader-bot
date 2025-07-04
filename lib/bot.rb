@@ -105,6 +105,7 @@ EOS
     require_relative 'td_bot'
     DRb.start_service ENV['DRB_WORKER_TD'], self
 
+    Zipper.size_mb_limit = 2_000
     @bot = TDBot.connect
     @bot.listen do |msg|
       Thread.new do # can't use fork

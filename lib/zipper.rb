@@ -1,9 +1,9 @@
 require 'tempfile'
+require_relative 'subtitler/ass'
 
 class Zipper
 
   class_attribute :size_mb_limit
-  self.size_mb_limit = 50
 
   VID_WIDTH    = 640
   VID_PERCENT  = 0.99
@@ -53,17 +53,6 @@ class Zipper
       encode:  '-c:a libmp3lame -abr 1 -b:a %{abrate}k'.freeze,
     },
   )
-
-  SUB_STYLE = SymMash.new(
-    Fontsize:      20,
-    Fontname:      'Roboto Medium',
-    PrimaryColour: '&H00ffffff',
-    OutlineColour: '&H80000000',
-    BorderStyle:   1,
-    Alignment:     2,
-    MarginV:       32,
-    Shadow:        1,
-  ).freeze
 
   THREADS = ENV['THREADS']&.to_i || 16
   FFMPEG  = "ffmpeg -y -threads #{THREADS} -loglevel error"
@@ -433,21 +422,26 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s webvtt -f w
       end
 
       lng = opts.lang
+    else
+      vtt = Subtitler.vtt_convert tsp
     end
     stl&.update 'transcoding'
 
+    # generate ASS subtitle directly (scales font automatically for portrait videos)
+    vstrea = probe.streams.find{ |s| s.codec_type == 'video' }
+    is_portrait = vstrea.width < vstrea.height
+    ass_content = Subtitler::Ass.from_vtt(vtt, portrait: is_portrait, mode: :instagram)
+
+    assp = 'sub.ass'
+    File.write assp, ass_content
+    fgraph << "ass=#{assp}"
+
+    # Write VTT for embedding
     subp = 'sub.vtt'
     File.write subp, vtt
-
-    vstrea = probe.streams.find{ |s| s.codec_type == 'video' }
-    style  = SUB_STYLE.dup
-    style.Fontsize *= 3.0/5 if vstrea.width < vstrea.height # portrait image
-    style  = style.map{ |k,v| "#{k}=#{v}" }.join(',')
-
-    fgraph << "subtitles=#{subp}:force_style='#{style}'"
-    # add as input too so it can be extracted
     iopts << " -i #{subp}"
-    oopts << " -c:s mov_text -metadata:s:s:0 language=#{lng} -metadata:s:s:0 title=#{lng}" if opts.speed == 1 # doesn't get the speed change
+    # embed subtitle track if speed not changed (timestamps stay aligned)
+    oopts << " -c:s mov_text -metadata:s:s:0 language=#{lng} -metadata:s:s:0 title=#{lng}" if opts.speed == 1
   end
 
   def metadata_args
