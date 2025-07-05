@@ -4,6 +4,8 @@ require_relative 'subtitler/ass'
 class Zipper
 
   class_attribute :size_mb_limit
+  self.size_mb_limit = 50
+
 
   VID_WIDTH    = 640
   VID_PERCENT  = 0.99
@@ -155,8 +157,8 @@ class Zipper
     1000 * Zipper.size_mb_limit / (br.to_i / 8) / 60
   end
 
-  VID_DURATION_THLD = if size_mb_limit then 20 else Float::INFINITY end
-  AUD_DURATION_THLD = if size_mb_limit then max_audio_duration Types.audio.opus.opts.bitrate else Float::INFINITY end
+  VID_DURATION_THLD = -> { size_mb_limit ? 20 : Float::INFINITY }
+  AUD_DURATION_THLD = -> { size_mb_limit ? max_audio_duration(Types.audio.opus.opts.bitrate) : Float::INFINITY }
 
   # reduce width for every minutes interval exceeding VID_DURATION_THLD
   VID_WIDTH_REDUC = SymMash.new width: 80, minutes: 8
@@ -332,18 +334,19 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s webvtt -f w
     return if opts.custom_width
 
     minutes  = (duration / 60).ceil
+    vthld    = self.class.vid_duration_thld
 
     # reduce resolution
-    if minutes > VID_DURATION_THLD and opts.width > dopts.width/3
+    if minutes > vthld and opts.width > dopts.width/3
       reduc,intv  = VID_WIDTH_REDUC.values_at :width, :minutes
-      opts.width -= reduc * ((minutes - VID_DURATION_THLD).to_f / intv).ceil
+      opts.width -= reduc * ((minutes - vthld).to_f / intv).ceil
       opts.width  = dopts.width/3 if opts.width < dopts.width/3
       opts.width -= 1 if opts.width % 2 == 1
     end
     # reduce audio bitrate
-    if minutes > VID_DURATION_THLD and opts.abrate > dopts.abrate/2
+    if minutes > vthld and opts.abrate > dopts.abrate/2
       reduc,intv   = AUD_BRATE_REDUC.values_at :brate, :minutes
-      opts.abrate -= reduc * ((minutes - VID_DURATION_THLD).to_f / intv).ceil
+      opts.abrate -= reduc * ((minutes - vthld).to_f / intv).ceil
       opts.abrate  = dopts.abrate/2 if opts.abrate < dopts.abrate/2
     end
 
@@ -455,6 +458,15 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s webvtt -f w
 
   def http
     Mechanize.new
+  end
+
+  # Dynamic helpers that reevaluate the thresholds at runtime
+  def self.vid_duration_thld
+    size_mb_limit ? 20 : Float::INFINITY
+  end
+
+  def self.aud_duration_thld
+    size_mb_limit ? max_audio_duration(Types.audio.opus.opts.bitrate) : Float::INFINITY
   end
 
 end
