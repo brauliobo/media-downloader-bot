@@ -10,7 +10,17 @@ class Subtitler
     mattr_accessor :api
     self.api = URI.parse ENV['WHISPER_CPP_SERVER']
 
-    def transcribe path, format: 'verbose_json', **extra
+    # Transcribe an audio file using whisper.cpp.
+    # Params:
+    #   path        – path to audio file
+    #   format:     – whisper.cpp response_format (default: 'verbose_json')
+    #   merge_words – when true (default) contiguous tokens without a leading
+    #                 space are merged into a single word and their timings
+    #                 are combined (start of first, end of last). This fixes
+    #                 whisper.cpp artefact where a single Portuguese word is
+    #                 emitted as two tokens (e.g. " test" + "ando").
+    #   **extra     – passed directly to whisper.cpp
+    def transcribe path, format: 'verbose_json', merge_words: true, **extra
       @http ||= Net::HTTP.new(api.host, api.port).tap do |http|
         http.read_timeout = 1.hour.to_i
         http.use_ssl = api.scheme == 'https'
@@ -30,9 +40,11 @@ class Subtitler
       res = @http.request req
       out = res.body
 
-      out = SymMash.new JSON.parse out if format.to_s.index 'json'
+      out = SymMash.new JSON.parse(out) if format.to_s.index('json')
 
       lang = ISO_639.find_by_english_name(out.language.capitalize)&.alpha2 if out.is_a?(Hash) and out.language
+
+      merge_split_words!(out) if merge_words && out.respond_to?(:segments)
 
       SymMash.new output: out, lang: lang
 
@@ -78,7 +90,7 @@ class Subtitler
         start  = ts.call(seg.start)
         finish = ts.call(seg.end)
 
-        line = (seg.words || []).each_with_index.map do |w, idx|
+        line = (seg.words || []).each_with_index.map do |w,idx|
           word     = w.word.to_s.strip
           w_start  = ts.call(w.start)
           idx.zero? ? word : "<#{w_start}>#{word}"
@@ -101,9 +113,14 @@ class Subtitler
     def translate verbose_json, from:, to:
       mash = SymMash.new verbose_json
 
-      mash.segments&.each do |seg|
-        # Full sentence translation per segment
-        ttext = Translator.translate seg.text, from: from, to: to
+      segments = mash.segments || []
+      texts = segments.map(&:text)
+      translations = texts.each_slice(Translator::BATCH_SIZE).with_object([]) do |slice, acc|
+        acc.concat Array.wrap(Translator.translate slice, from: from, to: to)
+      end
+
+      segments.each_with_index do |seg, idx|
+        ttext = translations[idx].to_s
         seg.text = ttext
 
         # Tokenize and attach trailing punctuation to previous token
@@ -142,6 +159,29 @@ class Subtitler
         seg.words.reject! { |w| w.word.to_s.strip.empty? }
       end
 
+      mash
+    end
+
+    private
+
+    # Merge tokens that belong to the same word (current token doesn't start
+    # with whitespace). Updates word text, timing, and segment text.
+    def merge_split_words! mash
+      (mash.segments || []).each do |seg|
+        merged = []
+        (seg.words || []).each do |w|
+          raw = w.word.to_s
+          if merged.empty? || raw.start_with?(' ')
+            merged << w
+          else
+            prev       = merged.last
+            prev.word  = "#{prev.word}#{raw}"
+            prev.end   = w.end
+          end
+        end
+        seg.words = merged
+        seg.text  = merged.map { |tw| tw.word.to_s.strip }.join(' ')
+      end
       mash
     end
 

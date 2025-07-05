@@ -122,7 +122,6 @@ class Subtitler
               "Dialogue: 0,#{ass_time(w_start)},#{ass_time(w_end)},Default,,0,0,0,,#{text}"
             end
           when :karaoke
-            # fallback to old karaoke effect
             dur_cs = word_times.map { |w_start, w_end, _| ((w_end-w_start)*100).round }
             karaoke_text = all_words.each_with_index.map { |w,i| "{\\k#{dur_cs[i]}}#{w}" }.join(' ')
             ["Dialogue: 0,#{ass_time(s_sec)},#{ass_time(e_sec)},Default,,0,0,0,,#{karaoke_text}"]
