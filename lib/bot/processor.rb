@@ -5,10 +5,10 @@ class Bot
 
     Types = Zipper::Types
 
-    VID_TOO_LONG = "\nQuality is compromised as the video is too long to fit the #{Zipper.size_mb_limit}MB upload limit on Telegram Bots"
-    AUD_TOO_LONG = "\nQuality is compromised as the audio is too long to fit the #{Zipper.size_mb_limit}MB upload limit on Telegram Bots"
-    VID_TOO_BIG  = "\nVideo over #{Zipper.size_mb_limit}MB Telegram Bot's limit"
-    TOO_BIG      = "\nFile over #{Zipper.size_mb_limit}MB Telegram Bot's limit"
+    VID_TOO_LONG = -> { "\nQuality is compromised as the video is too long to fit the #{Zipper.size_mb_limit}MB upload limit on Telegram Bots" }
+    AUD_TOO_LONG = -> { "\nQuality is compromised as the audio is too long to fit the #{Zipper.size_mb_limit}MB upload limit on Telegram Bots" }
+    VID_TOO_BIG  = -> { "\nVideo over #{Zipper.size_mb_limit}MB Telegram Bot's limit" }
+    TOO_BIG      = -> { "\nFile over #{Zipper.size_mb_limit}MB Telegram Bot's limit" }
 
     # missing mimes
     Rack::Mime::MIME_TYPES['.opus'] = 'audio/ogg'
@@ -89,11 +89,11 @@ class Bot
       end
 
       if Zipper.size_mb_limit
-        if i.type == Types.video and i.durat > Zipper::VID_DURATION_THLD.minutes.to_i
-          @stl.update VID_TOO_LONG
+        if i.type == Types.video and i.durat > Zipper.vid_duration_thld.minutes.to_i
+          @stl.update VID_TOO_LONG[]
         end
-        if i.type == Types.audio and i.durat > Zipper::AUD_DURATION_THLD.minutes.to_i
-          @stl.update AUD_TOO_LONG
+        if i.type == Types.audio and i.durat > Zipper.aud_duration_thld.minutes.to_i
+          @stl.update AUD_TOO_LONG[]
         end
       end
 
@@ -105,8 +105,8 @@ class Bot
       # check telegram bot's upload limit
       if Zipper.size_mb_limit
         mbsize = File.size(i.fn_out) / 2**20
-        return @stl.error VID_TOO_BIG if i.type == Types.video and mbsize >= Zipper.size_mb_limit
-        return @stl.error TOO_BIG if mbsize >= Zipper.size_mb_limit
+        return @stl.error VID_TOO_BIG[] if i.type == Types.video and mbsize >= Zipper.size_mb_limit
+        return @stl.error TOO_BIG[] if mbsize >= Zipper.size_mb_limit
       end
 
       tag i

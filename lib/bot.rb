@@ -118,6 +118,7 @@ EOS
   def start_tl_bot
     require_relative 'tl_bot'
 
+    Zipper.size_mb_limit = 50
     @bot = TlBot.connect
     @bot.listen do |msg|
       next unless msg.is_a? Telegram::Bot::Types::Message
