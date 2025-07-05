@@ -72,6 +72,13 @@ class TDBot
 
     def send_message msg, text, type: 'message', chat_id: msg.chat_id, **params
       caption_ft = parse_markdown(text)
+
+      # Build an InputThumbnail only if a :thumb param is provided; otherwise keep it nil.
+      ithumb = if (tp = params[:thumb])
+        tp_path = tp.respond_to?(:path) ? tp.path : tp.to_s
+        TD::Types::InputThumbnail.new thumbnail: TD::Types::InputFile::Local.new(path: tp_path), width: 0, height: 0
+      end
+
       content = if (file = params[:video] || params[:audio])
         path       = file.respond_to?(:path) ? file.path : file.to_s
         input_file = TD::Types::InputFile::Local.new path: path
@@ -80,27 +87,29 @@ class TDBot
           width     = (params[:width]  || 0).to_i
           height    = (params[:height] || 0).to_i
           duration  = (params[:duration] || 0).to_i
-          TD::Types::InputMessageContent::Video.new(
-            video:          input_file,
-            thumbnail:      DUMMY_THUMB,
-            added_sticker_file_ids: [],
-            duration:       duration,
-            width:          width,
-            height:         height,
-            supports_streaming: true,
-            caption:         caption_ft,
+          video_args = {
+            video:       input_file,
+            thumbnail:   ithumb,
+            duration:    duration,
+            width:       width,
+            height:      height,
+            caption:     caption_ft,
+            has_spoiler: false,
+            supports_streaming:       true,
             show_caption_above_media: false,
-            has_spoiler:     false,
-          )
-        else
-          TD::Types::InputMessageContent::Audio.new(
+            added_sticker_file_ids:   [], # required
+          }
+          TD::Types::InputMessageContent::Video.new video_args
+        elsif params[:audio]
+          audio_args = {
             audio:     input_file,
-            album_cover_thumbnail: DUMMY_THUMB,
             duration:  params[:duration].to_i,
             title:     params[:title].to_s,
             performer: params[:performer].to_s,
             caption:   caption_ft,
-          )
+            album_cover_thumbnail: ithumb,
+          }
+          TD::Types::InputMessageContent::Audio.new audio_args
         end
       else
         TD::Types::InputMessageContent::Text.new clear_draft: false, text: caption_ft
