@@ -6,24 +6,33 @@ class Zipper
   class_attribute :size_mb_limit
   self.size_mb_limit = 50
 
-
   VID_WIDTH    = 640
   VID_PERCENT  = 0.99
-  PRESET       = 'faster'
 
   TIME_REGEX   = /(?:\d?\d:)(?:\d?\d:)\d\d/
 
   # - Worse quality (better for streaming)
   # - Slower while mining (13x vs 34x on CPU)
   CUDA         = !!ENV['CUDA']
-  H264_OPTS    = if CUDA then '-hwaccel cuda -hwaccel_output_format cuda' else '' end
+  PRESET       = 'faster'
+  H264_PRESET  = if CUDA then 'medium' else PRESET end
+  # Use CPU decoding even when encoding with NVENC to avoid incompatibilities with CPU filters.
+  H264_OPTS    = ''
   H264_CODEC   = if CUDA then 'h264_nvenc' else 'libx264' end
   H264_QUALITY = if CUDA then 33 else 25 end # to keep similar size
-  SCALE_KEY    = if CUDA then 'scale_npp' else 'scale' end
+  H265_CODEC   = if CUDA then 'hevc_nvenc' else 'libx265' end
+  H265_QFLAG   = if CUDA then '-qp' else '-crf' end
+  H265_QUALITY = 25
+  H265_PRESET  = if CUDA then 'medium' else PRESET end
+  # CUDA-capable AV1 (Ada-generation GPUs) uses NVENC; otherwise fall back to SVT-AV1 (CPU).
+  AV1_CODEC    = if CUDA then 'av1_nvenc' else 'libsvtav1' end
+  AV1_QFLAG    = if CUDA then '-cq' else '-crf' end
+  AV1_PRESET   = if CUDA then '-preset p6' else '' end
+  SCALE_KEY    = 'scale'
 
   VFR_OPTS    = '-vsync vfr'
-  VF_SCALE_M2 = "#{SCALE_KEY}='%{width}:trunc(ow/a/2)*2'".freeze
-  VF_SCALE_M8 = "#{SCALE_KEY}='%{width}:trunc(ow/a/8)*8'".freeze
+  VF_SCALE_M2 = "#{SCALE_KEY}=%{width}:trunc(ow/a/2)*2".freeze
+  VF_SCALE_M8 = "#{SCALE_KEY}=%{width}:trunc(ow/a/8)*8".freeze
 
   META_MARK  = '-metadata downloaded_with=t.me/media_downloader_2bot'.freeze
   META_OPTS  = '-map_metadata 0 -id3v2_version 3 -movflags use_metadata_tags -write_id3v1 1'
@@ -33,7 +42,6 @@ class Zipper
   AUDIO_POST_OPTS << " #{META_OPTS}" unless ENV['SKIP_META']
   VIDEO_POST_OPTS  = '-movflags +faststart'
   VIDEO_POST_OPTS << " #{META_OPTS}" unless ENV['SKIP_META']
-  VIDEO_POST_OPTS << ' -profile:v high -tune:v hq -level 4.1 -rc:v vbr -rc-lookahead:v 32 -aq-strength:v 15' if CUDA 
   VIDEO_POST_OPTS.freeze
 
   FDK_AAC = `ffmpeg -encoders 2>/dev/null | grep fdk_aac`.present?
@@ -76,7 +84,7 @@ class Zipper
         szopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
         cmd: <<-EOC
 #{FFMPEG} #{H264_OPTS} #{INPUT_LINE} \
-  -c:v #{H264_CODEC} -crf %{quality} -preset #{PRESET} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
+  -c:v #{H264_CODEC} -crf %{quality} -preset #{H264_PRESET} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
 
@@ -87,11 +95,11 @@ class Zipper
       h265: {
         ext:    :mp4,
         mime:   'video/mp4',
-        opts:   {width: VID_WIDTH, quality: H264_QUALITY, abrate: 64, acodec: :aac, percent: VID_PERCENT}, #whatsapp can't handle opus in h265
+        opts:   {width: VID_WIDTH, quality: H265_QUALITY, abrate: 64, acodec: :aac, percent: VID_PERCENT}, #whatsapp can't handle opus in h265
         szopts: "-maxrate:v %{maxrate}",
         cmd: <<-EOC
-#{FFMPEG} #{INPUT_LINE} \
-  -c:v libx265 -crf %{quality} -preset #{PRESET} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
+#{FFMPEG} #{H264_OPTS} #{INPUT_LINE} \
+  -c:v #{H265_CODEC} #{H265_QFLAG} %{quality} -preset #{H265_PRESET} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
 
@@ -104,8 +112,8 @@ class Zipper
         #szopts: "-svtav1-params mbr=%{maxrate}",
         szopts: '',
         cmd:  <<-EOC
-#{FFMPEG} #{INPUT_LINE} \
-  -c:v libsvtav1 -crf %{quality} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
+#{FFMPEG} #{H264_OPTS} #{INPUT_LINE} \
+  -c:v #{AV1_CODEC} #{AV1_QFLAG} %{quality} #{AV1_PRESET} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
 
@@ -213,6 +221,11 @@ class Zipper
   def zip_video
     @type = :video
 
+    # Ensure the NVENC encoder receives frames in a supported pixel format
+    # add it early so it comes right after the scale* filter and before any
+    # other dynamically-added filters, avoiding a dangling comma when no
+    # other filters are present.
+    fgraph << 'format=yuv420p' if CUDA && !fgraph.include?('format=yuv420p')
     check_width
     reduce_framerate
     limit_framerate

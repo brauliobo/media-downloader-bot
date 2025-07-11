@@ -31,6 +31,8 @@ Environment=BUNDLE_FROZEN=false
 #Environment=TL_BOT_TOKEN=xxx
 Environment=SKIP_TD_BOT=1
 Environment=THREADS=6
+#Environment=CUDA=1
+#Environment=CUDA_VISIBLE_DEVICES=1
 #Environment=DEBUG=1
 Environment=DB=1
 
