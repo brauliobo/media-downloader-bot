@@ -13,8 +13,16 @@ class Bot
     USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36'
     DOWN_OPTS  = %i[referer]
 
-    VID_MAX_LENGTH = 35.minutes
-    VID_MAX_NOTICE = -> { "Can't download files bigger than 35 minutes due to bot #{Zipper.size_mb_limit}mb restriction" }
+    # Approximate minutes allowed per megabyte based on original 35-min @ 50 MB limit.
+    MIN_PER_MB         = 35.0 / 50
+    VID_MAX_LENGTH     = -> {
+      return Float::INFINITY unless Zipper.size_mb_limit
+      (MIN_PER_MB * Zipper.size_mb_limit).minutes
+    }
+    VID_MAX_NOTICE     = -> {
+      mx = (MIN_PER_MB * Zipper.size_mb_limit).round
+      "Can't download files bigger than #{mx} minutes due to bot #{Zipper.size_mb_limit}MB restriction"
+    }
 
     def self.add_opt h, o
       k,v = o.split '=', 2
@@ -59,7 +67,8 @@ class Bot
         info.title = "#{"%02d" % (i+1)} #{info.title}" if mult and opts.number
         info.title = MsgHelpers.limit info.title, percent: 90
 
-        return @st.error VID_MAX_NOTICE[] if info.video_ext != 'none' and Zipper.size_mb_limit and !from_admin?(msg) and info.duration >= VID_MAX_LENGTH.to_i
+        max_len = VID_MAX_LENGTH[]
+        return @st.error VID_MAX_NOTICE[] if info.video_ext != 'none' && Zipper.size_mb_limit && !from_admin?(msg) && info.duration >= max_len.to_i
 
         SymMash.new(
           url:  url,
