@@ -15,18 +15,9 @@ class Zipper
   # - Slower while mining (13x vs 34x on CPU)
   CUDA         = !!ENV['CUDA']
 
-  PRESET       = if CUDA then 'medium' else 'fast' end
-  AV1_PRESET   = if CUDA then '-preset p6' else '' end
-
+  # Removed codec/preset constants; encoder strings now live directly in Types specs.
   H264_QUALITY = if CUDA then 33 else 25 end # to keep similar size
   H265_QUALITY = if CUDA then 35 else 25 end
-
-  H264_CODEC   = if CUDA then 'h264_nvenc' else 'libx264' end
-  H265_CODEC   = if CUDA then 'hevc_nvenc' else 'libx265' end
-  AV1_CODEC    = if CUDA then  'av1_nvenc' else 'libsvtav1' end
-
-  H265_QFLAG   = if CUDA then '-cq' else '-crf' end
-  AV1_QFLAG    = if CUDA then '-cq' else '-crf' end
 
   VFR_OPTS    = '-vsync vfr'
   VF_SCALE_M2 = "scale=%{width}:trunc(ow/a/2)*2".freeze
@@ -65,6 +56,16 @@ class Zipper
   THREADS = ENV['THREADS']&.to_i || 16
   FFMPEG  = "ffmpeg -y -threads #{THREADS} -loglevel error"
 
+  # General templates with placeholder keys. Substitutions can be blank strings.
+  VIDEO_CMD_TPL = (
+    "#{FFMPEG} -i %{infile} %{iopts} -filter_complex \"%{fgraph}\" " \
+    "#{VFR_OPTS} %{maps} %{vflags} %{acodec} %{vpost} %{oopts} %{outfile}"
+  ).freeze
+
+  AUDIO_CMD_TPL = (
+    "#{FFMPEG} -vn -i %{infile} %{iopts} %{acodec} %{apost} %{oopts} %{outfile}"
+  ).freeze
+
   FG_SEP      = ','.freeze
   INPUT_LINE  = "-i %{infile} %{iopts} -filter_complex \"#{VF_SCALE_M2}#{FG_SEP}%{fgraph}\" #{VFR_OPTS} %{maps}"
   INPUT8_LINE = "-i %{infile} %{iopts} -filter_complex \"#{VF_SCALE_M8}#{FG_SEP}%{fgraph}\" #{VFR_OPTS} %{maps}"
@@ -79,11 +80,12 @@ class Zipper
         ext:    :mp4,
         mime:   'video/mp4',
         opts:   {width: VID_WIDTH, quality: H264_QUALITY, abrate: 64, acodec: :aac, percent: VID_PERCENT}, #whatsapp can't handle opus in h264
-        szopts: if CUDA then '' else "-maxrate:v %{maxrate} -bufsize %{bufsize}" end, #maxrate on CUDA doesn't work with setpts
-        cmd: <<-EOC
-#{FFMPEG} #{INPUT_LINE} \
-  -c:v #{H264_CODEC} -crf %{quality} -preset #{PRESET} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
-        EOC
+        szopts_cpu:  "-maxrate:v %{maxrate} -bufsize %{bufsize}",
+        szopts_cuda: '', # CUDA can't handle maxrate with setpts
+        codec_cpu:  'libx264',
+        codec_cuda: 'h264_nvenc',
+        qflag_cpu:  '-crf',
+        qflag_cuda: '-crf'
       },
 
       # - SVT-HEVC is discontinued
@@ -94,11 +96,12 @@ class Zipper
         ext:    :mp4,
         mime:   'video/mp4',
         opts:   {width: VID_WIDTH, quality: H265_QUALITY, abrate: 64, acodec: :aac, percent: VID_PERCENT}, #whatsapp can't handle opus in h265
-        szopts: if CUDA then '-rc:v vbr' else '-maxrate:v %{maxrate}' end, # maxrate on CUDA doesn't work with setpts
-        cmd: <<-EOC
-#{FFMPEG} #{INPUT_LINE} \
-  -c:v #{H265_CODEC} #{H265_QFLAG} %{quality} -preset #{PRESET} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
-        EOC
+        szopts_cpu:  "-maxrate:v %{maxrate}",
+        szopts_cuda: '-rc:v vbr',
+        codec_cpu:  'libx265',
+        codec_cuda: 'hevc_nvenc',
+        qflag_cpu:  '-crf',
+        qflag_cuda: '-cq'
       },
 
       # - MBR reduces quality too much, https://gitlab.com/AOMediaCodec/SVT-AV1/-/issues/2065
@@ -107,12 +110,12 @@ class Zipper
         ext:    :mp4,
         mime:   'video/mp4',
         opts:   {width: VID_WIDTH, quality: 50, abrate: 64, acodec: :opus, percent: VID_PERCENT},
-        #szopts: "-svtav1-params mbr=%{maxrate}",
         szopts: '',
-        cmd:  <<-EOC
-#{FFMPEG} #{INPUT_LINE} \
-  -c:v #{AV1_CODEC} #{AV1_QFLAG} %{quality} #{AV1_PRESET} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
-        EOC
+        codec_cpu:  'libsvtav1',
+        codec_cuda: 'av1_nvenc',
+        qflag_cpu:  '-crf',
+        qflag_cuda: '-cq',
+        extra_cuda: '-preset p6'
       },
 
       # VP9 doesn't seem to respect low bitrates:
@@ -124,10 +127,8 @@ class Zipper
         mime:   'video/mp4',
         opts:   {width: VID_WIDTH, vbrate: 835, abrate: 64, acodec: :aac, percent: 0.97},
         szopts: "-rc vbr -b:v %{maxrate}",
-        cmd:  <<-EOC
-#{FFMPEG} #{INPUT8_LINE} \
-  -c:v libsvt_vp9 %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
-        EOC
+        codec_cpu:  'libsvt_vp9',
+        qflag_cpu:  '',
       },
 
     },
@@ -137,24 +138,24 @@ class Zipper
       default: :opus,
 
       opus: {
-        ext:  :opus,
-        mime: 'audio/aac',
-        opts: {bitrate: 96, percent: AUDIO_ENC.opus.percent},
-        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{AUDIO_ENC.opus.encode} #{AUDIO_POST_OPTS} %{oopts}"
+        ext:    :opus,
+        mime:   'audio/aac',
+        opts:   {bitrate: 96, percent: AUDIO_ENC.opus.percent},
+        encode: AUDIO_ENC.opus.encode,
       },
 
       aac: {
-        ext:  :m4a,
-        mime: 'audio/aac',
-        opts: {bitrate: 96, percent: AUDIO_ENC.aac.percent},
-        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{AUDIO_ENC.aac.encode} #{AUDIO_POST_OPTS} %{oopts}"
+        ext:    :m4a,
+        mime:   'audio/aac',
+        opts:   {bitrate: 96, percent: AUDIO_ENC.aac.percent},
+        encode: AUDIO_ENC.aac.encode,
       },
 
       mp3: {
-        ext:  :mp3,
-        mime: 'audio/mp3',
-        opts: {bitrate: 128, percent: AUDIO_ENC.mp3.percent},
-        cmd:  "#{FFMPEG} -vn -i %{infile} %{iopts} #{AUDIO_ENC.mp3.encode} #{AUDIO_POST_OPTS} %{oopts}"
+        ext:    :mp3,
+        mime:   'audio/mp3',
+        opts:   {bitrate: 128, percent: AUDIO_ENC.mp3.percent},
+        encode: AUDIO_ENC.mp3.encode,
       },
     },
   )
@@ -211,6 +212,33 @@ class Zipper
 
     @duration    = probe.format.duration.to_f / opts.speed
 
+    opts.cuda = if opts.nocuda then false elsif opts.cuda then true else !!ENV['CUDA'] end
+  end
+
+  # Detect the current format key (e.g. :h264, :aac).
+  def format_name
+    @format_name ||= begin
+      v = opts.format
+      case v
+      when Types.video.h264 then :h264
+      when Types.video.h265 then :h265
+      when Types.video.av1  then :av1
+      when Types.video.vp9  then :vp9
+      when Types.audio.opus then :opus
+      when Types.audio.aac  then :aac
+      when Types.audio.mp3  then :mp3
+      else :unknown end
+    end
+  end
+
+  # szopts template depending on codec and CUDA availability.
+  def video_sz_template
+    spec = opts.format
+    if spec.respond_to?(:szopts_cpu) || spec.respond_to?(:szopts_cuda)
+      if opts.cuda then spec.szopts_cuda else spec.szopts_cpu end
+    else
+      spec.szopts || ''
+    end
   end
 
   def video?; @type == :video; end
@@ -223,7 +251,7 @@ class Zipper
     # add it early so it comes right after the scale* filter and before any
     # other dynamically-added filters, avoiding a dangling comma when no
     # other filters are present.
-    fgraph << 'format=yuv420p' if CUDA && !fgraph.include?('format=yuv420p')
+    fgraph << 'format=yuv420p' if opts.cuda && !fgraph.include?('format=yuv420p')
     check_width
     reduce_framerate
     limit_framerate
@@ -235,26 +263,47 @@ class Zipper
     apply_cut
     szopts = apply_video_size_limits
 
-    aenc   = AUDIO_ENC[opts.acodec&.to_sym] || AUDIO_ENC.opus
+    aenc        = AUDIO_ENC[opts.acodec&.to_sym] || AUDIO_ENC.opus
     opts.abrate = (aenc.percent * opts.abrate).round if size_mb_limit
-    acodec = aenc.encode % {abrate: opts.abrate}
+    acodec      = aenc.encode % {abrate: opts.abrate}
 
-    cmd = opts.format.cmd % {
-      infile:   Sh.escape(infile),
-      iopts:    iopts,
-      fgraph:   fgraph.join(FG_SEP),
-      maps:     maps.map{ |m| "-map #{m}" }.join(' '),
-      oopts:    oopts,
-      width:    opts.width,
-      quality:  opts.quality,
-      acodec:   acodec,
-      vbrate:   opts.vbrate,
-      szopts:   szopts,
-      metadata: metadata_args,
+    # Build filter graph with scaling first.
+    scale_expr   = (format_name == :vp9 ? VF_SCALE_M8 : VF_SCALE_M2) % {width: opts.width}
+    full_fgraph  = ([scale_expr] + fgraph).join(FG_SEP)
+    maps_str     = maps.map { |m| "-map #{m}" }.join(' ')
+
+    # Video encoder specific flags defined by format spec.
+    preset        = opts.cuda ? 'medium' : 'fast'
+    spec         = opts.format
+
+    vcodec       = opts.cuda ? (spec.codec_cuda || spec.codec_cpu) : spec.codec_cpu
+    qflag        = opts.cuda ? (spec.qflag_cuda || spec.qflag_cpu) : spec.qflag_cpu
+    extra        = opts.cuda ? (spec.extra_cuda || '')            : (spec.extra_cpu || '')
+
+    v_flags_parts = ["-c:v #{vcodec}"]
+    v_flags_parts << "#{qflag} #{opts.quality}" if qflag.present? && opts.quality
+    v_flags_parts << "-preset #{preset}"
+    v_flags_parts << extra if extra.present?
+    v_flags_parts << szopts if szopts.present?
+
+    v_flags = v_flags_parts.join(' ')
+
+    video_post_opts = VIDEO_POST_OPTS % {metadata: metadata_args}
+
+    cmd_params = {
+      infile:  Sh.escape(infile),
+      iopts:   iopts,
+      fgraph:  full_fgraph,
+      maps:    maps_str,
+      vflags:  v_flags,
+      acodec:  acodec,
+      vpost:   video_post_opts,
+      oopts:   oopts,
+      outfile: Sh.escape(outfile),
     }
 
-    cmd.strip!
-    cmd << " #{Sh.escape outfile}"
+    cmd = VIDEO_CMD_TPL % cmd_params
+    cmd.squeeze!(" ")
     Sh.run cmd
   end
 
@@ -268,16 +317,23 @@ class Zipper
     apply_audio_size_limit
     apply_cut
 
-    cmd = opts.format.cmd % {
-      infile:   Sh.escape(infile),
-      iopts:    iopts,
-      oopts:    oopts,
-      abrate:   opts.bitrate,
-      metadata: metadata_args,
+    # Encoder template defined by format spec
+    acodec_tmpl = opts.format.encode
+    acodec      = acodec_tmpl % {abrate: opts.bitrate}
+
+    audio_post_opts = AUDIO_POST_OPTS % {metadata: metadata_args}
+
+    cmd_params = {
+      infile:  Sh.escape(infile),
+      iopts:   iopts,
+      acodec:  acodec,
+      apost:   audio_post_opts,
+      oopts:   oopts,
+      outfile: Sh.escape(outfile),
     }
 
-    cmd.strip!
-    cmd << " #{Sh.escape outfile}"
+    cmd = AUDIO_CMD_TPL % cmd_params
+    cmd.squeeze!(" ")
     Sh.run cmd
   end
 
@@ -369,7 +425,7 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s webvtt -f w
     maxrate  = opts.vbrate if opts.vbrate and maxrate > opts.vbrate
     maxrate  = "#{maxrate}k"
 
-    opts.format.szopts % {maxrate:, bufsize:}
+    video_sz_template % {maxrate:, bufsize:}
   end
 
   def apply_speed

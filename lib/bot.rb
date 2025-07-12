@@ -107,6 +107,7 @@ EOS
     require_relative 'td_bot'
     DRb.start_service ENV['DRB_WORKER_TD'], self
 
+    ENV['CUDA'] = '1' #faster and don't work with maxrate for limiting
     Zipper.size_mb_limit = 2_000
     @bot = TDBot.connect
     @bot.listen do |msg|
