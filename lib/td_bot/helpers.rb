@@ -79,7 +79,7 @@ class TDBot
         TD::Types::InputThumbnail.new thumbnail: TD::Types::InputFile::Local.new(path: tp_path), width: 0, height: 0
       end
 
-      content = if (file = params[:video] || params[:audio])
+      content = if (file = params[:video] || params[:audio] || params[:document])
         path       = file.respond_to?(:path) ? file.path : file.to_s
         input_file = TD::Types::InputFile::Local.new path: path
 
@@ -110,6 +110,14 @@ class TDBot
             album_cover_thumbnail: ithumb,
           }
           TD::Types::InputMessageContent::Audio.new audio_args
+        elsif params[:document]
+          doc_args = {
+            document: input_file,
+            thumbnail: ithumb,
+            disable_content_type_detection: false,
+            caption: caption_ft,
+          }
+          TD::Types::InputMessageContent::Document.new doc_args
         end
       else
         TD::Types::InputMessageContent::Text.new clear_draft: false, text: caption_ft

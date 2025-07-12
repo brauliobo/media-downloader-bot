@@ -11,7 +11,7 @@ class Tagger
   end
 
   def self.copy fn_in, fn_out
-    cmd = "kid3-cli" 
+    cmd = "kid3-cli"
     cmd << " -c \"cd #{Sh.escape File.dirname fn_in}\"  -c \"select #{Sh.escape File.basename fn_in}\""
     cmd << " -c copy"
     cmd << " -c \"cd #{Sh.escape File.dirname fn_out}\" -c \"select #{Sh.escape File.basename fn_out}\""

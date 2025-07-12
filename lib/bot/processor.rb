@@ -31,10 +31,12 @@ class Bot
     delegate_missing_to :bot
 
     def self.probe i
+      mtype  = Rack::Mime.mime_type File.extname i.fn_in
+      return i unless mtype&.match?(/audio|video/)
+
       i.probe  = Prober.for i.fn_in
       i.durat  = i.probe.format.duration.to_i
       i.durat -= ChronicDuration.parse i.opts.ss if i.opts.ss
-      mtype  = Rack::Mime.mime_type File.extname i.fn_in
       i.type = if mtype.index 'video' then Types.video elsif mtype.index 'audio' then Types.audio end
       i.type = Types.audio if i.opts.audio
       i
@@ -83,10 +85,7 @@ class Bot
       return input.merge! fn_out: 'fake' if i.opts.simulate
 
       self.class.probe i
-      unless i.type
-        @stl.error "Unknown type for #{i.fn_in}"
-        return
-      end
+      return @stl&.error "Unknown type for #{i.fn_in}" unless i.type
 
       if Zipper.size_mb_limit
         if i.type == Types.video and i.durat > Zipper.vid_duration_thld.minutes.to_i
