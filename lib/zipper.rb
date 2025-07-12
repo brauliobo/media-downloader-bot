@@ -14,25 +14,23 @@ class Zipper
   # - Worse quality (better for streaming)
   # - Slower while mining (13x vs 34x on CPU)
   CUDA         = !!ENV['CUDA']
-  PRESET       = 'faster'
-  H264_PRESET  = if CUDA then 'medium' else PRESET end
-  # Use CPU decoding even when encoding with NVENC to avoid incompatibilities with CPU filters.
-  H264_OPTS    = ''
-  H264_CODEC   = if CUDA then 'h264_nvenc' else 'libx264' end
-  H264_QUALITY = if CUDA then 33 else 25 end # to keep similar size
-  H265_CODEC   = if CUDA then 'hevc_nvenc' else 'libx265' end
-  H265_QFLAG   = if CUDA then '-qp' else '-crf' end
-  H265_QUALITY = 25
-  H265_PRESET  = if CUDA then 'medium' else PRESET end
-  # CUDA-capable AV1 (Ada-generation GPUs) uses NVENC; otherwise fall back to SVT-AV1 (CPU).
-  AV1_CODEC    = if CUDA then 'av1_nvenc' else 'libsvtav1' end
-  AV1_QFLAG    = if CUDA then '-cq' else '-crf' end
+
+  PRESET       = if CUDA then 'medium' else 'fast' end
   AV1_PRESET   = if CUDA then '-preset p6' else '' end
-  SCALE_KEY    = 'scale'
+
+  H264_QUALITY = if CUDA then 33 else 25 end # to keep similar size
+  H265_QUALITY = if CUDA then 35 else 25 end
+
+  H264_CODEC   = if CUDA then 'h264_nvenc' else 'libx264' end
+  H265_CODEC   = if CUDA then 'hevc_nvenc' else 'libx265' end
+  AV1_CODEC    = if CUDA then  'av1_nvenc' else 'libsvtav1' end
+
+  H265_QFLAG   = if CUDA then '-cq' else '-crf' end
+  AV1_QFLAG    = if CUDA then '-cq' else '-crf' end
 
   VFR_OPTS    = '-vsync vfr'
-  VF_SCALE_M2 = "#{SCALE_KEY}=%{width}:trunc(ow/a/2)*2".freeze
-  VF_SCALE_M8 = "#{SCALE_KEY}=%{width}:trunc(ow/a/8)*8".freeze
+  VF_SCALE_M2 = "scale=%{width}:trunc(ow/a/2)*2".freeze
+  VF_SCALE_M8 = "scale=%{width}:trunc(ow/a/8)*8".freeze
 
   META_MARK  = '-metadata downloaded_with=t.me/media_downloader_2bot'.freeze
   META_OPTS  = '-map_metadata 0 -id3v2_version 3 -movflags use_metadata_tags -write_id3v1 1'
@@ -81,10 +79,10 @@ class Zipper
         ext:    :mp4,
         mime:   'video/mp4',
         opts:   {width: VID_WIDTH, quality: H264_QUALITY, abrate: 64, acodec: :aac, percent: VID_PERCENT}, #whatsapp can't handle opus in h264
-        szopts: "-maxrate:v %{maxrate} -bufsize %{bufsize}",
+        szopts: if CUDA then '' else "-maxrate:v %{maxrate} -bufsize %{bufsize}" end, #maxrate on CUDA doesn't work with setpts
         cmd: <<-EOC
-#{FFMPEG} #{H264_OPTS} #{INPUT_LINE} \
-  -c:v #{H264_CODEC} -crf %{quality} -preset #{H264_PRESET} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
+#{FFMPEG} #{INPUT_LINE} \
+  -c:v #{H264_CODEC} -crf %{quality} -preset #{PRESET} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
 
@@ -96,10 +94,10 @@ class Zipper
         ext:    :mp4,
         mime:   'video/mp4',
         opts:   {width: VID_WIDTH, quality: H265_QUALITY, abrate: 64, acodec: :aac, percent: VID_PERCENT}, #whatsapp can't handle opus in h265
-        szopts: "-maxrate:v %{maxrate}",
+        szopts: if CUDA then '-rc:v vbr' else '-maxrate:v %{maxrate}' end, # maxrate on CUDA doesn't work with setpts
         cmd: <<-EOC
-#{FFMPEG} #{H264_OPTS} #{INPUT_LINE} \
-  -c:v #{H265_CODEC} #{H265_QFLAG} %{quality} -preset #{H265_PRESET} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
+#{FFMPEG} #{INPUT_LINE} \
+  -c:v #{H265_CODEC} #{H265_QFLAG} %{quality} -preset #{PRESET} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
 
@@ -112,7 +110,7 @@ class Zipper
         #szopts: "-svtav1-params mbr=%{maxrate}",
         szopts: '',
         cmd:  <<-EOC
-#{FFMPEG} #{H264_OPTS} #{INPUT_LINE} \
+#{FFMPEG} #{INPUT_LINE} \
   -c:v #{AV1_CODEC} #{AV1_QFLAG} %{quality} #{AV1_PRESET} %{szopts} %{acodec} #{VIDEO_POST_OPTS} %{oopts}
         EOC
       },
