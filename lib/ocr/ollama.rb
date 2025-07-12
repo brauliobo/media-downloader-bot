@@ -9,14 +9,15 @@ class Ocr
     API   = ENV['OLLAMA_HOST']
     MODEL = ENV['OLLAMA_MODEL']
 
-    # Simple schema forcing model to return {"text": "..."}
-    SCHEMA_TEMPLATE = {
-      type: 'object',
-      properties: {
-        text: {type: 'string', description: 'Full page text with paragraphs separated by blank lines'}
-      },
-      required: ['text']
-    }.freeze
+    PROMPT = "Recognize the text in this image. Skip the book page headers or footers. Output only the plain text exactly as seen, with each heading or paragraph separated by a blank line. Do NOT return JSON, markup, or commentary—just the text.".freeze
+    USE_AI_MERGE = ENV.fetch('AI_MERGE', '0') == '1'
+
+    AI_MERGE_PROMPT = "You will be given two consecutive blocks of text extracted from a scanned book page. If they represent a single logical paragraph that was split across lines/pages, respond with ONLY the word YES. Otherwise respond with ONLY the word NO.".freeze
+
+    # Language detection
+    LANG_PROMPT_TEMPLATE = "What is the ISO 639-1 two-letter language code of the following text? Respond with ONLY the code (e.g., `en`, `es`).\n\n".freeze
+    USE_AI_LANG   = ENV.fetch('AI_LANG', '1') == '1'
+    LANG_SCHEMA = {type:'object',properties:{lang:{type:'string'}},required:['lang']}.to_json.freeze
 
     mattr_accessor :http
     self.http = Mechanize.new
@@ -24,40 +25,70 @@ class Ocr
     self.http.open_timeout = timeout_sec
     self.http.read_timeout = timeout_sec
 
-    def self.heading_line?(text)
-      words = text.split(/\s+/)
-      return false if words.empty? || words.size > 10
-      upper_ratio = words.count { |w| w == w.upcase }.fdiv(words.size)
-      return true if upper_ratio > 0.8
-      return true if words.all? { |w| w.match?(/\A[A-Z][a-z]+\z/) }
-      false
-    end
+    # use helpers from Ocr module
 
-    def self.merge_paragraphs(paragraphs)
-      result = []
+    # Ask the LLM whether consecutive paragraphs should be merged.
+    def self.ai_merge_paragraphs(paragraphs, timeout_sec: 30)
+      return paragraphs unless USE_AI_MERGE
+      out = []
       paragraphs.each do |para|
-        # Split blocks by blank lines first for better separation
-        blocks = para[:text].to_s.split(/\n{2,}/).map(&:strip).reject(&:empty?)
-        blocks.each do |block|
-          lines = block.split(/\n+/).map(&:strip).reject(&:empty?)
-          lines.each do |line|
-            # Start new paragraph for heading lines
-            if heading_line?(line)
-              result << SymMash.new(text: line, page_numbers: para[:page_numbers].dup, merged: false, kind: 'heading')
-              next
-            end
-
-            if result.any? && result.last[:text] !~ /[\.!?？¡!;:]"?$/ && result.last[:kind] != 'heading'
-              result.last[:text] << ' ' << line
-              result.last[:page_numbers] |= para[:page_numbers]
-              result.last[:merged] = true
-            else
-              result << SymMash.new(text: line, page_numbers: para[:page_numbers].dup, merged: para[:merged] || false, kind: 'text')
+        if out.any?
+          prev = out.last
+          # Only consider merging non-heading paragraphs
+          if prev[:kind] == 'text' && para[:kind] == 'text'
+            q = {
+              model: MODEL,
+              stream: false,
+              options: {temperature: 0.0},
+              messages: [
+                {role: :user, content: AI_MERGE_PROMPT},
+                {role: :assistant, content: ''},
+                {role: :user, content: "FIRST:\n#{prev[:text]}\nSECOND:\n#{para[:text]}"}
+              ]
+            }
+            begin
+              res = Timeout.timeout(timeout_sec) do
+                http.post "#{API}/api/chat", q.to_json
+              end
+              ans = SymMash.new(JSON.parse(res.body)).dig(:message, :content).to_s.strip.upcase
+              if ans == 'YES'
+                prev[:text] << ' ' << para[:text]
+                prev[:page_numbers] |= para[:page_numbers]
+                prev[:merged] = true
+                next
+              end
+            rescue StandardError
+              # On any failure, do not merge
             end
           end
         end
+        out << para
       end
-      result
+      out
+    end
+
+    def self.detect_language(paragraphs, timeout_sec: 15)
+      return nil unless USE_AI_LANG && paragraphs.any?
+      sample_text = paragraphs.first(5).map { |p| p[:text] }.join("\n")[0, 1000]
+      prompt = LANG_PROMPT_TEMPLATE + """\n#{sample_text}\n"""
+      q = {
+        model: MODEL,
+        format: JSON.parse(LANG_SCHEMA),
+        stream: false,
+        options: {temperature: 0.0},
+        messages: [
+          {role: :user, content: prompt}
+        ]
+      }
+      begin
+        res = Timeout.timeout(timeout_sec) { http.post "#{API}/api/chat", q.to_json }
+        ans = SymMash.new(JSON.parse(res.body)).dig(:message, :content)
+        lang_obj = JSON.parse(ans) rescue nil
+        code = lang_obj && lang_obj['lang'] ? lang_obj['lang'].downcase.strip : nil
+        return code.match?(/^[a-z]{2}$/) ? code : nil
+      rescue StandardError
+        nil
+      end
     end
 
     def self.transcribe pdf_path, json_path, stl: nil, timeout_sec: 120
@@ -75,24 +106,19 @@ class Ocr
 
           opts = {
             model: MODEL,
-            format: 'json',
             stream: false,
             options: {temperature: 0.0},
             messages: [
-              {role: :system, content: SCHEMA_TEMPLATE.to_json},
-              {role: :user, content: "Recognize the text in this image separating paragraphs with new lines", images: [base64]},
+              {role: :user, content: PROMPT, images: [base64]},
             ],
           }
 
           begin
-            puts "Requesting transcription for page #{page_num}..."
             res = Timeout.timeout(timeout_sec + 5) do
               http.post "#{API}/api/chat", opts.to_json
             end
-            puts "Received response for page #{page_num}."
             res = SymMash.new JSON.parse(res.body)
-            page_hash = JSON.parse(res.message.content)
-            text_content = page_hash['text'].to_s.strip
+            text_content = res.dig(:message, :content).to_s.strip
 
             if text_content.present?
               transcription[:content][:paragraphs] << {
@@ -120,7 +146,12 @@ class Ocr
         stl&.update 'OCR completed'
 
         # Post-process paragraphs: split by newlines and merge across pages
-        transcription[:content][:paragraphs] = merge_paragraphs(transcription[:content][:paragraphs])
+        blocks = Ocr.util.merge_paragraphs(transcription[:content][:paragraphs])
+        blocks = ai_merge_paragraphs(blocks)
+        transcription[:content][:paragraphs] = blocks
+
+        # Detect language and store in metadata
+        transcription[:metadata][:language] = detect_language(blocks)
 
         File.write json_path, JSON.pretty_generate(transcription)
       end
