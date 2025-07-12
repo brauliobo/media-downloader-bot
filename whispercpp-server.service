@@ -12,6 +12,8 @@ ExecStart=/home/braulio/Projects/whisper.cpp/build/bin/whisper-server \
   --model /home/braulio/Projects/media-downloader-bot/models/ggml-large-v3-turbo.bin \
   --threads 16 -l auto
 
+Environment=CUDA_VISIBLE_DEVICES=1
+
 RestartSec=30
 
 [Install]
