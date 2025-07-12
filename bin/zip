@@ -17,7 +17,6 @@ while ARGV[-1] and !File.exist?(ARGV[-1]) and ARGV[-1] !~ URI::regexp
 end
 
 Zipper.size_mb_limit = ENV['SIZE_MB_LIMIT']&.to_i
-Subtitler.local = true if ENV['WHISPER_LOCAL']
 
 class Stdout
   include TlBot::Helpers
@@ -31,10 +30,21 @@ stl = Bot::Status::Line.new '', status: st
 
 path = if ARGV.size > 1 then ARGV else ARGV.first.split "\n" end
 path.peach do |u|
-  klass = if u =~ URI::regexp then Bot::UrlProcessor else Bot::Processor end
-  dir   = if u =~ URI::regexp then Dir.pwd else File.dirname u end
-  dir   = "#{dir}/converted"
+  base_dir = u =~ URI::regexp ? Dir.pwd : File.dirname(u)
+  dir      = "#{base_dir}/converted"
   Dir.mkdir dir rescue nil
+
+  if u =~ URI::regexp
+    klass = Bot::UrlProcessor
+  elsif File.extname(u).downcase == '.pdf'
+    # Direct PDF OCR
+    json_out = "#{dir}/#{File.basename(u, '.pdf')}.json"
+    Ocr.transcribe(u, json_out, stl: stl)
+    puts "OCR transcription saved to #{json_out}"
+    next
+  else
+    klass = Bot::Processor
+  end
 
   if klass == Bot::UrlProcessor
     line = "#{u} #{lopts.join ' '}"
@@ -49,7 +59,7 @@ path.peach do |u|
     i   = prc.input_from_file u, opts
     prc.handle_input i
 
-    Tagger.copy u, i.fn_out
+    Tagger.copy u, i.fn_out if i.type
     prc.cleanup
   end
 end

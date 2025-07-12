@@ -5,7 +5,7 @@ class Bot
     VL = 10
     AL = nil
 
-    MAX_RES    = 1080
+    MAX_RES    = ENV['MAX_RES'] || 1080
     DOWN_BIN   = "yt-dlp"
     DOWN_ARGS  = "-S 'res:#{MAX_RES}' --ignore-errors"
     DOWN_ARGS << " --compat-options no-live-chat"

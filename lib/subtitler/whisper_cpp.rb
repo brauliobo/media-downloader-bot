@@ -6,7 +6,6 @@ require 'iso-639'
 class Subtitler
   module WhisperCpp
 
-    # Server base URL (e.g. http://127.0.0.1:8080)
     mattr_accessor :api
     self.api = URI.parse ENV['WHISPER_CPP_SERVER']
 
