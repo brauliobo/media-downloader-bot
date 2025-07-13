@@ -11,14 +11,7 @@ class Zipper
 
   TIME_REGEX   = /(?:\d?\d:)(?:\d?\d:)\d\d/
 
-  # - Worse quality (better for streaming)
-  # - Slower while mining (13x vs 34x on CPU)
-  CUDA         = !!ENV['CUDA']
-
-  # Removed codec/preset constants; encoder strings now live directly in Types specs.
-  H264_QUALITY = if CUDA then 33 else 25 end # to keep similar size
-  H265_QUALITY = if CUDA then 35 else 25 end
-
+  # Constants removed; quality defaults are set dynamically per instance.
   VFR_OPTS    = '-vsync vfr'
   VF_SCALE_M2 = "scale=%{width}:trunc(ow/a/2)*2".freeze
   VF_SCALE_M8 = "scale=%{width}:trunc(ow/a/8)*8".freeze
@@ -79,7 +72,7 @@ class Zipper
       h264: {
         ext:    :mp4,
         mime:   'video/mp4',
-        opts:   {width: VID_WIDTH, quality: H264_QUALITY, abrate: 64, acodec: :aac, percent: VID_PERCENT}, #whatsapp can't handle opus in h264
+        opts:   {width: VID_WIDTH, quality: 25, abrate: 64, acodec: :aac, percent: VID_PERCENT}, # quality adjusted dynamically
         szopts_cpu:  "-maxrate:v %{maxrate} -bufsize %{bufsize}",
         szopts_cuda: '', # CUDA can't handle maxrate with setpts
         codec_cpu:  'libx264',
@@ -95,7 +88,7 @@ class Zipper
       h265: {
         ext:    :mp4,
         mime:   'video/mp4',
-        opts:   {width: VID_WIDTH, quality: H265_QUALITY, abrate: 64, acodec: :aac, percent: VID_PERCENT}, #whatsapp can't handle opus in h265
+        opts:   {width: VID_WIDTH, quality: 25, abrate: 64, acodec: :aac, percent: VID_PERCENT}, # quality adjusted dynamically
         szopts_cpu:  "-maxrate:v %{maxrate}",
         szopts_cuda: '-rc:v vbr',
         codec_cpu:  'libx265',
@@ -207,12 +200,16 @@ class Zipper
 
     opts.speed   = opts.speed&.to_f || 1
     opts.width   = opts.width&.to_i
-    opts.quality = opts.quality&.to_i
+    opts.quality = opts.quality&.to_i if opts.quality
     opts.abrate  = opts.abrate&.to_i
-
     @duration    = probe.format.duration.to_f / opts.speed
+    opts.cuda    = if opts.nocuda then false elsif opts.cuda then true else !!ENV['CUDA'] end
 
-    opts.cuda = if opts.nocuda then false elsif opts.cuda then true else !!ENV['CUDA'] end
+    case opts.format
+    when Types.video.h264 then opts.quality = if opts.cuda then 33 else 25 end
+    when Types.video.h265 then opts.quality = if opts.cuda then 33 else 25 end
+    else opts.quality ||= opts.format.opts.quality
+    end
   end
 
   # Detect the current format key (e.g. :h264, :aac).
