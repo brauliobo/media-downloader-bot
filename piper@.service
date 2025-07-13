@@ -16,6 +16,8 @@ ExecStart=/bin/bash -c '\
   /srv/piper/src/python_run/venv/bin/python3 -m piper.http_server --model "$MODEL" --cuda --port "$PORT" \
 '
 
+Environment=CUDA_VISIBLE_DEVICES=1
+
 RestartSec=30
 
 [Install]

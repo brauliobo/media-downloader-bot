@@ -14,9 +14,11 @@ vendor
 # envs
 .venv
 
-# media
+# test media
+input
 *mp4
 *webm
 *srt
 *opus
 *wav
+*pdf

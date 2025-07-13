@@ -1,0 +1,20 @@
+#!/usr/bin/env ruby
+
+Dir.chdir File.expand_path "#{File.realpath __dir__}/.." do
+  require_relative '../lib/bot'
+end
+
+# Usage:
+#   echo "Hello world" | bin/tts [lang] > hello.wav
+#
+# First positional argument is the ISO language code (default: $LANG or 'en').
+lang = (ARGV[0] || ENV['LANG']&.slice(0, 2) || 'en').downcase
+
+text = STDIN.read.strip
+abort 'No input text provided.' if text.empty?
+
+Tempfile.create(%w[tts .wav]) do |f|
+  TTS.synthesize text:, lang:, out_path: f.path
+  STDOUT.binmode
+  STDOUT.write File.binread(f.path)
+end

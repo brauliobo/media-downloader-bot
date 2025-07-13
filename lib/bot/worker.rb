@@ -1,6 +1,8 @@
 require 'faraday'
 require 'faraday/multipart'
 
+require_relative '../audiobook'
+
 Faraday::UploadIO = Faraday::Multipart::FilePart unless defined?(Faraday::UploadIO)
 
 class Bot
@@ -44,11 +46,7 @@ class Bot
     end
 
     def process
-      # Handle PDF documents separately
-      if pdf_document?
-        return process_pdf
-      end
-
+      # Processing starts: use a single workdir for all cases
       workdir do |work_dir|
         @dir = work_dir
         procs  = []
@@ -60,8 +58,9 @@ class Bot
         end
 
         popts = {dir: work_dir, bot:, msg:, st: @st}
-        klass = if msg.audio.present? or msg.video.present? then Bot::FileProcessor else Bot::UrlProcessor end
+        klass = if msg.audio.present? || msg.video.present? || pdf_document? then Bot::FileProcessor else Bot::UrlProcessor end
         procs = msg.text.to_s.split("\n").reject(&:blank?).map { |l| klass.new line: l, **popts }
+        procs << klass.new(**popts) if procs.empty? && pdf_document?
         msg.resp = send_message msg, me('Downloading metadata...')
         procs.each.with_index do |p, i|
           inputs[i] = p.download
@@ -109,34 +108,6 @@ class Bot
     def pdf_document?
       doc = msg.document
       doc && (doc.mime_type == 'application/pdf' || doc.file_name.to_s.downcase.end_with?('.pdf'))
-    end
-
-    def process_pdf
-      workdir do |work_dir|
-        @dir = work_dir
-
-        prc = Bot::PdfProcessor.new(dir: work_dir, bot:, msg:)
-        input = prc.download
-
-        json_path = "#{work_dir}/#{File.basename(input.fn_in, '.pdf')}.json"
-
-        progress_msg = send_message msg, me('Running OCR, please wait...')
-
-        st = Status.new do |text|
-          edit_message msg, progress_msg.message_id, text: me(text)
-        end
-        stl = Status::Line.new '', status: st
-
-        Ocr.transcribe input.fn_in, json_path, stl: stl
-
-        file_io = Faraday::UploadIO.new json_path, 'application/json'
-        send_message msg, me('Book transcription'), type: 'document', document: file_io
-
-        edit_message msg, progress_msg.message_id, text: me('Done ✅')
-        nil
-      ensure
-        prc&.cleanup
-      end
     end
 
     def upload i

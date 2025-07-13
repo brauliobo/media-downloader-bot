@@ -8,6 +8,9 @@
 		},
 		{
 			"path": "../tdlib-schema"
+		},
+		{
+			"path": "../coqui-ai-TTS"
 		}
 	],
 	"settings": {}

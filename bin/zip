@@ -37,10 +37,14 @@ path.peach do |u|
   if u =~ URI::regexp
     klass = Bot::UrlProcessor
   elsif File.extname(u).downcase == '.pdf'
-    # Direct PDF OCR
-    json_out = "#{dir}/#{File.basename(u, '.pdf')}.json"
-    Ocr.transcribe(u, json_out, stl: stl)
-    puts "OCR transcription saved to #{json_out}"
+    # Direct PDF to audiobook (OCR + TTS)
+    require_relative '../lib/audiobook'
+    audio_zip = "#{dir}/#{File.basename(u, '.pdf')}.zip"
+
+    result = Audiobook.generate(u, audio_zip, stl: stl)
+
+    puts "OCR transcription saved to #{result.transcription}"
+    puts "Audiobook saved to #{result.audio}"
     next
   else
     klass = Bot::Processor

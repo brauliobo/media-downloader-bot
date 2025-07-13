@@ -7,7 +7,7 @@ class Ocr
   module Ollama
 
     API   = ENV['OLLAMA_HOST']
-    MODEL = ENV['OLLAMA_MODEL']
+    MODEL = ENV['OLLAMA_OCR_MODEL']
 
     PROMPT = "Recognize the text in this image. Skip the book page headers or footers. Output only the plain text exactly as seen, with each heading or paragraph separated by a blank line. Do NOT return JSON, markup, or commentary—just the text.".freeze
     USE_AI_MERGE = ENV.fetch('AI_MERGE', '0') == '1'
@@ -21,7 +21,7 @@ class Ocr
 
     mattr_accessor :http
     self.http = Mechanize.new
-    timeout_sec = (ENV['OLLAMA_TIMEOUT'] || 120).to_i
+    timeout_sec = ENV['OLLAMA_TIMEOUT']&.to_i || 120
     self.http.open_timeout = timeout_sec
     self.http.read_timeout = timeout_sec
 

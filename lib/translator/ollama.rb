@@ -4,25 +4,46 @@ class Translator
     API   = ENV['OLLAMA_HOST']
     MODEL = ENV['OLLAMA_MODEL']
 
-    SYS = <<-EOP
-You are a professional content translator to the %{lang} language. Your task is only to translate. Return only the translations of the prompts. Preserve endings, closings, thanks, subject, numbers, all details, meaning, semantics, verb tenses, format, lines, symbols, and structure of the content. Return the translations as a JSON array named \"translations\", where each translation corresponds to each user message in the order they were provided."
-EOP
+    JSON_SCHEMA = {
+      type: :object,
+      properties: {
+        translations: {
+          type: :array,
+          description: "An array of translated strings, corresponding to the user's input.",
+          items: {
+            type: :string,
+            description: 'The translated text.'
+          }
+        }
+      },
+      required: ["translations"]
+    }
 
     LANG_MAP = {
-      pt: :pt_BR,
+      pt: 'Brazilian Portuguese',
     }
 
     mattr_accessor :http
     self.http = Mechanize.new
 
     def translate text, from:, to:
-      to   = LANG_MAP[to.to_sym] || to
+      to = LANG_MAP[to.to_sym] || to
+
+      system_message_content = {
+        task: "You are an expert translator. Translate the texts in `texts_to_translate` to the `target_language`.",
+        target_language: to,
+        texts_to_translate: Array(text)
+      }.to_json
+
       opts = {
-        model: MODEL, temperature: 0, format: 'json', stream: false,
+        model: MODEL,
+        temperature: 0,
+        format: JSON_SCHEMA,
+        stream: false,
         messages: [
-          {role: :system, content: SYS % {lang: to}},
-          *Array(text).map{ |t| {role: :user, content: t} },
-        ],
+          { role: :system, content: system_message_content },
+          { role: :user, content: 'Translate the content as instructed in the system message.' }
+        ]
       }
       res  = http.post "#{API}/api/chat", opts.to_json
       res  = SymMash.new JSON.parse res.body
