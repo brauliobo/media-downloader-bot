@@ -1,0 +1,19 @@
+[Unit]
+Description=Coqui TTS HTTP server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=mdb
+Nice=19
+
+WorkingDirectory=/srv/coqui-ai-TTS
+
+ExecStart=/srv/coqui-ai-TTS/venv/bin/python3 /srv/coqui-ai-TTS/http_server.py
+
+Environment=CUDA_VISIBLE_DEVICES=1
+
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
