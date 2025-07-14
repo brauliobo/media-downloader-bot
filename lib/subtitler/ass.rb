@@ -98,14 +98,24 @@ class Subtitler
         if raw.match(/<\d{2}:\d{2}:\d{2}\.\d{3}>/)
           segments = raw.split(/<(\d{2}:\d{2}:\d{2}\.\d{3})>/)
           word_times = []
+
+          # Handle first word, which doesn't have a preceding timestamp tag
+          first_word = segments.first&.strip
+          if first_word && !first_word.empty?
+            w_end = segments.length > 1 ? parse_time(segments[1]) : e_sec
+            word_times << [s_sec, w_end, first_word]
+          end
+
           index = 1
           while index < segments.size
             time_str = segments[index]
             word_text = segments[index + 1] || ''
-            w_start = parse_time(time_str)
-            next_time_str = segments[index + 2]
-            w_end = next_time_str ? parse_time(next_time_str) : e_sec
-            word_times << [w_start, w_end, word_text.strip]
+            unless word_text.strip.empty?
+              w_start = parse_time(time_str)
+              next_time_str = segments[index + 2]
+              w_end = next_time_str ? parse_time(next_time_str) : e_sec
+              word_times << [w_start, w_end, word_text.strip]
+            end
             index += 2
           end
           all_words = word_times.map { |_,_,w| w }
