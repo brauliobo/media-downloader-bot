@@ -22,6 +22,8 @@ gem 'drb'
 gem 'addressable'
 gem 'mechanize'
 
+gem 'pdf-reader'
+
 gem 'srt'
 
 gem 'tdlib-schema', github: 'brauliobo/tdlib-schema', path: path_for("#{ENV['HOME']}/Projects/tdlib-schema")

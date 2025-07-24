@@ -145,15 +145,23 @@ class Ocr
 
         stl&.update 'OCR completed'
 
+        stl&.update 'Merging paragraphs'
         # Post-process paragraphs: split by newlines and merge across pages
         blocks = Ocr.util.merge_paragraphs(transcription[:content][:paragraphs])
-        blocks = ai_merge_paragraphs(blocks)
+
+        if USE_AI_MERGE
+          stl&.update 'AI merging paragraphs'
+          blocks = ai_merge_paragraphs(blocks)
+        end
         transcription[:content][:paragraphs] = blocks
 
+        stl&.update 'Detecting language'
         # Detect language and store in metadata
         transcription[:metadata][:language] = detect_language(blocks)
 
+        stl&.update 'Saving transcription'
         File.write json_path, JSON.pretty_generate(transcription)
+        stl&.update 'Done'
       end
     end
 
