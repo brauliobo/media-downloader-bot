@@ -6,6 +6,7 @@ ENV['SKIP_META'] = '1'
 Dir.chdir File.expand_path "#{File.realpath __dir__}/.." do
   require_relative '../lib/bot'
   require_relative '../lib/tl_bot'
+  require_relative '../lib/zipper'
 end
 
 opts  = SymMash.new metadata: {}
@@ -39,9 +40,10 @@ path.peach do |u|
   elsif File.extname(u).downcase == '.pdf'
     # Direct PDF to audiobook (OCR + TTS)
     require_relative '../lib/audiobook'
-    audio_zip = "#{dir}/#{File.basename(u, '.pdf')}.zip"
 
-    result = Audiobook.generate(u, audio_zip, stl: stl)
+    fmt_spec  = Zipper.choose_format Zipper::Types.audio, opts, nil
+    audio_out = "#{dir}/#{File.basename(u, '.pdf')}.#{fmt_spec.ext}"
+    result = Audiobook.generate u, audio_out, stl: stl, opts: opts
 
     puts "OCR transcription saved to #{result.transcription}"
     puts "Audiobook saved to #{result.audio}"

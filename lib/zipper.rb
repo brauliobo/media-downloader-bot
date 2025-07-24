@@ -1,4 +1,5 @@
 require 'tempfile'
+require 'fileutils'
 require_relative 'subtitler/ass'
 
 class Zipper
@@ -170,6 +171,34 @@ class Zipper
   def self.zip_audio *args, **params
     self.new(*args, **params).zip_audio
   end
+
+  def self.concat_audio inputs, outfile, stl: nil
+    return FileUtils.cp inputs.first, outfile if inputs.size == 1
+
+    Dir.mktmpdir do |dir|
+      listfile = File.join(dir, 'concat.txt')
+      File.write listfile, inputs.map { |p| "file '#{p}'" }.join("\n")
+
+      cmd = [
+        'ffmpeg', '-y', '-f', 'concat', '-safe', '0', '-i', Sh.escape(listfile),
+        '-c', 'copy', Sh.escape(outfile)
+      ].join(' ')
+
+      _, _, status = Sh.run cmd
+      raise 'FFmpeg concat failed' unless status.success?
+    end
+
+    outfile
+  end
+
+  def self.choose_format type_hash, opts, durat
+    fmt = opts && opts[:format]
+    fmt ||= (durat && durat >= 10.minutes ? type_hash[:ldefault] : nil) || type_hash[:default]
+    fmt = :aac if Zipper.size_mb_limit && fmt == :opus && durat && durat <= 122 # telegram consider small opus as voice
+    fmt = type_hash[fmt] if fmt.is_a?(Symbol)
+    fmt
+  end
+
   def self.extract_vtt infile, language
     self.new(infile, nil, opts: SymMash.new(format: {})).extract_vtt language
   end
@@ -202,6 +231,7 @@ class Zipper
     opts.width   = opts.width&.to_i
     opts.quality = opts.quality&.to_i if opts.quality
     opts.abrate  = opts.abrate&.to_i
+    # Use the instance variable to avoid referencing the (possibly nil) local parameter.
     @duration    = probe.format.duration.to_f / opts.speed
     opts.cuda    = if opts.nocuda then false elsif opts.cuda then true else !!ENV['CUDA'] end
 

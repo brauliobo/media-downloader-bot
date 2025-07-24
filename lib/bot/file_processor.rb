@@ -16,9 +16,12 @@ class Bot
 
     # Entry-point for Worker when we have a PDF. Performs:
     # 1. Download the Telegram document (delegated to PdfProcessor).
-    # 2. Run OCR + TTS via `Audiobook.generate` (progress through stl).
-    # 3. Upload transcription JSON and audiobook ZIP as reply docs.
-    # 4. Cleans up and returns nil.
+    # 2. Run OCR + TTS via `Audiobook.generate`.
+    # 3. Attach the generated artifacts to the input as `uploads` so that the
+    #    Worker can handle sending them. No direct upload happens here.
+    #
+    # Returns the input object augmented with its `uploads` array so that the
+    # caller (Worker) proceeds with the regular pipeline.
     def handle_pdf
       return unless pdf_document?
 
@@ -27,21 +30,28 @@ class Bot
 
       audio_zip = "#{dir}/#{File.basename(input.fn_in, '.pdf')}.zip"
 
-      progress_msg = send_message msg, me('Running OCR and TTS, please wait...')
-
-      st  = Status.new { |text| edit_message msg, progress_msg.message_id, text: me(text) }
-      stl = Status::Line.new '', status: st
+      # Use the shared Status instance so progress is integrated with other
+      # operations handled by Worker.
+      stl = Status::Line.new 'OCR & TTS', status: self.st
 
       result = Audiobook.generate(input.fn_in, audio_zip, stl: stl)
 
-      json_io  = Faraday::UploadIO.new result.transcription, 'application/json'
-      send_message msg, me('Book transcription'), type: 'document', document: json_io
+      # Describe every output for the Worker.
+      uploads = []
+      uploads << SymMash.new(
+        path:    result.transcription,
+        mime:    'application/json',
+        caption: me('Book transcription'),
+      )
+      uploads << SymMash.new(
+        path:    result.audio,
+        mime:    'application/zip',
+        caption: me('Audiobook (ZIP)'),
+      )
 
-      audio_io = Faraday::UploadIO.new result.audio, 'application/zip'
-      send_message msg, me('Audiobook (ZIP)'), type: 'document', document: audio_io
+      input.uploads = uploads
 
-      edit_message msg, progress_msg.message_id, text: me('Done ✅')
-      nil
+      input
     ensure
       pdf_dl&.cleanup if defined?(pdf_dl)
     end

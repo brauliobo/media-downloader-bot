@@ -1,5 +1,6 @@
 require 'faraday'
 require 'faraday/multipart'
+require 'rack/mime'
 
 require_relative '../audiobook'
 
@@ -111,6 +112,18 @@ class Bot
     end
 
     def upload i
+      if i.uploads.present?
+        i.uploads.each do |up|
+          path    = up[:path]    || up.path
+          caption = up[:caption] || up.caption || ''
+          mime    = up[:mime]    || up.mime    || Rack::Mime.mime_type(File.extname(path))
+
+          io = Faraday::UploadIO.new path, mime
+          send_message msg, caption, type: 'document', document: io
+        end
+        return
+      end
+
       oprobe = i.oprobe = Prober.for i.fn_out
       fn_out = i.fn_out
       type   = i.type

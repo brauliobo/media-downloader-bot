@@ -1,4 +1,5 @@
 require_relative 'ocr/ollama'
+require_relative 'ocr/pdf_text'
 
 class Ocr
 
@@ -6,8 +7,15 @@ class Ocr
 
   extend BACKEND_CLASS
 
-  def self.transcribe(*args, **kwargs)
-    BACKEND_CLASS.transcribe(*args, **kwargs)
+  # Automatically choose the appropriate backend:
+  # * If the PDF has an embedded text layer (checked on the first 3 pages), use the PDFText backend.
+  # * Otherwise fall back to the default OCR backend (Ollama or whatever is set via ENV['OCR']).
+  def self.transcribe(pdf_path, json_path, **kwargs)
+    if PDFText.has_text?(pdf_path)
+      PDFText.transcribe(pdf_path, json_path, **kwargs)
+    else
+      BACKEND_CLASS.transcribe(pdf_path, json_path, **kwargs)
+    end
   end
 
   # ---------- Generic helpers (backend-agnostic) ----------

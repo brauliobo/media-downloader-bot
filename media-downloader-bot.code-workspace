@@ -11,6 +11,9 @@
 		},
 		{
 			"path": "../coqui-ai-TTS"
+		},
+		{
+			"path": "../whisperX"
 		}
 	],
 	"settings": {}
