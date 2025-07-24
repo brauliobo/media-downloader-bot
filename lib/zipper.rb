@@ -214,7 +214,7 @@ class Zipper
     @infile  = infile
     @outfile = outfile
     @info    = info
-    @probe   = probe || Prober.for(infile)
+    @probe   = probe ||= Prober.for infile
     @stl     = stl
 
     @iopts = ''; @oopts = ''; @dopts = opts.format.opts
