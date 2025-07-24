@@ -36,13 +36,15 @@ class Ocr
       # the same footer line.
       norm = ->(s) { s.downcase.gsub(/\d+/, '<d>').gsub(/\s+/, ' ').strip }
 
-      # Heuristic: any line appearing in >30% of pages (case-insensitive) among
-      # the first/last 2 lines is considered header/footer.
+      # Heuristic: any *text* line (first and last non-blank line of a page)
+      # appearing in >30% of pages is considered a header/footer.
       hdrf_counts = Hash.new(0)
       total_pages = pages_lines.size
       pages_lines.each do |p|
-        cand = (p[:lines].first(2) + p[:lines].last(2)).map(&norm).reject(&:empty?)
-        cand.each { |l| hdrf_counts[l] += 1 }
+        # grab first and last non-blank text line of the page
+        first_text = p[:lines].find { |l| !l.strip.empty? }
+        last_text  = p[:lines].reverse.find { |l| !l.strip.empty? }
+        [first_text, last_text].compact.map(&norm).each { |l| hdrf_counts[l] += 1 }
       end
       threshold = (total_pages * 0.3).ceil
       hdrf_set = hdrf_counts.select { |_, c| c >= threshold }.keys
@@ -50,6 +52,8 @@ class Ocr
       transcription = { metadata: { pages: [] }, content: { paragraphs: [] } }
 
       pages_lines.each do |p|
+        page_first_text = p[:lines].find { |l| !l.strip.empty? }
+        page_last_text  = p[:lines].reverse.find { |l| !l.strip.empty? }
         clean_lines = p[:lines].reject { |l| hdrf_set.include?(norm.call(l)) }
 
         # Break into paragraphs by blank lines (empty strings) preserving structure.
@@ -76,7 +80,14 @@ class Ocr
         end
         add_para.call(buf)
 
-        transcription[:metadata][:pages] << { page_number: p[:num] }
+        page_meta = { page_number: p[:num] }
+        if page_first_text && hdrf_set.include?(norm.call(page_first_text))
+          page_meta[:header] = page_first_text
+        end
+        if page_last_text && hdrf_set.include?(norm.call(page_last_text))
+          page_meta[:footer] = page_last_text
+        end
+        transcription[:metadata][:pages] << page_meta
       end
 
       stl&.update 'Merging paragraphs'
