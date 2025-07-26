@@ -5,9 +5,8 @@ require_relative 'subtitler/ass'
 class Zipper
 
   class_attribute :size_mb_limit
-  self.size_mb_limit = 50
 
-  VID_WIDTH    = 640
+  VID_WIDTH    = 720
   VID_PERCENT  = 0.99
 
   TIME_REGEX   = /(?:\d?\d:)(?:\d?\d:)\d\d/
@@ -158,10 +157,18 @@ class Zipper
     1000 * Zipper.size_mb_limit / (br.to_i / 8) / 60
   end
 
-  VID_DURATION_THLD = -> { size_mb_limit ? 20 : Float::INFINITY }
-  AUD_DURATION_THLD = -> { size_mb_limit ? max_audio_duration(Types.audio.opus.opts.bitrate) : Float::INFINITY }
+  # Dynamic helpers that reevaluate the thresholds at runtime
+  def self.vid_duration_thld
+    return Float::INFINITY unless size_mb_limit
+    # Baseline: 20 minutes when the limit is 50 MB (Telegram). Scale linearly with higher limits.
+    (size_mb_limit * 20.0 / 50).ceil
+  end
 
-  # reduce width for every minutes interval exceeding VID_DURATION_THLD
+  def self.aud_duration_thld
+    size_mb_limit ? max_audio_duration(Types.audio.opus.opts.bitrate) : Float::INFINITY
+  end
+
+  # reduce width for every minutes interval exceeding vid_duration_thld
   VID_WIDTH_REDUC = SymMash.new width: 80, minutes: 8
   AUD_BRATE_REDUC = SymMash.new brate:  8, minutes: 8
 
@@ -192,10 +199,10 @@ class Zipper
   end
 
   def self.choose_format type_hash, opts, durat
-    fmt = opts && opts[:format]
-    fmt ||= (durat && durat >= 10.minutes ? type_hash[:ldefault] : nil) || type_hash[:default]
-    fmt = :aac if Zipper.size_mb_limit && fmt == :opus && durat && durat <= 122 # telegram consider small opus as voice
-    fmt = type_hash[fmt] if fmt.is_a?(Symbol)
+    fmt   = opts && opts.format
+    fmt ||= if durat && durat >= 10.minutes then type_hash[:ldefault] else type_hash[:default] end
+    fmt   = :aac if Zipper.size_mb_limit && fmt == :opus && durat && durat <= 122 # telegram consider small opus as voice
+    fmt   = type_hash[fmt]
     fmt
   end
 
@@ -552,15 +559,6 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s webvtt -f w
 
   def http
     Mechanize.new
-  end
-
-  # Dynamic helpers that reevaluate the thresholds at runtime
-  def self.vid_duration_thld
-    size_mb_limit ? 20 : Float::INFINITY
-  end
-
-  def self.aud_duration_thld
-    size_mb_limit ? max_audio_duration(Types.audio.opus.opts.bitrate) : Float::INFINITY
   end
 
 end

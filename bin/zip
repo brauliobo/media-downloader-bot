@@ -29,7 +29,8 @@ st  = Bot::Status.new do |line|
 end
 stl = Bot::Status::Line.new '', status: st
 
-path = if ARGV.size > 1 then ARGV else ARGV.first.split "\n" end
+raise "No files found" if ARGV.blank?
+path = if ARGV.size > 1 then ARGV else ARGV.first&.split "\n" end
 path.peach do |u|
   base_dir = u =~ URI::regexp ? Dir.pwd : File.dirname(u)
   dir      = "#{base_dir}/converted"
