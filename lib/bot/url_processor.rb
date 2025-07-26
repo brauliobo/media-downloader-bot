@@ -106,7 +106,19 @@ class Bot
         audiof += "[language=#{opts.lang}]" if opts.lang
         audiof  = 'mp3-320' if url.index 'bandcamp.com' # FIXME: it is choosing flac
 
-        bcmd << " -f '#{videof}+#{audiof}/best'"
+        # Inject ffmpeg downloader cut when start/stop times are given
+        if opts.ss || opts.to
+          bcmd << ' --downloader ffmpeg'
+          darr = []
+          darr << "-ss #{opts.ss}" if opts.ss
+          darr << "-to #{opts.to}" if opts.to
+          bcmd << " --downloader-args \"ffmpeg_i:#{darr.join(' ')}\""
+          opts.delete :ss
+          opts.delete :to
+          videof = audiof = nil # format selection not compatible
+        end
+
+        bcmd << " -f '#{videof}+#{audiof}/best'" if videof and audiof
 
         ml = if opts.audio then AL else VL end
         opts.limit ||= ml if opts.after
