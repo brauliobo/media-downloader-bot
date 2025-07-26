@@ -154,6 +154,7 @@ class Bot
       durat   -= ChronicDuration.parse i.opts.ss if i.opts.ss
 
       chosen   = Zipper.choose_format i.type, i.opts, durat
+
       i.format = i.opts.format = chosen
       i.opts.cover  = i.info.thumbnail
 
