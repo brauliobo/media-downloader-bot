@@ -5,15 +5,10 @@ class Bot
       info = msg.document
       raise 'No PDF' unless info&.mime_type == 'application/pdf' || info&.file_name&.end_with?('.pdf')
 
-      file  = SymMash.new api.get_file file_id: info.file_id
-      fn_in = file.result.file_path
-      page  = http.get "https://api.telegram.org/file/bot#{ENV['TOKEN']}/#{fn_in}"
-
-      fn_out = "#{dir}/#{info.file_name || 'input.pdf'}"
-      File.write fn_out, page.body
+      local_path = bot.download_file(info, dir: dir)
 
       SymMash.new(
-        fn_in: fn_out,
+        fn_in: local_path,
         info:  {title: info.file_name},
       )
     end

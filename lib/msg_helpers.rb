@@ -43,4 +43,5 @@ module MsgHelpers
     CGI::escapeHTML t
   end
 
+  extend self
 end
