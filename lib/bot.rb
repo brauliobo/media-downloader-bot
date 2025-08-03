@@ -63,7 +63,7 @@ class Bot
   def fork name
     pid = Kernel.fork do
       DB.disconnect if defined? DB
-      Process.setproctitle name
+      Process.setproctitle name.to_s
       yield
     end
     Process.detach pid
@@ -140,7 +140,7 @@ EOS
 
   def react msg
     msg.bot = bot
-    return if msg.text.blank? and msg.video.blank? and msg.audio.blank?
+    return if msg.text.blank? && msg.video.blank? && msg.audio.blank? && msg.document.blank?
     return send_help msg if msg.text&.starts_with? '/start'
     return send_help msg if msg.text&.starts_with? '/help'
     raise 'user blocked' if msg.from.id.in? BLOCKED_USERS

@@ -174,5 +174,16 @@ class TlBot
       MsgHelpers.limit text
     end
 
+    # Download any Telegram file (audio, video, document) and store it locally.
+    def download_file(info, dir: Dir.tmpdir)
+      tg_path   = api.get_file(file_id: info.file_id).file_path or raise 'no file_path returned'
+      file_name = File.basename tg_path
+      local     = File.join dir, file_name
+
+      base_url = "https://api.telegram.org/file/bot#{ENV['TL_BOT_TOKEN']}/"
+      File.write local, Mechanize.new.get(base_url + tg_path).body
+      local
+    end
+
   end
 end

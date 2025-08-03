@@ -59,10 +59,15 @@ class Bot
       @st   = st || stline.status
       @stl  = stline
 
-      return unless line or msg
-      @line = line || msg.text
+      return unless line || msg
+      @line = line || msg&.text
+      if @line.blank?
+        @args = []
+        @opts = SymMash.new
+        return
+      end
       @args = @line.split(/[[:space:]]+/)
-      @uri  = Addressable::URI.parse @args.shift if @args.first =~ URI::regexp
+      @uri  = Addressable::URI.parse(@args.shift) if @args.first&.match?(URI::DEFAULT_PARSER.make_regexp)
       @url  = @uri&.to_s
       raise 'Blocked domain' if @uri && @uri.host && BLOCKED_DOMAINS.any?{ |d| @uri.host.index d }
 

@@ -25,31 +25,8 @@ class Bot
     def handle_pdf
       return unless pdf_document?
 
-      pdf_dl  = Bot::PdfProcessor.new(dir:, bot:, msg:)
-      input   = pdf_dl.download
-
-      audio_zip = "#{dir}/#{File.basename(input.fn_in, '.pdf')}.zip"
-
-      # Use the shared Status instance so progress is integrated with other
-      # operations handled by Worker.
-      stl = Status::Line.new 'OCR & TTS', status: self.st
-
-      result = Audiobook.generate(input.fn_in, audio_zip, stl: stl)
-
-      # Describe every output for the Worker.
-      uploads = []
-      uploads << SymMash.new(
-        path:    result.transcription,
-        mime:    'application/json',
-        caption: me('Book transcription'),
-      )
-      uploads << SymMash.new(
-        path:    result.audio,
-        mime:    'application/zip',
-        caption: me('Audiobook (ZIP)'),
-      )
-
-      input.uploads = uploads
+      pdf_dl = Bot::PdfProcessor.new(dir:, bot:, msg:, st: self.st)
+      input  = pdf_dl.download
 
       input
     ensure
@@ -60,55 +37,41 @@ class Bot
     def download
       return handle_pdf if pdf_document?
 
-      # Use TDLib when running under a TDBot instance -----------------------------
-      return download_via_tdlib if defined?(TDBot) && bot.is_a?(TDBot)
-
-      # Fallback to Telegram Bot API --------------------------------------------
-      info   = msg.video || msg.audio
-      file   = SymMash.new api.get_file file_id: info.file_id
-      fn_in  = file.result.file_path
-      page   = http.get "https://api.telegram.org/file/bot#{ENV['TOKEN']}/#{fn_in}"
-
-      fn_out = "#{dir}/input.#{File.extname fn_in}"
-      File.write fn_out, page.body
-
-      SymMash.new(
-        fn_in: fn_out,
-        opts:  SymMash.new(onlysrt: 1),
-        info: {
-          title: info.file_name,
-        },
-      )
+      info = msg.video || msg.audio
+      unless info
+        st.error('Unsupported message type')
+        return
       end
 
-    # Download using TDLib for TDBot ---------------------------------------------
-    def download_via_tdlib
-    td      = bot.td
-    content = msg.content
+      local_path = bot.download_file(info, dir: dir)
 
-    file_id, file_name = case content
-    when TD::Types::MessageContent::Video then [content.video.video.id, content.video.file_name]
-    when TD::Types::MessageContent::Audio then [content.audio.audio.id, content.audio.file_name]
-    else
-      st.error('Unsupported message type')
-      return
+      SymMash.new(
+        fn_in: local_path,
+        opts:  SymMash.new(onlysrt: 1),
+        info: {
+          title: info.respond_to?(:file_name) ? info.file_name : File.basename(local_path, File.extname(local_path)),
+        },
+      )
     end
 
-    td.download_file(file_id: file_id, priority: 1, synchronous: true)
-    file_info  = td.get_file(file_id: file_id).value
-    local_path = file_info.local.path
-
-    SymMash.new(
-      fn_in: local_path,
-      opts: SymMash.new(onlysrt: 1),
-      info: { title: file_name || File.basename(local_path, File.extname(local_path)) },
-    )
-  end
 
   # PDF bypasses the typical transcoding flow, so we override `handle_input`
     # to no-op in that case. For audio/video, fall back to the parent logic.
-    def handle_input i=nil, **kwargs
-      return if pdf_document?
+    # Handle transcoding normally; for PDFs run OCR+TTS here where stline exists.
+    def handle_input(i = nil, **kwargs)
+      if pdf_document?
+        raise 'no input provided' unless i
+
+        @stl&.update 'OCR & TTS'
+        audio_out = "#{dir}/#{File.basename(i.fn_in, '.pdf')}.opus"
+        result = Audiobook.generate(i.fn_in, audio_out, stl: @stl)
+
+        i.uploads = [
+          SymMash.new(path: result.transcription, mime: 'application/json', caption: me('Book transcription')),
+          SymMash.new(path: result.audio,        mime: 'audio/ogg',          caption: me('Audiobook')),
+        ]
+        return i
+      end
       super
     end
 

@@ -97,7 +97,6 @@ class TDBot
           duration  = (params[:duration] || 0).to_i
           video_args = {
             video:       input_file,
-            thumbnail:   ithumb,
             duration:    duration,
             width:       width,
             height:      height,
@@ -107,6 +106,7 @@ class TDBot
             show_caption_above_media: false,
             added_sticker_file_ids:   [], # required
           }
+          video_args[:thumbnail] = ithumb if ithumb
           TD::Types::InputMessageContent::Video.new video_args
         elsif params[:audio]
           audio_args = {
@@ -115,15 +115,15 @@ class TDBot
             title:     params[:title].to_s,
             performer: params[:performer].to_s,
             caption:   caption_ft,
-            album_cover_thumbnail: ithumb,
+            album_cover_thumbnail: ithumb || DUMMY_THUMB,
           }
           TD::Types::InputMessageContent::Audio.new audio_args
         elsif params[:document]
           doc_args = {
             document: input_file,
-            thumbnail: ithumb,
             disable_content_type_detection: false,
             caption: caption_ft,
+            thumbnail: ithumb || DUMMY_THUMB,
           }
           TD::Types::InputMessageContent::Document.new doc_args
         end
@@ -275,12 +275,47 @@ class TDBot
             nil
           end
         end unless method_defined? :text
+
+        # Ensure optional flags absent in older TDLib versions exist
+        class << self
+          alias_method :__orig_new_msg, :new unless method_defined?(:__orig_new_msg)
+          def new(hash)
+            h = hash.dup
+            h[:is_topic_message] = false unless h.key?(:is_topic_message) || h.key?('is_topic_message')
+            h[:saved_messages_topic_id] ||= 0
+            __orig_new_msg(h)
+          end
+        end
       end
     end
 
-    # Stub missing type to avoid serialization errors
+    # Provide defaults for new boolean/int flags missing in older TDLib builds so
+    # tdlib-ruby structs never crash. This is version-agnostic: if the flag is
+    # already present we keep it, otherwise we supply a sane default.
     module TD::Types
       class MessageSelfDestructType < Base; end unless const_defined?(:MessageSelfDestructType)
+
+      %i[ScopeNotificationSettings ChatNotificationSettings].each do |klass|
+        next if const_defined?(klass)
+      end
+
+      # Patch ScopeNotificationSettings and ChatNotificationSettings to tolerate
+      # missing story-related flags in older tdlib builds.
+      {
+        ScopeNotificationSettings: %i[show_story_sender use_default_show_story_sender],
+        ChatNotificationSettings:  %i[show_story_sender use_default_show_story_sender],
+      }.each do |kls, flags|
+        base = const_get(kls) rescue next
+        flag_list = flags
+        class << base
+          alias_method :__orig_new_notif, :new unless method_defined?(:__orig_new_notif)
+          define_method :new do |hash|
+            h = hash.dup
+            flag_list.each { |f| h[f] = false unless h.key?(f) || h.key?(f.to_s) }
+            __orig_new_notif(h)
+          end
+        end
+      end
 
       # Make self_destruct_type optional for InputMessageContent::Video to support older TDLib versions.
       class InputMessageContent::Video < InputMessageContent
@@ -316,6 +351,43 @@ class TDBot
       return text unless text
       MsgHelpers::MARKDOWN_FORMAT.each { |c| text = text.gsub(c, "\\#{c}") }
       text
+    end
+
+    # Download any Telegram file (audio, video, document) via TDLib and return
+    # the local filesystem path.
+    def download_file(info, dir: nil)
+      td = self.td
+
+      file_id, remote_id, file_name = case info
+      when TD::Types::Document
+        [info.document.id, info.document.remote.id, info.file_name]
+      when TD::Types::MessageDocument
+        [info.document.id, info.document.remote.id, info.file_name]
+      when TD::Types::Audio
+        [info.audio.id,    info.audio.remote.id,    info.file_name]
+      when TD::Types::Video
+        [info.video.id,    info.video.remote.id,    info.file_name]
+      else
+        id = info.respond_to?(:id) ? info.id : nil
+        [id, nil, info.respond_to?(:file_name) ? info.file_name : nil]
+      end
+
+      raise 'Unsupported info type for download' unless file_id || remote_id
+
+      if file_id && file_id.nonzero?
+        td.download_file(file_id: file_id, priority: 1, offset: 0, limit: 0, synchronous: true)
+        file_info = td.get_file(file_id: file_id).value
+      elsif remote_id && !remote_id.empty?
+        # Attempt to register remote file to obtain a valid file_id
+        rf = td.search_public_file(remote_id: remote_id).value rescue nil
+        fid = rf&.id
+        raise 'No valid file identifier' unless fid && fid.nonzero?
+        td.download_file(file_id: fid, priority: 1, offset: 0, limit: 0, synchronous: true)
+        file_info = td.get_file(file_id: fid).value
+      else
+        raise 'Unsupported info type for download'
+      end
+      file_info.local.path
     end
 
   end
