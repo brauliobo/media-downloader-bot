@@ -22,7 +22,8 @@ class Audiobook
     # input, we keep it. If a PDF was provided, place the JSON alongside the
     # desired output ZIP using the same basename.
     if File.extname(input_path).downcase == '.pdf'
-      json_path = File.join(File.dirname(out_audio), "#{File.basename(input_path, '.pdf')}.json")
+      json_base = File.basename(out_audio, File.extname(out_audio))
+      json_path = File.join(File.dirname(out_audio), "#{json_base}.json")
       Ocr.transcribe(input_path, json_path, stl: stl)
     else
       json_path = input_path

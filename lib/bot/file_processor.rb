@@ -63,7 +63,8 @@ class Bot
         raise 'no input provided' unless i
 
         @stl&.update 'OCR & TTS'
-        audio_out = "#{dir}/#{File.basename(i.fn_in, '.pdf')}.opus"
+        base = File.basename((i.info&.title || i.fn_in), '.pdf')
+        audio_out = "#{dir}/#{base}.opus"
         result = Audiobook.generate(i.fn_in, audio_out, stl: @stl)
 
         i.uploads = [
