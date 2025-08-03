@@ -52,8 +52,11 @@ class Subtitler
     end
 
     # Convert verbose_json into SRT with inline per-word timings.
-    def srt_convert verbose_json
+    # When stdsub: true, adjacent short segments are merged to produce
+    # typical movie-style subtitles (max ~2 lines / similar length).
+    def srt_convert verbose_json, stdsub: false, word_tags: true
       mash = SymMash.new verbose_json
+      merge_segments_for_stdsub!(mash) if stdsub
 
       ts = ->(t){ h, rem = t.divmod(3600); m, s = rem.divmod(60); "%02d:%02d:%02d,%03d" % [h, m, s.to_i, (s.modulo(1)*1000).round] }
 
@@ -65,7 +68,11 @@ class Subtitler
         line = (seg.words || []).each_with_index.map do |w,i|
           word    = w.word.to_s.strip
           w_start = ts.call(w.start)
-          i.zero? ? word : "<#{w_start}>#{word}"
+          if word_tags
+            i.zero? ? word : "<#{w_start}>#{word}"
+          else
+            word
+          end
         end.join(' ')
 
         out << "#{idx+1}\n"
@@ -79,8 +86,9 @@ class Subtitler
     # Convert whisper.cpp verbose_json output to WEBVTT with inline per-word timings.
     # Accepts either a Hash (already parsed) or a JSON string.
     # Returns the VTT as a single string.
-    def vtt_convert verbose_json
+    def vtt_convert verbose_json, stdsub: false, word_tags: true
       mash = SymMash.new verbose_json
+      merge_segments_for_stdsub!(mash) if stdsub
 
       ts = ->(t){ h, rem = t.divmod(3600); m, s = rem.divmod(60); "%02d:%02d:%06.3f" % [h, m, s] }
 
@@ -92,7 +100,11 @@ class Subtitler
         line = (seg.words || []).each_with_index.map do |w,idx|
           word     = w.word.to_s.strip
           w_start  = ts.call(w.start)
-          idx.zero? ? word : "<#{w_start}>#{word}"
+          if word_tags
+            idx.zero? ? word : "<#{w_start}>#{word}"
+          else
+            word
+          end
         end.join(' ')
 
         vtt << "#{start} --> #{finish}\n"
@@ -173,14 +185,45 @@ class Subtitler
           if merged.empty? || raw.start_with?(' ')
             merged << w
           else
-            prev       = merged.last
-            prev.word  = "#{prev.word}#{raw}"
-            prev.end   = w.end
+            prev = merged.last
+            # Avoid merging across sentence boundaries (prev token ends with . ? or !)
+            if prev.word.to_s.strip.match?(/[.!?]$/)
+              merged << w
+            else
+              prev.word = "#{prev.word}#{raw}"
+              prev.end  = w.end
+            end
           end
         end
         seg.words = merged
         seg.text  = merged.map { |tw| tw.word.to_s.strip }.join(' ')
       end
+      mash
+    end
+
+    # Merge adjacent segments to build standard two-line movie subtitles.
+    # Merges when the silence gap ≤ gap_threshold and total text length ≤ max_chars.
+    def merge_segments_for_stdsub! mash, max_chars: 84, gap_threshold: 1.0
+      segments = mash.segments || []
+      return mash if segments.empty?
+
+      merged = []
+      current = segments.first
+      segments.drop(1).each do |seg|
+        gap = seg.start.to_f - current.end.to_f
+        combined_len = current.text.to_s.length + 1 + seg.text.to_s.length
+        if gap <= gap_threshold && combined_len <= max_chars
+          current.text = "#{current.text} #{seg.text}"
+          current.end  = seg.end
+          current.words ||= []
+          current.words.concat(seg.words || [])
+        else
+          merged << current
+          current = seg
+        end
+      end
+      merged << current unless merged.last.equal?(current) rescue merged.push(current)
+      mash.segments = merged
       mash
     end
 

@@ -1,7 +1,13 @@
 require 'chronic_duration'
+require_relative '../output'
 
 class Bot
   class Processor
+
+    def self.add_opt h, o
+      k, v = o.split('=', 2)
+      h[k] = v || 1
+    end
 
     Types = Zipper::Types
 
@@ -98,6 +104,12 @@ class Bot
 
       binding.pry if ENV['PRY_BEFORE_CONVERT']
 
+      # Handle subtitle-only request before heavy conversion
+      if i.opts.onlysrt
+        generate_srt_only(i)
+        return i
+      end
+
       i.thumb = i.opts.thumb = thumb i.info
       return unless i.fn_out = convert(i, pos: pos)
 
@@ -111,6 +123,11 @@ class Bot
       tag i
 
       i
+    end
+
+    def generate_srt_only i
+      srt_path = Zipper.generate_srt(i.fn_in, dir: dir, info: i.info, probe: i.probe, stl: @stl, opts: i.opts)
+      i.uploads = [SymMash.new(path: srt_path, mime: 'application/x-subrip', caption: '')]
     end
 
     def tag i
@@ -165,14 +182,7 @@ class Bot
       m.url    = i.url
       i.opts.metadata = m
 
-      fn_out  = i.info.title.dup
-      fn_out  = "#{pos} #{fn_out}" if pos # avoid filename conflict on multiline
-      fn_out << " by #{i.info.uploader}" if i.info.uploader
-      fn_out  = fn_out.first 80 # /tmp can't have big filename
-      fn_out << ".#{i.format.ext}"
-      fn_out.gsub! '"', '' # Telegram doesn't accept "
-      fn_out.gsub! '/', ', ' # not escaped by shellwords
-      fn_out  = "#{dir}/#{fn_out}"
+      fn_out = Output.filename(i.info, dir: dir, ext: i.format.ext, pos: pos)
 
       Dir.chdir dir do
         o, e, st = Zipper.send "zip_#{i.type.name}", i.fn_in, fn_out,
