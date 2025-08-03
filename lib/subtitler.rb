@@ -6,4 +6,8 @@ class Subtitler
 
   extend BACKEND_CLASS
 
+  TAG_REGEX = /<\d{2}:\d{2}:\d{2}[,.]\d{3}>/
+  def self.strip_word_tags str
+    str.gsub(TAG_REGEX, '')
+  end
 end

@@ -401,6 +401,40 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s webvtt -f w
     wpath
   end
 
+  # Public helper: prepare subtitles and return [vtt, lang, verbose_json]
+  def self.prepare_subtitle infile, info:, probe:, stl:, opts:
+    new(infile, nil, info: info, probe: probe, stl: stl, opts: opts).prepare_subtitle
+  end
+
+  # Prepare subtitles (download, transcribe, translate) and return
+  # [vtt_string, language_iso, verbose_json_or_nil]
+  def prepare_subtitle
+    vtt = nil; lng = nil; tsp = nil
+
+    vtt,lng = fetch_subtitle unless opts.gensubs
+
+    if vtt.nil?
+      stl&.update 'transcribing'
+      res = Subtitler.transcribe infile
+      tsp,lng = res.output, res.lang
+      vtt = Subtitler.vtt_convert tsp, word_tags: !opts.nowords
+      info.language ||= lng
+    end
+
+    if opts.lang && lng && opts.lang.to_s != lng.to_s
+      stl&.update 'translating'
+      if tsp
+        tsp = Subtitler.translate tsp, from: lng, to: opts.lang
+        vtt = Subtitler.vtt_convert tsp, word_tags: !opts.nowords
+      else
+        vtt = Translator.translate_vtt vtt, from: lng, to: opts.lang
+      end
+      lng = opts.lang
+    end
+
+    [vtt, lng, tsp]
+  end
+
   protected
 
   def reduce_framerate
@@ -504,37 +538,41 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s webvtt -f w
     [vtt, lng]
   end
 
-  def apply_subtitle
-    return if !opts.lang and !opts.subs
+  # Generate an SRT file from the given media and return its path
+  def self.generate_srt infile, dir:, info:, probe:, stl:, opts:
+    opts ||= SymMash.new
+    opts.format ||= Zipper::Types.audio.opus unless opts.respond_to?(:format) && opts.format
+    opts.audio ||= 1 # audio-only download is enough for transcription
 
-    vtt,lng = fetch_subtitle if !opts.gensubs and opts.lang
+    vtt,lng,tsp = prepare_subtitle(infile, info: info, probe: probe, stl: stl, opts: opts)
 
-    if !vtt
-      stl&.update 'transcribing'
-      res = Subtitler.transcribe infile
-      tsp,lng = res.output, res.lang
-      info.language ||= lng # instagram doesn't have language metadata
-    end
-
-    if opts.lang and opts.lang != lng
-      stl&.update 'translating'
-      if tsp
-        tsp = Subtitler.translate tsp, from: lng, to: opts.lang
-        vtt = Subtitler.vtt_convert tsp
-      else
-        vtt = Translator.translate_vtt vtt, from: lng, to: opts.lang
-      end
-
-      lng = opts.lang
+    require_relative 'output'
+    srt_path = Output.filename(info, dir: dir, ext: 'srt')
+    if tsp
+      srt_content = Subtitler.srt_convert(tsp, word_tags: !opts.nowords)
     else
-      vtt = Subtitler.vtt_convert tsp
+      vtt_path = File.join(dir, 'sub.vtt')
+      File.write vtt_path, vtt
+      srt_content, _, status = Sh.run "ffmpeg -loglevel error -y -i #{Sh.escape vtt_path} -f srt -"
+      raise 'srt conversion failed' unless status.success?
     end
+
+
+
+    File.write srt_path, srt_content
+    srt_path
+  end
+
+  def apply_subtitle
+    return if !opts.lang && !opts.subs && !opts.onlysrt
+
+    vtt,lng,_tsp = prepare_subtitle
     stl&.update 'transcoding'
 
     # generate ASS subtitle directly (scales font automatically for portrait videos)
     vstrea = probe.streams.find{ |s| s.codec_type == 'video' }
     is_portrait = vstrea.width < vstrea.height
-    ass_content = Subtitler::Ass.from_vtt(vtt, portrait: is_portrait, mode: :instagram)
+    ass_content = Subtitler::Ass.from_vtt vtt, portrait: is_portrait, mode: if opts.nowords then :plain else :instagram end
 
     assp = 'sub.ass'
     File.write assp, ass_content

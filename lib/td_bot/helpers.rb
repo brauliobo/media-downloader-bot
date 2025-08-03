@@ -33,26 +33,34 @@ class TDBot
 
     def listen
       client.on TD::Types::Update::NewMessage do |update|
-        msg = update.message
-        text = case msg.content
+        orig_msg = update.message
+        text = case orig_msg.content
         when TD::Types::MessageContent::Text
-          STDERR.puts msg.content.text
-          msg.content.text&.text
+          STDERR.puts orig_msg.content.text
+          orig_msg.content.text&.text
         when TD::Types::MessageContent::Photo,
              TD::Types::MessageContent::Video,
              TD::Types::MessageContent::Audio,
              TD::Types::MessageContent::Document
-          msg.content.caption&.text
+          orig_msg.content.caption&.text
         else
           nil
         end
         msg = SymMash.new(
-          msg.to_h.merge(
-            chat: {id: msg.chat_id},
-            from: {id: msg.sender_id.user_id},
+          orig_msg.to_h.merge(
+            chat: {id: orig_msg.chat_id},
+            from: {id: orig_msg.sender_id.user_id},
             text: text,
           )
         )
+        case orig_msg.content
+        when TD::Types::MessageContent::Audio
+          msg[:audio]    = orig_msg.content.audio
+        when TD::Types::MessageContent::Video
+          msg[:video]    = orig_msg.content.video
+        when TD::Types::MessageContent::Document
+          msg[:document] = orig_msg.content.document
+        end
         # Ignore messages sent by the bot itself (identified by user id)
         @self_id ||= td.get_me.value.id
         if (sid = msg.sender_id)&.respond_to?(:user_id)

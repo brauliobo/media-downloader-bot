@@ -94,6 +94,8 @@ class Subtitler
         e_sec = parse_time(cue[:end])
         raw = CGI.unescapeHTML(cue[:text])
         raw.gsub!(/\r?\n/, '\\N')
+        # remove per-word timestamp markers when plain mode requested
+        raw.gsub!(/<\d{2}:\d{2}:\d{2}\.\d{3}>/, '') if mode && mode.to_sym == :plain
 
         if raw.match(/<\d{2}:\d{2}:\d{2}\.\d{3}>/)
           segments = raw.split(/<(\d{2}:\d{2}:\d{2}\.\d{3})>/)
