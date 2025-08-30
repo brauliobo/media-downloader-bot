@@ -12,9 +12,14 @@ class Zipper
     # Public entry -----------------------------------------------------------
     # Attach subtitles to a Zipper instance (video only).
     def apply(zipper)
-      return if !zipper.opts.lang && !zipper.opts.subs && !zipper.opts.onlysrt
+      return if !zipper.opts.lang && !zipper.opts.subs && !zipper.opts.onlysrt && !zipper.opts.sub_vtt
 
-      vtt, lng, tsp = prepare(zipper)
+      if (sv = zipper.opts.sub_vtt).present?
+        vtt = sv.to_s
+        lng = zipper.opts.sub_lang || zipper.opts.lang
+      else
+        vtt, lng, tsp = prepare(zipper)
+      end
       zipper.stl&.update 'transcoding'
 
       # generate ASS subtitle directly (scales font automatically for portrait videos)
@@ -23,12 +28,13 @@ class Zipper
       ass_content  = Subtitler::Ass.from_vtt(vtt, portrait: is_portrait,
                                              mode: zipper.opts.nowords ? :plain : :instagram)
 
-      assp = 'sub.ass'
+      prefix = zipper.opts._sub_prefix || 'sub'
+      assp = "#{prefix}.ass"
       File.write assp, ass_content
       zipper.fgraph << "ass=#{assp}"
 
       # Write VTT (needed for embedding)
-      subp = 'sub.vtt'
+      subp = "#{prefix}.vtt"
       File.write subp, vtt
       zipper.iopts << " -i #{subp}"
       zipper.oopts << " -c:s mov_text -metadata:s:s:0 language=#{lng} -metadata:s:s:0 title=#{lng}" if zipper.opts.speed == 1
@@ -60,6 +66,92 @@ class Zipper
       end
 
       [vtt, lng, tsp]
+    end
+
+    # Slice a VTT by time and optionally rebase to 00:00:00
+    # from/to are HH:MM:SS strings
+    def slice_vtt(vtt, from:, to:, rebase: true)
+      from_s = hms_to_seconds(from)
+      to_s   = hms_to_seconds(to)
+      out = +"WEBVTT\n\n"
+      i = 0
+      vtt.each_line.slice_when { |prev, line| line.strip.empty? && !prev.strip.empty? }.each do |blk|
+        cue = blk.join
+        next unless cue.include?("-->")
+        lines = cue.lines
+        timing = lines.find { |l| l.include?("-->") }
+        next unless timing
+        ts, te = timing.strip.split("-->").map(&:strip)
+        ts_s = hms_ms_to_seconds(ts)
+        te_s = hms_ms_to_seconds(te)
+        next if te_s <= from_s || ts_s >= to_s
+        n_ts = [ts_s - from_s, 0].max
+        n_te = [te_s - from_s, 0].max
+        n_ts = [n_ts, to_s - from_s].min
+        n_te = [n_te, to_s - from_s].min
+        if rebase
+          nts = seconds_to_hms_ms(n_ts)
+          nte = seconds_to_hms_ms(n_te)
+        else
+          nts = seconds_to_hms_ms(ts_s)
+          nte = seconds_to_hms_ms(te_s)
+        end
+        text = (lines - [timing]).join.strip
+        next if text.blank?
+        i += 1
+        out << "#{i}\n#{nts} --> #{nte}\n#{text}\n\n"
+      end
+      out
+    end
+
+    # Convert SRT string to simple VTT string (no styling), in-memory.
+    def srt_text_to_vtt(srt)
+      out = +"WEBVTT\n\n"
+      buf = []
+      srt.each_line do |line|
+        if line.strip.empty?
+          out << buf.join if buf.any?
+          out << "\n"
+          buf.clear
+          next
+        end
+
+        if line.include?("-->")
+          # 00:00:01,000 --> 00:00:02,000  =>  00:00:01.000 --> 00:00:02.000
+          buf << line.tr(',', '.')
+        elsif line.strip =~ /^\d+$/
+          # drop numeric index lines
+        else
+          buf << line
+        end
+      end
+      out << buf.join if buf.any?
+      out
+    end
+
+    def hms_to_seconds(hms)
+      return unless hms
+      if hms =~ /(\d{1,2}):(\d{2}):(\d{2})/
+        $1.to_i*3600 + $2.to_i*60 + $3.to_i
+      end
+    end
+
+    def hms_ms_to_seconds(hms)
+      return unless hms
+      if hms =~ /(\d{1,2}):(\d{2}):(\d{2})([\.,](\d{3}))?/
+        base = $1.to_i*3600 + $2.to_i*60 + $3.to_i
+        ms = $5.to_i
+        base + ms/1000.0
+      end
+    end
+
+    def seconds_to_hms_ms(sec)
+      sec = sec.to_f
+      h = (sec/3600).floor
+      m = ((sec%3600)/60).floor
+      s = (sec%60).floor
+      ms = ((sec - sec.floor) * 1000).round
+      format('%02d:%02d:%02d.%03d', h, m, s, ms)
     end
 
     # ----------------------------------------------------------------------

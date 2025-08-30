@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CONV_DIR="$ROOT_DIR/converted"
+
+shopt -s nullglob
+videos=("$CONV_DIR"/*.{mp4,mkv,webm,mov})
+shopt -u nullglob
+
+if [[ ${#videos[@]} -eq 0 ]]; then
+  echo "No videos found in: $CONV_DIR" >&2
+  exit 1
+fi
+
+video="${videos[0]}"
+base_noext="${video%.*}"
+srt=""
+
+if [[ -f "${base_noext}.srt" ]]; then
+  srt="${base_noext}.srt"
+elif [[ -f "${base_noext}.SRT" ]]; then
+  srt="${base_noext}.SRT"
+fi
+
+echo "Using video: $video" >&2
+mkdir -p "$ROOT_DIR/converted"
+
+# Work around Ruby URI regex mis-detecting paths with ':' as URLs by using sanitized symlinks
+tmpdir="$ROOT_DIR/.genshorts_tmp"
+mkdir -p "$tmpdir"
+safe_base="$(basename "$base_noext" | tr ':?' '__')"
+vlink="$tmpdir/${safe_base}.mp4"
+rm -f "$vlink"
+ln -s "$video" "$vlink"
+
+if [[ -n "$srt" ]]; then
+  echo "Using SRT:   $srt" >&2
+  slink="$tmpdir/${safe_base}.srt"
+  rm -f "$slink"
+  ln -s "$srt" "$slink"
+  "$ROOT_DIR/bin/zip" "$vlink" "genshorts=$slink" "$@"
+else
+  echo "No SRT next to video; will auto-generate SRT" >&2
+  "$ROOT_DIR/bin/zip" "$vlink" "genshorts" "$@"
+fi
+
+# Move generated shorts from temp converted dir to project converted dir
+if compgen -G "$tmpdir/converted/*" > /dev/null; then
+  mv -f "$tmpdir/converted"/* "$ROOT_DIR/converted/" || true
+fi
+
+

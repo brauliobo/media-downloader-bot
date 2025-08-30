@@ -187,6 +187,8 @@ class Zipper
     szopts = apply_video_size_limits
 
     aenc        = AUDIO_ENC[opts.acodec&.to_sym] || AUDIO_ENC.opus
+    # Ensure abrate is set for video audio track (kbps)
+    opts.abrate ||= opts.format&.opts&.abrate || 64
     opts.abrate = (aenc.percent * opts.abrate).round if size_mb_limit
     acodec      = aenc.encode % {abrate: opts.abrate}
 
@@ -365,6 +367,8 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s webvtt -f w
 
   def check_width
     vstrea = probe.streams.find{ |s| s.codec_type == 'video' }
+    # Ensure a sane default width
+    opts.width ||= opts.format&.opts&.width || vstrea&.width || 720
     if opts.vf&.index 'transpose'
     elsif vstrea.width < vstrea.height # portrait image
       opts.width /= 2
