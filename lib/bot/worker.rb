@@ -119,7 +119,7 @@ class Bot
           mime    = up[:mime]    || up.mime    || Rack::Mime.mime_type(File.extname(path))
 
           io = Faraday::UploadIO.new path, mime
-          send_message msg, caption, type: 'document', document: io
+          send_message msg, caption, type: 'document', document: io, parse_mode: nil
         end
         return
       end
