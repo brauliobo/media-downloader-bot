@@ -52,11 +52,13 @@ class Subtitler
     end
 
     # Convert verbose_json into SRT with inline per-word timings.
-    # When stdsub: true, adjacent short segments are merged to produce
+    # When normalize: true (default), adjacent short segments are merged to produce
     # typical movie-style subtitles (max ~2 lines / similar length).
-    def srt_convert verbose_json, stdsub: false, word_tags: true
+    # Backward-compat: legacy stdsub overrides normalize when provided.
+    def srt_convert verbose_json, normalize: true, word_tags: true, stdsub: nil
       mash = SymMash.new verbose_json
-      merge_segments_for_stdsub!(mash) if stdsub
+      use_norm = stdsub.nil? ? normalize : stdsub
+      merge_segments_for_stdsub!(mash) if use_norm
 
       ts = ->(t){ h, rem = t.divmod(3600); m, s = rem.divmod(60); "%02d:%02d:%02d,%03d" % [h, m, s.to_i, (s.modulo(1)*1000).round] }
 
@@ -65,15 +67,20 @@ class Subtitler
         start = ts.call(seg.start)
         finish = ts.call(seg.end)
 
-        line = (seg.words || []).each_with_index.map do |w,i|
-          word    = w.word.to_s.strip
-          w_start = ts.call(w.start)
-          if word_tags
-            i.zero? ? word : "<#{w_start}>#{word}"
-          else
-            word
-          end
-        end.join(' ')
+        words = seg.words || []
+        line = if words.empty?
+          seg.text.to_s.strip
+        else
+          words.each_with_index.map do |w,i|
+            word    = w.word.to_s.strip
+            w_start = ts.call(w.start)
+            if word_tags
+              i.zero? ? word : "<#{w_start}>#{word}"
+            else
+              word
+            end
+          end.join(' ')
+        end
 
         out << "#{idx+1}\n"
         out << "#{start} --> #{finish}\n"
@@ -86,9 +93,12 @@ class Subtitler
     # Convert whisper.cpp verbose_json output to WEBVTT with inline per-word timings.
     # Accepts either a Hash (already parsed) or a JSON string.
     # Returns the VTT as a single string.
-    def vtt_convert verbose_json, stdsub: false, word_tags: true
+    # When normalize: true (default), merges adjacent short segments to typical movie style.
+    # Backward-compat: legacy stdsub overrides normalize when provided.
+    def vtt_convert verbose_json, normalize: true, word_tags: true, stdsub: nil
       mash = SymMash.new verbose_json
-      merge_segments_for_stdsub!(mash) if stdsub
+      use_norm = stdsub.nil? ? normalize : stdsub
+      merge_segments_for_stdsub!(mash) if use_norm
 
       ts = ->(t){ h, rem = t.divmod(3600); m, s = rem.divmod(60); "%02d:%02d:%06.3f" % [h, m, s] }
 
@@ -97,15 +107,20 @@ class Subtitler
         start  = ts.call(seg.start)
         finish = ts.call(seg.end)
 
-        line = (seg.words || []).each_with_index.map do |w,idx|
-          word     = w.word.to_s.strip
-          w_start  = ts.call(w.start)
-          if word_tags
-            idx.zero? ? word : "<#{w_start}>#{word}"
-          else
-            word
-          end
-        end.join(' ')
+        words = seg.words || []
+        line = if words.empty?
+          seg.text.to_s.strip
+        else
+          words.each_with_index.map do |w,idx|
+            word     = w.word.to_s.strip
+            w_start  = ts.call(w.start)
+            if word_tags
+              idx.zero? ? word : "<#{w_start}>#{word}"
+            else
+              word
+            end
+          end.join(' ')
+        end
 
         vtt << "#{start} --> #{finish}\n"
         vtt << "#{line}\n\n"
@@ -180,7 +195,9 @@ class Subtitler
     def merge_split_words! mash
       (mash.segments || []).each do |seg|
         merged = []
-        (seg.words || []).each do |w|
+        orig_words = seg.words || []
+        had_words = orig_words.any?
+        orig_words.each do |w|
           raw = w.word.to_s
           if merged.empty? || raw.start_with?(' ')
             merged << w
@@ -196,7 +213,22 @@ class Subtitler
           end
         end
         seg.words = merged
-        seg.text  = merged.map { |tw| tw.word.to_s.strip }.join(' ')
+        seg.text  = merged.map { |tw| tw.word.to_s.strip }.join(' ') if had_words
+      end
+      # Fix cross-segment splits: move leading non-space tokens of next segment to previous if appropriate
+      segs = mash.segments || []
+      (1...segs.size).each do |i|
+        prev = segs[i-1]
+        cur  = segs[i]
+        next if (prev.words || []).empty? || (cur.words || []).empty?
+        while cur.words.first && !cur.words.first.word.to_s.start_with?(' ') && !prev.words.last.word.to_s.strip.match?(/[.!?]$/)
+          w = cur.words.shift
+          last = prev.words.last
+          last.word = "#{last.word}#{w.word}"
+          last.end  = w.end
+        end
+        prev.text = (prev.words || []).map { |tw| tw.word.to_s.strip }.join(' ')
+        cur.text  = (cur.words  || []).map { |tw| tw.word.to_s.strip }.join(' ')
       end
       mash
     end

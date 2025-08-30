@@ -119,7 +119,7 @@ class Zipper
         lng, lsub = candidates.find { |c| subs.key?(c) }, nil
         return [nil, nil] unless lng
         lsub = subs[lng].find { |s| s.ext == 'vtt' } || subs[lng][0]
-        sub  = zipper.http.get(lsub.url).body
+        sub  = http.get(lsub.url).body
         vtt  = subtitle_to_vtt(sub, lsub.ext)
         return [vtt, lng]
       end
@@ -137,5 +137,10 @@ class Zipper
 
       [nil, nil]
     end
+
+    def http
+      Mechanize.new
+    end
+
   end
 end

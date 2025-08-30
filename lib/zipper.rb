@@ -402,8 +402,6 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s webvtt -f w
     Zipper::Subtitle.generate_srt(*args, **kwargs)
   end
 
-
-
   def metadata_args
     (opts.metadata || {}).map{ |k,v| "-metadata #{Sh.escape k}=#{Sh.escape v}" }.join ' '
   end
