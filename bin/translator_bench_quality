@@ -1,0 +1,98 @@
+#!/usr/bin/env ruby
+
+Dir.chdir File.expand_path("#{File.realpath __dir__}/..") do
+  require_relative '../lib/bot'
+end
+
+require 'json'
+
+MARKER = '|||---SUBTITLEBLOCK---|||'
+
+def translate_segments segments, model:
+  ENV['TRANSLATOR']   = 'Ollama'
+  ENV['OLLAMA_MODEL'] = model
+  ENV['OLLAMA_HOST']  = ENV['OLLAMA_HOST'] || 'http://127.0.0.1:11434'
+  Translator.translate segments, from: 'en', to: 'pt'
+end
+
+def parse_number_pt str
+  str.to_s.gsub(/[^[0-9],\.]/,'').tr(',', '.').to_f
+end
+
+def approx_equal a, b, tol: 0.2
+  (a - b).abs <= tol
+end
+
+tests = [
+  {
+    name: 'depth_feet_to_meters',
+    segments: [
+      'How deep are we?',
+      "We're at 78.",
+    ],
+    checks: [
+      ->(out){ out.size == 2 },
+      ->(out){ out[0].to_s.downcase.include?('quão') || out[0].to_s.downcase.include?('profund') },
+      ->(out){ n = out[1].to_s.scan(/[0-9]+,[0-9]/).map{ |m| m.tr(',', '.').to_f }.first; !!n && approx_equal(n, 23.8) },
+      ->(out){ out[1].to_s.downcase.include?('metro') },
+    ]
+  },
+  {
+    name: 'locations_pt_rules',
+    segments: [
+      'We are heading to the Garden Shaft on Oak Island.',
+      'Meet us at the War Room near Smith\'s Cove.',
+    ],
+    checks: [
+      ->(out){ out.size == 2 },
+      ->(out){ out[0].include?('Poço do Jardim') },
+      ->(out){ out[0].include?('Oak Island') },
+      ->(out){ out[1].include?('sala de guerra') },
+      ->(out){ out[1].include?('Enseada Smith') },
+    ]
+  },
+  {
+    name: 'okay_token_and_century',
+    segments: [
+      'Okay.',
+      'a 17th-century artifact',
+    ],
+    checks: [
+      ->(out){ out.size == 2 },
+      ->(out){ out[0].strip == 'Ok.' },
+      ->(out){ out[1].downcase.include?('século 17') },
+    ]
+  }
+]
+
+models = (
+  ARGV.empty? ? %w[
+    gemma3:12b-it-qat
+    gpt-oss:latest
+    mistral-small3.1:latest
+    qwen3:latest
+    qwen2.5:7b
+  ] : ARGV
+)
+
+results = {}
+models.each do |model|
+  model_result = { total: 0, passed: 0, tests: {} }
+  tests.each do |t|
+    begin
+      out = translate_segments t[:segments], model: model
+      out = Array(out)
+      passed = t[:checks].map{ |ck| !!ck.call(out) }
+      model_result[:tests][t[:name]] = { total: passed.size, passed: passed.count(true) }
+      model_result[:total]  += passed.size
+      model_result[:passed] += passed.count(true)
+    rescue => e
+      model_result[:tests][t[:name]] = { error: e.class.to_s }
+    end
+  end
+  results[model] = model_result
+end
+
+puts JSON.pretty_generate results
+
+

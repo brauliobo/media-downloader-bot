@@ -100,7 +100,8 @@ class Bot
 
         videof  = 'bestvideo[ext=mp4]'
         audiof  = 'bestaudio[ext=mp4]'
-        audiof << "[language=#{opts.lang}]" if opts.lang
+        # FIXME: retuning invalid format
+        #audiof << "[language=#{opts.lang}]" if opts.lang
         audiof  = 'mp3-320' if url.index 'bandcamp.com' # FIXME: it is choosing flac
 
         # Inject ffmpeg downloader cut when start/stop times are given
