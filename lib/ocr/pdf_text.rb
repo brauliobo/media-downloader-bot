@@ -15,7 +15,7 @@ class Ocr
     # Extract text from a digital (non-scanned) PDF and save it in the same JSON
     # structure produced by the Ollama backend so downstream consumers remain
     # unaffected.
-    def self.transcribe(pdf_path, json_path, stl: nil, **_kwargs)
+    def self.transcribe(pdf_path, json_path, stl: nil, opts: nil, **_kwargs)
       reader = PDF::Reader.new(pdf_path)
 
       pages_lines = []
@@ -51,10 +51,12 @@ class Ocr
 
       transcription = { metadata: { pages: [] }, content: { paragraphs: [] } }
 
+      include_all = !!(opts && (opts[:includeall] || opts['includeall']))
+
       pages_lines.each do |p|
         page_first_text = p[:lines].find { |l| !l.strip.empty? }
         page_last_text  = p[:lines].reverse.find { |l| !l.strip.empty? }
-        clean_lines = p[:lines].reject { |l| hdrf_set.include?(norm.call(l)) }
+        clean_lines = include_all ? p[:lines] : p[:lines].reject { |l| hdrf_set.include?(norm.call(l)) }
 
         # Break into paragraphs by blank lines (empty strings) preserving structure.
         buf = []

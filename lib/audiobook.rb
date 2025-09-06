@@ -24,7 +24,7 @@ class Audiobook
     if File.extname(input_path).downcase == '.pdf'
       json_base = File.basename(out_audio, File.extname(out_audio))
       json_path = File.join(File.dirname(out_audio), "#{json_base}.json")
-      Ocr.transcribe(input_path, json_path, stl: stl)
+      Ocr.transcribe(input_path, json_path, stl: stl, opts: opts)
     else
       json_path = input_path
     end
