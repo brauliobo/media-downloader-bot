@@ -1,0 +1,94 @@
+## General rules for this repository (Cursor)
+
+These rules guide any AI-assisted edits in this project. They encode the repo’s conventions and preferred patterns so generated code integrates cleanly.
+
+### Scope & Stack
+- **Primary language**: Ruby (Ruby 3.x features are used: `class_attribute`, `delegate_missing_to`, one-line defs `def x = ...`).
+- **Key libs**: ActiveSupport, Faraday(+multipart), Mechanize, Roda, DRb, Rack::Mime, ChronicDuration, Sequel (optional), tdlib-ruby.
+- **System**: systemd unit files in `services/` and shell/FFmpeg-like invocations via `Sh.run`.
+
+### Global style
+- **Line length**: 120 columns. Prefer one-liners if they fit within 120.
+- **Indentation**: 2 spaces. Do not change indentation style.
+- **Comments**: Only for non-obvious code. Keep comments short and high-signal; prefer docstrings above complex methods over inline noise.
+- **DRY & concise**: Prefer small, composable methods; reuse helpers (`MsgHelpers`, `Zipper`, `Prober`, etc.).
+- **Naming**: snake_case methods/vars; CamelCase classes/modules; UPPER_CASE constants.
+- **Strings**: single quotes unless interpolation needed; prefer interpolation over concatenation.
+- **Control flow**: Guard clauses and early returns; avoid deep nesting; handle edge cases first.
+
+### Error handling & resilience
+- Only rescue when handling meaningfully. Typical patterns:
+  - User-facing pipeline errors: use status line `@stl.error ...` or `st.error ...` and continue when safe.
+  - Bot-level failures: `report_error msg, e` then re-raise where appropriate (see `Bot#react`).
+  - Always clean up temp resources in `ensure` blocks.
+- Do not swallow exceptions silently. If ignoring is intentional, add a brief reason.
+
+### Concurrency & processes
+- Use the existing patterns:
+  - Long-running workers: `fork` via `Bot#fork` and `daemon` wrapper; `Process.detach` and `Process.wait` loop are already in place.
+  - Per-message parallelism: `Thread.new` for non-fork contexts (TDLib listener) and extension methods like `.api_peach` for IO-bound work.
+- Avoid shared mutable state across threads; pass state explicitly; prefer local variables and immutable options (`SymMash` copies when needed).
+
+### Temporary files & work directories
+- Use `Dir.mktmpdir` with `ensure`-based cleanup (see `Worker#workdir`, `Processor#cleanup`).
+- For file/command execution, `Dir.chdir dir` locally within a block and always exit the directory.
+- Respect `Bot::Worker.tmpdir` and `ENV['TMPDIR']` when present.
+
+### Pipelines & architecture
+- Orchestrator: `Bot::Worker#process` manages status, batching, ordering, and uploading.
+- Inputs are represented as `SymMash` objects containing `fn_in`, `opts`, `info`, etc.
+- Routing:
+  - URL inputs: `Bot::UrlProcessor` delegates to `TDBot::Downloader` for `t.me` links; otherwise `Bot::YtDlp`.
+  - File/PDF inputs: `Bot::FileProcessor` handles Telegram audio/video and a dedicated PDF path.
+- Transcoding & metadata: `Bot::Processor#convert` delegates to `Zipper.zip_*` methods and uses `Output.filename`. MIME inference via `Rack::Mime`.
+- Status updates: use `Status` object (`st` / `@stl`) with concise messages; prefer `_` italics for captions, and escape via `MsgHelpers`.
+
+### Extending the system
+- New URL source/downloader: implement a `Downloader` tied to a `Processor` (or extend `Bot::YtDlp`) and branch in `UrlProcessor#downloader`.
+- New media format/codec: add support in `Zipper` and return chosen format via `Zipper.choose_format`; integrate in `Processor#convert`.
+- New command-line option: parse via `Processor.add_opt` (key[=val]) and thread through to `opts`.
+- New file-type flow (e.g., docs): extend `FileProcessor` and keep the early `pdf` bypass pattern of returning `uploads` so `Worker` can send results directly.
+
+### Messaging & captions (Telegram)
+- Use `MsgHelpers.me/mfe/mnfe` to escape appropriately.
+- Respect caption limits (`MsgHelpers::MAX_CAPTION` ~ 1024). Trim or reduce content when approaching limits.
+- Prefer minimal, readable captions. For ordered uploads, use `opts.number`/`opts.ordered` logic already in `Worker`.
+
+### HTTP, uploads & MIME
+- HTTP fetches via `Mechanize` inside localized helpers; avoid global clients.
+- For uploads, use `Faraday::UploadIO` and detect content type with `Rack::Mime.mime_type(File.extname(path))` when needed.
+- Extend missing MIME types alongside existing additions in `Processor`.
+
+### Shell/FFmpeg invocation
+- Use `Sh.run` for external commands. Build explicit, interpolated commands; avoid global env mutation unless required.
+- Run heavy work inside the per-job `dir` using `Dir.chdir dir do ... end`.
+
+### ENV & configuration
+- Common flags: `DB`, `TMPDIR`, `CUDA`, `PAID`, `BLOCKED_USERS`, `BLOCKED_DOMAINS`, `PRY_BEFORE_CONVERT`, `DEBUG`, `SKIP_TD_BOT`, `SKIP_TL_BOT`.
+- Validate and coerce ENV values near use sites; keep defaults conservative; feature-gate risky paths.
+
+### Systemd units (`services/`)
+- Keep services simple, self-healing, and non-interactive. Prefer `Restart=always` and environment via files where supported. Ensure long-running commands do not depend on interactive TTY.
+
+### Coding conventions (Ruby specifics)
+- Prefer modern Ruby idioms used in the codebase:
+  - `def method = expression` for trivial delegations.
+  - `delegate_missing_to :target` or explicit `method_missing` with `respond_to_missing?` when sharing state from wrappers.
+  - Use `presence`, `blank?`, `in?`, `to_time`, and `class_attribute` from ActiveSupport when they improve clarity.
+- Return early with nil-safe ops; keep public method contracts stable (`Worker#process`, `Processor#handle_input`, `Processor#convert`).
+
+### Testing & safety (lightweight)
+- There is no dedicated test suite. When adding complex logic, prefer extracting small, easily invocable methods and add minimal self-checks or assertions guarded behind `ENV['DEBUG']` or similar.
+
+### What not to do
+- Do not reformat unrelated files or change indentation styles.
+- Do not introduce blocking I/O in critical listener loops.
+- Do not bypass existing helpers (`MsgHelpers`, `Zipper`, `Output`, `Prober`) with ad-hoc alternatives.
+
+### AI generation checklist
+- Add all required `require`/`require_relative` and, if adding dependencies, declare them in `Gemfile` under appropriate groups.
+- Respect line length 120; prefer one-liners for simple delegations; keep code short and DRY.
+- Use guard clauses and early returns; minimal comments only for non-obvious code.
+- Ensure temp dirs/files are cleaned in `ensure` blocks.
+- Use `Status` updates sparingly and meaningfully; escape messages with `MsgHelpers`.
+- Keep public APIs and message flow intact; integrate with existing processors/downloaders.
