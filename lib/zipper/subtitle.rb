@@ -9,6 +9,15 @@ class Zipper
   module Subtitle
     module_function
 
+    NOISE_DOTS_LINE = /\A\s*\d(?:\s*\.\s*\d){3,}\.??\s*\z/
+
+    def filter_noise_srt(srt)
+      srt.split(/\r?\n\r?\n+/).reject { |blk|
+        blk.lines.reject { |l| l.strip.empty? || l.strip =~ /^\d+$/ || l.include?("-->") }
+           .any? { |tl| tl.strip.match?(NOISE_DOTS_LINE) }
+      }.join("\n\n")
+    end
+
     # Public entry -----------------------------------------------------------
     # Attach subtitles to a Zipper instance (video only).
     def apply(zipper)
@@ -168,12 +177,13 @@ class Zipper
       opts.format ||= Zipper::Types.audio.opus unless opts.respond_to?(:format) && opts.format
       opts.audio  ||= 1 # audio-only download is enough for transcription
 
-      vtt, _lng, tsp = prepare_subtitle(infile, info: info, probe: probe, stl: stl, opts: opts)
+      vtt, lng, tsp = prepare_subtitle(infile, info: info, probe: probe, stl: stl, opts: opts)
 
       require_relative '../output'
       srt_path = Output.filename(info, dir: dir, ext: 'srt')
       if tsp
-        srt_content = Subtitler.srt_convert(tsp, word_tags: !opts.nowords)
+        # Avoid per-word timestamp tags in SRT for external processors (onlysrt)
+        srt_content = Subtitler.srt_convert(tsp, word_tags: (!opts.nowords && !opts.onlysrt))
       else
         vtt_path = File.join(dir, 'sub.vtt')
         File.write vtt_path, vtt
@@ -181,7 +191,8 @@ class Zipper
         raise 'srt conversion failed' unless status.success?
       end
 
-      File.write srt_path, srt_content
+      srt_content = filter_noise_srt(srt_content)
+      File.binwrite srt_path, "\uFEFF" + srt_content.encode('UTF-8')
       srt_path
     end
 

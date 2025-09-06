@@ -10,6 +10,7 @@ class Ocr
     MODEL = ENV['OLLAMA_OCR_MODEL']
 
     PROMPT = "Recognize the text in this image. Skip the book page headers or footers. Output only the plain text exactly as seen, with each heading or paragraph separated by a blank line. Do NOT return JSON, markup, or commentary—just the text.".freeze
+    PROMPT_INCLUDE_ALL = "Recognize the text in this image. Include everything present, including any headers, footers, page numbers, and marginalia. Output only the plain text exactly as seen, with each heading or paragraph separated by a blank line. Do NOT return JSON, markup, or commentary—just the text.".freeze
     USE_AI_MERGE = ENV.fetch('AI_MERGE', '0') == '1'
 
     AI_MERGE_PROMPT = "You will be given two consecutive blocks of text extracted from a scanned book page. If they represent a single logical paragraph that was split across lines/pages, respond with ONLY the word YES. Otherwise respond with ONLY the word NO.".freeze
@@ -91,7 +92,7 @@ class Ocr
       end
     end
 
-    def self.transcribe pdf_path, json_path, stl: nil, timeout_sec: 120
+    def self.transcribe pdf_path, json_path, stl: nil, timeout_sec: 120, opts: nil
       Dir.mktmpdir do |dir|
         # Convert PDF to PNG pages at 300 dpi for better OCR accuracy.
         Sh.run "pdftoppm -png -r 300 #{Sh.escape pdf_path} #{dir}/page"
@@ -104,18 +105,19 @@ class Ocr
           stl&.update "Processing page #{page_num}/#{images.size}"
           base64   = Base64.strict_encode64 File.binread(img)
 
-          opts = {
+          include_all = !!(opts && (opts[:includeall] || opts['includeall']))
+          q = {
             model: MODEL,
             stream: false,
             options: {temperature: 0.0},
             messages: [
-              {role: :user, content: PROMPT, images: [base64]},
+              {role: :user, content: (include_all ? PROMPT_INCLUDE_ALL : PROMPT), images: [base64]},
             ],
           }
 
           begin
             res = Timeout.timeout(timeout_sec + 5) do
-              http.post "#{API}/api/chat", opts.to_json
+              http.post "#{API}/api/chat", q.to_json
             end
             res = SymMash.new JSON.parse(res.body)
             text_content = res.dig(:message, :content).to_s.strip

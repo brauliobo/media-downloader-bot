@@ -1,4 +1,5 @@
 require 'tempfile'
+require 'securerandom'
 require 'fileutils'
 require_relative 'exts/sym_mash'
 require_relative 'subtitler/ass'
@@ -283,7 +284,7 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s webvtt -f w
   end
 
   def self.audio_to_wav path
-    wpath = 'audio.wav'
+    wpath = File.join(Dir.tmpdir, "audio-#{SecureRandom.hex(6)}.wav")
 
     cmd = ['ffmpeg', '-i', Sh.escape(path), '-y', Sh.escape(wpath)].join(' ')
     _, _, st = Sh.run cmd
