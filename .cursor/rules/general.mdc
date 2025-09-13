@@ -80,6 +80,18 @@ These rules guide any AI-assisted edits in this project. They encode the repo’
 ### Testing & safety (lightweight)
 - There is no dedicated test suite. When adding complex logic, prefer extracting small, easily invocable methods and add minimal self-checks or assertions guarded behind `ENV['DEBUG']` or similar.
 
+### Subtitles & translation
+- Do not overwrite target `opts.lang`; translate when source is nil or differs.
+- Whisper detection must accept ISO codes (e.g., `es`) and English names (e.g., `Spanish`).
+- Burn path must use translated VTT/ASS and set `language`/`title` metadata.
+- For `onlysrt`, strip per-word tags and ensure the final SRT is translated to `opts.lang`.
+- Keep logic DRY via a central helper (e.g., `maybe_translate_vtt`).
+
+### Git workflow
+- Make small, focused commits with precise messages.
+- Never run `git add -A` or commit all files at once; stage only the files you changed.
+- Prefer separate commits for code changes, refactors, and docs/notes.
+
 ### What not to do
 - Do not reformat unrelated files or change indentation styles.
 - Do not introduce blocking I/O in critical listener loops.
@@ -92,13 +104,5 @@ These rules guide any AI-assisted edits in this project. They encode the repo’
 - Ensure temp dirs/files are cleaned in `ensure` blocks.
 - Use `Status` updates sparingly and meaningfully; escape messages with `MsgHelpers`.
 - Keep public APIs and message flow intact; integrate with existing processors/downloaders.
-Subtitle translation: do not overwrite target opts.lang; translate when source is nil or differs.
 
-Whisper detection: accept ISO codes (es) and English names (Spanish).
-
-Burn path: ensure VTT/ASS used for burn is translated; set language/title metadata.
-
-onlysrt: strip per-word tags; ensure final SRT is translated to opts.lang.
-
-Refactor: centralized maybe_translate_vtt to DRY translation logic.
 
