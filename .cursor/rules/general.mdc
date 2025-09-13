@@ -1,3 +1,4 @@
+- TDLib compat policy: Never patch TDLib in the bot. Apply fixes in local tdlib-schema/tdlib-ruby repos, then test with LOCAL_GEMS=1.
 ## General rules for this repository (Cursor)
 
 These rules guide any AI-assisted edits in this project. They encode the repo’s conventions and preferred patterns so generated code integrates cleanly.
@@ -105,4 +106,15 @@ These rules guide any AI-assisted edits in this project. They encode the repo’
 - Use `Status` updates sparingly and meaningfully; escape messages with `MsgHelpers`.
 - Keep public APIs and message flow intact; integrate with existing processors/downloaders.
 
-
+- tdlib update: moved app-level tdlib compat shims into tdlib-schema and tdlib-ruby.
+  - Schema (tdlib-schema):
+    - Added/stubbed types: EmojiStatusTypeCustomEmoji (expiration_date=0), PaidReactionTypeRegular, ChatFolderName,
+      AccountInfo, VerificationStatus, MessageTopicSavedMessages, MessageTopicForum, Update::DefaultPaidReactionType.
+    - Added defaults in existing types: Supergroup booleans=false; restriction_reason=''; User booleans=false and ids=0;
+      LinkPreviewType::Photo.author=''; ChatActionBar::ReportAddBlock.distance=0; InputMessageContent::Video.self_destruct_type=nil;
+      EmojiStatus.custom_emoji_id=0; Message#text helper.
+    - LOOKUP_TABLE extended for new @type strings above.
+    - TD::Types.wrap made lenient: auto-creates unknown types or compat placeholders on the fly.
+  - Ruby client (tdlib-ruby):
+    - UpdateManager ignores benign schema mismatch errors; removed require 'tdlib/compat'.
+  - App: removed dependency on lib/td_bot/compat.rb.
