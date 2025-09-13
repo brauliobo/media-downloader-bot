@@ -1,0 +1,5 @@
+- Subtitle translation: do not overwrite target opts.lang with detected source; always translate when source is nil or differs.
+- Whisper lang detection: accept ISO codes e.g. es and English names e.g. Spanish.
+- Burn path: ensure VTT/ASS used for burn is translated; set language/title metadata.
+- onlysrt: strip per-word tags and ensure final SRT is translated to opts.lang.
+- Refactor: centralized maybe_translate_vtt to DRY translation logic.

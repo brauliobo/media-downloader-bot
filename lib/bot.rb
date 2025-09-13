@@ -105,7 +105,7 @@ EOS
 
   def start_td_bot
     require_relative 'td_bot'
-    DRb.start_service ENV['DRB_WORKER_TD'], self
+    DRb.start_service ENV['DRB_WORKER_TD'], self rescue nil
 
     ENV['CUDA'] = '1' #faster and don't work with maxrate for limiting
     Zipper.size_mb_limit = 2_000
