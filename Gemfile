@@ -2,7 +2,8 @@ source 'https://rubygems.org'
 
 ruby File.read('.ruby-version')
 
-def path_for p; p if ENV['LOCAL_GEMS']; end
+def path_for p; "#{ENV['LOCAL_GEMS_DIR']}/p" if ENV['LOCAL_GEMS'] && File.exist?(p); end
+LOCAL_GEMS_DIR = "#{ENV['HOME']}/Projects"
 
 gem 'activesupport'
 gem 'dotenv'
@@ -26,8 +27,8 @@ gem 'pdf-reader'
 
 gem 'srt'
 
-gem 'tdlib-schema', github: 'brauliobo/tdlib-schema', path: path_for("#{ENV['HOME']}/Projects/tdlib-schema")
-gem 'tdlib-ruby',   github: 'brauliobo/tdlib-ruby',   path: path_for("#{ENV['HOME']}/Projects/tdlib-ruby")
+gem 'tdlib-schema', github: 'brauliobo/tdlib-schema', path: path_for('tdlib-schema')
+gem 'tdlib-ruby',   github: 'brauliobo/tdlib-ruby',   path: path_for('tdlib-ruby')
 
 if ENV['DB']
   gem 'pg'

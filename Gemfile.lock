@@ -10,7 +10,7 @@ GIT
 
 GIT
   remote: https://github.com/brauliobo/tdlib-ruby.git
-  revision: bdb51809b7be8693d826526ca593d2627186c0f3
+  revision: d8b444e3b820510a429c24887037f816c220173f
   specs:
     tdlib-ruby (3.0.4)
       concurrent-ruby (~> 1.1)
@@ -20,7 +20,7 @@ GIT
 
 GIT
   remote: https://github.com/brauliobo/tdlib-schema.git
-  revision: 1f98a3437de79d97d684abec6437f38e842aa92b
+  revision: ee016acd01349d006261accd9ccd066d3f7bb514
   specs:
     tdlib-schema (1.7.0.4)
       dry-struct (~> 1.0)
@@ -48,7 +48,7 @@ GEM
     afm (0.2.2)
     base64 (0.3.0)
     benchmark (0.4.1)
-    bigdecimal (3.2.2)
+    bigdecimal (3.2.3)
     chronic (0.10.2)
     chronic_duration (0.10.6)
       numerizer (~> 0.1.1)
