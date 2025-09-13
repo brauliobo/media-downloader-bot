@@ -110,6 +110,8 @@ EOS
     ENV['CUDA'] = '1' #faster and don't work with maxrate for limiting
     Zipper.size_mb_limit = 2_000
     @bot = TDBot.connect
+    # Process any unread messages first (ignore mute state)
+    @bot.process_unread_on_start(->(m){ react m }) if @bot.respond_to?(:process_unread_on_start)
     @bot.listen do |msg|
       Thread.new do # can't use fork
         react msg
