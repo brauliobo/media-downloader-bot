@@ -1,9 +1,13 @@
 require_relative 'markdown'
+require_relative 'compat'
 
 class TDBot
+  def self.dlog(msg); puts msg if ENV['TDLOG'].to_i > 0; end
   module Helpers
 
     include MsgHelpers
+
+    def dlog(msg); TDBot.dlog(msg); end
 
     TD.configure do |config|
       config.client.api_id   = ENV['TDLIB_API_ID']
@@ -29,9 +33,40 @@ class TDBot
       client.on TD::Types::Update::MessageSendSucceeded do |u|
         @@msg_id_map[[u.message.chat_id, u.old_message_id]] = u.message.id
       end
+
+      # Track unread counters and connection state for visibility into pending msgs
+      client.on TD::Types::Update::UnreadMessageCount do |u|
+        dlog "[UNREAD] messages=#{u.unread_count} unmuted=#{u.unread_unmuted_count}"
+      end rescue nil
+      client.on TD::Types::Update::UnreadChatCount do |u|
+        dlog "[UNREAD_CHAT] total=#{u.unread_count} unmuted=#{u.unread_unmuted_count}"
+      end rescue nil
+      client.on TD::Types::Update::ConnectionState do |u|
+        dlog "[NET] state=#{u.state.class.name.split('::').last}"
+      end rescue nil
+
+      # Print a single line when the bot is fully authorized
+      client.on TD::Types::Update::AuthorizationState do |update|
+        if update.authorization_state.is_a?(TD::Types::AuthorizationState::Ready)
+          puts "[ONLINE] TDLib authorization is READY"
+          begin
+            @self_id = td.get_me.value.id
+            dlog "[SELF] user_id=#{@self_id}"
+          rescue => e
+            dlog "self_id_error: #{e.class}: #{e.message}"
+          end
+          @auth_ready = true
+          if defined?(@listen_handler) && @listen_handler && !@startup_unread_processed
+            process_unread_on_start @listen_handler
+            @startup_unread_processed = true
+          end
+        end
+      end
     end
 
-    def listen
+    def listen(&handler)
+      dlog "[LISTEN] waiting for messages..."
+      @listen_handler = handler
       client.on TD::Types::Update::NewMessage do |update|
         orig_msg = update.message
         text = case orig_msg.content
@@ -45,6 +80,11 @@ class TDBot
           orig_msg.content.caption&.text
         else
           nil
+        end
+        dlog "[MSG] incoming: #{text.to_s[0,80]}" if text
+        unless defined?(@__first_recv_logged) && @__first_recv_logged
+          dlog "[RECV] first message update received"
+          @__first_recv_logged = true
         end
         msg = SymMash.new(
           orig_msg.to_h.merge(
@@ -61,16 +101,131 @@ class TDBot
         when TD::Types::MessageContent::Document
           msg[:document] = orig_msg.content.document
         end
-        # Ignore messages sent by the bot itself (identified by user id)
+        # Ignore messages sent by the bot itself (identified by user id) or outgoing
         @self_id ||= td.get_me.value.id
+        if orig_msg.respond_to?(:is_outgoing) && orig_msg.is_outgoing
+          dlog "[SKIP] outgoing message id=#{orig_msg.id}"
+          next
+        end
         if (sid = msg.sender_id)&.respond_to?(:user_id)
-          next if sid.user_id == @self_id
+          if sid.user_id == @self_id
+            dlog "[SKIP] self message id=#{orig_msg.id}"
+            next
+          end
         end
 
         # Mark original message as read immediately
         mark_read msg
 
-        yield msg
+        handler.call msg if handler
+      end
+    end
+
+    # Fetch and process all unread messages for all chats at startup, ignoring mute state
+    def process_unread_on_start(handler)
+      td = self.td
+      self_id = (@self_id || td.get_me.value.id) rescue nil
+      # Ensure chat lists are loaded so get_chats returns results
+      load_all_chats TD::Types::ChatList::Main.new rescue nil
+      load_all_chats TD::Types::ChatList::Archive.new rescue nil
+      # Collect chat ids from both Main and Archive lists using multiple fallbacks
+      chat_ids = []
+      main_ids = []
+      arch_ids = []
+      begin
+        main_ids = td.get_chats(chat_list: TD::Types::ChatList::Main.new, limit: 1000).value.chat_ids rescue []
+        arch_ids = td.get_chats(chat_list: TD::Types::ChatList::Archive.new, limit: 1000).value.chat_ids rescue []
+      rescue; end
+      if main_ids.empty? && arch_ids.empty?
+        main_ids = td.get_chats(limit: 1000).value.chat_ids rescue []
+      end
+      chat_ids = (main_ids + arch_ids).uniq
+      dlog "[UNREAD_SCAN] main=#{main_ids.size} archive=#{arch_ids.size} total=#{chat_ids.size}"
+      chat_ids.each do |cid|
+        begin
+          chat = td.get_chat(chat_id: cid).value
+        rescue
+          next
+        end
+        last_read = chat.last_read_inbox_message_id.to_i
+        processed = 0
+        from_id = 0 # 0 means start from latest
+        loop do
+          msgs = (td.get_chat_history(chat_id: cid, from_message_id: from_id, offset: 0, limit: 100, only_local: false).value.messages rescue [])
+          break if msgs.empty?
+          min_id = msgs.map { |m| m.id.to_i }.min
+          unread_msgs = msgs.select { |m| m.id.to_i > last_read }
+          unread_msgs.reverse_each do |orig_msg|
+            begin
+              # Skip self-sent or outgoing messages
+              if self_id && (sid = orig_msg.sender_id)&.respond_to?(:user_id)
+                if sid.user_id == self_id
+                  dlog "[SKIP] startup self msg id=#{orig_msg.id}"
+                  next
+                end
+              end
+              if orig_msg.respond_to?(:is_outgoing) && orig_msg.is_outgoing
+                dlog "[SKIP] startup outgoing msg id=#{orig_msg.id}"
+                next
+              end
+
+              text = case orig_msg.content
+              when TD::Types::MessageContent::Text
+                orig_msg.content.text&.text
+              when TD::Types::MessageContent::Photo,
+                   TD::Types::MessageContent::Video,
+                   TD::Types::MessageContent::Audio,
+                   TD::Types::MessageContent::Document
+                orig_msg.content.caption&.text
+              else
+                nil
+              end
+
+              msg = SymMash.new(
+                orig_msg.to_h.merge(
+                  chat: {id: orig_msg.chat_id},
+                  from: {id: (orig_msg.sender_id.respond_to?(:user_id) ? orig_msg.sender_id.user_id : nil)},
+                  text: text.to_s,
+                )
+              )
+              case orig_msg.content
+              when TD::Types::MessageContent::Audio
+                msg[:audio]    = orig_msg.content.audio
+              when TD::Types::MessageContent::Video
+                msg[:video]    = orig_msg.content.video
+              when TD::Types::MessageContent::Document
+                msg[:document] = orig_msg.content.document
+              end
+
+              dlog "[RECV] startup unread: chat=#{msg.chat_id} id=#{msg.id}"
+              processed += 1
+              # Mark as read first so processing exceptions don't block read-status
+              mark_read msg
+              handler.call msg if handler
+            rescue => e
+              dlog "startup_unread_error: #{e.class}: #{e.message}"
+            end
+          end
+          break if min_id <= last_read
+          from_id = min_id - 1
+        end
+        dlog "[UNREAD_SCAN] chat=#{cid} last_read=#{last_read} processed=#{processed}"
+      end
+    rescue => e
+      dlog "unread_scan_error: #{e.class}: #{e.message}"
+    end
+
+    # Proactively load chats so TDLib has them available for get_chats
+    def load_all_chats(chat_list=nil, limit: 200)
+      5.times do |i|
+        begin
+          td.load_chats chat_list: chat_list, limit: limit
+          dlog "[LOAD] chats phase=#{i+1} list=#{chat_list&.class&.name&.split('::')&.last || 'Main'}"
+          sleep 0.2
+        rescue => e
+          dlog "load_chats_error: #{e.class}: #{e.message}"
+          break
+        end
       end
     end
 
@@ -217,128 +372,12 @@ class TDBot
 
     def mark_read msg
       client.view_messages chat_id: msg.chat_id, message_ids: [msg.id], source: nil, force_read: true
+      dlog "[READ] chat=#{msg.chat_id} id=#{msg.id}"
     rescue => e
-      STDERR.puts "mark_read_error: #{e.class}: #{e.message}"
+      dlog "mark_read_error: #{e.class}: #{e.message}"
     end
 
-    # Workaround for schema mismatch: older tdlib versions may omit some required fields.
-    begin
-      module TD::Types
-        class User < Base
-          class << self
-            alias_method :__orig_new, :new unless method_defined?(:__orig_new)
-
-            def new(hash)
-              h = hash.dup
-              # Ensure required boolean flags exist to avoid Dry::Struct errors
-              %w[is_verified is_premium is_support is_scam is_fake has_active_stories has_unread_active_stories restricts_new_chats have_access added_to_attachment_menu].each do |k|
-                h[k] = false unless h.key?(k)
-              end
-              # numeric defaults that may be absent
-              %w[accent_color_id background_custom_emoji_id profile_accent_color_id profile_background_custom_emoji_id].each do |k|
-                h[k] = 0 unless h.key?(k)
-              end
-              __orig_new(h)
-            end
-          end
-        end
-      end
-    rescue NameError
-      # TD::Types::User not yet loaded; ignore
-    end
-
-    # Define stub classes for unknown update types so TD::Types.wrap can succeed
-    module TD::Types
-      class EmojiStatusTypeCustomEmoji < EmojiStatus; end unless const_defined?(:EmojiStatusTypeCustomEmoji)
-      class PaidReactionTypeRegular < Base; end unless const_defined?(:PaidReactionTypeRegular)
-      class ChatFolderName < Base; end unless const_defined?(:ChatFolderName)
-    end
-
-    begin
-      TD::Types::LOOKUP_TABLE['emojiStatusTypeCustomEmoji'] ||= 'EmojiStatusTypeCustomEmoji'
-      TD::Types::LOOKUP_TABLE['paidReactionTypeRegular']    ||= 'PaidReactionTypeRegular'
-      TD::Types::LOOKUP_TABLE['chatFolderName']             ||= 'ChatFolderName'
-    rescue
-      # ignore
-    end
-
-    # Provide the same .text helper as telegram-bot-ruby for easier interoperability
-    module TD::Types
-      class Message < Base
-        def text
-          case content
-          when MessageContent::Text
-            content.text&.text
-          when MessageContent::Photo, MessageContent::Video, MessageContent::Audio, MessageContent::Document
-            content.caption&.text
-          else
-            nil
-          end
-        end unless method_defined? :text
-
-        # Ensure optional flags absent in older TDLib versions exist
-        class << self
-          alias_method :__orig_new_msg, :new unless method_defined?(:__orig_new_msg)
-          def new(hash)
-            h = hash.dup
-            h[:is_topic_message] = false unless h.key?(:is_topic_message) || h.key?('is_topic_message')
-            h[:saved_messages_topic_id] ||= 0
-            __orig_new_msg(h)
-          end
-        end
-      end
-    end
-
-    # Provide defaults for new boolean/int flags missing in older TDLib builds so
-    # tdlib-ruby structs never crash. This is version-agnostic: if the flag is
-    # already present we keep it, otherwise we supply a sane default.
-    module TD::Types
-      class MessageSelfDestructType < Base; end unless const_defined?(:MessageSelfDestructType)
-
-      %i[ScopeNotificationSettings ChatNotificationSettings].each do |klass|
-        next if const_defined?(klass)
-      end
-
-      # Patch ScopeNotificationSettings and ChatNotificationSettings to tolerate
-      # missing story-related flags in older tdlib builds.
-      {
-        ScopeNotificationSettings: %i[show_story_sender use_default_show_story_sender],
-        ChatNotificationSettings:  %i[show_story_sender use_default_show_story_sender],
-      }.each do |kls, flags|
-        base = const_get(kls) rescue next
-        flag_list = flags
-        class << base
-          alias_method :__orig_new_notif, :new unless method_defined?(:__orig_new_notif)
-          define_method :new do |hash|
-            h = hash.dup
-            flag_list.each { |f| h[f] = false unless h.key?(f) || h.key?(f.to_s) }
-            __orig_new_notif(h)
-          end
-        end
-      end
-
-      # Make self_destruct_type optional for InputMessageContent::Video to support older TDLib versions.
-      class InputMessageContent::Video < InputMessageContent
-        class << self
-          alias_method :__orig_new_video, :new unless method_defined?(:__orig_new_video)
-
-          def new(hash)
-            h = hash.dup
-            h[:self_destruct_type] ||= TD::Types::MessageSelfDestructType::Timer.new(self_destruct_time: 0)
-            __orig_new_video(h)
-          end
-        end
-
-        # Remove self_destruct_type from the hash sent to TDLib to stay compatible with old versions
-        def to_hash
-          h = super
-          h.delete(:self_destruct_type)
-          h.delete('self_destruct_type')
-          h
-        end
-        alias_method :to_h, :to_hash
-      end
-    end
+    # All TDLib compatibility patches live in td_bot/compat.rb
 
     # Escape only the non-format Markdown characters required by Telegram Markdown V2 while keeping * _ for styling
     def me(text)
