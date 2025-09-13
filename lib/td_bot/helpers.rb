@@ -1,4 +1,5 @@
 require_relative 'markdown'
+require_relative 'compat'
 
 class TDBot
   def self.dlog(msg); puts msg if ENV['TDLOG'].to_i > 0; end
@@ -376,7 +377,7 @@ class TDBot
       dlog "mark_read_error: #{e.class}: #{e.message}"
     end
 
-    # TDLib compatibility handled inside tdlib-schema and tdlib-ruby gems
+    # All TDLib compatibility patches live in td_bot/compat.rb
 
     # Escape only the non-format Markdown characters required by Telegram Markdown V2 while keeping * _ for styling
     def me(text)
