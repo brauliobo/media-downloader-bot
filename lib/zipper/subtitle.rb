@@ -8,6 +8,18 @@ class Zipper
   # All subtitle-related responsibilities live here.
   module Subtitle
     module_function
+    def maybe_translate_vtt(zipper, vtt, tsp, from_lang, to_lang)
+      return [vtt, from_lang, tsp] unless to_lang
+      return [vtt, from_lang, tsp] if from_lang && to_lang.to_s == from_lang.to_s
+      zipper&.stl&.update 'translating'
+      if tsp
+        tsp = Subtitler.translate(tsp, from: (from_lang if from_lang.present?), to: to_lang)
+        vtt = Subtitler.vtt_convert(tsp, word_tags: !zipper.opts.nowords)
+      else
+        vtt = Translator.translate_vtt(vtt, from: (from_lang if from_lang.present?), to: to_lang)
+      end
+      [vtt, to_lang, tsp]
+    end
 
     NOISE_DOTS_LINE = /\A\s*\d(?:\s*\.\s*\d){3,}\.??\s*\z/
 
@@ -24,11 +36,11 @@ class Zipper
       return if !zipper.opts.lang && !zipper.opts.subs && !zipper.opts.onlysrt && !zipper.opts.sub_vtt
 
       if (sv = zipper.opts.sub_vtt).present?
-        vtt = sv.to_s
-        lng = zipper.opts.sub_lang || zipper.opts.lang
+        vtt, lng = sv.to_s, (zipper.opts.sub_lang || zipper.opts.lang)
       else
         vtt, lng, tsp = prepare(zipper)
       end
+      vtt, lng, tsp = maybe_translate_vtt(zipper, vtt, tsp, lng, zipper.opts.lang)
       zipper.stl&.update 'transcoding'
 
       # generate ASS subtitle directly (scales font automatically for portrait videos)
@@ -63,16 +75,7 @@ class Zipper
         zipper.info.language ||= lng if zipper.info.respond_to?(:language)
       end
 
-      if zipper.opts.lang && lng && zipper.opts.lang.to_s != lng.to_s
-        zipper.stl&.update 'translating'
-        if tsp
-          tsp = Subtitler.translate(tsp, from: lng, to: zipper.opts.lang)
-          vtt = Subtitler.vtt_convert(tsp, word_tags: !zipper.opts.nowords)
-        else
-          vtt = Translator.translate_vtt(vtt, from: lng, to: zipper.opts.lang)
-        end
-        lng = zipper.opts.lang
-      end
+      vtt, lng, tsp = maybe_translate_vtt(zipper, vtt, tsp, lng, zipper.opts.lang)
 
       [vtt, lng, tsp]
     end
@@ -185,10 +188,18 @@ class Zipper
         # Avoid per-word timestamp tags in SRT for external processors (onlysrt)
         srt_content = Subtitler.srt_convert(tsp, word_tags: (!opts.nowords && !opts.onlysrt))
       else
+        # If onlysrt, drop inline word tags from VTT before conversion
+        clean_vtt = opts.onlysrt ? Subtitler.strip_word_tags(vtt) : vtt
         vtt_path = File.join(dir, 'sub.vtt')
-        File.write vtt_path, vtt
+        File.write vtt_path, clean_vtt
         srt_content, _, status = Sh.run "ffmpeg -loglevel error -y -i #{Sh.escape vtt_path} -f srt -"
         raise 'srt conversion failed' unless status.success?
+      end
+
+      # Ensure final SRT is in the requested language when provided
+      if opts.lang && lng.to_s != opts.lang.to_s
+        srt_content = Translator.translate_srt(srt_content, from: (lng if lng.present?), to: opts.lang) rescue srt_content
+        lng = opts.lang
       end
 
       srt_content = filter_noise_srt(srt_content)
@@ -224,6 +235,7 @@ class Zipper
         lsub = subs[lng].find { |s| s.ext == 'vtt' } || subs[lng][0]
         sub  = http.get(lsub.url).body
         vtt  = subtitle_to_vtt(sub, lsub.ext)
+        zipper.stl&.update "subs:scraped:#{lng}"
         return [vtt, lng]
       end
 
@@ -234,7 +246,7 @@ class Zipper
         return [nil, nil] unless idx
         vtt = extract_vtt(zipper, idx)
         lng = esubs[idx].lang
-        zipper.opts.lang = lng
+        zipper.stl&.update "subs:embedded:#{lng}"
         return [vtt, lng]
       end
 

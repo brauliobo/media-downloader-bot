@@ -92,3 +92,13 @@ These rules guide any AI-assisted edits in this project. They encode the repo’
 - Ensure temp dirs/files are cleaned in `ensure` blocks.
 - Use `Status` updates sparingly and meaningfully; escape messages with `MsgHelpers`.
 - Keep public APIs and message flow intact; integrate with existing processors/downloaders.
+Subtitle translation: do not overwrite target opts.lang; translate when source is nil or differs.
+
+Whisper detection: accept ISO codes (es) and English names (Spanish).
+
+Burn path: ensure VTT/ASS used for burn is translated; set language/title metadata.
+
+onlysrt: strip per-word tags; ensure final SRT is translated to opts.lang.
+
+Refactor: centralized maybe_translate_vtt to DRY translation logic.
+

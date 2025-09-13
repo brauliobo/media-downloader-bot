@@ -385,7 +385,7 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s webvtt -f w
       cads = [opts.lang, :en, subs.keys.first]
       lng,lsub =  cads.each.with_object([]){ |s, r| break r = [s, subs[s]] if subs.key? s }
       return if lng.blank?
-      lsub = lsub.find{ |s| s.ext == 'vtt' } || lsubs[0]
+      lsub = lsub.find{ |s| s.ext == 'vtt' } || lsub[0]
       sub  = http.get(lsub.url).body
       vtt  = subtitle_to_vtt sub, lsub.ext
 
@@ -396,7 +396,6 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s webvtt -f w
       return unless index
       vtt   = extract_vtt index
       lng   = esubs[index].lang
-      opts.lang = lng
     end
 
     [vtt, lng]

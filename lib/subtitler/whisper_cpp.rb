@@ -41,7 +41,12 @@ class Subtitler
 
       out = SymMash.new JSON.parse(out) if format.to_s.index('json')
 
-      lang = ISO_639.find_by_english_name(out.language.capitalize)&.alpha2 if out.is_a?(Hash) and out.language
+      # Accept both ISO codes ("es", "spa") and English names ("Spanish")
+      if out.is_a?(Hash) && out.language
+        raw = out.language.to_s.strip
+        entry = ISO_639.find_by_code(raw) || ISO_639.find_by_english_name(raw.capitalize)
+        lang = entry&.alpha2
+      end
 
       merge_split_words!(out) if merge_words && out.respond_to?(:segments)
 
