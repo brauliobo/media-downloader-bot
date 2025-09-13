@@ -1,19 +1,20 @@
 {
 	"folders": [
 		{
+			"name": "media-downloader-bot",
 			"path": "."
 		},
 		{
-			"path": "../tdlib-ruby"
+			"name": "tdlib-ruby",
+			"path": "../../home/braulio/Projects/tdlib-ruby"
 		},
 		{
-			"path": "../tdlib-schema"
+			"name": "tdlib-schema",
+			"path": "../../home/braulio/Projects/tdlib-schema"
 		},
 		{
+			"name": "coqui-ai-TTS",
 			"path": "../coqui-ai-TTS"
-		},
-		{
-			"path": "../whisperX"
 		}
 	],
 	"settings": {}
