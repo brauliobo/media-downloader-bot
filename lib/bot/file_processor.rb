@@ -81,9 +81,30 @@ class Bot
             @stl&.update 'Warning: Generated audio is very small, may be empty'
           end
 
+          # Get audio duration like other processors do
+          audio_duration = 0
+          begin
+            probe = Prober.for(result.audio)
+            audio_duration = probe.format.duration.to_i if probe&.format&.duration
+          rescue => e
+            puts "[DURATION_ERROR] Failed to get audio duration: #{e.message}"
+          end
+
           i.uploads = [
-            SymMash.new(path: result.transcription, mime: 'application/json', caption: me('Book transcription')),
-            SymMash.new(path: result.audio,        mime: 'audio/ogg',          caption: me('Audiobook')),
+            SymMash.new(
+              fn_out: result.transcription,
+              type: SymMash.new(name: 'document'),
+              info: SymMash.new(title: me('Book transcription'), uploader: ''),
+              opts: SymMash.new(format: SymMash.new(mime: 'application/json')),
+              oprobe: Prober.for(result.transcription)
+            ),
+            SymMash.new(
+              fn_out: result.audio,
+              type: SymMash.new(name: 'audio'),
+              info: SymMash.new(title: me('Audiobook'), uploader: ''),
+              opts: SymMash.new(format: SymMash.new(mime: 'audio/ogg')),
+              oprobe: Prober.for(result.audio)
+            ),
           ]
           return i
         rescue => e

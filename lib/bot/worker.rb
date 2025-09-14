@@ -122,29 +122,20 @@ class Bot
 
     def upload i
       if i.uploads.present?
-        i.uploads.each do |up|
-          path    = up[:path]    || up.path
-          caption = up[:caption] || up.caption || ''
-          mime    = up[:mime]    || up.mime    || Rack::Mime.mime_type(File.extname(path))
-
-          # For TDBot, pass file path directly; for TlBot, use UploadIO
-          file_param = bot.is_a?(TDBot) ? path : Faraday::UploadIO.new(path, mime)
-          
-          # Send audio files as audio messages instead of documents
-          if mime&.start_with?('audio/') || path.to_s.downcase.match?(/\.(opus|ogg|mp3|wav|flac|aac|m4a)$/)
-            send_message msg, caption, type: 'audio', audio: file_param, parse_mode: nil
-          else
-            send_message msg, caption, type: 'document', document: file_param, parse_mode: nil
-          end
-        end
-        return
+        i.uploads.each { |up| upload_one up }
+      else
+        upload_one i
       end
+    end
 
-      oprobe = i.oprobe = Prober.for i.fn_out
-      fn_out = i.fn_out
+    private
+
+    def upload_one i
+      oprobe = i.oprobe ||= Prober.for i.fn_out
+      puts "[DEBUG] fn_out: #{i.fn_out}, exists: #{File.exist?(i.fn_out)}, oprobe: #{oprobe.class}, format: #{oprobe&.format.class}" if ENV['DEBUG']
       type   = i.type
       info   = i.info
-      durat  = i.oprobe.format.duration.to_i # speed may change from input
+      durat  = oprobe&.format&.duration&.to_i || 0 # speed may change from input
       opts   = i.opts
 
       if info.language and opts.lang
@@ -157,7 +148,10 @@ class Bot
 
       vstrea = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
       thumb  = Faraday::UploadIO.new i.thumb, 'image/jpeg' if i.thumb
-      fn_io  = Faraday::UploadIO.new fn_out, i.opts.format.mime
+      
+      fn_io = bot.is_a?(TDBot) ? i.fn_out : Faraday::UploadIO.new(i.fn_out, i.opts.format.mime)
+      
+      # Common send logic for both cases
       paid   = ENV['PAID'] || msg.from.id.in?([6884159818])
       typek  = if paid then :media else type.name end
 
