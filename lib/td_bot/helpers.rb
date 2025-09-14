@@ -1,4 +1,5 @@
 require 'set'
+require 'fileutils'
 
 class TDBot
   include TD::Logging
@@ -63,8 +64,62 @@ class TDBot
     end
 
     # Download any Telegram file (audio, video, document) via TDLib
-    def download_file(file_id, priority: 32, offset: 0, limit: 0, synchronous: true)
-      file_manager.download_file(file_id, priority: priority, offset: offset, limit: limit, synchronous: synchronous)
+    def download_file(file_id_or_info, priority: 32, offset: 0, limit: 0, synchronous: true, dir: nil)
+      # Handle both file_id (integer) and info object (with document/file_id method)
+      if file_id_or_info.respond_to?(:document) && file_id_or_info.document.respond_to?(:file_id)
+        # This is a message document object
+        file_id = file_id_or_info.document.file_id
+      elsif file_id_or_info.respond_to?(:file_id)
+        # This is a document or file object with direct file_id
+        file_id = file_id_or_info.file_id
+      elsif file_id_or_info.respond_to?(:document) && file_id_or_info.document.respond_to?(:id)
+        # This is a document object with id field instead of file_id
+        file_id = file_id_or_info.document.id
+      elsif file_id_or_info.respond_to?(:id)
+        # This is a file object with id field
+        file_id = file_id_or_info.id
+      else
+        # This should be a file_id integer
+        file_id = file_id_or_info
+      end
+      
+      dlog "[TD_DOWNLOAD] file_id=#{file_id} dir=#{dir}"
+      
+      # Download the file using TDLib
+      result = file_manager.download_file(file_id, priority: priority, offset: offset, limit: limit, synchronous: synchronous)
+      
+      dlog "[TD_DOWNLOAD] result=#{result.inspect}"
+      
+      # Check for errors in the download result
+      if result.is_a?(Hash) && result[:error]
+        raise "Failed to download file: #{result[:error]}"
+      end
+      
+      # Extract the local path from the file manager result hash
+      local_path = result.is_a?(Hash) ? result[:local_path] : nil
+      dlog "[TD_DOWNLOAD] extracted path=#{local_path} exists=#{File.exist?(local_path) if local_path}"
+      
+      # If dir is specified and we have a valid local path, copy the file to the desired directory
+      if dir && local_path && !local_path.empty? && File.exist?(local_path)
+        filename = File.basename(local_path)
+        target_path = File.join(dir, filename)
+        
+        dlog "[TD_DOWNLOAD] copying #{local_path} -> #{target_path}"
+        # Ensure target directory exists
+        FileUtils.mkdir_p(dir)
+        # Copy file to target directory
+        FileUtils.cp(local_path, target_path)
+        return target_path
+      end
+      
+      # Ensure we always return a string path
+      final_path = local_path && !local_path.empty? ? local_path : nil
+      dlog "[TD_DOWNLOAD] final_path=#{final_path} (class=#{final_path.class})"
+      
+      # If we don't have a valid path, raise an error
+      raise "Failed to download file: no local path available (got: #{result.inspect})" unless final_path
+      
+      final_path
     end
 
     # TDLib-specific caption formatting that handles URLs properly
@@ -85,12 +140,28 @@ class TDBot
     def send_message(msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **params)
       t = type.to_s
       
+      # Add reply-to information if original message exists
+      reply_to = nil
+      if msg.respond_to?(:id)
+        reply_to = msg.id
+      elsif msg.respond_to?(:message_id)
+        reply_to = msg.message_id
+      end
+      
+      dlog "[TD_SEND_MESSAGE] reply_to=#{reply_to} msg.class=#{msg.class}"
+      
       if t.in? %w[message text]
-        result = message_sender.send_text(msg.chat.id, text, parse_mode: parse_mode)
+        begin
+          result = message_sender.send_text(msg.chat.id, text, parse_mode: parse_mode, reply_to: reply_to)
+        rescue => e
+          dlog "[TD_SEND_TEXT_ERROR] #{e.class}: #{e.message}"
+          # Fallback: try without reply_to
+          result = message_sender.send_text(msg.chat.id, text, parse_mode: parse_mode, reply_to: nil)
+        end
       elsif params[:video]
-        result = message_sender.send_video(msg.chat.id, text, **params)
+        result = message_sender.send_video(msg.chat.id, text, reply_to: reply_to, **params)
       elsif params[:document]
-        result = message_sender.send_document(msg.chat.id, text, **params)
+        result = message_sender.send_document(msg.chat.id, text, reply_to: reply_to, **params)
       else
         preview = text.to_s.gsub(/\s+/, ' ')[0, 200]
         dlog "[TD_SEND] type=#{type} chat=#{msg.chat.id} text=#{preview}"
