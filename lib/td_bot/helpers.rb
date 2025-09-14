@@ -1,4 +1,3 @@
-require_relative 'markdown'
 require 'set'
 
 class TDBot
