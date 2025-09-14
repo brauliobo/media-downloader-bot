@@ -10,17 +10,25 @@ GIT
 
 GIT
   remote: https://github.com/brauliobo/tdlib-ruby.git
-  revision: d8b444e3b820510a429c24887037f816c220173f
+  revision: eedb3631f570ff045bc7b9b34dbcb29f87cbb10d
   specs:
-    tdlib-ruby (3.0.4)
+
+GIT
+  remote: https://github.com/brauliobo/tdlib-schema.git
+  revision: ee016acd01349d006261accd9ccd066d3f7bb514
+  specs:
+
+PATH
+  remote: /home/braulio/Projects/tdlib-ruby
+  specs:
+    tdlib-ruby (3.1.0)
       concurrent-ruby (~> 1.1)
       dry-configurable
       ffi (~> 1.15.0)
       tdlib-schema
 
-GIT
-  remote: https://github.com/brauliobo/tdlib-schema.git
-  revision: ee016acd01349d006261accd9ccd066d3f7bb514
+PATH
+  remote: /home/braulio/Projects/tdlib-schema
   specs:
     tdlib-schema (1.7.0.4)
       dry-struct (~> 1.0)
@@ -30,7 +38,7 @@ GEM
   remote: https://rubygems.org/
   specs:
     Ascii85 (2.0.1)
-    activesupport (8.0.2)
+    activesupport (8.0.2.1)
       base64
       benchmark (>= 0.3)
       bigdecimal
@@ -45,7 +53,7 @@ GEM
       uri (>= 0.13.1)
     addressable (2.8.7)
       public_suffix (>= 2.0.2, < 7.0)
-    afm (0.2.2)
+    afm (1.0.0)
     base64 (0.3.0)
     benchmark (0.4.1)
     bigdecimal (3.2.3)
@@ -54,7 +62,7 @@ GEM
       numerizer (~> 0.1.1)
     coderay (1.1.3)
     concurrent-ruby (1.3.5)
-    connection_pool (2.5.3)
+    connection_pool (2.5.4)
     csv (3.3.5)
     domain_name (0.6.20240107)
     dotenv (3.1.8)
@@ -84,7 +92,7 @@ GEM
       dry-inflector (~> 1.0)
       dry-logic (~> 1.4)
       zeitwerk (~> 2.6)
-    faraday (2.13.2)
+    faraday (2.13.4)
       faraday-net_http (>= 2.0, < 3.5)
       json
       logger
@@ -102,7 +110,7 @@ GEM
     ice_nine (0.11.2)
     iso-639 (0.3.8)
       csv
-    json (2.12.2)
+    json (2.13.2)
     logger (1.7.0)
     mechanize (2.14.0)
       addressable (~> 2.8)
@@ -121,7 +129,7 @@ GEM
     mime-types (3.7.0)
       logger
       mime-types-data (~> 3.2025, >= 3.2025.0507)
-    mime-types-data (3.2025.0708)
+    mime-types-data (3.2025.0909)
     minitest (5.25.5)
     multipart-post (2.4.1)
     net-http (0.6.0)
@@ -131,12 +139,26 @@ GEM
       connection_pool (~> 2.2, >= 2.2.4)
     nio4r (2.7.4)
     nkf (0.2.0)
+    nokogiri (1.18.9-aarch64-linux-gnu)
+      racc (~> 1.4)
+    nokogiri (1.18.9-aarch64-linux-musl)
+      racc (~> 1.4)
+    nokogiri (1.18.9-arm-linux-gnu)
+      racc (~> 1.4)
+    nokogiri (1.18.9-arm-linux-musl)
+      racc (~> 1.4)
+    nokogiri (1.18.9-arm64-darwin)
+      racc (~> 1.4)
+    nokogiri (1.18.9-x86_64-darwin)
+      racc (~> 1.4)
     nokogiri (1.18.9-x86_64-linux-gnu)
       racc (~> 1.4)
+    nokogiri (1.18.9-x86_64-linux-musl)
+      racc (~> 1.4)
     numerizer (0.1.1)
-    pdf-reader (2.14.1)
+    pdf-reader (2.15.0)
       Ascii85 (>= 1.0, < 3.0, != 2.0.0)
-      afm (~> 0.2.1)
+      afm (>= 0.2.1, < 2)
       hashery (~> 2.0)
       ruby-rc4
       ttfunk
@@ -144,11 +166,11 @@ GEM
       coderay (~> 1.1)
       method_source (~> 1.0)
     public_suffix (6.0.2)
-    puma (6.6.0)
+    puma (7.0.3)
       nio4r (~> 2.0)
     racc (1.8.1)
-    rack (3.1.16)
-    roda (3.93.0)
+    rack (3.2.1)
+    roda (3.96.0)
       rack
     ruby-rc4 (0.1.5)
     rubyntlm (0.6.5)
@@ -165,7 +187,14 @@ GEM
     zeitwerk (2.7.3)
 
 PLATFORMS
-  x86_64-linux
+  aarch64-linux-gnu
+  aarch64-linux-musl
+  arm-linux-gnu
+  arm-linux-musl
+  arm64-darwin
+  x86_64-darwin
+  x86_64-linux-gnu
+  x86_64-linux-musl
 
 DEPENDENCIES
   activesupport
@@ -191,4 +220,4 @@ RUBY VERSION
    ruby 3.3.6p108
 
 BUNDLED WITH
-   2.5.6
+   2.5.22
