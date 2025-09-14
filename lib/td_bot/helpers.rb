@@ -141,7 +141,7 @@ class TDBot
     end
 
     def delete_message(msg, id, wait: nil)
-      result = message_sender.delete_message(msg.chat.id, id)
+      result = message_sender.delete_message_public(msg.chat.id, id)
       dlog "[TD_DELETE] wait=#{wait} result=#{result ? 'success' : 'failed'}"
       result
     end
