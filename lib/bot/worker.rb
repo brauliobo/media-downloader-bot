@@ -119,7 +119,13 @@ class Bot
           mime    = up[:mime]    || up.mime    || Rack::Mime.mime_type(File.extname(path))
 
           io = Faraday::UploadIO.new path, mime
-          send_message msg, caption, type: 'document', document: io, parse_mode: nil
+          
+          # Send audio files as audio messages instead of documents
+          if mime&.start_with?('audio/') || path.to_s.downcase.match?(/\.(opus|ogg|mp3|wav|flac|aac|m4a)$/)
+            send_message msg, caption, type: 'audio', audio: io, parse_mode: nil
+          else
+            send_message msg, caption, type: 'document', document: io, parse_mode: nil
+          end
         end
         return
       end
