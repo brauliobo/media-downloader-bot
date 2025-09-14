@@ -27,11 +27,15 @@ These rules guide any AI-assisted edits in this project. They encode the repo’
 ### Concurrency & processes
 - Use the existing patterns:
   - Long-running workers: `fork` via `Bot#fork` and `daemon` wrapper; `Process.detach` and `Process.wait` loop are already in place.
-  - Per-message parallelism: `Thread.new` for non-fork contexts (TDLib listener) and extension methods like `.api_peach` for IO-bound work.
+  - **TDBot**: Uses `Thread.new` for parallel message processing (handled in `TD::MessageHandler`).
+  - **TlBot**: Uses `fork` for per-message parallelism.
+  - IO-bound work: extension methods like `.api_peach` for concurrent processing.
 - Avoid shared mutable state across threads; pass state explicitly; prefer local variables and immutable options (`SymMash` copies when needed).
 
 ### Temporary files & work directories
 - Use `Dir.mktmpdir` with `ensure`-based cleanup (see `Worker#workdir`, `Processor#cleanup`).
+- **TDBot cleanup**: Delayed cleanup (30s) in separate thread to allow async uploads to complete.
+- **TlBot cleanup**: Immediate cleanup after processing.
 - For file/command execution, `Dir.chdir dir` locally within a block and always exit the directory.
 - Respect `Bot::Worker.tmpdir` and `ENV['TMPDIR']` when present.
 
@@ -49,15 +53,20 @@ These rules guide any AI-assisted edits in this project. They encode the repo’
 - New media format/codec: add support in `Zipper` and return chosen format via `Zipper.choose_format`; integrate in `Processor#convert`.
 - New command-line option: parse via `Processor.add_opt` (key[=val]) and thread through to `opts`.
 - New file-type flow (e.g., docs): extend `FileProcessor` and keep the early `pdf` bypass pattern of returning `uploads` so `Worker` can send results directly.
+- **PDF handling**: Extract text from `metadata.pages` headers/footers when paragraphs are empty; handle graceful degradation for empty content.
 
 ### Messaging & captions (Telegram)
 - Use `MsgHelpers.me/mfe/mnfe` to escape appropriately.
 - Respect caption limits (`MsgHelpers::MAX_CAPTION` ~ 1024). Trim or reduce content when approaching limits.
 - Prefer minimal, readable captions. For ordered uploads, use `opts.number`/`opts.ordered` logic already in `Worker`.
+- Use high-level `TD::MessageSender` methods (`send_text`, `send_audio`, `send_video`, `send_document`).
+- Always pass `reply_to` when sending status or uploads; `MessageHandler` maps async IDs for edits.
+- Use `delete_message_public` for deletion; avoid private/low-level TDLib calls.
 
 ### HTTP, uploads & MIME
 - HTTP fetches via `Mechanize` inside localized helpers; avoid global clients.
 - For uploads, use `Faraday::UploadIO` and detect content type with `Rack::Mime.mime_type(File.extname(path))` when needed.
+- **Audio files**: Detected by MIME type and extension, sent using `send_audio` (not `send_document`) for proper playback controls.
 - Extend missing MIME types alongside existing additions in `Processor`.
 
 ### Shell/FFmpeg invocation
@@ -65,7 +74,8 @@ These rules guide any AI-assisted edits in this project. They encode the repo’
 - Run heavy work inside the per-job `dir` using `Dir.chdir dir do ... end`.
 
 ### ENV & configuration
-- Common flags: `DB`, `TMPDIR`, `CUDA`, `PAID`, `BLOCKED_USERS`, `BLOCKED_DOMAINS`, `PRY_BEFORE_CONVERT`, `DEBUG`, `SKIP_TD_BOT`, `SKIP_TL_BOT`.
+- Common flags: `DB`, `TMPDIR`, `CUDA`, `PAID`, `BLOCKED_USERS`, `BLOCKED_DOMAINS`, `PRY_BEFORE_CONVERT`, `DEBUG`, `SKIP_TD_BOT`, `SKIP_TL_BOT`, `TDLIB_PROCESS_UNREAD`.
+- **TDLIB_PROCESS_UNREAD**: Set to '1' to enable processing of unread messages on startup.
 - Validate and coerce ENV values near use sites; keep defaults conservative; feature-gate risky paths.
 
 ### Systemd units (`services/`)
@@ -86,6 +96,7 @@ These rules guide any AI-assisted edits in this project. They encode the repo’
 - Whisper detection must accept ISO codes (e.g., `es`) and English names (e.g., `Spanish`).
 - Burn path must use translated VTT/ASS and set `language`/`title` metadata.
 - For `onlysrt`, strip per-word tags and ensure the final SRT is translated to `opts.lang`.
+- **Audiobook translation**: Translate each paragraph individually when `opts.lang` differs from source.
 - Keep logic DRY via a central helper (e.g., `maybe_translate_vtt`).
 
 ### Git workflow
@@ -97,6 +108,7 @@ These rules guide any AI-assisted edits in this project. They encode the repo’
 - Do not reformat unrelated files or change indentation styles.
 - Do not introduce blocking I/O in critical listener loops.
 - Do not bypass existing helpers (`MsgHelpers`, `Zipper`, `Output`, `Prober`) with ad-hoc alternatives.
+- **TDLib**: Prefer high-level interfaces (`TD::Client`, `TD::MessageHandler`, `TD::MessageSender`, `TD::FileManager`). If a high-level API is missing, isolate low-level TDLib calls inside `TDBot`-scoped helpers (e.g., `TDBot::Downloader`) only.
 
 ### AI generation checklist
 - Add all required `require`/`require_relative` and, if adding dependencies, declare them in `Gemfile` under appropriate groups.
@@ -106,15 +118,10 @@ These rules guide any AI-assisted edits in this project. They encode the repo’
 - Use `Status` updates sparingly and meaningfully; escape messages with `MsgHelpers`.
 - Keep public APIs and message flow intact; integrate with existing processors/downloaders.
 
-- tdlib update: moved app-level tdlib compat shims into tdlib-schema and tdlib-ruby.
-  - Schema (tdlib-schema):
-    - Added/stubbed types: EmojiStatusTypeCustomEmoji (expiration_date=0), PaidReactionTypeRegular, ChatFolderName,
-      AccountInfo, VerificationStatus, MessageTopicSavedMessages, MessageTopicForum, Update::DefaultPaidReactionType.
-    - Added defaults in existing types: Supergroup booleans=false; restriction_reason=''; User booleans=false and ids=0;
-      LinkPreviewType::Photo.author=''; ChatActionBar::ReportAddBlock.distance=0; InputMessageContent::Video.self_destruct_type=nil;
-      EmojiStatus.custom_emoji_id=0; Message#text helper.
-    - LOOKUP_TABLE extended for new @type strings above.
-    - TD::Types.wrap made lenient: auto-creates unknown types or compat placeholders on the fly.
-  - Ruby client (tdlib-ruby):
-    - UpdateManager ignores benign schema mismatch errors; removed require 'tdlib/compat'.
-  - App: removed dependency on lib/td_bot/compat.rb.
+### Rule maintenance
+- This file is consolidated rules, not a changelog. Fold stable patterns from commits into the right sections.
+- Periodically review recent commits; remove stale guidance and update rules to match current code.
+- Validate changes against the codebase before editing; prefer high-level APIs over low-level calls.
+- Keep bullets short, DRY, and ≤120 cols with 2-space indentation.
+- Use focused commits prefixed with `rules:` when updating this file.
+
