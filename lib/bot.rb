@@ -112,9 +112,7 @@ EOS
     @bot = TDBot.connect
     # Set up listener; unread processing is handled inside listen/authorization READY
     @bot.listen do |msg|
-      Thread.new do # can't use fork
-        react msg
-      end
+      react msg # threading now handled in MessageHandler
     end
     sleep 1.year while true
   end

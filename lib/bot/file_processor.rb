@@ -65,13 +65,33 @@ class Bot
         @stl&.update 'OCR & TTS'
         base = File.basename((i.info&.title || i.fn_in), '.pdf')
         audio_out = "#{dir}/#{base}.opus"
-        result = Audiobook.generate(i.fn_in, audio_out, stl: @stl)
+        
+        begin
+          result = Audiobook.generate(i.fn_in, audio_out, stl: @stl)
+          
+          # Check if files were actually created
+          unless File.exist?(result.transcription) && File.exist?(result.audio)
+            @stl&.error 'Failed to generate audiobook files'
+            return nil
+          end
+          
+          # Check if audio file has content (not just a tiny silent file)
+          audio_size = File.size(result.audio)
+          if audio_size < 1000 # Less than 1KB suggests empty/silent audio
+            @stl&.update 'Warning: Generated audio is very small, may be empty'
+          end
 
-        i.uploads = [
-          SymMash.new(path: result.transcription, mime: 'application/json', caption: me('Book transcription')),
-          SymMash.new(path: result.audio,        mime: 'audio/ogg',          caption: me('Audiobook')),
-        ]
-        return i
+          i.uploads = [
+            SymMash.new(path: result.transcription, mime: 'application/json', caption: me('Book transcription')),
+            SymMash.new(path: result.audio,        mime: 'audio/ogg',          caption: me('Audiobook')),
+          ]
+          return i
+        rescue => e
+          @stl&.error "Audiobook generation failed: #{e.message}"
+          puts "[PDF_ERROR] #{e.class}: #{e.message}"
+          puts e.backtrace.first(3)
+          return nil
+        end
       end
       super
     end
