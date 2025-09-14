@@ -6,6 +6,7 @@ require_relative 'tts'
 require_relative 'zipper'
 require_relative 'sh'
 require_relative 'exts/sym_mash'
+require_relative 'translator'
 
 require 'tmpdir'
 require 'fileutils'
@@ -40,6 +41,8 @@ class Audiobook
   def process_to_audio(out_audio)
     paragraphs = extract_paragraphs
     return create_silent_audiobook(out_audio) if paragraphs.empty?
+
+    paragraphs = translate_paragraphs(paragraphs) if translation_needed?
 
     @stl&.update "Generating audio for #{paragraphs.count} paragraphs"
     create_audiobook_from_paragraphs(paragraphs, out_audio)
@@ -186,5 +189,36 @@ class Audiobook
     zip_opts = SymMash.new(@opts || {})
     zip_opts[:format] = Zipper.choose_format(Zipper::Types.audio, zip_opts, nil)
     Zipper.zip_audio(input_wav, out_audio, opts: zip_opts)
+  end
+
+  # Check if translation is needed
+  def translation_needed?
+    return false unless @opts&.lang
+    return false unless @lang
+    @opts.lang.to_s != @lang.to_s
+  end
+
+  # Translate paragraphs if target language differs from source
+  def translate_paragraphs(paragraphs)
+    return paragraphs unless translation_needed?
+
+    @stl&.update 'Translating paragraphs'
+    
+    # Translate each paragraph individually
+    translated_paragraphs = paragraphs.map.with_index do |para, idx|
+      if para['text']&.length&.positive?
+        @stl&.update "Translating paragraph #{idx + 1}/#{paragraphs.size}"
+        translated_text = Translator.translate(para['text'], from: @lang, to: @opts.lang)
+        para.merge('text' => translated_text)
+      else
+        para
+      end
+    end
+
+    # Update the language for TTS
+    @lang = @opts.lang.to_s
+    
+    @stl&.update "Translated to #{@lang}"
+    translated_paragraphs
   end
 end

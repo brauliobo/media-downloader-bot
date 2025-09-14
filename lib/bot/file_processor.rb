@@ -67,7 +67,7 @@ class Bot
         audio_out = "#{dir}/#{base}.opus"
         
         begin
-          result = Audiobook.generate(i.fn_in, audio_out, stl: @stl)
+          result = Audiobook.generate(i.fn_in, audio_out, stl: @stl, opts: i.opts)
           
           # Check if files were actually created
           unless File.exist?(result.transcription) && File.exist?(result.audio)
