@@ -2,8 +2,8 @@ source 'https://rubygems.org'
 
 ruby File.read('.ruby-version')
 
-def path_for p; "#{ENV['LOCAL_GEMS_DIR']}/p" if ENV['LOCAL_GEMS'] && File.exist?(p); end
 LOCAL_GEMS_DIR = "#{ENV['HOME']}/Projects"
+def path_for p; "#{LOCAL_GEMS_DIR}/#{p}" if ENV['LOCAL_GEMS'] && File.exist?("#{LOCAL_GEMS_DIR}/#{p}"); end
 
 gem 'activesupport'
 gem 'dotenv'
