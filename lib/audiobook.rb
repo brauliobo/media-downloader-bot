@@ -64,6 +64,14 @@ class Audiobook
         # Extract text from pages structure
         pages_text = data['content']['pages'].map { |page| page['text'] }.compact.join(' ')
         alternative_text = pages_text unless pages_text.empty?
+      elsif data['metadata'] && data['metadata']['pages']
+        # Extract text from metadata.pages (headers/footers)
+        pages_text = []
+        data['metadata']['pages'].each do |page|
+          pages_text << page['header'] if page['header'] && !page['header'].strip.empty?
+          pages_text << page['footer'] if page['footer'] && !page['footer'].strip.empty?
+        end
+        alternative_text = pages_text.uniq.join(' ') unless pages_text.empty?
       end
       
       if alternative_text && !alternative_text.strip.empty?
