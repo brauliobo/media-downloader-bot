@@ -43,7 +43,16 @@ class Bot
       @dir = Dir.mktmpdir "mdb-", tmpdir
       yield @dir
     ensure
-      FileUtils.remove_entry dir
+      # For TDBot, delay cleanup to allow async uploads to complete
+      if bot.is_a?(TDBot)
+        cleanup_dir = @dir
+        Thread.new do
+          sleep 30 # Give TDBot time to upload files
+          FileUtils.remove_entry cleanup_dir if Dir.exist?(cleanup_dir)
+        end
+      else
+        FileUtils.remove_entry @dir
+      end
     end
 
     def process
@@ -118,13 +127,14 @@ class Bot
           caption = up[:caption] || up.caption || ''
           mime    = up[:mime]    || up.mime    || Rack::Mime.mime_type(File.extname(path))
 
-          io = Faraday::UploadIO.new path, mime
+          # For TDBot, pass file path directly; for TlBot, use UploadIO
+          file_param = bot.is_a?(TDBot) ? path : Faraday::UploadIO.new(path, mime)
           
           # Send audio files as audio messages instead of documents
           if mime&.start_with?('audio/') || path.to_s.downcase.match?(/\.(opus|ogg|mp3|wav|flac|aac|m4a)$/)
-            send_message msg, caption, type: 'audio', audio: io, parse_mode: nil
+            send_message msg, caption, type: 'audio', audio: file_param, parse_mode: nil
           else
-            send_message msg, caption, type: 'document', document: io, parse_mode: nil
+            send_message msg, caption, type: 'document', document: file_param, parse_mode: nil
           end
         end
         return
