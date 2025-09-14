@@ -40,7 +40,64 @@ class Audiobook
     lang = data.dig('metadata', 'language') || 'en'
     paragraphs = data.dig('content', 'paragraphs') || []
 
+    # Debug: log the JSON structure to understand what we're getting
+    puts "[DEBUG] JSON data keys: #{data.keys}"
+    puts "[DEBUG] Content keys: #{data['content']&.keys}"
+    puts "[DEBUG] Paragraphs found: #{paragraphs.count}"
+    paragraphs.each_with_index do |para, idx|
+      puts "[DEBUG] Paragraph #{idx}: #{para['text']&.slice(0, 100)}..."
+    end
+
+    # Fallback: if no paragraphs found, try to extract text from other locations
+    if paragraphs.empty?
+      stl&.update 'No paragraphs found, checking for alternative text sources'
+      
+      # Try to find text in different JSON structures
+      alternative_text = nil
+      
+      # Check if there's raw text in the data
+      if data['text']
+        alternative_text = data['text']
+      elsif data['content'] && data['content']['text']
+        alternative_text = data['content']['text']
+      elsif data['content'] && data['content']['pages']
+        # Extract text from pages structure
+        pages_text = data['content']['pages'].map { |page| page['text'] }.compact.join(' ')
+        alternative_text = pages_text unless pages_text.empty?
+      end
+      
+      if alternative_text && !alternative_text.strip.empty?
+        stl&.update 'Found alternative text, creating single paragraph'
+        paragraphs = [{ 'text' => alternative_text.strip }]
+        puts "[DEBUG] Created paragraph from alternative text: #{alternative_text.slice(0, 100)}..."
+      end
+    end
+
     stl&.update "Generating audio for #{paragraphs.count} paragraphs"
+
+    # Handle still empty paragraphs case
+    if paragraphs.empty?
+      stl&.update 'No text found anywhere - creating silent audio file'
+      
+      # Create a minimal silent audio file
+      Dir.mktmpdir do |dir|
+        silent_wav = File.join(dir, 'silent.wav')
+        # Create 1 second of silence using ffmpeg
+        cmd = "ffmpeg -y -f lavfi -i anullsrc=channel_layout=mono:sample_rate=22050 -t 1 '#{silent_wav}'"
+        system(cmd)
+        
+        if File.exist?(silent_wav)
+          zip_opts = SymMash.new(opts || {})
+          zip_opts[:format] = Zipper.choose_format(Zipper::Types.audio, zip_opts, nil)
+          Zipper.zip_audio(silent_wav, out_audio, opts: zip_opts)
+        else
+          raise "Failed to create silent audio file"
+        end
+      end
+      
+      stl&.update 'Silent audiobook created (no text found)'
+      return
+    end
 
     Dir.mktmpdir do |dir|
       wav_files = []
@@ -52,6 +109,17 @@ class Audiobook
         wav = File.join(dir, format('%04d.wav', idx + 1))
         TTS.synthesize(text: para['text'], lang: lang, out_path: wav)
         wav_files << wav
+      end
+
+      # Handle case where all paragraphs were filtered out
+      if wav_files.empty?
+        stl&.update 'No valid text found - creating empty audio file'
+        
+        # Create a minimal silent audio file
+        silent_wav = File.join(dir, 'silent.wav')
+        cmd = "ffmpeg -y -f lavfi -i anullsrc=channel_layout=mono:sample_rate=22050 -t 1 '#{silent_wav}'"
+        system(cmd)
+        wav_files << silent_wav if File.exist?(silent_wav)
       end
 
       # Concatenate all WAVs into a single file.
