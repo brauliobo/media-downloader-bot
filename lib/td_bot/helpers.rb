@@ -65,30 +65,8 @@ class TDBot
 
     # Download any Telegram file (audio, video, document) via TDLib
     def download_file(file_id_or_info, priority: 32, offset: 0, limit: 0, synchronous: true, dir: nil)
-      # Handle both file_id (integer) and info object (with document/file_id method)
-      if file_id_or_info.respond_to?(:document) && file_id_or_info.document.respond_to?(:file_id)
-        # This is a message document object
-        file_id = file_id_or_info.document.file_id
-      elsif file_id_or_info.respond_to?(:file_id)
-        # This is a document or file object with direct file_id
-        file_id = file_id_or_info.file_id
-      elsif file_id_or_info.respond_to?(:document) && file_id_or_info.document.respond_to?(:id)
-        # This is a document object with id field instead of file_id
-        file_id = file_id_or_info.document.id
-      elsif file_id_or_info.respond_to?(:id)
-        # This is a file object with id field
-        file_id = file_id_or_info.id
-      else
-        # This should be a file_id integer
-        file_id = file_id_or_info
-      end
-      
-      dlog "[TD_DOWNLOAD] file_id=#{file_id} dir=#{dir}"
-      
-      # Download the file using TDLib
-      result = file_manager.download_file(file_id, priority: priority, offset: offset, limit: limit, synchronous: synchronous)
-      
-      dlog "[TD_DOWNLOAD] result=#{result.inspect}"
+      # Use the enhanced file_manager method
+      result = file_manager.download_file(file_id_or_info, priority: priority, offset: offset, limit: limit, synchronous: synchronous, dir: dir)
       
       # Check for errors in the download result
       if result.is_a?(Hash) && result[:error]
@@ -97,29 +75,11 @@ class TDBot
       
       # Extract the local path from the file manager result hash
       local_path = result.is_a?(Hash) ? result[:local_path] : nil
-      dlog "[TD_DOWNLOAD] extracted path=#{local_path} exists=#{File.exist?(local_path) if local_path}"
-      
-      # If dir is specified and we have a valid local path, copy the file to the desired directory
-      if dir && local_path && !local_path.empty? && File.exist?(local_path)
-        filename = File.basename(local_path)
-        target_path = File.join(dir, filename)
-        
-        dlog "[TD_DOWNLOAD] copying #{local_path} -> #{target_path}"
-        # Ensure target directory exists
-        FileUtils.mkdir_p(dir)
-        # Copy file to target directory
-        FileUtils.cp(local_path, target_path)
-        return target_path
-      end
       
       # Ensure we always return a string path
-      final_path = local_path && !local_path.empty? ? local_path : nil
-      dlog "[TD_DOWNLOAD] final_path=#{final_path} (class=#{final_path.class})"
+      raise "Failed to download file: no local path available (got: #{result.inspect})" unless local_path && !local_path.empty?
       
-      # If we don't have a valid path, raise an error
-      raise "Failed to download file: no local path available (got: #{result.inspect})" unless final_path
-      
-      final_path
+      local_path
     end
 
     # TDLib-specific caption formatting that handles URLs properly
@@ -179,8 +139,9 @@ class TDBot
     end
 
     def delete_message(msg, id, wait: nil)
-      message_sender.delete_message(msg.chat.id, id)
-      dlog "[TD_DELETE] wait=#{wait}"
+      result = message_sender.delete_message(msg.chat.id, id)
+      dlog "[TD_DELETE] wait=#{wait} result=#{result ? 'success' : 'failed'}"
+      result
     end
 
     def mark_read(msg)
@@ -190,17 +151,9 @@ class TDBot
       dlog "[READ_ERROR] #{e.class}: #{e.message}"
     end
 
-    # Legacy compatibility method for direct editing
+    # Legacy compatibility method for direct editing - use edit_message instead
     def edit(msg, text)
-      client.edit_message_text(
-        chat_id: msg.chat_id,
-        message_id: msg.id,
-        input_message_content: TD::Types::InputMessageContent::Text.new(
-          text: TD::Types::FormattedText.new(text: text, entities: [])
-        )
-      ).value
-    rescue => e
-      STDERR.puts "edit_error: #{e.class}: #{e.message}"
+      edit_message(msg, msg.id, text: text)
     end
   end
 end
