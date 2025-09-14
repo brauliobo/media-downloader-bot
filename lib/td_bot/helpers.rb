@@ -717,11 +717,15 @@ class TDBot
       
       dlog "[TD_EDIT] chat=#{msg.chat.id} id=#{id}->#{actual_id} text=#{text.to_s[0,50]}..."
       return if actual_id.to_i <= 0 || text.to_s.empty?
+      
+      # Parse markdown to get proper formatting entities
+      formatted_text = parse_markdown_text(text.to_s)
+      
       client.edit_message_text(
         chat_id: msg.chat.id,
         message_id: actual_id,
         input_message_content: TD::Types::InputMessageContent::Text.new(
-          text: TD::Types::FormattedText.new(text: text.to_s, entities: []),
+          text: formatted_text,
           link_preview_options: nil,
           clear_draft: false
         ),
@@ -742,8 +746,11 @@ class TDBot
 
     private
     def send_td_text(msg, text)
+      # Parse markdown to get proper formatting entities
+      formatted_text = parse_markdown_text(text.to_s)
+      
       content = TD::Types::InputMessageContent::Text.new(
-        text: TD::Types::FormattedText.new(text: text.to_s, entities: []),
+        text: formatted_text,
         link_preview_options: nil,
         clear_draft: false
       )
@@ -773,6 +780,19 @@ class TDBot
         return io.path if io && io.respond_to?(:path)
       rescue; end
       nil
+    end
+
+    def parse_markdown_text(text)
+      return TD::Types::FormattedText.new(text: '', entities: []) if text.to_s.empty?
+      
+      # Use the existing TDBot::Markdown class which has proper fallback handling
+      result = TDBot::Markdown.parse(client, text.to_s)
+      dlog "[MARKDOWN_PARSE] '#{text[0,30]}...' -> #{result.entities.length} entities"
+      result
+    rescue => e
+      dlog "[PARSE_MARKDOWN_ERROR] #{e.class}: #{e.message}"
+      # Fallback to plain text
+      TD::Types::FormattedText.new(text: text.to_s, entities: [])
     end
 
     def copy_to_safe_location(original_path)
@@ -825,7 +845,7 @@ class TDBot
         width: width,
         height: height,
         supports_streaming: supports_streaming,
-        caption: TD::Types::FormattedText.new(text: caption.to_s, entities: []),
+        caption: parse_markdown_text(caption.to_s),
         show_caption_above_media: false,
         self_destruct_type: nil,
         has_spoiler: false
@@ -849,7 +869,7 @@ class TDBot
         document: TD::Types::InputFile::Local.new(path: safe_path),
         thumbnail: DUMMY_THUMB,
         disable_content_type_detection: false,
-        caption: TD::Types::FormattedText.new(text: caption.to_s, entities: [])
+        caption: parse_markdown_text(caption.to_s)
       )
       sent = client.send_message(chat_id: msg.chat.id, message_thread_id: 0, reply_to: nil, options: nil, reply_markup: nil, input_message_content: content).value(60)
       SymMash.new message_id: (sent&.id || 0), text: caption
