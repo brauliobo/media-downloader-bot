@@ -118,6 +118,8 @@ class TDBot
           # Fallback: try without reply_to
           result = message_sender.send_text(msg.chat.id, text, parse_mode: parse_mode, reply_to: nil)
         end
+      elsif params[:audio]
+        result = message_sender.send_audio(msg.chat.id, text, reply_to: reply_to, **params)
       elsif params[:video]
         result = message_sender.send_video(msg.chat.id, text, reply_to: reply_to, **params)
       elsif params[:document]
