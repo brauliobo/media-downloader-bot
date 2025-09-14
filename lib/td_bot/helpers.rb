@@ -177,11 +177,15 @@ class TDBot
       self.class.instance_variable_set(:@listen_instance, self)
       dlog "[LISTEN] handler set: instance=#{!!@listen_handler} class=#{!!self.class.instance_variable_get(:@listen_handler)}"
       # Kick unread scan immediately
-      begin
-        dlog "[UNREAD_KICK] starting"
-        process_unread_on_start handler
-      rescue => e
-        dlog "unread_kick_error: #{e.class}: #{e.message}"
+      if ENV['TDLIB_PROCESS_UNREAD'].to_s == '1'
+        begin
+          dlog "[UNREAD_KICK] starting"
+          process_unread_on_start handler
+        rescue => e
+          dlog "unread_kick_error: #{e.class}: #{e.message}"
+        end
+      else
+        dlog "[UNREAD_KICK] skipped (TDLIB_PROCESS_UNREAD!=1)"
       end
       # Trigger unread once READY; poll briefly if needed
       Thread.new do
@@ -194,11 +198,15 @@ class TDBot
           break if (auth_ready || class_auth_ready || auth_state_ready)
           sleep 0.2
         end
-        begin
-          dlog "[UNREAD_KICK_READY] starting"
-          process_unread_on_start(handler)
-        rescue => e
-          dlog "unread_kick_ready_error: #{e.class}: #{e.message}"
+        if ENV['TDLIB_PROCESS_UNREAD'].to_s == '1'
+          begin
+            dlog "[UNREAD_KICK_READY] starting"
+            process_unread_on_start(handler)
+          rescue => e
+            dlog "unread_kick_ready_error: #{e.class}: #{e.message}"
+          end
+        else
+          dlog "[UNREAD_KICK_READY] skipped (TDLIB_PROCESS_UNREAD!=1)"
         end
       end
       
@@ -246,6 +254,21 @@ class TDBot
       rescue => e
         dlog "[DEBUG] error registering Update::NewMessage handler: #{e.class}: #{e.message}"
       end
+      
+      # Handle message send success to update message ID mapping
+      begin
+        client.on TD::Types::Update::MessageSendSucceeded do |u|
+          if u.respond_to?(:old_message_id) && u.respond_to?(:message) && u.message.respond_to?(:id)
+            @@message_id_map ||= {}
+            old_id = u.old_message_id
+            new_id = u.message.id
+            @@message_id_map[old_id] = new_id
+            dlog "[MSG_ID_UPDATE] #{old_id} -> #{new_id}"
+          end
+        end
+      rescue => e
+        dlog "[DEBUG] error registering MessageSendSucceeded handler: #{e.class}: #{e.message}"
+      end
 
       # Fallback: some environments don't emit Update::NewMessage reliably; process last_message
       begin
@@ -256,7 +279,7 @@ class TDBot
           @@known_chat_ids << u.chat_id if u.respond_to?(:chat_id)
           # Queue for startup unread processing
           @@pending_last_messages << u.last_message
-          handle_incoming_message(u.last_message, handler)
+          handle_incoming_message(u.last_message, handler) if ENV['TDLIB_PROCESS_UNREAD'].to_s == '1'
         end
       rescue => e
         dlog "[DEBUG] error registering ChatLastMessage handler: #{e.class}: #{e.message}"
@@ -403,9 +426,12 @@ class TDBot
           global_search.messages.first(30).each do |orig_msg|
                 break if processed_messages >= 10
                 
-                # Skip outgoing messages
+                # Skip outgoing/self/service/channel/chat-sent
                 next if orig_msg.respond_to?(:is_outgoing) && orig_msg.is_outgoing
                 next if self_id && orig_msg.sender_id.respond_to?(:user_id) && orig_msg.sender_id.user_id == self_id
+                next if orig_msg.respond_to?(:is_channel_post) && orig_msg.is_channel_post
+                next if orig_msg.sender_id.respond_to?(:chat_id)
+                next if orig_msg.sender_id.respond_to?(:user_id) && orig_msg.sender_id.user_id == 777000
                 
                 # Extract message text using the patched method
                 text = orig_msg.text rescue (orig_msg.content.text&.text rescue nil)
@@ -487,6 +513,9 @@ class TDBot
               rescue; end
               next if orig_msg.respond_to?(:is_outgoing) && orig_msg.is_outgoing
               next if self_id && orig_msg.sender_id.respond_to?(:user_id) && orig_msg.sender_id.user_id == self_id
+              next if orig_msg.respond_to?(:is_channel_post) && orig_msg.is_channel_post
+              next if orig_msg.sender_id.respond_to?(:chat_id)
+              next if orig_msg.sender_id.respond_to?(:user_id) && orig_msg.sender_id.user_id == 777000
               text = orig_msg.text rescue (orig_msg.content.text&.text rescue nil)
               next if text.nil? || text.empty?
               msg = SymMash.new(orig_msg.to_h.merge(chat: {id: orig_msg.chat_id}, from: {id: (orig_msg.sender_id.respond_to?(:user_id) ? orig_msg.sender_id.user_id : nil)}, text: text.to_s))
@@ -525,7 +554,6 @@ class TDBot
     # Centralized message handling used by all update sources
     def handle_incoming_message(orig_msg, handler)
       return unless orig_msg
-      dlog "[MSG] incoming id=#{orig_msg.id} chat=#{orig_msg.chat_id} type=#{orig_msg.content.class.name.split('::').last}"
       text = case orig_msg.content
       when TD::Types::MessageContent::Text
         orig_msg.content.text&.text
@@ -545,6 +573,16 @@ class TDBot
       if @self_id && (sid = orig_msg.sender_id)&.respond_to?(:user_id)
         return if sid.user_id == @self_id
       end
+      return if orig_msg.respond_to?(:is_channel_post) && orig_msg.is_channel_post
+      return if (orig_msg.sender_id rescue nil)&.respond_to?(:chat_id)
+      if (sid = orig_msg.sender_id rescue nil)&.respond_to?(:user_id)
+        return if sid.user_id == 777000
+      end
+      # Keep processing of plain text (commands/help) even if no URL
+
+      dlog "[MSG] incoming id=#{orig_msg.id} chat=#{orig_msg.chat_id} type=#{orig_msg.content.class.name.split('::').last}"
+      return if orig_msg.respond_to?(:is_channel_post) && orig_msg.is_channel_post
+      return if (orig_msg.sender_id rescue nil)&.respond_to?(:chat_id)
 
       msg = SymMash.new(
         orig_msg.to_h.merge(
@@ -589,10 +627,15 @@ class TDBot
       dlog "mark_read_error: #{e.class}: #{e.message}"
     end
 
-    # Escape only the non-format Markdown characters required by Telegram Markdown V2 while keeping * _ for styling
+    # TDLib-specific markdown escaping - only escape characters that break parsing
     def me(text)
       return text unless text
-      MsgHelpers::MARKDOWN_NON_FORMAT.each { |c| text = text.gsub(c, "\\#{c}") }
+      # For TDLib, we need minimal escaping to allow markdown to work
+      # Only escape characters that would break the markdown parsing
+      text = text.gsub('\\', '\\\\')  # Escape backslashes first
+      text = text.gsub('`', '\\`')    # Escape backticks for code formatting
+      # Don't escape _ and * - we want them to work for formatting
+      # Don't escape [] - TDLib handles URLs automatically
       text
     end
     alias_method :mnfe, :me
@@ -639,8 +682,26 @@ class TDBot
       end
     end
 
+    # TDLib-specific caption formatting that handles URLs properly
+    def msg_caption i
+      return '' if i.respond_to?(:opts) && i.opts.nocaption
+      text = ''
+      if (i.respond_to?(:opts) && i.opts.caption) || (i.respond_to?(:type) && i.type == Zipper::Types.video)
+        text  = "_#{me i.info.title}_"
+        text << "\n#{me i.info.uploader}" if i.info.uploader
+      end
+      text << "\n\n_#{me i.info.description.strip}_" if i.respond_to?(:opts) && i.opts.description && i.info.description.strip.presence
+      # Format URL as clickable link for TDLib
+      text << "\n\n#{i.url}" if i.url  # Don't escape URLs - TDLib handles them automatically
+      text
+    end
+
     # Minimal stubs to be API-compatible with TlBot for Worker usage
     def send_message msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **params
+      t = type.to_s
+      return send_td_text(msg, text) if t.in? %w[message text]
+      return send_td_video(msg, text, **params) if params[:video]
+      return send_td_document(msg, text, **params) if params[:document]
       preview = text.to_s.gsub(/\s+/, ' ')[0, 200]
       puts "[TD_SEND] type=#{type} chat=#{msg.chat.id} text=#{preview}"
       SymMash.new message_id: (Time.now.to_f * 1000).to_i, text: text
@@ -650,16 +711,151 @@ class TDBot
     end
 
     def edit_message msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', **params
-      preview = text.to_s.gsub(/\s+/, ' ')[0, 200]
-      puts "[TD_EDIT] chat=#{msg.chat.id} id=#{id} text=#{preview}"
+      # Use the correct message ID from mapping if available
+      @@message_id_map ||= {}
+      actual_id = @@message_id_map[id] || id
+      
+      dlog "[TD_EDIT] chat=#{msg.chat.id} id=#{id}->#{actual_id} text=#{text.to_s[0,50]}..."
+      return if actual_id.to_i <= 0 || text.to_s.empty?
+      client.edit_message_text(
+        chat_id: msg.chat.id,
+        message_id: actual_id,
+        input_message_content: TD::Types::InputMessageContent::Text.new(
+          text: TD::Types::FormattedText.new(text: text.to_s, entities: []),
+          link_preview_options: nil,
+          clear_draft: false
+        ),
+        reply_markup: nil
+      ).value(15)
+      dlog "[TD_EDIT] success"
     rescue => e
       dlog "[TD_EDIT_ERROR] #{e.class}: #{e.message}"
+      dlog "[TD_EDIT_ERROR] backtrace: #{e.backtrace[0,3].join(' | ')}"
     end
 
     def delete_message msg, id, wait: nil
-      puts "[TD_DELETE] chat=#{msg.chat.id} id=#{id} wait=#{wait}"
+      client.delete_messages chat_id: msg.chat.id, message_ids: [id], revoke: true
+      dlog "[TD_DELETE] chat=#{msg.chat.id} id=#{id} wait=#{wait}"
     rescue => e
       dlog "[TD_DELETE_ERROR] #{e.class}: #{e.message}"
+    end
+
+    private
+    def send_td_text(msg, text)
+      content = TD::Types::InputMessageContent::Text.new(
+        text: TD::Types::FormattedText.new(text: text.to_s, entities: []),
+        link_preview_options: nil,
+        clear_draft: false
+      )
+      dlog "[TD_SEND_TEXT] chat=#{msg.chat.id} text=#{text[0,50]}..."
+      sent = client.send_message(chat_id: msg.chat.id, message_thread_id: 0, reply_to: nil, options: nil, reply_markup: nil, input_message_content: content).value(15)
+      msg_id = sent&.id || 0
+      dlog "[TD_SEND_TEXT] sent id=#{msg_id}"
+      
+      # Track message ID updates for proper editing
+      if msg_id > 0
+        @@message_id_map ||= {}
+        @@message_id_map[msg_id] = msg_id
+      end
+      
+      SymMash.new message_id: msg_id, text: text
+    rescue => e
+      dlog "[TD_SEND_TEXT_ERROR] #{e.class}: #{e.message}"
+      dlog "[TD_SEND_TEXT_ERROR] backtrace: #{e.backtrace[0,3].join(' | ')}"
+      SymMash.new message_id: 0, text: text
+    end
+
+    def extract_local_path(obj)
+      return obj if obj.is_a?(String)
+      return obj.path if obj.respond_to?(:path)
+      begin
+        io = obj.instance_variable_get(:@io)
+        return io.path if io && io.respond_to?(:path)
+      rescue; end
+      nil
+    end
+
+    def copy_to_safe_location(original_path)
+      return original_path unless File.exist?(original_path)
+      
+      # Create safe upload directory
+      safe_dir = File.join(Dir.tmpdir, 'tdbot-uploads')
+      FileUtils.mkdir_p(safe_dir)
+      
+      # Generate unique filename
+      basename = File.basename(original_path)
+      timestamp = Time.now.to_f.to_s.tr('.', '')
+      safe_filename = "#{timestamp}_#{basename}"
+      safe_path = File.join(safe_dir, safe_filename)
+      
+      # Copy file
+      FileUtils.cp(original_path, safe_path)
+      dlog "[SAFE_COPY] #{original_path} -> #{safe_path}"
+      
+      # Schedule cleanup after a reasonable delay (5 minutes)
+      Thread.new do
+        sleep 300
+        File.delete(safe_path) if File.exist?(safe_path)
+        dlog "[SAFE_CLEANUP] deleted #{safe_path}"
+      rescue => e
+        dlog "[SAFE_CLEANUP_ERROR] #{e.class}: #{e.message}"
+      end
+      
+      safe_path
+    end
+
+    def send_td_video(msg, caption, **params)
+      file_obj = params[:video]
+      path = extract_local_path(file_obj)
+      raise 'video path missing' unless path && !path.empty?
+      
+      # Copy file to permanent location to avoid cleanup issues
+      safe_path = copy_to_safe_location(path)
+      
+      duration = params[:duration].to_i rescue 0
+      width    = params[:width].to_i rescue 0
+      height   = params[:height].to_i rescue 0
+      supports_streaming = !!params[:supports_streaming]
+
+      content = TD::Types::InputMessageContent::Video.new(
+        video: TD::Types::InputFile::Local.new(path: safe_path),
+        thumbnail: DUMMY_THUMB,
+        added_sticker_file_ids: [],
+        duration: duration,
+        width: width,
+        height: height,
+        supports_streaming: supports_streaming,
+        caption: TD::Types::FormattedText.new(text: caption.to_s, entities: []),
+        show_caption_above_media: false,
+        self_destruct_type: nil,
+        has_spoiler: false
+      )
+      sent = client.send_message(chat_id: msg.chat.id, message_thread_id: 0, reply_to: nil, options: nil, reply_markup: nil, input_message_content: content).value(60)
+      SymMash.new message_id: (sent&.id || 0), text: caption
+    rescue => e
+      dlog "[TD_SEND_VIDEO_ERROR] #{e.class}: #{e.message}"
+      SymMash.new message_id: 0, text: caption
+    end
+
+    def send_td_document(msg, caption, **params)
+      file_obj = params[:document]
+      path = extract_local_path(file_obj)
+      raise 'document path missing' unless path && !path.empty?
+      
+      # Copy file to permanent location to avoid cleanup issues
+      safe_path = copy_to_safe_location(path)
+      
+      content = TD::Types::InputMessageContent::Document.new(
+        document: TD::Types::InputFile::Local.new(path: safe_path),
+        thumbnail: DUMMY_THUMB,
+        disable_content_type_detection: false,
+        caption: TD::Types::FormattedText.new(text: caption.to_s, entities: [])
+      )
+      sent = client.send_message(chat_id: msg.chat.id, message_thread_id: 0, reply_to: nil, options: nil, reply_markup: nil, input_message_content: content).value(60)
+      SymMash.new message_id: (sent&.id || 0), text: caption
+    rescue => e
+      dlog "[TD_SEND_DOC_ERROR] #{e.class}: #{e.message}"
+      SymMash.new message_id: 0, text: caption
     end
 
   end
