@@ -132,7 +132,6 @@ class Bot
 
     def upload_one i
       oprobe = i.oprobe ||= Prober.for i.fn_out
-      puts "[DEBUG] fn_out: #{i.fn_out}, exists: #{File.exist?(i.fn_out)}, oprobe: #{oprobe.class}, format: #{oprobe&.format.class}" if ENV['DEBUG']
       type   = i.type
       info   = i.info
       durat  = oprobe&.format&.duration&.to_i || 0 # speed may change from input
