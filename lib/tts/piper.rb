@@ -20,7 +20,9 @@ class TTS
     def synthesize(text:, lang:, out_path:, voice: nil, **kwargs)
       port = PORT_MAP[lang] or raise ArgumentError, "Unsupported language: #{lang}"
       uri = URI.parse(format(ENDPOINT_TEMPLATE, port: port))
-      payload = { text: text }
+      # Ensure text is properly encoded as UTF-8
+      clean_text = text.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
+      payload = { text: clean_text }
       payload[:voice] = voice if voice
       payload.merge!(kwargs)
 

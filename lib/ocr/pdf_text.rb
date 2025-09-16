@@ -25,7 +25,9 @@ class Ocr
         stl&.update "Extracting text from page #{page_num}/#{reader.page_count}"
 
         # Split page text into lines, keep blank lines for paragraph boundaries
-        lines = page.text.to_s.split(/\r?\n/).map { |l| l.rstrip }
+        # Ensure UTF-8 encoding and handle invalid characters
+        page_text = page.text.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
+        lines = page_text.split(/\r?\n/).map { |l| l.rstrip }
         pages_lines << { num: page_num, lines: lines }
       end
 
