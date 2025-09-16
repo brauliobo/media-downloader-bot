@@ -41,6 +41,7 @@ class Zipper
     # size-limit flags as string (video) or nil (audio).
 
     def apply_audio_size_limit!(zipper)
+      return if zipper.opts.onlysrt
       return unless Zipper.size_mb_limit
 
       if max_audio_duration(zipper.opts.bitrate, Zipper.size_mb_limit) < zipper.duration / 60.0
@@ -49,8 +50,9 @@ class Zipper
     end
 
     def apply_video_size_limits!(zipper)
-      return '' unless Zipper.size_mb_limit
-      return '' if zipper.opts.custom_width
+      return if zipper.opts.onlysrt
+      return unless Zipper.size_mb_limit
+      return if zipper.opts.custom_width
 
       minutes  = (zipper.duration / 60).ceil
       vthld    = vid_duration_thld(Zipper.size_mb_limit)
