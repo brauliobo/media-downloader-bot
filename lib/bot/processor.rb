@@ -104,7 +104,7 @@ class Bot
         return i
       end
 
-      if Zipper.size_mb_limit
+      if Zipper.size_mb_limit && !opts.onlysrt
         if i.type == Types.video and i.durat > Zipper.vid_duration_thld.minutes.to_i
           @stl.update VID_TOO_LONG[]
         end
