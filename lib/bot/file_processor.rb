@@ -63,7 +63,8 @@ class Bot
         raise 'no input provided' unless i
 
         @stl&.update 'OCR & TTS'
-        base = File.basename((i.info&.title || i.fn_in), '.pdf')
+        src  = i.info&.title || i.fn_in
+        base = File.basename(src, File.extname(src))
         audio_out = "#{dir}/#{base}.opus"
         
         begin
@@ -94,7 +95,7 @@ class Bot
             SymMash.new(
               fn_out: result.transcription,
               type: SymMash.new(name: 'document'),
-              info: SymMash.new(title: me('Book transcription'), uploader: ''),
+              info: SymMash.new(title: base, uploader: ''),
               mime: 'application/json',
               opts: SymMash.new(format: SymMash.new(mime: 'application/json')),
               oprobe: Prober.for(result.transcription)
@@ -102,7 +103,7 @@ class Bot
             SymMash.new(
               fn_out: result.audio,
               type: SymMash.new(name: 'audio'),
-              info: SymMash.new(title: me('Audiobook'), uploader: ''),
+              info: SymMash.new(title: base, uploader: ''),
               mime: 'audio/ogg',
               opts: SymMash.new(format: SymMash.new(mime: 'audio/ogg')),
               oprobe: Prober.for(result.audio)
