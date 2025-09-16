@@ -22,6 +22,8 @@ gem 'drb'
 
 gem 'addressable'
 gem 'mechanize'
+gem 'faraday'
+gem 'httparty'
 
 gem 'pdf-reader'
 

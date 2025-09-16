@@ -138,7 +138,12 @@ class Bot
 
     def generate_srt_only i
       srt_path = Zipper.generate_srt(i.fn_in, dir: dir, info: i.info, probe: i.probe, stl: @stl, opts: i.opts)
-      i.uploads = [SymMash.new(path: srt_path, mime: 'application/x-subrip', caption: '')]
+      # Standardize as a document for the regular upload path
+      i.fn_out = srt_path
+      i.type   = SymMash.new(name: :document)
+      i.mime   = 'application/x-subrip'
+      i.opts.format = SymMash.new(mime: i.mime)
+      i.uploads = nil
     end
 
     def tag i
@@ -184,6 +189,7 @@ class Bot
       chosen   = Zipper.choose_format i.type, i.opts, durat
 
       i.format = i.opts.format = chosen
+      i.mime   = i.format.mime
       i.opts.cover  = i.info.thumbnail
 
       m = SymMash.new

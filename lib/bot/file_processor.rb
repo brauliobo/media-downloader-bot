@@ -95,6 +95,7 @@ class Bot
               fn_out: result.transcription,
               type: SymMash.new(name: 'document'),
               info: SymMash.new(title: me('Book transcription'), uploader: ''),
+              mime: 'application/json',
               opts: SymMash.new(format: SymMash.new(mime: 'application/json')),
               oprobe: Prober.for(result.transcription)
             ),
@@ -102,6 +103,7 @@ class Bot
               fn_out: result.audio,
               type: SymMash.new(name: 'audio'),
               info: SymMash.new(title: me('Audiobook'), uploader: ''),
+              mime: 'audio/ogg',
               opts: SymMash.new(format: SymMash.new(mime: 'audio/ogg')),
               oprobe: Prober.for(result.audio)
             ),

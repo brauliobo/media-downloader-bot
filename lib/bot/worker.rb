@@ -131,10 +131,11 @@ class Bot
     private
 
     def upload_one i
-      oprobe = i.oprobe ||= Prober.for i.fn_out
-      type   = i.type
+      # Treat documents (e.g., SRT-only) via standard path using fn_out/type
+      is_doc = (i.type&.name == :document)
+      oprobe = (i.oprobe ||= Prober.for i.fn_out) unless is_doc
       info   = i.info
-      durat  = oprobe&.format&.duration&.to_i || 0 # speed may change from input
+      durat  = oprobe&.format&.duration&.to_i
       opts   = i.opts
 
       if info.language and opts.lang
@@ -146,13 +147,17 @@ class Bot
       return send_message msg, caption if opts.simulate
 
       vstrea = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
-      thumb  = Faraday::UploadIO.new i.thumb, 'image/jpeg' if i.thumb
+      thumb  = if i.thumb
+        bot.is_a?(TDBot) ? i.thumb : Faraday::UploadIO.new(i.thumb, 'image/jpeg')
+      end
       
-      fn_io = bot.is_a?(TDBot) ? i.fn_out : Faraday::UploadIO.new(i.fn_out, i.opts.format.mime)
+      mime  = i.mime.presence || i.opts.format&.mime || 'application/octet-stream'
+      fn_io = if bot.is_a?(TDBot) then i.fn_out else Faraday::UploadIO.new(i.fn_out, mime) end
       
       # Common send logic for both cases
-      paid   = ENV['PAID'] || msg.from.id.in?([6884159818])
-      typek  = if paid then :media else type.name end
+      paid  = (ENV['PAID'] || msg.from.id.in?([6884159818])) && !is_doc
+      type  = i.type
+      typek = paid ? :media : type.name
 
       media  = SymMash.new(
         type:      type.name,
