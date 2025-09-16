@@ -64,7 +64,8 @@ class Bot
         info.title = MsgHelpers.limit info.title, percent: 90
 
         max_len = VID_MAX_LENGTH[]
-        if info.video_ext != 'none' && Zipper.size_mb_limit && !from_admin?(msg) && info.duration >= max_len.to_i
+        if info.video_ext != 'none' && Zipper.size_mb_limit && !opts.onlysrt && !from_admin?(msg) &&
+           info.duration >= max_len.to_i
           return processor.st.error VID_MAX_NOTICE[]
         end
 
