@@ -29,7 +29,9 @@ class Ocr
   end
 
   def normalize_text(str)
-    str.to_s.gsub("\u00A0", ' ').gsub(/<[^>]+>/, '').gsub(/\s+/, ' ').strip
+    # Ensure UTF-8 encoding and handle invalid characters
+    clean_str = str.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
+    clean_str.gsub("\u00A0", ' ').gsub(/<[^>]+>/, '').gsub(/\s+/, ' ').strip
   end
 
   def merge_paragraphs(paragraphs)
