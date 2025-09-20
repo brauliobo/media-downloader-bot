@@ -6,7 +6,7 @@ require_relative '../audiobook'
 
 Faraday::UploadIO = Faraday::Multipart::FilePart unless defined?(Faraday::UploadIO)
 
-class Bot
+class Manager
   class Worker
 
     attr_reader :bot
@@ -68,7 +68,7 @@ class Bot
         end
 
         popts = {dir: work_dir, bot:, msg:, st: @st}
-        klass = if msg.audio.present? || msg.video.present? || pdf_document? then Bot::FileProcessor else Bot::UrlProcessor end
+        klass = if msg.audio.present? || msg.video.present? || pdf_document? then Manager::FileProcessor else Manager::UrlProcessor end
         procs = msg.text.to_s.split("\n").reject(&:blank?).map { |l| klass.new line: l, **popts }
         procs << klass.new(**popts) if procs.empty? && pdf_document?
         msg.resp = send_message msg, me('Downloading metadata...')

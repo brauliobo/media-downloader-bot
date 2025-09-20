@@ -1,11 +1,11 @@
 require_relative 'yt_dlp'
 require_relative '../td_bot/downloader'
 
-class Bot
+class Manager
   # Delegates URL downloads to specialized downloader classes.
   #
   # * t.me links – handled by TDBot::Downloader (TDLib)
-  # * everything else – handled by Bot::YtDlp (yt-dlp)
+  # * everything else – handled by Manager::YtDlp (yt-dlp)
   class UrlProcessor < Processor
 
     # Pick the appropriate backend once and memoize it.
@@ -13,7 +13,7 @@ class Bot
       @downloader ||= if url.to_s.match?(%r{\Ahttps?://t\.me/})
         TDBot::Downloader.new self
       else
-        Bot::YtDlp.new self
+        Manager::YtDlp.new self
       end
     end
 

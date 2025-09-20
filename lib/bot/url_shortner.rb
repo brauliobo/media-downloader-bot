@@ -1,4 +1,4 @@
-class Bot
+class Manager
   class UrlShortner
 
     SITES = SymMash.new(

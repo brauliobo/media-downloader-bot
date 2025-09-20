@@ -1,4 +1,4 @@
-class Bot
+class Manager
   class FileProcessor < Processor
 
     require 'faraday'
@@ -31,7 +31,7 @@ class Bot
     def handle_pdf
       return unless pdf_document?
 
-      pdf_dl = Bot::PdfProcessor.new(dir:, bot:, msg:, st: self.st)
+      pdf_dl = Manager::PdfProcessor.new(dir:, bot:, msg:, st: self.st)
       input  = pdf_dl.download
 
       input
@@ -42,7 +42,7 @@ class Bot
     def handle_epub
       return unless epub_document?
 
-      epub_dl = Bot::PdfProcessor.new(dir:, bot:, msg:, st: self.st) # reuse simple downloader
+      epub_dl = Manager::PdfProcessor.new(dir:, bot:, msg:, st: self.st) # reuse simple downloader
       input  = epub_dl.download
       input
     ensure
