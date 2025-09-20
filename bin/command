@@ -1,8 +1,8 @@
 #!/usr/bin/env ruby
 
-require_relative '../lib/bot'
+require_relative '../lib/manager'
 
-bot = Bot.new
+bot = Manager.new
 bot.mock_start
 msg = ARGV[0]
 puts "reacting to message: #{msg}"

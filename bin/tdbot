@@ -1,9 +1,9 @@
 #!/usr/bin/env ruby
 
 ENV['SKIP_TL_BOT'] = '1'
-require_relative '../lib/bot'
+require_relative '../lib/manager'
 
-$bot = Bot.new
+$bot = Manager.new
 $bot.start_td_bot
 TDBot.__binding__.pry
 #Pry.start $bot

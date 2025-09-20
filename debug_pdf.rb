@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 
 # Debug script to test PDF processing pipeline
-require_relative 'lib/bot'
+require_relative 'lib/manager'
 require_relative 'lib/audiobook'
 require_relative 'lib/ocr'
 require 'tmpdir'

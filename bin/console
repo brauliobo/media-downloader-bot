@@ -1,10 +1,7 @@
 #!/usr/bin/env ruby
 
-require_relative '../lib/bot'
-# fork requires for drb
-require_relative '../lib/td_bot'
-require_relative '../lib/tl_bot'
+require_relative '../lib/manager'
 
-bot = Bot.new
+bot = Manager.new
 Pry.start bot
 
