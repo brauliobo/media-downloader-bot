@@ -4,7 +4,7 @@ ENV['PRINT_CMD'] = '1'
 ENV['SKIP_META'] = '1'
 
 Dir.chdir File.expand_path "#{File.realpath __dir__}/.." do
-  require_relative '../lib/bot'
+  require_relative '../lib/manager'
   require_relative '../lib/tl_bot'
   require_relative '../lib/zipper'
 end
@@ -14,7 +14,7 @@ lopts = []
 while ARGV[-1] and !File.exist?(ARGV[-1]) and ARGV[-1] !~ URI::regexp
   opt = ARGV.pop
   lopts.push opt
-  Bot::UrlProcessor.add_opt opts, opt
+  Manager::UrlProcessor.add_opt opts, opt
 end
 
 Zipper.size_mb_limit = ENV['SIZE_MB_LIMIT']&.to_i
@@ -24,10 +24,10 @@ class Stdout
   mock
 end
 bot = Stdout.new
-st  = Bot::Status.new do |line|
+st  = Manager::Status.new do |line|
   puts line
 end
-stl = Bot::Status::Line.new '', status: st
+stl = Manager::Status::Line.new '', status: st
 
 raise "No files found" if ARGV.blank?
 path = if ARGV.size > 1 then ARGV else ARGV.first&.split "\n" end
@@ -37,7 +37,7 @@ path.peach do |u|
   Dir.mkdir dir rescue nil
 
   if u =~ URI::regexp
-    klass = Bot::UrlProcessor
+    klass = Manager::UrlProcessor
   elsif File.extname(u).downcase == '.pdf'
     # Direct PDF to audiobook (OCR + TTS)
     require_relative '../lib/audiobook'
@@ -50,10 +50,10 @@ path.peach do |u|
     puts "Audiobook saved to #{result.audio}"
     next
   else
-    klass = Bot::Processor
+    klass = Manager::Processor
   end
 
-  if klass == Bot::UrlProcessor
+  if klass == Manager::UrlProcessor
     line = "#{u} #{lopts.join ' '}"
     prc  = klass.new(dir:, line:, bot:, st:, stline: stl)
     prc.download.peach do |i|

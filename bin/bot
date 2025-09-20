@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 
-require_relative '../lib/bot'
+require_relative '../lib/manager'
 
-$bot = Bot.new
+$bot = Manager.new
 $bot.start
 

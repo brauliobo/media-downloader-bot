@@ -3,7 +3,7 @@
 ENV['WHISPER'] = '1'
 
 Dir.chdir File.expand_path "#{File.realpath __dir__}/.." do
-  require_relative '../lib/bot'
+  require_relative '../lib/manager'
 end
 
 Subtitler.local = true
