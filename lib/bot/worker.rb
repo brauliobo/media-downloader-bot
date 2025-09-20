@@ -44,7 +44,7 @@ class Bot
       yield @dir
     ensure
       # For TDBot, delay cleanup to allow async uploads to complete
-      if bot.is_a?(TDBot)
+      if bot.td_bot?
         cleanup_dir = @dir
         Thread.new do
           sleep 30 # Give TDBot time to upload files
@@ -120,6 +120,12 @@ class Bot
       doc && (doc.mime_type == 'application/pdf' || doc.file_name.to_s.downcase.end_with?('.pdf'))
     end
 
+    def epub_document?
+      doc = msg.document
+      fname = doc&.file_name.to_s.downcase
+      doc && (doc.mime_type == 'application/epub+zip' || fname.end_with?('.epub'))
+    end
+
     def upload i
       if i.uploads.present?
         i.uploads.each { |up| upload_one up }
@@ -147,12 +153,10 @@ class Bot
       return send_message msg, caption if opts.simulate
 
       vstrea = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
-      thumb  = if i.thumb
-        bot.is_a?(TDBot) ? i.thumb : Faraday::UploadIO.new(i.thumb, 'image/jpeg')
-      end
+      thumb  = if bot.td_bot? then i.thumb else Faraday::UploadIO.new(i.thumb, 'image/jpeg') end if i.thumb
       
       mime  = i.mime.presence || i.opts.format&.mime || 'application/octet-stream'
-      fn_io = if bot.is_a?(TDBot) then i.fn_out else Faraday::UploadIO.new(i.fn_out, mime) end
+      fn_io = if bot.td_bot? then i.fn_out else Faraday::UploadIO.new(i.fn_out, mime) end
       
       # Common send logic for both cases
       paid  = (ENV['PAID'] || msg.from.id.in?([6884159818])) && !is_doc

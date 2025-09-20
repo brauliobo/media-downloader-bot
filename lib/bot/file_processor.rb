@@ -11,7 +11,13 @@ class Bot
 
     def pdf_document?
       info = msg.document
-      info && info.mime_type == 'application/pdf'
+      info && (info.mime_type == 'application/pdf' || info.file_name.to_s.downcase.end_with?('.pdf'))
+    end
+
+    def epub_document?
+      info = msg.document
+      fname = info&.file_name.to_s.downcase
+      info && (info.mime_type == 'application/epub+zip' || fname.end_with?('.epub'))
     end
 
     # Entry-point for Worker when we have a PDF. Performs:
@@ -33,9 +39,20 @@ class Bot
       pdf_dl&.cleanup if defined?(pdf_dl)
     end
 
+    def handle_epub
+      return unless epub_document?
+
+      epub_dl = Bot::PdfProcessor.new(dir:, bot:, msg:, st: self.st) # reuse simple downloader
+      input  = epub_dl.download
+      input
+    ensure
+      epub_dl&.cleanup if defined?(epub_dl)
+    end
+
     # ------------------------------------------------------------------
     def download
       return handle_pdf if pdf_document?
+      return handle_epub if epub_document?
 
       info = msg.video || msg.audio
       unless info
@@ -55,11 +72,11 @@ class Bot
     end
 
 
-  # PDF bypasses the typical transcoding flow, so we override `handle_input`
+  # Document (PDF/EPUB) bypasses the typical transcoding flow, so we override `handle_input`
     # to no-op in that case. For audio/video, fall back to the parent logic.
     # Handle transcoding normally; for PDFs run OCR+TTS here where stline exists.
     def handle_input(i = nil, **kwargs)
-      if pdf_document?
+      if pdf_document? || epub_document?
         raise 'no input provided' unless i
 
         @stl&.update 'OCR & TTS'

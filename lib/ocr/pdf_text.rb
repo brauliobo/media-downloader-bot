@@ -75,11 +75,17 @@ class Ocr
         end
 
         clean_lines.each do |line|
-          if line.strip.empty?
+          stripped = line.strip
+          if stripped.empty?
             add_para.call(buf)
             buf = []
           else
-            buf << line.strip
+            # Dehyphenate: join trailing '-' with next line starting lowercase (Unicode-aware)
+            if buf.any? && buf.last.end_with?('-') && stripped.match?(/\A\p{Ll}/u)
+              buf[-1] = buf.last.chomp('-') + stripped
+            else
+              buf << stripped
+            end
           end
         end
         add_para.call(buf)
