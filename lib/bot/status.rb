@@ -1,4 +1,4 @@
-class Bot
+class Manager
   class Status < Array
 
     class Line < SimpleDelegator

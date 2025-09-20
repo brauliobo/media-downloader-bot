@@ -1,4 +1,4 @@
-class Bot
+class Manager
   class Session < Sequel::Model
 
     unrestrict_primary_key

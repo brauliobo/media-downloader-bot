@@ -1,4 +1,4 @@
-class Bot
+class Manager
   class PdfProcessor < Processor
 
     def download

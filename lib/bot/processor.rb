@@ -2,7 +2,7 @@ require 'chronic_duration'
 require_relative '../output'
 require_relative '../shorts'
 
-class Bot
+class Manager
   class Processor
 
     def self.add_opt h, o

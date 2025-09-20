@@ -1,6 +1,6 @@
 require_relative '../downloader'
 
-class Bot
+class Manager
   class YtDlp < ::Downloader
 
     # max number of videos and audios for non-admins to download
@@ -56,7 +56,7 @@ class Bot
       mult = infos.size > 1
       infos.map.with_index do |info, i|
         ourl       = info.url = mult ? info.webpage_url : url
-        short_url  = Bot::UrlShortner.shortify(info) || ourl
+        short_url  = Manager::UrlShortner.shortify(info) || ourl
 
         info.title = info.track if info.track # e.g. bandcamp
         info.title = info.description || info.title if info.webpage_url.index 'instagram.com'
