@@ -1,5 +1,6 @@
 require_relative 'ocr/ollama'
 require_relative 'ocr/pdf_text'
+require_relative 'ocr/epub_text'
 
 class Ocr
 
@@ -7,14 +8,18 @@ class Ocr
 
   extend BACKEND_CLASS
 
-  # Automatically choose the appropriate backend:
-  # * If the PDF has an embedded text layer (checked on the first 3 pages), use the PDFText backend.
-  # * Otherwise fall back to the default OCR backend (Ollama or whatever is set via ENV['OCR']).
-  def self.transcribe(pdf_path, json_path, **kwargs)
-    if PDFText.has_text?(pdf_path)
-      PDFText.transcribe(pdf_path, json_path, **kwargs)
+  # Route transcription by file type. For PDFs, prefer embedded text when present;
+  # for EPUBs, parse XHTML; otherwise fall back to default backend.
+  def self.transcribe(input_path, json_path, **kwargs)
+    ext = File.extname(input_path).downcase
+    case ext
+    when '.pdf'
+      return PDFText.transcribe(input_path, json_path, **kwargs) if PDFText.has_text?(input_path)
+      return BACKEND_CLASS.transcribe(input_path, json_path, **kwargs)
+    when '.epub'
+      return EPUBText.transcribe(input_path, json_path, **kwargs)
     else
-      BACKEND_CLASS.transcribe(pdf_path, json_path, **kwargs)
+      return BACKEND_CLASS.transcribe(input_path, json_path, **kwargs)
     end
   end
 

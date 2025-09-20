@@ -131,6 +131,10 @@ EOS
     end
   end
 
+  def td_bot?
+    defined?(TDBot) && bot.is_a?(TDBot)
+  end
+
   def send_help msg
     msg.bot.send_message msg, bot.mnfe(START_MSG)
   end

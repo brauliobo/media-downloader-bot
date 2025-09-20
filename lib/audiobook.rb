@@ -13,9 +13,9 @@ require 'fileutils'
 require 'set'
 
 class Audiobook
-  # Generate audiobook from a transcription JSON or a PDF.
-  # If PDF is provided OCR runs first.
-  # input_path: PDF or transcription JSON path
+  # Generate audiobook from a transcription JSON or a document (PDF/EPUB).
+  # If document is provided OCR/Parsing runs first.
+  # input_path: PDF/EPUB or transcription JSON path
   # out_audio: Path for final encoded audio (e.g., .opus)
   def self.generate(input_path, out_audio, stl: nil, opts: nil)
     raise "Input not found: #{input_path}" unless File.exist?(input_path)
@@ -50,9 +50,10 @@ class Audiobook
 
   private
 
-  # Determine the transcription JSON path from input
+  # Determine the transcription JSON path from input (.pdf/.epub => produce .json)
   def self.determine_json_path(input_path, out_audio, stl: nil, opts: nil)
-    return input_path unless File.extname(input_path).downcase == '.pdf'
+    ext = File.extname(input_path).downcase
+    return input_path unless ['.pdf', '.epub'].include?(ext)
 
     json_base = File.basename(out_audio, File.extname(out_audio))
     json_path = File.join(File.dirname(out_audio), "#{json_base}.json")

@@ -3,7 +3,7 @@ class Bot
 
     def download
       info = msg.document
-      raise 'No PDF' unless info&.mime_type == 'application/pdf' || info&.file_name&.end_with?('.pdf')
+      raise 'No document' unless info
 
       local_path = bot.download_file(info, dir: dir)
 

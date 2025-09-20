@@ -26,11 +26,15 @@ gem 'faraday'
 gem 'httparty'
 
 gem 'pdf-reader'
+gem 'epub-parser'
+gem 'nokogiri'
 
 gem 'srt'
 
-gem 'tdlib-schema', github: 'brauliobo/tdlib-schema', path: path_for('tdlib-schema')
-gem 'tdlib-ruby',   github: 'brauliobo/tdlib-ruby',   path: path_for('tdlib-ruby')
+unless ENV['SKIP_TD_BOT']
+  gem 'tdlib-schema', github: 'brauliobo/tdlib-schema', path: path_for('tdlib-schema')
+  gem 'tdlib-ruby',   github: 'brauliobo/tdlib-ruby',   path: path_for('tdlib-ruby')
+end
 
 if ENV['DB']
   gem 'pg'
