@@ -2,6 +2,7 @@
 
 ENV['PRINT_CMD'] = '1'
 ENV['SKIP_META'] = '1'
+ENV['SKIP_TD_BOT'] = '1'
 
 Dir.chdir File.expand_path "#{File.realpath __dir__}/.." do
   require_relative '../lib/manager'

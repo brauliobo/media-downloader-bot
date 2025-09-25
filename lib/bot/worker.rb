@@ -68,9 +68,10 @@ class Manager
         end
 
         popts = {dir: work_dir, bot:, msg:, st: @st}
-        klass = if msg.audio.present? || msg.video.present? || pdf_document? then Manager::FileProcessor else Manager::UrlProcessor end
+        is_doc = msg.audio.present? || msg.video.present? || pdf_document? || epub_document?
+        klass = is_doc ? Manager::FileProcessor : Manager::UrlProcessor
         procs = msg.text.to_s.split("\n").reject(&:blank?).map { |l| klass.new line: l, **popts }
-        procs << klass.new(**popts) if procs.empty? && pdf_document?
+        procs << klass.new(**popts) if procs.empty? && is_doc
         msg.resp = send_message msg, me('Downloading metadata...')
         procs.each.with_index do |p, i|
           inputs[i] = p.download
@@ -138,7 +139,9 @@ class Manager
 
     def upload_one i
       # Treat documents (e.g., SRT-only) via standard path using fn_out/type
-      is_doc = (i.type&.name == :document)
+      type_name = i.type&.name
+      type_name = type_name.to_sym if type_name.respond_to?(:to_sym)
+      is_doc = (type_name == :document)
       oprobe = (i.oprobe ||= Prober.for i.fn_out) unless is_doc
       info   = i.info
       durat  = oprobe&.format&.duration&.to_i

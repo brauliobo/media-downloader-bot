@@ -34,7 +34,7 @@ require_relative 'bot/status'
 require_relative 'bot/url_shortner'
 require_relative 'bot/processor'
 require_relative 'bot/file_processor'
-require_relative 'bot/pdf_processor'
+require_relative 'bot/document_processor'
 require_relative 'bot/url_processor'
 require_relative 'bot/worker'
 

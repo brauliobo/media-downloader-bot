@@ -28,31 +28,21 @@ class Manager
     #
     # Returns the input object augmented with its `uploads` array so that the
     # caller (Worker) proceeds with the regular pipeline.
-    def handle_pdf
-      return unless pdf_document?
+    def handle_document
+      return unless pdf_document? || epub_document?
 
-      pdf_dl = Manager::PdfProcessor.new(dir:, bot:, msg:, st: self.st)
-      input  = pdf_dl.download
-
+      doc_dl = Manager::DocumentProcessor.new(dir:, bot:, msg:, st: self.st)
+      input  = doc_dl.download
       input
     ensure
-      pdf_dl&.cleanup if defined?(pdf_dl)
+      doc_dl&.cleanup if defined?(doc_dl)
     end
 
-    def handle_epub
-      return unless epub_document?
-
-      epub_dl = Manager::PdfProcessor.new(dir:, bot:, msg:, st: self.st) # reuse simple downloader
-      input  = epub_dl.download
-      input
-    ensure
-      epub_dl&.cleanup if defined?(epub_dl)
-    end
+    # EPUB/PDF share same download path
 
     # ------------------------------------------------------------------
     def download
-      return handle_pdf if pdf_document?
-      return handle_epub if epub_document?
+      return handle_document if pdf_document? || epub_document?
 
       info = msg.video || msg.audio
       unless info
@@ -111,15 +101,14 @@ class Manager
           i.uploads = [
             SymMash.new(
               fn_out: result.transcription,
-              type: SymMash.new(name: 'document'),
+              type: SymMash.new(name: :document),
               info: SymMash.new(title: base, uploader: ''),
               mime: 'application/json',
-              opts: SymMash.new(format: SymMash.new(mime: 'application/json')),
-              oprobe: Prober.for(result.transcription)
+              opts: SymMash.new(format: SymMash.new(mime: 'application/json'))
             ),
             SymMash.new(
               fn_out: result.audio,
-              type: SymMash.new(name: 'audio'),
+              type: SymMash.new(name: :audio),
               info: SymMash.new(title: base, uploader: ''),
               mime: 'audio/ogg',
               opts: SymMash.new(format: SymMash.new(mime: 'audio/ogg')),
