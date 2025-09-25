@@ -8,16 +8,6 @@ GIT
       faraday-multipart (~> 1.0)
       zeitwerk (~> 2.6)
 
-GIT
-  remote: https://github.com/brauliobo/tdlib-ruby.git
-  revision: acb89ac47142063707f5c116df466e1ac4f27a0f
-  specs:
-
-GIT
-  remote: https://github.com/brauliobo/tdlib-schema.git
-  revision: 4262653c6a7156df850af52f73e741159f77db57
-  specs:
-
 PATH
   remote: /home/braulio/Projects/tdlib-ruby
   specs:
