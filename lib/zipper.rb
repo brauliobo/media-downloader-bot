@@ -415,8 +415,6 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s webvtt -f w
     oopts << " -to #{opts.to}" if opts.to&.match(TIME_REGEX)
   end
 
-  def http
-    Mechanize.new
-  end
+  def http; Manager.http; end
 
 end

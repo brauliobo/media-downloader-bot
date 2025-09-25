@@ -6,7 +6,7 @@ class Translator
     self.api_path = '/v1/chat/completions'
 
     mattr_accessor :http
-    self.http = Mechanize.new
+    self.http = Manager.http
 
     def translate text, to:, from: nil
       opts = {

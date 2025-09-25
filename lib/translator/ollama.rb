@@ -23,7 +23,7 @@ class Translator
     # Keep language handling minimal; send ISO codes to the model
 
     mattr_accessor :http
-    self.http = Mechanize.new
+    self.http = Manager.http
 
     def translate text, from:, to:
       to_iso      = to.to_s.downcase
