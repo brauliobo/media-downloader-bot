@@ -21,10 +21,7 @@ class Ocr
     LANG_SCHEMA = {type:'object',properties:{lang:{type:'string'}},required:['lang']}.to_json.freeze
 
     mattr_accessor :http
-    self.http = Mechanize.new
-    timeout_sec = ENV['OLLAMA_TIMEOUT']&.to_i || 120
-    self.http.open_timeout = timeout_sec
-    self.http.read_timeout = timeout_sec
+    self.http = Manager.http
 
     # use helpers from Ocr module
 

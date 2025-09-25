@@ -20,13 +20,19 @@ class TTS
     def synthesize(text:, lang:, out_path:, voice: nil, **kwargs)
       port = PORT_MAP[lang] or raise ArgumentError, "Unsupported language: #{lang}"
       uri = URI.parse(format(ENDPOINT_TEMPLATE, port: port))
+      http = Net::HTTP.new(uri.host, uri.port)
+      t = (ENV['HTTP_TIMEOUT'] || 1800).to_i
+      http.open_timeout = t; http.read_timeout = t
       # Ensure text is properly encoded as UTF-8
       clean_text = text.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
       payload = { text: clean_text }
       payload[:voice] = voice if voice
       payload.merge!(kwargs)
 
-      res = Net::HTTP.post(uri, payload.to_json, 'Content-Type' => 'application/json')
+      req = Net::HTTP::Post.new(uri)
+      req['Content-Type'] = 'application/json'
+      req.body = payload.to_json
+      res = http.request(req)
       raise "TTS failed: #{res.code}" unless res.is_a?(Net::HTTPSuccess)
 
       File.binwrite(out_path, res.body)

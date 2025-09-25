@@ -54,6 +54,13 @@ class Manager
   def initialize
   end
 
+  def self.http
+    @http ||= Mechanize.new.tap do |a|
+      t = ENV['HTTP_TIMEOUT']&.to_i || 30.min
+      a.open_timeout = t; a.read_timeout = t
+    end
+  end
+
   def mock_start
     require_relative 'tl_bot'
     TlBot.mock

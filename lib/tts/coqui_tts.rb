@@ -12,7 +12,7 @@ class TTS
     CHUNK_CHARS = 500
 
     def synthesize(text:, lang:, out_path:, speaker_wav: nil, **kwargs)
-      agent, url = Mechanize.new, "#{BASE_URL}#{SYNTH_PATH}"
+      agent, url = Manager.http, "#{BASE_URL}#{SYNTH_PATH}"
       clean_text = text.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
 
       # Build safe chunks first by sentences, then by words for long sentences

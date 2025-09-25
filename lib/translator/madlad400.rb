@@ -8,8 +8,7 @@ class Translator
     self.api_path = '/completions'
 
     mattr_accessor :http
-    self.http = Mechanize.new
-    self.http.read_timeout = 10.minutes.to_i
+    self.http = Manager.http
 
     HEADERS = { 
       'Content-Type' => 'application/json',

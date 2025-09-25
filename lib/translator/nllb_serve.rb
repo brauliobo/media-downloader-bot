@@ -93,7 +93,7 @@ class Translator
     )
 
     mattr_accessor :http
-    self.http = Mechanize.new
+    self.http = Manager.http
 
     def translate text, from:, to:
       from,to = ISO_TO_NLLB.values_at from, to
