@@ -415,6 +415,12 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s webvtt -f w
     oopts << " -to #{opts.to}" if opts.to&.match(TIME_REGEX)
   end
 
-  def http; Manager.http; end
+  def http
+    return Manager.http if defined?(Manager)
+    Mechanize.new.tap do |a|
+      t = (ENV['HTTP_TIMEOUT'] || 1800).to_i
+      a.open_timeout = t; a.read_timeout = t
+    end
+  end
 
 end

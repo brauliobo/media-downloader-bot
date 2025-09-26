@@ -92,12 +92,9 @@ class Translator
       'zu' => 'zul_Latn'  # Zulu
     )
 
-    mattr_accessor :http
-    self.http = Manager.http
-
     def translate text, from:, to:
       from,to = ISO_TO_NLLB.values_at from, to
-      res = http.post "#{API}/translate", source: text, src_lang: from, tgt_lang: to
+      res = Manager.http.post "#{API}/translate", source: text, src_lang: from, tgt_lang: to
       res = SymMash.new JSON.parse res.body
       tr  = res.translation
       return tr.first if text.is_a? String

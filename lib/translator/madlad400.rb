@@ -7,8 +7,7 @@ class Translator
     self.api_host = ENV['CANDLE_MADLAD400_HOST']
     self.api_path = '/completions'
 
-    mattr_accessor :http
-    self.http = Manager.http
+    # use Manager.http at call sites
 
     HEADERS = { 
       'Content-Type' => 'application/json',
@@ -16,7 +15,7 @@ class Translator
 
     def translate _text, to:, from: nil
       text  = Array.wrap(_text).map{ |t| "<2#{to}> #{t}" }
-      res   = http.post "#{api_host}#{api_path}", {prompt: text}.to_json, HEADERS
+      res   = Manager.http.post "#{api_host}#{api_path}", {prompt: text}.to_json, HEADERS
       res   = JSON.parse res.body
       trans = res['content']
       return trans.first if _text.is_a? String and trans.is_a? Array
