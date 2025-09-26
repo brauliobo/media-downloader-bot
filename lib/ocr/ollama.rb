@@ -20,10 +20,6 @@ class Ocr
     USE_AI_LANG   = ENV.fetch('AI_LANG', '1') == '1'
     LANG_SCHEMA = {type:'object',properties:{lang:{type:'string'}},required:['lang']}.to_json.freeze
 
-    # use Manager.http at call sites
-
-    # use helpers from Ocr module
-
     # Ask the LLM whether consecutive paragraphs should be merged.
     def self.ai_merge_paragraphs(paragraphs, timeout_sec: 30)
       return paragraphs unless USE_AI_MERGE

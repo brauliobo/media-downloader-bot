@@ -7,9 +7,7 @@ class Translator
     self.api_host = ENV['CANDLE_MADLAD400_HOST']
     self.api_path = '/completions'
 
-    # use Manager.http at call sites
-
-    HEADERS = { 
+    HEADERS = {
       'Content-Type' => 'application/json',
     }
 
