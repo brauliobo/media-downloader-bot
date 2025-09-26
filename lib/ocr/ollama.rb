@@ -20,8 +20,7 @@ class Ocr
     USE_AI_LANG   = ENV.fetch('AI_LANG', '1') == '1'
     LANG_SCHEMA = {type:'object',properties:{lang:{type:'string'}},required:['lang']}.to_json.freeze
 
-    mattr_accessor :http
-    self.http = Manager.http
+    # use Manager.http at call sites
 
     # use helpers from Ocr module
 
@@ -45,9 +44,7 @@ class Ocr
               ]
             }
             begin
-              res = Timeout.timeout(timeout_sec) do
-                http.post "#{API}/api/chat", q.to_json
-              end
+              res = Timeout.timeout(timeout_sec) { Manager.http.post "#{API}/api/chat", q.to_json }
               ans = SymMash.new(JSON.parse(res.body)).dig(:message, :content).to_s.strip.upcase
               if ans == 'YES'
                 prev[:text] << ' ' << para[:text]
@@ -79,7 +76,7 @@ class Ocr
         ]
       }
       begin
-        res = Timeout.timeout(timeout_sec) { http.post "#{API}/api/chat", q.to_json }
+        res = Timeout.timeout(timeout_sec) { Manager.http.post "#{API}/api/chat", q.to_json }
         ans = SymMash.new(JSON.parse(res.body)).dig(:message, :content)
         lang_obj = JSON.parse(ans) rescue nil
         code = lang_obj && lang_obj['lang'] ? lang_obj['lang'].downcase.strip : nil
@@ -113,9 +110,7 @@ class Ocr
           }
 
           begin
-            res = Timeout.timeout(timeout_sec + 5) do
-              http.post "#{API}/api/chat", q.to_json
-            end
+            res = Timeout.timeout(timeout_sec + 5) { Manager.http.post "#{API}/api/chat", q.to_json }
             res = SymMash.new JSON.parse(res.body)
             text_content = res.dig(:message, :content).to_s.strip
 
