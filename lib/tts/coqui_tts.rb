@@ -61,10 +61,11 @@ class TTS
             wavs << wav
           rescue Mechanize::ResponseCodeError => e
             body = e.page&.body.to_s
-            if e.response_code.to_s == '500' && body.include?('maximum of 400 tokens') && payload.length > 50
-              mid = payload.length / 2
-              left  = payload[0...mid].rstrip
-              right = payload[mid..-1].lstrip
+            ptxt = payload.to_s
+            if e.response_code.to_s == '500' && body.include?('maximum of 400 tokens') && ptxt.length > 50
+              mid = ptxt.length / 2
+              left  = ptxt[0...mid].rstrip
+              right = ptxt[mid..-1].lstrip
               synth.call(left, index)
               synth.call(right, index + 1)
             else
