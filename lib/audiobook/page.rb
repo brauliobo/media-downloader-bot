@@ -23,12 +23,24 @@ module Audiobook
     end
 
     # Generate combined wav for all items on this page
-    def to_wav(dir, idx, lang: 'en', stl: nil)
+    def to_wav(dir, idx, lang: 'en', stl: nil, para_context: nil)
       return nil if items.empty?
+      
+      # Count paragraphs for context
+      para_count = items.count { |i| i.is_a?(Audiobook::Paragraph) }
+      current_para = para_context ? para_context[:current] : 0
+      total_paras = para_context ? para_context[:total] : para_count
       
       wavs = items.each_with_index.map do |item, iidx|
         stl&.update "Processing page #{number}, item #{iidx+1}/#{items.size} (#{item.class.name.split('::').last})"
-        item.to_wav(dir, "#{idx}_#{iidx}", lang: lang, stl: stl)
+        
+        # Pass paragraph context to paragraphs
+        if item.is_a?(Audiobook::Paragraph) && para_context
+          current_para += 1
+          item.to_wav(dir, "#{idx}_#{iidx}", lang: lang, stl: stl, para_idx: current_para, para_total: total_paras)
+        else
+          item.to_wav(dir, "#{idx}_#{iidx}", lang: lang, stl: stl)
+        end
       end.compact
       
       return nil if wavs.empty?
@@ -43,7 +55,7 @@ module Audiobook
       items.flat_map do |item|
         case item
         when Heading
-          [item.sentence]
+          [item]  # Heading is a Sentence
         when Paragraph, Image
           item.sentences
         else

@@ -47,10 +47,20 @@ module Audiobook
 
       @stl&.update "Generating audio"
       Dir.mktmpdir do |dir|
-        # Process pages in parallel
+        # Count total paragraphs across all pages
+        total_paragraphs = pages.sum { |page| page.items.count { |i| i.is_a?(Audiobook::Paragraph) } }
+        
+        # Process pages in parallel with paragraph context
         wavs = Array.new(pages.size)
+        current_para = 0
+        
         pages.each.with_index.peach do |page, idx|
-          wavs[idx] = page.to_wav(dir, format('%04d', idx + 1), lang: @lang, stl: @stl)
+          # Calculate paragraph offset for this page
+          para_offset = pages[0...idx].sum { |p| p.items.count { |i| i.is_a?(Audiobook::Paragraph) } }
+          
+          wavs[idx] = page.to_wav(dir, format('%04d', idx + 1), 
+                                  lang: @lang, stl: @stl,
+                                  para_context: { current: para_offset, total: total_paragraphs })
         end
 
         # Remove nil entries (empty pages)

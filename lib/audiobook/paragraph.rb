@@ -5,7 +5,7 @@ require_relative '../zipper'
 module Audiobook
   class Paragraph
 
-    PAUSE = 0.5
+    PAUSE = 0.20
 
     attr_reader :sentences
 
@@ -22,11 +22,15 @@ module Audiobook
     end
 
     # Generate combined wav for this paragraph
-    def to_wav(dir, idx, lang: 'en', stl: nil)
+    def to_wav(dir, idx, lang: 'en', stl: nil, para_idx: nil, para_total: nil)
       return nil if sentences.empty?
       
       wavs = sentences.each_with_index.map do |sent, sidx|
-        stl&.update "Synthesizing sentence #{sidx+1}/#{sentences.size}"
+        if para_idx && para_total
+          stl&.update "Synthesizing sentence #{sidx+1}/#{sentences.size} of paragraph #{para_idx}/#{para_total}"
+        else
+          stl&.update "Synthesizing sentence #{sidx+1}/#{sentences.size}"
+        end
         sent.to_wav(dir, "#{idx}_#{sidx}", lang: lang)
       end
       
