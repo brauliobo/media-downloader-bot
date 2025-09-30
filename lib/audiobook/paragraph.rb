@@ -8,6 +8,7 @@ module Audiobook
     PAUSE = 0.20
 
     attr_reader :sentences
+    attr_accessor :para_idx, :para_total, :page_num, :item_idx, :item_total, :lang, :stl
 
     def initialize(sentences = [])
       @sentences = sentences
@@ -22,7 +23,7 @@ module Audiobook
     end
 
     # Generate combined wav for this paragraph
-    def to_wav(dir, idx, lang: 'en', stl: nil, para_idx: nil, para_total: nil, page_num: nil, item_idx: nil, item_total: nil)
+    def to_wav(dir, idx)
       return nil if sentences.empty?
       
       wavs = sentences.each_with_index.map do |sent, sidx|
@@ -33,7 +34,7 @@ module Audiobook
         status_parts << "sentence #{sidx+1}/#{sentences.size}"
         
         stl&.update "Processing #{status_parts.join(', ')}"
-        sent.to_wav(dir, "#{idx}_#{sidx}", lang: lang)
+        sent.to_wav(dir, "#{idx}_#{sidx}", lang: lang || 'en')
       end
       
       combined = File.join(dir, "para_#{idx}.wav")
