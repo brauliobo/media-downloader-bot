@@ -1,0 +1,106 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'tmpdir'
+require 'securerandom'
+require 'json'
+require 'fileutils'
+require 'active_support/all'
+
+# Set default env vars to avoid errors
+ENV['TRANSLATOR'] ||= 'LlamacppApi'
+ENV['OCR'] ||= 'Ollama'
+
+Dir.chdir File.expand_path "#{File.realpath __dir__}/.." do
+  require_relative '../lib/exts/sym_mash'
+  require_relative '../lib/audiobook/image'
+end
+
+class MockStatus
+  def update(msg)
+    puts "  #{msg}"
+  end
+end
+
+# Parse options like page=1
+opts = SymMash.new
+while ARGV[-1] && !File.exist?(ARGV[-1])
+  opt = ARGV.pop
+  if opt =~ /^(\w+)=(.+)$/
+    key, val = $1, $2
+    opts[key] = val.match?(/^\d+$/) ? val.to_i : val
+  end
+end
+
+input_path = ARGV[0]
+unless input_path && File.exist?(input_path)
+  puts "Error: File not found"
+  puts "Usage: bin/ocr FILE [page=N]"
+  puts "  FILE can be a PDF or image file (jpg, png, etc.)"
+  exit 1
+end
+
+ext = File.extname(input_path).downcase
+
+puts "=" * 60
+puts "OCR Test for: #{File.basename(input_path)}"
+
+# Determine input type and create appropriate reference
+if ext == '.pdf'
+  page_num = opts.page || 1
+  puts "Page: #{page_num}"
+  puts "=" * 60
+  puts
+  # Create PDF page reference path
+  input_ref = "#{input_path}#page=#{page_num}"
+elsif ['.jpg', '.jpeg', '.png', '.gif', '.webp'].include?(ext)
+  puts "Type: Image file"
+  puts "=" * 60
+  puts
+  # Use image file directly
+  input_ref = input_path
+else
+  puts "=" * 60
+  puts "Error: Unsupported file type: #{ext}"
+  puts "Supported: PDF, JPG, PNG, GIF, WEBP"
+  exit 1
+end
+
+stl = MockStatus.new
+
+puts "Creating Image object for #{input_ref}..."
+puts
+
+begin
+  # Let Image class handle everything (rasterization + OCR + sentence splitting)
+  image = Audiobook::Image.new(input_ref, stl: stl)
+  
+  puts
+  puts "=" * 60
+  puts "RESULTS:"
+  puts "=" * 60
+  
+  if image.sentences.empty?
+    puts "  ✗ No sentences extracted from OCR"
+  else
+    puts "  ✓ Successfully extracted #{image.sentences.size} sentences:"
+    puts
+    image.sentences.each_with_index do |sent, idx|
+      puts "#{idx + 1}. #{sent.text}"
+      puts
+    end
+  end
+  
+rescue => e
+  puts
+  puts "=" * 60
+  puts "ERROR:"
+  puts "=" * 60
+  puts "  #{e.message}"
+  puts
+  puts "Backtrace:"
+  e.backtrace.first(10).each { |line| puts "  #{line}" }
+end
+
+puts "=" * 60
+puts "Done!"
