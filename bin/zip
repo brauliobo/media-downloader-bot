@@ -47,8 +47,8 @@ path.peach do |u|
     audio_out = "#{dir}/#{File.basename(u, '.pdf')}.#{fmt_spec.ext}"
     result = Audiobook.generate u, audio_out, stl: stl, opts: opts
 
-    puts "OCR transcription saved to #{result.transcription}"
-    puts "Audiobook saved to #{result.audio}"
+    puts "YAML saved to #{result.yaml}" if result.respond_to?(:yaml) && result.yaml
+    puts "Audiobook saved to #{result.audio}" if result.respond_to?(:audio) && result.audio
     next
   else
     klass = Manager::Processor
