@@ -22,15 +22,17 @@ module Audiobook
     end
 
     # Generate combined wav for this paragraph
-    def to_wav(dir, idx, lang: 'en', stl: nil, para_idx: nil, para_total: nil)
+    def to_wav(dir, idx, lang: 'en', stl: nil, para_idx: nil, para_total: nil, page_num: nil, item_idx: nil, item_total: nil)
       return nil if sentences.empty?
       
       wavs = sentences.each_with_index.map do |sent, sidx|
-        if para_idx && para_total
-          stl&.update "Synthesizing sentence #{sidx+1}/#{sentences.size} of paragraph #{para_idx}/#{para_total}"
-        else
-          stl&.update "Synthesizing sentence #{sidx+1}/#{sentences.size}"
-        end
+        status_parts = []
+        status_parts << "page #{page_num}" if page_num
+        status_parts << "item #{item_idx}/#{item_total}" if item_idx && item_total
+        status_parts << "paragraph #{para_idx}/#{para_total}" if para_idx && para_total
+        status_parts << "sentence #{sidx+1}/#{sentences.size}"
+        
+        stl&.update "Processing #{status_parts.join(', ')}"
         sent.to_wav(dir, "#{idx}_#{sidx}", lang: lang)
       end
       

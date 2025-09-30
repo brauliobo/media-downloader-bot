@@ -1,5 +1,8 @@
+require 'limiter'
+
 class Manager
   class Status < Array
+    extend Limiter::Mixin
 
     class Line < SimpleDelegator
       attr_accessor :status
@@ -56,18 +59,27 @@ class Manager
     end
 
     def error text, *args, **params
-      @block.call text, *args, **params
+      send_update text, *args, **params
       nil
     end
+
     def update *args, **params
       return if blank?
-      @block.call formatted, *args, **params
+      send_update formatted, *args, **params
       nil
     end
 
     def formatted
       map(&:to_s).join "\n"
     end
+
+    private
+
+    def send_update text, *args, **params
+      @block.call text, *args, **params
+    end
+
+    limit_method :send_update, rate: 30, interval: 60
 
   end
 end

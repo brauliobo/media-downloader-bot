@@ -78,7 +78,7 @@ class Manager
           result = Audiobook.generate(i.fn_in, audio_out, stl: @stl, opts: i.opts)
           
           # Check if files were actually created
-          unless File.exist?(result.transcription) && File.exist?(result.audio)
+          unless File.exist?(result.yaml) && File.exist?(result.audio)
             @stl&.error 'Failed to generate audiobook files'
             return nil
           end
@@ -100,11 +100,11 @@ class Manager
 
           i.uploads = [
             SymMash.new(
-              fn_out: result.transcription,
+              fn_out: result.yaml,
               type: SymMash.new(name: :document),
               info: SymMash.new(title: base, uploader: ''),
-              mime: 'application/json',
-              opts: SymMash.new(format: SymMash.new(mime: 'application/json'))
+              mime: 'application/x-yaml',
+              opts: SymMash.new(format: SymMash.new(mime: 'application/x-yaml'))
             ),
             SymMash.new(
               fn_out: result.audio,
