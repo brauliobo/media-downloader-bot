@@ -31,7 +31,7 @@ module Audiobook
       base_para = para_context ? para_context[:current] : 0
       total_paras = para_context ? para_context[:total] : para_count
       
-      # Pre-calculate and set paragraph indices
+      # Pre-calculate and set paragraph attributes
       para_counter = base_para
       items.each_with_index do |item, iidx|
         next unless item.is_a?(Audiobook::Paragraph)
@@ -44,12 +44,14 @@ module Audiobook
         item.item_total = items.size
         item.lang = lang
         item.stl = stl
+        item.dir = dir
+        item.idx = "#{idx}_#{iidx}"
       end
       
       wavs = Array.new(items.size)
       items.each_with_index.peach do |item, iidx|
         if item.is_a?(Audiobook::Paragraph)
-          wavs[iidx] = item.to_wav(dir, "#{idx}_#{iidx}")
+          wavs[iidx] = item.to_wav
         else
           # For non-paragraphs (headings, images), show the old status format
           stl&.update "Processing page #{number}, item #{iidx+1}/#{items.size} (#{item.class.name.split('::').last})"
