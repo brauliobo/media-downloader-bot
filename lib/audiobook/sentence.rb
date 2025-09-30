@@ -4,6 +4,7 @@ require_relative '../tts'
 module Audiobook
   # Represents a sentence of text to speak.
   class Sentence < Speech
+
     PAUSE = 0.10
 
     attr_reader :text
