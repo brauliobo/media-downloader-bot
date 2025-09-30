@@ -8,7 +8,7 @@ module Audiobook
     PAUSE = 0.20
 
     attr_reader :sentences
-    attr_accessor :para_idx, :para_total, :page_num, :item_idx, :item_total, :lang, :stl
+    attr_accessor :para_idx, :para_total, :page_num, :item_idx, :item_total, :lang, :stl, :dir, :idx
 
     def initialize(sentences = [])
       @sentences = sentences
@@ -23,7 +23,7 @@ module Audiobook
     end
 
     # Generate combined wav for this paragraph
-    def to_wav(dir, idx)
+    def to_wav
       return nil if sentences.empty?
       
       wavs = sentences.each_with_index.map do |sent, sidx|
