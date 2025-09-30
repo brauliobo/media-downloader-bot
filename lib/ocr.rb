@@ -1,6 +1,6 @@
 require_relative 'ocr/ollama'
-require_relative 'ocr/pdf_text'
-require_relative 'ocr/epub_text'
+require_relative 'ocr/pdf_handler'
+require_relative 'ocr/epub_handler'
 
 class Ocr
 
@@ -14,10 +14,10 @@ class Ocr
     ext = File.extname(input_path).downcase
     case ext
     when '.pdf'
-      return PDFText.transcribe(input_path, json_path, **kwargs) if PDFText.has_text?(input_path)
+      return PdfHandler.transcribe(input_path, json_path, **kwargs) if PdfHandler.has_text?(input_path)
       return BACKEND_CLASS.transcribe(input_path, json_path, **kwargs)
     when '.epub'
-      return EPUBText.transcribe(input_path, json_path, **kwargs)
+      return EpubHandler.transcribe(input_path, json_path, **kwargs)
     else
       return BACKEND_CLASS.transcribe(input_path, json_path, **kwargs)
     end
