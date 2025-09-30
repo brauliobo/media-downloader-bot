@@ -1,17 +1,30 @@
 require 'mechanize'
 require 'tempfile'
 require 'fileutils'
+require 'concurrent'
 require_relative '../zipper'
 
 class TTS
   module CoquiTTS
-    PORT = (ENV['PORT'] || 10230).to_i
-    BASE_URL = "http://127.0.0.1:#{PORT}".freeze
-    SYNTH_PATH = '/synthesize'.freeze
-    MAX_TOKENS = 400
+
+    PORT        = ENV['PORT']&.to_i || 10230
+    BASE_URL    = "http://127.0.0.1:#{PORT}".freeze
+    SYNTH_PATH  = '/synthesize'.freeze
+    MAX_TOKENS  = 400
     CHUNK_CHARS = 500
+    CONCURRENCY = ENV['COQUITTS_CONCURRENCY']&.to_i || 2
+
+    mattr_accessor :semaphore
+    self.semaphore = Concurrent::Semaphore.new(CONCURRENCY)
 
     def synthesize(text:, lang:, out_path:, speaker_wav: nil, **kwargs)
+      CoquiTTS.semaphore.acquire
+      _synthesize(text: text, lang: lang, out_path: out_path, speaker_wav: speaker_wav, **kwargs)
+    ensure
+      CoquiTTS.semaphore.release
+    end
+
+    def _synthesize(text:, lang:, out_path:, speaker_wav: nil, **kwargs)
       agent, url = Manager.http, "#{BASE_URL}#{SYNTH_PATH}"
       clean_text = text.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
 
