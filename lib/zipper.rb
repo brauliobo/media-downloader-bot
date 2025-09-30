@@ -82,7 +82,8 @@ class Zipper
 
       cmd = [
         'ffmpeg', '-y', '-f', 'concat', '-safe', '0', '-i', Sh.escape(listfile),
-        '-c', 'copy', Sh.escape(outfile)
+        '-c', 'copy',
+        Sh.escape(outfile)
       ].join(' ')
 
       _, _, status = Sh.run cmd
@@ -90,6 +91,26 @@ class Zipper
     end
 
     outfile
+  end
+
+  # Prepend silence of given seconds to the beginning of wav_path (in-place)
+  def self.prepend_silence! wav_path, seconds, dir: nil
+    return wav_path if seconds.to_f <= 0
+    dir ||= File.dirname(wav_path)
+    
+    out = File.join(dir, "out_#{SecureRandom.hex(4)}.wav")
+    cmd = [
+      'ffmpeg -y',
+      "-f lavfi -i anullsrc=channel_layout=mono:sample_rate=22050:duration=#{seconds.to_f}",
+      '-i', Sh.escape(wav_path),
+      '-filter_complex "[0:a][1:a]concat=n=2:v=0:a=1[a]"',
+      '-map "[a]"',
+      Sh.escape(out)
+    ].join(' ')
+    
+    Sh.run cmd
+    FileUtils.mv out, wav_path, force: true
+    wav_path
   end
 
   def self.choose_format(*args)
