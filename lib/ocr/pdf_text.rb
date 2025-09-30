@@ -17,99 +17,65 @@ class Ocr
     # unaffected.
     def self.transcribe(pdf_path, json_path, stl: nil, opts: nil, **_kwargs)
       reader = PDF::Reader.new(pdf_path)
-
-      pages_lines = []
+      all_lines = []
 
       reader.pages.each_with_index do |page, idx|
         page_num = idx + 1
         stl&.update "Extracting text from page #{page_num}/#{reader.page_count}"
 
-        # Split page text into lines, keep blank lines for paragraph boundaries
-        # Ensure UTF-8 encoding and handle invalid characters
-        page_text = page.text.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
-        lines = page_text.split(/\r?\n/).map { |l| l.rstrip }
-        pages_lines << { num: page_num, lines: lines }
+        # Extract text runs with font and position info
+        current_text = ''
+        current_font_size = nil
+        current_y = nil
+        prev_y = nil
+        
+        page.runs.each do |run|
+          text = run.text.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
+          font_size = run.font_size
+          y_pos = run.y
+          
+          # New line detected by Y position change
+          min_font = [current_font_size, font_size, 12].compact.min
+          if prev_y && (prev_y - y_pos).abs > (min_font * 0.3)
+            all_lines << { text: current_text, font_size: current_font_size, y: current_y, page: page_num } unless current_text.strip.empty?
+            current_text = text
+            current_font_size = font_size
+            current_y = y_pos
+          else
+            current_text << text
+            current_font_size = [current_font_size, font_size].compact.max
+            current_y ||= y_pos
+          end
+          prev_y = y_pos
+        end
+        all_lines << { text: current_text, font_size: current_font_size, y: current_y, page: page_num } unless current_text.strip.empty?
       end
 
       stl&.update 'Detecting headers/footers'
 
-      # Normalize by collapsing digits (page numbers) to '<d>' token so that
-      # "Psychotherapy Guidebook 10" and "Psychotherapy Guidebook 11" count as
-      # the same footer line.
+      # Detect headers/footers by finding lines that appear on >30% of pages
       norm = ->(s) { s.downcase.gsub(/\d+/, '<d>').gsub(/\s+/, ' ').strip }
-
-      # Heuristic: any *text* line (first and last non-blank line of a page)
-      # appearing in >30% of pages is considered a header/footer.
+      pages_hash = all_lines.group_by { |l| l[:page] }
       hdrf_counts = Hash.new(0)
-      total_pages = pages_lines.size
-      pages_lines.each do |p|
-        # grab first and last non-blank text line of the page
-        first_text = p[:lines].find { |l| !l.strip.empty? }
-        last_text  = p[:lines].reverse.find { |l| !l.strip.empty? }
+      
+      pages_hash.each do |_, lines|
+        first_text = lines.first&.dig(:text)
+        last_text = lines.last&.dig(:text)
         [first_text, last_text].compact.map(&norm).each { |l| hdrf_counts[l] += 1 }
       end
-      threshold = (total_pages * 0.3).ceil
+      
+      threshold = (pages_hash.size * 0.3).ceil
       hdrf_set = hdrf_counts.select { |_, c| c >= threshold }.keys
-
-      transcription = { metadata: { pages: [] }, content: { paragraphs: [] } }
-
       include_all = !!(opts && (opts[:includeall] || opts['includeall']))
-
-      pages_lines.each do |p|
-        page_first_text = p[:lines].find { |l| !l.strip.empty? }
-        page_last_text  = p[:lines].reverse.find { |l| !l.strip.empty? }
-        clean_lines = include_all ? p[:lines] : p[:lines].reject { |l| hdrf_set.include?(norm.call(l)) }
-
-        # Break into paragraphs by blank lines (empty strings) preserving structure.
-        buf = []
-        add_para = lambda do |paragraph_lines|
-          return if paragraph_lines.empty?
-          text = paragraph_lines.join(' ').strip
-          return if text.empty?
-          transcription[:content][:paragraphs] << {
-            text: text,
-            page_numbers: [p[:num]],
-            merged: false,
-            kind: 'text'
-          }
-        end
-
-        clean_lines.each do |line|
-          stripped = line.strip
-          if stripped.empty?
-            add_para.call(buf)
-            buf = []
-          else
-            # Dehyphenate: join trailing '-' with next line starting lowercase (Unicode-aware)
-            if buf.any? && buf.last.end_with?('-') && stripped.match?(/\A\p{Ll}/u)
-              buf[-1] = buf.last.chomp('-') + stripped
-            else
-              buf << stripped
-            end
-          end
-        end
-        add_para.call(buf)
-
-        page_meta = { page_number: p[:num] }
-        if page_first_text && hdrf_set.include?(norm.call(page_first_text))
-          page_meta[:header] = page_first_text
-        end
-        if page_last_text && hdrf_set.include?(norm.call(page_last_text))
-          page_meta[:footer] = page_last_text
-        end
-        transcription[:metadata][:pages] << page_meta
-      end
-
-      stl&.update 'Merging paragraphs'
-      # Merge across pages using backend-agnostic helpers.
-      blocks = Ocr.util.merge_paragraphs(transcription[:content][:paragraphs])
-      transcription[:content][:paragraphs] = blocks
-
-      # Reuse Ollama's language detection if available.
-      stl&.update 'Detecting language'
-      if defined?(Ocr::Ollama) && Ocr::Ollama.respond_to?(:detect_language)
-        transcription[:metadata][:language] = Ocr::Ollama.detect_language(blocks)
-      end
+      
+      # Filter out headers/footers unless includeall
+      clean_lines = include_all ? all_lines : all_lines.reject { |l| hdrf_set.include?(norm.call(l[:text])) }
+      
+      # Store lines with metadata for processing by Book class
+      transcription = {
+        metadata: { language: 'pt' },
+        content: { lines: clean_lines }
+      }
 
       stl&.update 'Saving transcription'
       File.write json_path, JSON.pretty_generate(transcription)
