@@ -1,5 +1,5 @@
 class Ocr
-  module PDFText
+  module Pdf
     require 'pdf-reader'
 
     # Check if the PDF contains an embedded text layer by inspecting the first
@@ -18,16 +18,18 @@ class Ocr
     def self.transcribe(pdf_path, json_path, stl: nil, opts: nil, **_kwargs)
       reader = PDF::Reader.new(pdf_path)
       all_lines = []
+      image_pages = []
 
       reader.pages.each_with_index do |page, idx|
         page_num = idx + 1
-        stl&.update "Extracting text from page #{page_num}/#{reader.page_count}"
+        stl&.update "Extract content from page #{page_num}/#{reader.page_count}"
 
         # Extract text runs with font and position info
         current_text = ''
         current_font_size = nil
         current_y = nil
         prev_y = nil
+        page_has_text = false
         
         page.runs.each do |run|
           text = run.text.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
@@ -37,7 +39,10 @@ class Ocr
           # New line detected by Y position change
           min_font = [current_font_size, font_size, 12].compact.min
           if prev_y && (prev_y - y_pos).abs > (min_font * 0.3)
-            all_lines << { text: current_text, font_size: current_font_size, y: current_y, page: page_num } unless current_text.strip.empty?
+            unless current_text.strip.empty?
+              all_lines << { text: current_text, font_size: current_font_size, y: current_y, page: page_num }
+              page_has_text = true
+            end
             current_text = text
             current_font_size = font_size
             current_y = y_pos
@@ -48,38 +53,34 @@ class Ocr
           end
           prev_y = y_pos
         end
-        all_lines << { text: current_text, font_size: current_font_size, y: current_y, page: page_num } unless current_text.strip.empty?
+        
+        unless current_text.strip.empty?
+          all_lines << { text: current_text, font_size: current_font_size, y: current_y, page: page_num }
+          page_has_text = true
+        end
+        
+        # If page has no text, mark it for image-based OCR later by Image class
+        unless page_has_text
+          image_pages << { page: page_num, path: "#{pdf_path}#page=#{page_num}" }
+        end
       end
 
-      stl&.update 'Detecting headers/footers'
-
-      # Detect headers/footers by finding lines that appear on >30% of pages
-      norm = ->(s) { s.downcase.gsub(/\d+/, '<d>').gsub(/\s+/, ' ').strip }
-      pages_hash = all_lines.group_by { |l| l[:page] }
-      hdrf_counts = Hash.new(0)
-      
-      pages_hash.each do |_, lines|
-        first_text = lines.first&.dig(:text)
-        last_text = lines.last&.dig(:text)
-        [first_text, last_text].compact.map(&norm).each { |l| hdrf_counts[l] += 1 }
-      end
-      
-      threshold = (pages_hash.size * 0.3).ceil
-      hdrf_set = hdrf_counts.select { |_, c| c >= threshold }.keys
-      include_all = !!(opts && (opts[:includeall] || opts['includeall']))
-      
-      # Filter out headers/footers unless includeall
-      clean_lines = include_all ? all_lines : all_lines.reject { |l| hdrf_set.include?(norm.call(l[:text])) }
-      
-      # Store lines with metadata for processing by Book class
+      # Store raw lines and image pages for processing by Book class
+      # (Header/footer detection and filtering will be handled by Book)
       transcription = {
         metadata: { language: 'pt' },
-        content: { lines: clean_lines }
+        content: { 
+          lines: all_lines,
+          images: image_pages
+        },
+        opts: opts
       }
 
       stl&.update 'Saving transcription'
       File.write json_path, JSON.pretty_generate(transcription)
       stl&.update 'Done'
     end
+
+    # (Image rasterization and OCR are handled by Audiobook::Image)
   end
 end 

@@ -1,5 +1,5 @@
 class Ocr
-  module EPUBText
+  module Epub
     require 'nokogiri'
 
     # Extract text from an EPUB and save it in the same JSON structure as PDFs
