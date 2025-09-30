@@ -76,7 +76,7 @@ module Audiobook
         Heading.new(item['heading']['text'])
       elsif item['image']
         img = Image.allocate
-        img.instance_variable_set(:@path, item['image']['path'])
+        img.instance_variable_set(:@path, item['image']['path'] || '')
         sentences = (item['image']['sentences'] || []).map { |s| Sentence.new(s['text']) }
         img.instance_variable_set(:@sentences, sentences)
         img
@@ -91,7 +91,7 @@ module Audiobook
           Heading.new(item['text'])
         when 'Image'
           img = Image.allocate
-          img.instance_variable_set(:@path, item['path'])
+          img.instance_variable_set(:@path, item['path'] || '')
           sentences = (item['sentences'] || []).map { |s| Sentence.new(s['text']) }
           img.instance_variable_set(:@sentences, sentences)
           img
@@ -111,7 +111,7 @@ module Audiobook
       
       # Handle new line-based format or legacy paragraph format
       if @data.dig('content', 'lines')
-        @pages = pages_from_lines(@data['content']['lines'])
+        @pages = pages_from_lines(@data['content']['lines'], @data.dig('content', 'images') || [])
       else
         @pages = pages_from_paragraphs
       end
@@ -132,9 +132,13 @@ module Audiobook
     private
 
     # Build pages from Line objects (new format with font metadata)
-    def pages_from_lines(lines_data)
+    def pages_from_lines(lines_data, images_data = [])
+      # Filter headers/footers unless includeall option is set
+      include_all = @data.dig('opts', 'includeall') || @data.dig('opts', :includeall)
+      filtered_lines = include_all ? lines_data : filter_headers_footers(lines_data)
+      
       # Create Line objects
-      lines = lines_data.map do |l|
+      lines = filtered_lines.map do |l|
         Line.new(l['text'], font_size: l['font_size'], y_position: l['y'], page_number: l['page'])
       end.reject(&:empty?)
       
@@ -146,6 +150,16 @@ module Audiobook
       items_with_pages.each do |item_data|
         page_num = item_data[:page]
         pages_hash[page_num] << item_data[:item]
+      end
+      
+      # Add Image objects for image-only pages (they will OCR themselves)
+      images_data.each do |img_data|
+        page_num = img_data['page']
+        path = img_data['path']
+        next unless path
+        
+        # Image will handle rasterization and OCR in its initializer
+        pages_hash[page_num] << Image.new(path, stl: @stl)
       end
       
       # Create Page objects
@@ -241,6 +255,35 @@ module Audiobook
       result = footer_text unless prev_footers.include?(footer_text)
       prev_footers << footer_text
       result
+    end
+
+    # Detect and filter headers/footers by finding lines that appear on >30% of pages
+    def filter_headers_footers(lines_data)
+      return lines_data if lines_data.empty?
+      
+      # Normalize text for comparison (replace numbers with placeholder)
+      norm = ->(s) { s.downcase.gsub(/\d+/, '<d>').gsub(/\s+/, ' ').strip }
+      
+      # Group lines by page
+      pages_hash = lines_data.group_by { |l| l['page'] || l[:page] }
+      hdrf_counts = Hash.new(0)
+      
+      # Count how often first/last lines appear across pages
+      pages_hash.each do |_, page_lines|
+        first_text = page_lines.first&.dig('text') || page_lines.first&.dig(:text)
+        last_text = page_lines.last&.dig('text') || page_lines.last&.dig(:text)
+        [first_text, last_text].compact.map(&norm).each { |l| hdrf_counts[l] += 1 }
+      end
+      
+      # If a line appears on >30% of pages, it's likely a header/footer
+      threshold = (pages_hash.size * 0.3).ceil
+      hdrf_set = hdrf_counts.select { |_, c| c >= threshold }.keys
+      
+      # Filter out detected headers/footers
+      lines_data.reject do |l|
+        text = l['text'] || l[:text]
+        hdrf_set.include?(norm.call(text))
+      end
     end
 
     # ---------- translation ----------
