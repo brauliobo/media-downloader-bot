@@ -23,7 +23,7 @@ module Audiobook
     end
 
     # Generate combined wav for all items on this page
-    def to_wav(dir, idx, lang: 'en', stl: nil, para_context: nil)
+    def to_wav(dir, idx, lang: 'en', stl: nil, para_context: nil, page_context: nil, book_metadata: {})
       return nil if items.empty?
       
       # Count paragraphs for context
@@ -31,21 +31,33 @@ module Audiobook
       base_para = para_context ? para_context[:current] : 0
       total_paras = para_context ? para_context[:total] : para_count
       
+      # Page context for status messages
+      page_idx = page_context ? page_context[:current] : number
+      page_total = page_context ? page_context[:total] : number
+      is_ocr_book = !!book_metadata['fully_ocr']
+      
       # Pre-calculate and set paragraph attributes
       para_counter = base_para
       items.each_with_index do |item, iidx|
-        next unless item.is_a?(Audiobook::Paragraph)
-        
-        para_counter += 1
-        item.para_idx = para_counter
-        item.para_total = total_paras
-        item.page_num = number
-        item.item_idx = iidx + 1
-        item.item_total = items.size
-        item.lang = lang
-        item.stl = stl
-        item.dir = dir
-        item.idx = "#{idx}_#{iidx}"
+        # Common attributes for all items that respond to them
+        if item.respond_to?(:page_idx=)
+          item.page_idx = page_idx
+          item.page_total = page_total
+        end
+
+        if item.is_a?(Audiobook::Paragraph)
+          para_counter += 1
+          item.para_idx = para_counter
+          item.para_total = total_paras
+          item.page_num = number
+          item.item_idx = iidx + 1
+          item.item_total = items.size
+          item.lang = lang
+          item.stl = stl
+          item.dir = dir
+          item.idx = "#{idx}_#{iidx}"
+          item.is_ocr = is_ocr_book || item.is_a?(Audiobook::Image)
+        end
       end
       
       wavs = Array.new(items.size)
@@ -53,8 +65,12 @@ module Audiobook
         if item.is_a?(Audiobook::Paragraph)
           wavs[iidx] = item.to_wav
         else
-          # For non-paragraphs (headings, images), show the old status format
-          stl&.update "Processing page #{number}, item #{iidx+1}/#{items.size} (#{item.class.name.split('::').last})"
+          # For non-paragraphs (headings), show status
+          operation = item.class.name.split('::').last
+          status_parts = ["page #{page_idx}/#{page_total}", "item #{iidx+1}/#{items.size}", operation]
+          status_line = "Processing #{status_parts.join(', ')}"
+          status_line << " (OCR)" if is_ocr_book
+          stl&.update status_line
           wavs[iidx] = item.to_wav(dir, "#{idx}_#{iidx}", lang: lang, stl: stl)
         end
       end
