@@ -27,7 +27,7 @@ def debug_pdf_processing(pdf_path)
     puts "\nGenerating transcription..."
     
     begin
-      Ocr.transcribe(pdf_path, json_path)
+      Ocr.transcribe(pdf_path)
       puts "Transcription saved: #{json_path}"
       puts "JSON size: #{File.size(json_path)} bytes"
       
