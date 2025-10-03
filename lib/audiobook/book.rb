@@ -2,6 +2,9 @@ require 'json'
 require 'yaml'
 require 'set'
 require 'fileutils'
+require_relative 'parsers/pdf'
+require_relative 'parsers/epub'
+require_relative 'text_helpers'
 require_relative '../ocr'
 require_relative 'line'
 require_relative 'sentence'
@@ -29,15 +32,22 @@ module Audiobook
       ext = File.extname(input_path).downcase
       case ext
       when '.yml', '.yaml' then from_yaml(input_path, opts: opts, stl: stl)
-      when '.json'         then new(input_path, opts: opts, stl: stl)
-      when '.pdf', '.epub'
-        tmp = File.join(Dir.mktmpdir, "#{File.basename(input_path, File.extname(input_path))}.json")
-        Ocr.transcribe(input_path, tmp, stl: stl, opts: opts)
-        book = new(tmp, opts: opts, stl: stl)
-        FileUtils.rm_f(tmp)
-        book
-      else
-        new(input_path, opts: opts, stl: stl)
+      when '.json'
+        data = SymMash.new(JSON.parse(File.read(input_path)))
+        new(data: data, opts: opts, stl: stl)
+      when '.pdf'
+        stl&.update "Analyzing document and extracting text..."
+        data = Parsers::Pdf.parse(input_path, stl: stl, opts: opts)
+        stl&.update "Structuring content and processing images..."
+        new(data: data, opts: opts, stl: stl)
+      when '.epub'
+        stl&.update "Analyzing document and extracting text..."
+        data = Parsers::Epub.parse(input_path, stl: stl, opts: opts)
+        stl&.update "Structuring content and processing images..."
+        new(data: data, opts: opts, stl: stl)
+          else
+            data = Ocr.transcribe(input_path, opts: opts, stl: stl)
+            new(data: data, opts: opts, stl: stl)
       end
     end
 
@@ -102,16 +112,18 @@ module Audiobook
       end
     end
 
-    def initialize(json_path, opts: nil, stl: nil)
-      @data = JSON.parse(File.read(json_path))
-      @metadata = @data['metadata'] || {}
+    def initialize(data:, opts: nil, stl: nil)
+      @data = data
+      @metadata = @data.metadata || {}
       @opts = opts || SymMash.new
       @stl = stl
-      @lang = @metadata['language'] || 'en'
+      @lang = @metadata.language || 'en'
       
       # Handle new line-based format or legacy paragraph format
-      if @data.dig('content', 'lines')
-        @pages = pages_from_lines(@data['content']['lines'], @data.dig('content', 'images') || [])
+      if @data.content&.lines
+        @pages = pages_from_lines(@data.content.lines, @data.content.images || [])
+        # After OCR, refine language detection if there were OCR pages
+        refine_language_detection! if @metadata.has_ocr_pages
       else
         @pages = pages_from_paragraphs
       end
@@ -121,7 +133,8 @@ module Audiobook
 
     # Write YAML file following class hierarchy representation
     def write(yaml_path)
-      book_hash = { 'pages' => pages.map(&:to_h) }
+      lang_code = @metadata['language'] || @lang || 'en'
+      book_hash = { 'language' => lang_code, 'pages' => pages.map(&:to_h) }
       begin
         File.write(yaml_path, YAML.dump(book_hash, line_width: -1))
       rescue ArgumentError
@@ -134,7 +147,7 @@ module Audiobook
     # Build pages from Line objects (new format with font metadata)
     def pages_from_lines(lines_data, images_data = [])
       # Filter headers/footers unless includeall option is set
-      include_all = @data.dig('opts', 'includeall') || @data.dig('opts', :includeall)
+      include_all = @data.opts&.includeall
       filtered_lines = include_all ? lines_data : filter_headers_footers(lines_data)
       
       # Create Line objects
@@ -153,13 +166,15 @@ module Audiobook
       end
       
       # Add Image objects for image-only pages (they will OCR themselves)
+      total_pages = @metadata.page_count
       images_data.each do |img_data|
         page_num = img_data['page']
         path = img_data['path']
         next unless path
         
+        page_context = total_pages ? { current: page_num, total: total_pages } : nil
         # Image will handle rasterization and OCR in its initializer
-        pages_hash[page_num] << Image.new(path, stl: @stl)
+        pages_hash[page_num] << Image.new(path, stl: @stl, page_context: page_context)
       end
       
       # Create Page objects
@@ -183,19 +198,9 @@ module Audiobook
       end
     end
 
-    def self.heading_line?(text)
-      return false unless text
-      words = text.split(/\s+/)
-      return false if words.empty? || words.size > 10
-      upper_ratio = words.count { |w| w == w.upcase }.fdiv(words.size)
-      return true if upper_ratio > 0.8
-      return true if words.all? { |w| w.match?(/\A[A-Z][a-z]+\z/) }
-      false
-    end
-
     # ---------- extraction helpers ----------
     def extract_paragraphs_with_pages
-      paras = @data.dig('content', 'paragraphs') || []
+      paras = @data.content&.paragraphs || []
       unless paras.empty?
         return paras.map { |p| { text: p['text'], page_numbers: p['page_numbers'] || [1] } }
       end
@@ -207,7 +212,7 @@ module Audiobook
     end
 
     def extract_raw_paragraphs
-      paras = @data.dig('content', 'paragraphs') || []
+      paras = @data.content&.paragraphs || []
       return paras.map { |p| p['text'] } unless paras.empty?
 
       @stl&.update 'No paragraphs found, checking alternative text'
@@ -217,14 +222,14 @@ module Audiobook
     end
 
     def find_alternative_text
-      return @data['text'] if @data['text']
-      return @data['content']['text'] if @data.dig('content', 'text')
-      return extract_pages_text if @data.dig('content', 'pages')
-      return extract_headers_footers if @data.dig('metadata', 'pages')
+      return @data.text if @data.text
+      return @data.content&.text if @data.content&.text
+      return extract_pages_text if @data.content&.pages
+      return extract_headers_footers if @data.metadata&.pages
     end
 
     def extract_pages_text
-      pages_text = @data['content']['pages'].map { |page| page['text'] }.compact.join(' ')
+      pages_text = @data.content.pages.map { |page| page['text'] }.compact.join(' ')
       pages_text.empty? ? nil : pages_text
     end
 
@@ -233,7 +238,7 @@ module Audiobook
       prev_headers = Set.new
       prev_footers = Set.new
 
-      @data['metadata']['pages'].each do |page|
+      @data.metadata.pages.each do |page|
         pages_text << process_header(page, prev_headers)
         pages_text << process_footer(page, prev_footers)
       end
@@ -284,6 +289,16 @@ module Audiobook
         text = l['text'] || l[:text]
         hdrf_set.include?(norm.call(text))
       end
+    end
+
+    # ---------- language detection ----------
+    def refine_language_detection!
+      @stl&.update 'Detecting language from OCR content'
+      sample_paras = pages.flat_map(&:all_sentences).first(5).map { |s| { text: s.text } }
+      detected = Ocr.detect_language(sample_paras) || 'en'
+      @lang = detected
+      @metadata['language'] = detected
+      @stl&.update "Detected language: #{detected}"
     end
 
     # ---------- translation ----------
