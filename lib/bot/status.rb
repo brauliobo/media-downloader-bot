@@ -2,7 +2,6 @@ require 'limiter'
 
 class Manager
   class Status < Array
-    extend Limiter::Mixin
 
     class Line < SimpleDelegator
       attr_accessor :status
@@ -78,8 +77,6 @@ class Manager
     def send_update text, *args, **params
       @block.call text, *args, **params
     end
-
-    limit_method :send_update, rate: 30, interval: 60
 
   end
 end

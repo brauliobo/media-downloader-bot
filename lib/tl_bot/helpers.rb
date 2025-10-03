@@ -1,10 +1,14 @@
 require 'puma'
 require 'roda'
+require 'limiter'
+require_relative '../bot/rate_limiter'
 
 class TlBot
   module Helpers
 
+    extend ActiveSupport::Concern
     include MsgHelpers
+    include Bot::RateLimiter
 
     RETRY_ERRORS = [
       Faraday::ConnectionFailed,
@@ -12,12 +16,12 @@ class TlBot
       Net::OpenTimeout, Net::WriteTimeout,
     ]
 
-    extend ActiveSupport::Concern
     included do
       class_attribute :bot_name
-
       class_attribute :error_delete_time
       self.error_delete_time = 30.seconds
+
+      rate_limits global: 20, per_chat: 1
 
       def self.mock
         define_method :send_message do |msg, text, *args|
@@ -63,22 +67,29 @@ class TlBot
       Net::HTTP.new('www.google.com').head('/').kind_of? Net::HTTPOK
     end
     def wait_net_up
-      sleep 1 while !net_up?
+      sleep 1 until net_up?
+    end
+
+    def retry_after_seconds(e)
+      (e.message[/retry after (\d+)/, 1]&.to_i).presence || begin
+        body = JSON.parse(e.response.body) rescue nil
+        body && body.dig('parameters', 'retry_after')
+      end.to_i
+    end
+
+    def tg_text_payload msg, text, parse_mode
+      t = parse_text text, parse_mode: parse_mode
+      { chat_id: msg.chat.id, text: t, caption: t, parse_mode: parse_mode }
     end
 
     def edit_message msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', **params
-      text = parse_text text, parse_mode: parse_mode
-      api.send "edit_message_#{type}",
-        chat_id:    msg.chat.id,
-        message_id: id,
-        text:       text,
-        caption:    text,
-        parse_mode: parse_mode,
-        **params
+      throttle! msg.chat.id, :low
+      api.send "edit_message_#{type}", **tg_text_payload(msg, text, parse_mode), message_id: id, **params
 
     rescue ::Telegram::Bot::Exceptions::ResponseError => e
-      resp = SymMash.new JSON.parse e.response.body
-      return if resp.description.match(/exactly the same as a current content/)
+      resp = SymMash.new(JSON.parse(e.response.body)) rescue nil
+      return if resp&.description&.match(/exactly the same as a current content/)
+      if (ra = retry_after_seconds(e)) > 0 then sleep ra; retry end
       raise
     rescue
       # ignore
@@ -90,14 +101,8 @@ class TlBot
 
     def send_message msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **params
       _text = text
-      text  = parse_text text, parse_mode: parse_mode
-      resp  = SymMash.new api.send("send_#{type}",
-        reply_to_message_id: msg.message_id,
-        chat_id:             msg.chat.id,
-        text:                text,
-        caption:             text,
-        parse_mode:          parse_mode,
-        **params).to_h
+      throttle! msg.chat.id, :high
+      resp  = SymMash.new api.send("send_#{type}", **tg_text_payload(msg, text, parse_mode), reply_to_message_id: msg.message_id, **params).to_h
       resp.text = _text
 
       delete = delete_both if delete_both
@@ -107,6 +112,9 @@ class TlBot
       resp
     rescue *RETRY_ERRORS
       retry
+    rescue ::Telegram::Bot::Exceptions::ResponseError => e
+      if (ra = retry_after_seconds(e)) > 0 then sleep ra; retry end
+      raise
     rescue => e
       retry if e.message.index 'Internal Server Error'
       binding.pry if ENV['PRY_SEND_MESSAGE']
@@ -141,16 +149,12 @@ class TlBot
     end
 
     def clean_bc bc
-      @bc ||= self.then do
-        bcl = ActiveSupport::BacktraceCleaner.new
-        bcl.add_filter{ |line| line.gsub "#{Dir.pwd}/", '' }
-        bcl
-      end.clean bc
+      @bcl ||= ActiveSupport::BacktraceCleaner.new.tap { |c| c.add_filter { |line| line.gsub "#{Dir.pwd}/", '' } }
+      @bcl.clean bc
     end
 
     def admin_report msg, _error, status: 'error'
-      return if ADMIN_CHAT_ID != msg.chat.id
-
+      return unless ADMIN_CHAT_ID
       msg_ct = if msg.respond_to? :text then msg.text else msg.data end
       error  = "<b>msg</b>: #{he msg_ct}"
       error << "\n\n<b>#{status}</b>: <pre>#{he _error}</pre>\n"
@@ -177,7 +181,7 @@ class TlBot
     # Download any Telegram file (audio, video, document) and store it locally.
     def download_file(info, dir: Dir.tmpdir)
       tg_path   = api.get_file(file_id: info.file_id).file_path or raise 'no file_path returned'
-      file_name = File.basename tg_path
+      file_name = info.respond_to?(:file_name) && info.file_name.present? ? info.file_name : File.basename(tg_path)
       local     = File.join dir, file_name
 
       base_url = "https://api.telegram.org/file/bot#{ENV['TL_BOT_TOKEN']}/"
