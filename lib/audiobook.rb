@@ -53,11 +53,14 @@ module Audiobook
         # Process pages sequentially to maintain status update order
         wavs = []
         para_offset = 0
+        total_pages = pages.size
         
         pages.each.with_index do |page, idx|
           wav = page.to_wav(dir, format('%04d', idx + 1), 
                             lang: @lang, stl: @stl,
-                            para_context: { current: para_offset, total: total_paragraphs })
+                            para_context: { current: para_offset, total: total_paragraphs },
+                            page_context: { current: idx + 1, total: total_pages },
+                            book_metadata: @book.metadata)
           wavs << wav if wav
           
           # Update offset for next page
