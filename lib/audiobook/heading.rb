@@ -4,6 +4,7 @@ require_relative '../zipper'
 module Audiobook
   # Represents a heading - single sentence with extra pause
   class Heading < Sentence
+
     PAUSE = 0.5
 
     def to_h
