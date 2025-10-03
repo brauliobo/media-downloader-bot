@@ -8,7 +8,7 @@ module Audiobook
     PAUSE = 0.20
 
     attr_reader :sentences
-    attr_accessor :para_idx, :para_total, :page_num, :item_idx, :item_total, :lang, :stl, :dir, :idx
+    attr_accessor :para_idx, :para_total, :page_num, :item_idx, :item_total, :lang, :stl, :dir, :idx, :page_idx, :page_total, :is_ocr
 
     def initialize(sentences = [])
       @sentences = sentences
@@ -28,12 +28,23 @@ module Audiobook
       
       wavs = sentences.each_with_index.map do |sent, sidx|
         status_parts = []
-        status_parts << "page #{page_num}" if page_num
+        
+        page_str = "page "
+        if page_idx && page_total
+          page_str << "#{page_idx}/#{page_total}"
+        elsif page_num
+          page_str << page_num.to_s
+        end
+        status_parts << page_str
+
         status_parts << "item #{item_idx}/#{item_total}" if item_idx && item_total
         status_parts << "paragraph #{para_idx}/#{para_total}" if para_idx && para_total
         status_parts << "sentence #{sidx+1}/#{sentences.size}"
         
-        stl&.update "Processing #{status_parts.join(', ')}"
+        status_line = "Processing #{status_parts.join(', ')}"
+        status_line << " (OCR)" if defined?(@is_ocr) && @is_ocr
+        
+        stl&.update status_line
         sent.to_wav(dir, "#{idx}_#{sidx}", lang: lang || 'en')
       end
       
@@ -114,15 +125,11 @@ module Audiobook
     # Legacy discover for text strings (EPUB, etc)
     def self.discover(raw_paragraphs)
       raw_paragraphs.map do |para_text|
-        normalized = Ocr.util.normalize_text(para_text)
-          .gsub(/[\u0000-\u001F\u007F-\u009F]/, '').gsub(/\u00AD/, '').gsub(/\s+/, ' ').strip
+        normalized = Audiobook::TextHelpers.normalize_text(para_text)
         next if normalized.empty?
         
-        sentences = normalized
-          .gsub(/([.!?…]\"?)\s+(?=\p{Lu})/u, "\\1\n")
-          .split(/\n+/)
-          .map { |s| Sentence.new(s) }
-          .reject { |s| s.text.empty? }
+        sentences = normalized.gsub(/([.!?…]\"?)\s+(?=\p{Lu})/u, "\\1\n").split(/\n+/)
+          .map { |s| Sentence.new(s) }.reject { |s| s.text.empty? }
         
         heading_like?(sentences.first&.text) && sentences.size == 1 ? Heading.new(sentences.first.text) : new(sentences)
       end.compact.reject { |item| item.is_a?(Paragraph) && item.empty? }
@@ -155,17 +162,12 @@ module Audiobook
         next if group.empty?
         
         # Join lines into paragraph text
-        para_text = group.map(&:text).join(' ')
-        normalized = Ocr.util.normalize_text(para_text)
-          .gsub(/[\u0000-\u001F\u007F-\u009F]/, '').gsub(/\u00AD/, '').gsub(/\s+/, ' ').strip
+        normalized = Audiobook::TextHelpers.normalize_text(group.map(&:text).join(' '))
         next if normalized.empty?
         
         # Split into sentences
-        sentences = normalized
-          .gsub(/([.!?…]\"?)\s+(?=\p{Lu})/u, "\\1\n")
-          .split(/\n+/)
-          .map { |s| Sentence.new(s) }
-          .reject { |s| s.text.empty? }
+        sentences = normalized.gsub(/([.!?…]\"?)\s+(?=\p{Lu})/u, "\\1\n").split(/\n+/)
+          .map { |s| Sentence.new(s) }.reject { |s| s.text.empty? }
         next if sentences.empty?
         
         # Detect heading vs paragraph
