@@ -1,13 +1,17 @@
 require 'set'
 require 'fileutils'
+require 'limiter'
+require_relative '../bot/rate_limiter'
 
 class TDBot
   include TD::Logging
   
   module Helpers
-    include MsgHelpers
 
     extend ActiveSupport::Concern
+    include MsgHelpers
+    include Bot::RateLimiter
+
     included do
       class_attribute :td, :client, :message_handler, :message_sender, :file_manager
       
@@ -22,6 +26,13 @@ class TDBot
       
       # Setup authentication
       client.setup_authentication_handlers
+
+      # Rate limiters
+      rate_limits global: 25, per_chat: 1
+    end
+    
+    def td_retry_after_seconds(e)
+      e.message[/retry after (\d+)/, 1]&.to_i || 60
     end
 
     def listen(&handler)
@@ -100,6 +111,8 @@ class TDBot
     def send_message(msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **params)
       t = type.to_s
       
+      throttle! msg.chat.id, :high
+      
       # Add reply-to information if original message exists
       reply_to = nil
       if msg.respond_to?(:id)
@@ -131,13 +144,26 @@ class TDBot
       end
       
       SymMash.new(result)
+    rescue TD::Error => e
+      if e.message.include?('429') || e.message.include?('Too Many Requests')
+        ra = td_retry_after_seconds(e); dlog "[RATE_LIMIT] TDLib sleeping #{ra}s (send_message)"; sleep ra; retry
+      end
+      dlog "[TD_SEND_ERROR] #{e.class}: #{e.message}"; SymMash.new(message_id: 0, text: text)
     rescue => e
       dlog "[TD_SEND_ERROR] #{e.class}: #{e.message}"
       SymMash.new(message_id: 0, text: text)
     end
 
     def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', **params)
+      throttle! msg.chat.id, :low
       message_sender.edit_message(msg.chat.id, id, text, parse_mode: parse_mode)
+    rescue TD::Error => e
+      if e.message.include?('429') || e.message.include?('Too Many Requests')
+        ra = td_retry_after_seconds(e); dlog "[RATE_LIMIT] TDLib sleeping #{ra}s (edit_message)"; sleep ra; retry
+      end
+      dlog "[TD_EDIT_ERROR] #{e.class}: #{e.message}"
+    rescue => e
+      dlog "[TD_EDIT_ERROR] #{e.class}: #{e.message}"
     end
 
     def delete_message(msg, id, wait: nil)
