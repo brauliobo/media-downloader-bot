@@ -16,10 +16,11 @@ vendor
 
 # test media
 input
+*yml
 /*mp4
 /*webm
 /*srt
+/*vtt
 /*opus
 /*wav
 /*pdf
-/*yml
