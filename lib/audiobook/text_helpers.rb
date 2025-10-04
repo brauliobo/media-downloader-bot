@@ -10,6 +10,26 @@ module Audiobook
       clean.strip
     end
 
+    # Join an array of line strings from a PDF into one paragraph string using sane defaults:
+    # - Preserve line boundaries initially, so we can handle hyphen and in-word artifacts
+    # - Remove hyphenated wraps ("palavra-\nseguinte" -> "palavraseguinte")
+    # - Convert remaining newlines to single spaces
+    def self.join_pdf_lines(lines)
+      raw = Array(lines).join("\n")
+      raw = raw.gsub(/-\s*\n\s*/u, '')
+      raw = raw.gsub(/\s*\n\s*/u, ' ')
+      normalize_text(raw)
+    end
+
+    # Split a paragraph into sentences with a simple, diacritic-aware rule
+    def self.split_sentences(text)
+      Array(text).join
+        .gsub(/([.!?…]"?)\s+(?=\p{Lu})/u, "\\1\n")
+        .split(/\n+/)
+        .map { |s| s.strip }
+        .reject(&:empty?)
+    end
+
     def self.heading_line?(text)
       words = text.split(/\s+/)
       return false if words.empty? || words.size > 10

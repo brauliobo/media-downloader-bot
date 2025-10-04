@@ -97,11 +97,10 @@ module Audiobook
           
           # Check if both lines look like parts of a multi-line heading
           both_heading_like = prev_line.word_count <= 5 && line.word_count <= 5 && 
-                             !prev_line.ends_with_punctuation? && !line.ends_with_punctuation?
+                             !prev_line.ends_with_punctuation? && !line.ends_with_punctuation? && prev_line.starts_with_capital? && line.starts_with_capital?
           
-          should_break = is_only_numbers ||
-                        font_changed ||  # Always break on font change
-                        (prev_line.ends_with_punctuation? && line.starts_with_capital?)
+          # default break rules
+          should_break = is_only_numbers || font_changed || (prev_line.ends_with_punctuation? && line.starts_with_capital?)
           
           # Only break on short+capital if NOT a multi-line heading
           if !both_heading_like && prev_line.word_count <= 10 && !prev_line.ends_with_punctuation? && line.starts_with_capital?
@@ -172,13 +171,13 @@ module Audiobook
       grouped_by_font.map do |group|
         next if group.empty?
         
-        # Join lines into paragraph text
-        normalized = Audiobook::TextHelpers.normalize_text(group.map(&:text).join(' '))
+        # Join preserving explicit line boundaries, then fix artifacts caused by line wraps
+        normalized = Audiobook::TextHelpers.join_pdf_lines(group.map(&:text))
         normalized = normalized.gsub(/\bN\s*\.\s*T\./i, 'N.T.')
         next if normalized.empty?
         
         # Split into sentences
-        sentences = normalized.gsub(/([.!?…]\"?)\s+(?=\p{Lu})/u, "\\1\n").split(/\n+/)
+        sentences = Audiobook::TextHelpers.split_sentences(normalized)
           .map { |s| Sentence.new(s) }.reject { |s| s.text.empty? }
         next if sentences.empty?
         
