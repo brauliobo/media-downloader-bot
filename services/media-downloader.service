@@ -30,7 +30,6 @@ ExecStart=/usr/local/rvm/wrappers/ruby-3.4.4/bundle exec bin/bot
 Environment=BUNDLE_DEPLOYMENT=true
 Environment=BUNDLE_FROZEN=false
 #Environment=TL_BOT_TOKEN=xxx
-Environment=SKIP_TD_BOT=1
 Environment=THREADS=6
 #Environment=CUDA=1
 #Environment=CUDA_VISIBLE_DEVICES=1
