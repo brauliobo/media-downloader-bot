@@ -5,7 +5,7 @@ require_relative 'translator/madlad400'
 
 class Translator
 
-  BACKEND_CLASS = const_get ENV['TRANSLATOR'].to_sym
+  BACKEND_CLASS = const_get ENV['TRANSLATOR'].to_sym if ENV['TRANSLATOR']
 
   extend BACKEND_CLASS
 
