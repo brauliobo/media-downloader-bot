@@ -8,6 +8,8 @@ module Audiobook
     PAUSE = 0.10
 
     attr_reader :text
+    attr_writer :references
+    attr_accessor :source_sentence, :font_size
 
     def initialize(text)
       super()
@@ -16,6 +18,25 @@ module Audiobook
         .tr("\x01\x02\x03\x04\x05\x06\x07\x08", '')
         .gsub(/\u00AD/, '')
         .gsub(/\s+/, ' ').strip
+      @references = []
+      @font_size = nil
+      @source_sentence = nil
+    end
+
+    def references
+      @references ||= []
+    end
+
+    def add_reference(ref)
+      return unless ref
+      existing = references.find { |r| r.id == ref.id }
+      if existing
+        existing
+      else
+        references << ref
+        ref.source_sentence ||= self
+        ref
+      end
     end
 
     protected
@@ -29,7 +50,9 @@ module Audiobook
     end
 
     def extra_hash
-      { 'text' => text }
+      h = { 'text' => text }
+      h['references'] = references.map(&:to_h) if references && !references.empty?
+      h
     end
   end
 end

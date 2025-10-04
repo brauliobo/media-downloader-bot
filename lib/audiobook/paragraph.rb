@@ -26,7 +26,7 @@ module Audiobook
     def to_wav
       return nil if sentences.empty?
       
-      wavs = sentences.each_with_index.map do |sent, sidx|
+      wavs = sentences.each_with_index.flat_map do |sent, sidx|
         status_parts = []
         
         page_str = "page "
@@ -45,7 +45,18 @@ module Audiobook
         status_line << " (OCR)" if defined?(@is_ocr) && @is_ocr
         
         stl&.update status_line
-        sent.to_wav(dir, "#{idx}_#{sidx}", lang: lang || 'en')
+        main_wav = sent.to_wav(dir, "#{idx}_#{sidx}", lang: lang || 'en')
+        ref_wavs = (sent.references || []).each_with_index.flat_map do |ref, ridx|
+          stl&.update "Processing reference #{ref.id} for sentence #{sidx+1}/#{sentences.size}"
+          ref.sentences.each_with_index.map do |rs, j|
+            wav_path = rs.to_wav(dir, "#{idx}_#{sidx}_r#{ridx}_#{j}", lang: lang || 'en')
+            if j == 0
+              Zipper.prepend_silence!(wav_path, 0.15, dir: dir)
+            end
+            wav_path
+          end
+        end
+        [main_wav, *ref_wavs]
       end
       
       combined = File.join(dir, "para_#{idx}.wav")
@@ -163,6 +174,7 @@ module Audiobook
         
         # Join lines into paragraph text
         normalized = Audiobook::TextHelpers.normalize_text(group.map(&:text).join(' '))
+        normalized = normalized.gsub(/\bN\s*\.\s*T\./i, 'N.T.')
         next if normalized.empty?
         
         # Split into sentences
@@ -173,12 +185,18 @@ module Audiobook
         # Detect heading vs paragraph
         first_line = group.first
         item = if sentences.size == 1 && (first_line.heading_like? || heading_like?(sentences.first.text))
-          Heading.new(sentences.first.text)
+          heading_sentence = sentences.first
+          heading_sentence.font_size = first_line.font_size if heading_sentence.respond_to?(:font_size=)
+          Heading.new(heading_sentence)
         else
-          new(sentences)
+          para = new(sentences)
+          if first_line.font_size
+            para.sentences.each { |s| s.font_size = first_line.font_size if s.respond_to?(:font_size=) }
+          end
+          para
         end
-        
-        { item: item, page: start_page }
+
+        { item: item, page: start_page, font_size: first_line.font_size }
       end.compact
     end
 

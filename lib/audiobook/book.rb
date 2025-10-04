@@ -9,6 +9,7 @@ require_relative '../ocr'
 require_relative 'line'
 require_relative 'sentence'
 require_relative 'paragraph'
+require_relative 'reference'
 require_relative 'heading'
 require_relative 'image'
 require_relative 'page'
@@ -84,6 +85,14 @@ module Audiobook
       # Item is a hash with single key indicating type
       if item['heading']
         Heading.new(item['heading']['text'])
+      elsif item['reference']
+        ref_info = item['reference']
+        sentences = (ref_info['sentences'] || []).map do |s|
+          sent = Sentence.new(s['text'])
+          # nested references unlikely, ignore
+          sent
+        end
+        Reference.new(ref_info['id'], sentences)
       elsif item['image']
         img = Image.allocate
         img.instance_variable_set(:@path, item['image']['path'] || '')
@@ -91,7 +100,17 @@ module Audiobook
         img.instance_variable_set(:@sentences, sentences)
         img
       elsif item['paragraph']
-        sentences = (item['paragraph']['sentences'] || []).map { |s| Sentence.new(s['text']) }
+        sentences = (item['paragraph']['sentences'] || []).map do |s|
+          sent = Sentence.new(s['text'])
+          if s['references']
+            sent.references = s['references'].map do |r|
+              ref_info = r['reference'] || r
+              ref_sents = (ref_info['sentences'] || []).map { |rs| Sentence.new(rs['text']) }
+              Reference.new(ref_info['id'], ref_sents)
+            end
+          end
+          sent
+        end
         Paragraph.new(sentences)
       else
         # Legacy format fallback with 'type' field
@@ -157,6 +176,111 @@ module Audiobook
       
       # Discover paragraphs across all pages (handles cross-page paragraphs)
       items_with_pages = Paragraph.discover_from_lines(lines)
+
+      # Attach inline reference markers and collect footnote paragraphs
+      # Strategy:
+        # - Detect numeric-only paragraphs as reference markers (e.g., "5") on a page
+        # - Attach a Reference(id: "5") to the last sentence of the previous paragraph on same page
+        # - Move any paragraphs whose first sentence starts with that number (e.g., "5 Lorem ...")
+        #   into the Reference object and remove them from the items list
+        # - If subsequent paragraphs (same font size as footnotes) appear before the next marker,
+        #   attach them to the last reference on that page (supports multi-paragraph notes)
+      ref_map = Hash.new { |h, k| h[k] = {} } # { page => { '5' => Reference } }
+      pending_refs = Hash.new { |h, k| h[k] = [] }
+      last_ref_by_page = {}
+      last_para_by_page = {}
+      body_font_by_page = {}
+
+      marker_id_for = lambda do |item|
+        extract_id = lambda do |raw|
+          text = raw.to_s.strip
+          match = text.match(/^(\d+)(?:[\)\.\]]+)?$/)
+          match && match[1]
+        end
+
+        case item
+        when Paragraph
+          next unless item.sentences.size == 1
+          extract_id.call(item.sentences.first.text)
+        when Heading
+          extract_id.call(item.text)
+        end
+      end
+
+      # First pass: identify markers and attach to previous paragraph's last sentence
+      processed = []
+      items_with_pages.each do |entry|
+        item = entry[:item]
+        page_num = entry[:page]
+
+        item_font = entry[:font_size]
+
+        if (ref_id = marker_id_for.call(item))
+          if ref_map[page_num].key?(ref_id) && body_font_by_page[page_num] && item_font && item_font < body_font_by_page[page_num] - 0.5
+            next
+          end
+          ref = ref_map[page_num][ref_id] ||= Reference.new(ref_id)
+
+          if (prev_para = last_para_by_page[page_num]) && prev_para.sentences.any?
+            last_sentence = prev_para.sentences.last
+            ref = last_sentence.add_reference(ref) || ref
+            ref_map[page_num][ref_id] = ref
+          end
+
+          pending_refs[page_num] << { ref: ref, min_idx: processed.size }
+          last_ref_by_page[page_num] = ref
+          body_font_by_page[page_num] ||= item_font if item_font
+          next
+        end
+
+        last_para_by_page[page_num] = item if item.is_a?(Paragraph)
+        if body_font_by_page[page_num].nil? && item.is_a?(Paragraph) && item_font
+          body_font_by_page[page_num] = item_font
+        end
+        processed << entry
+      end
+
+      # Second pass: move footnote paragraphs into existing references on same page
+      items_with_pages = []
+      processed.each_with_index do |entry, idx|
+        item = entry[:item]
+        page_num = entry[:page]
+        queue = pending_refs[page_num]
+        if item.is_a?(Paragraph) && item.sentences.any?
+          first_text = item.sentences.first.text
+          leading_match = first_text.match(/^(\d+)[\)\.]?\s+(.*)$/)
+          if leading_match && (ref = ref_map[page_num][leading_match[1]])
+            if (entry_info = queue.find { |info| info[:ref].equal?(ref) })
+              entry_info[:min_idx] = idx + 1
+            end
+            # Strip the leading number from the first sentence
+            item.sentences.first.instance_variable_set(:@text, leading_match[2])
+            ref.add_sentences(item.sentences)
+            pending_refs[page_num].reject! { |info| info[:ref].equal?(ref) && info[:min_idx] <= idx }
+            last_ref_by_page[page_num] = ref
+            next # remove this paragraph from page items
+          elsif (info = queue.find { |data| data[:min_idx] <= idx })
+            body_font = body_font_by_page[page_num]
+            line_font = entry[:font_size]
+            if body_font && line_font && line_font < body_font - 0.5
+              ref = info[:ref]
+              info[:min_idx] = idx + 1
+              ref.add_sentences(item.sentences)
+              last_ref_by_page[page_num] = ref
+              next
+            end
+          else
+            ref = last_ref_by_page[page_num]
+            body_font = body_font_by_page[page_num]
+            line_font = entry[:font_size]
+            if ref && body_font && line_font && line_font < body_font - 0.5
+              ref.add_sentences(item.sentences)
+              next
+            end
+          end
+        end
+        items_with_pages << entry
+      end
       
       # Group items by their page number
       pages_hash = Hash.new { |h, k| h[k] = [] }
