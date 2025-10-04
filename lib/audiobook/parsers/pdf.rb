@@ -58,7 +58,30 @@ module Audiobook
         page_lines = []
         add_line = ->(text, font_size = nil, y = nil) { page_lines << { text: text, font_size: font_size, y: y, page: page_num } unless text.to_s.strip.empty? }
 
-        current_text = ''
+        # Helper to join runs left-to-right within a line
+        join_runs = lambda do |runs|
+          return '' if runs.nil? || runs.empty?
+          parts = []
+          prev = nil
+          runs.sort_by { |r| r[:x] || 0 }.each do |r|
+            t = r[:text]
+            next if t.nil? || t.empty?
+            if prev
+              # add a space between segments unless hyphen-join
+              if prev[:text].end_with?('-')
+                parts[-1] = prev[:text].chomp('-') + t
+              else
+                parts << t.prepend(' ')
+              end
+            else
+              parts << t
+            end
+            prev = r
+          end
+          parts.join
+        end
+
+        current_runs = []
         current_font_size = nil
         current_y = nil
         prev_y = nil
@@ -67,18 +90,23 @@ module Audiobook
           next if text.empty?
           font_size = run.font_size
           y = run.y
+          x = run.x rescue nil
           min_font = [current_font_size, font_size, 12].compact.min
           if prev_y && (prev_y - y).abs > (min_font * 0.3)
-            add_line.call(current_text, current_font_size, current_y)
-            current_text = text; current_font_size = font_size; current_y = y
+            joined = join_runs.call(current_runs)
+            add_line.call(joined, current_font_size, current_y)
+            current_runs = [{ text:, font_size:, y:, x: }]
+            current_font_size = font_size
+            current_y = y
           else
-            current_text << text
+            current_runs << { text:, font_size:, y:, x: }
             current_font_size = [current_font_size, font_size].compact.max
             current_y ||= y
           end
           prev_y = y
         end
-        add_line.call(current_text, current_font_size, current_y)
+        joined = join_runs.call(current_runs)
+        add_line.call(joined, current_font_size, current_y)
 
         if page_lines.empty?
           page.text.to_s.split(/\r?\n+/).each { |l| add_line.call(l) } rescue nil

@@ -48,20 +48,20 @@ These rules guide any AI-assisted edits in this project. They encode the repo’
 - Transcoding & metadata: `Bot::Processor#convert` delegates to `Zipper.zip_*` methods and uses `Output.filename`. MIME inference via `Rack::Mime`.
 - Status updates: use `Status` object (`st` / `@stl`) with concise messages; prefer `_` italics for captions, and escape via `MsgHelpers`.
 
-### Extending the system
-- New URL source/downloader: implement a `Downloader` tied to a `Processor` (or extend `Bot::YtDlp`) and branch in `UrlProcessor#downloader`.
-- New media format/codec: add support in `Zipper` and return chosen format via `Zipper.choose_format`; integrate in `Processor#convert`.
-- New command-line option: parse via `Processor.add_opt` (key[=val]) and thread through to `opts`.
-- New file-type flow (e.g., docs): extend `FileProcessor` and keep the early `pdf` bypass pattern of returning `uploads` so `Worker` can send results directly.
-- **PDF handling**: Extract text from `metadata.pages` headers/footers when paragraphs are empty; handle graceful degradation for empty content.
+### PDF parsing & Audiobook (learned rules)
+- **Runs → Lines**: Group by y-gap; within each line, sort by x and join runs with a single space. Remove space only when previous run ends with `-` (hyphen-wrap).
+- **Lines → Paragraph text**: Join lines with newlines; dehyphenate `-\n` → ``; convert remaining newlines to single spaces; then normalize whitespace.
+- **Sentences**: Split with diacritic-aware boundary `([.!?…]"?)\s+(?=\p{Lu})`.
+- **Headings vs paragraphs**: Treat single-sentence groups as `Heading` only if they clearly look like headings (short, title/uppercase, no sentence-ending punctuation).
+- **Headers/footers**: Detect by frequency across pages; filter only if the first/last line repeats on ≥30% of pages. Avoid one-off content filters.
+- **Footnotes**: Use modal body font per page; treat much smaller-font paragraphs as footnotes. When a numeric marker (e.g., `1)` or `1.`) is detected, attach a `Reference` to the last sentence and move following small-font items into it.
+- **Cross-page merge**: After references, merge only when: fonts are close; previous paragraph ends without terminal punctuation or next starts lowercase; and the page increased. Do not reorder tokens.
+- **Keep it simple**: No “smart” letter-by-letter joins; never attempt to relocate words across runs or lines. Only hyphen de-wrap is special.
 
 ### Messaging & captions (Telegram)
 - Use `MsgHelpers.me/mfe/mnfe` to escape appropriately.
 - Respect caption limits (`MsgHelpers::MAX_CAPTION` ~ 1024). Trim or reduce content when approaching limits.
 - Prefer minimal, readable captions. For ordered uploads, use `opts.number`/`opts.ordered` logic already in `Worker`.
-- Use high-level `TD::MessageSender` methods (`send_text`, `send_audio`, `send_video`, `send_document`).
-- Always pass `reply_to` when sending status or uploads; `MessageHandler` maps async IDs for edits.
-- Use `delete_message_public` for deletion; avoid private/low-level TDLib calls.
 
 ### HTTP, uploads & MIME
 - HTTP fetches via `Mechanize` inside localized helpers; avoid global clients.
@@ -74,7 +74,7 @@ These rules guide any AI-assisted edits in this project. They encode the repo’
 - Run heavy work inside the per-job `dir` using `Dir.chdir dir do ... end`.
 
 ### ENV & configuration
-- Common flags: `DB`, `TMPDIR`, `CUDA`, `PAID`, `BLOCKED_USERS`, `BLOCKED_DOMAINS`, `PRY_BEFORE_CONVERT`, `DEBUG`, `SKIP_TD_BOT`, `SKIP_TL_BOT`, `TDLIB_PROCESS_UNREAD`.
+- Common flags: `DB`, `TMPDIR`, `CUDA`, `PAID`, `BLOCKED_USERS`, `BLOCKED_DOMAINS`, `PRY_BEFORE_CONVERT`, `DEBUG`, `SKIP_TL_BOT`, `TDLIB_PROCESS_UNREAD`.
 - **TDLIB_PROCESS_UNREAD**: Set to '1' to enable processing of unread messages on startup.
 - Validate and coerce ENV values near use sites; keep defaults conservative; feature-gate risky paths.
 
@@ -97,7 +97,6 @@ These rules guide any AI-assisted edits in this project. They encode the repo’
 - Burn path must use translated VTT/ASS and set `language`/`title` metadata.
 - For `onlysrt`, strip per-word tags and ensure the final SRT is translated to `opts.lang`.
 - **Audiobook translation**: Translate each paragraph individually when `opts.lang` differs from source.
-- Keep logic DRY via a central helper (e.g., `maybe_translate_vtt`).
 
 ### Git workflow
 - Make small, focused commits with precise messages.
@@ -123,5 +122,4 @@ These rules guide any AI-assisted edits in this project. They encode the repo’
 - Periodically review recent commits; remove stale guidance and update rules to match current code.
 - Validate changes against the codebase before editing; prefer high-level APIs over low-level calls.
 - Keep bullets short, DRY, and ≤120 cols with 2-space indentation.
-- Use focused commits prefixed with `rules:` when updating this file.
 

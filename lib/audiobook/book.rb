@@ -177,6 +177,22 @@ module Audiobook
       # Discover paragraphs across all pages (handles cross-page paragraphs)
       items_with_pages = Paragraph.discover_from_lines(lines)
 
+      # Pre-compute body font per page as the most frequent paragraph font size
+      body_font_by_page = Hash.new { |h, k| h[k] = nil }
+      font_counts_by_page = Hash.new { |h, k| h[k] = Hash.new(0) }
+      items_with_pages.each do |entry|
+        item = entry[:item]
+        next unless item.is_a?(Paragraph)
+        fs = entry[:font_size]
+        next unless fs
+        # round to 0.1 to merge tiny variations
+        font_counts_by_page[entry[:page]][(fs.to_f * 10).round / 10.0] += 1
+      end
+      font_counts_by_page.each do |page, counts|
+        mode_pair = counts.max_by { |_, c| c }
+        body_font_by_page[page] = mode_pair&.first
+      end
+
       # Attach inline reference markers and collect footnote paragraphs
       # Strategy:
         # - Detect numeric-only paragraphs as reference markers (e.g., "5") on a page
@@ -189,12 +205,11 @@ module Audiobook
       pending_refs = Hash.new { |h, k| h[k] = [] }
       last_ref_by_page = {}
       last_para_by_page = {}
-      body_font_by_page = {}
 
       marker_id_for = lambda do |item|
         extract_id = lambda do |raw|
           text = raw.to_s.strip
-          match = text.match(/^(\d+)(?:[\)\.\]]+)?$/)
+          match = text.match(/^(\d+)[\)\.\]]*$/)
           match && match[1]
         end
 
@@ -216,7 +231,7 @@ module Audiobook
         item_font = entry[:font_size]
 
         if (ref_id = marker_id_for.call(item))
-          if ref_map[page_num].key?(ref_id) && body_font_by_page[page_num] && item_font && item_font < body_font_by_page[page_num] - 0.5
+          if ref_map[page_num].key?(ref_id) && body_font_by_page[page_num] && item_font && item_font < body_font_by_page[page_num].to_f - 1.0
             next
           end
           ref = ref_map[page_num][ref_id] ||= Reference.new(ref_id)
@@ -229,14 +244,10 @@ module Audiobook
 
           pending_refs[page_num] << { ref: ref, min_idx: processed.size }
           last_ref_by_page[page_num] = ref
-          body_font_by_page[page_num] ||= item_font if item_font
           next
         end
 
         last_para_by_page[page_num] = item if item.is_a?(Paragraph)
-        if body_font_by_page[page_num].nil? && item.is_a?(Paragraph) && item_font
-          body_font_by_page[page_num] = item_font
-        end
         processed << entry
       end
 
@@ -249,31 +260,43 @@ module Audiobook
         if item.is_a?(Paragraph) && item.sentences.any?
           first_text = item.sentences.first.text
           leading_match = first_text.match(/^(\d+)[\)\.]?\s+(.*)$/)
-          if leading_match && (ref = ref_map[page_num][leading_match[1]])
-            if (entry_info = queue.find { |info| info[:ref].equal?(ref) })
-              entry_info[:min_idx] = idx + 1
+          if leading_match
+            lead_id = leading_match[1]
+            ref = ref_map[page_num][lead_id]
+            unless ref
+              ref = Reference.new(lead_id)
+              if (prev_para = last_para_by_page[page_num]) && prev_para.sentences.any?
+                last_sentence = prev_para.sentences.last
+                ref = last_sentence.add_reference(ref) || ref
+              end
+              ref_map[page_num][lead_id] = ref
             end
-            # Strip the leading number from the first sentence
-            item.sentences.first.instance_variable_set(:@text, leading_match[2])
-            ref.add_sentences(item.sentences)
-            pending_refs[page_num].reject! { |info| info[:ref].equal?(ref) && info[:min_idx] <= idx }
-            last_ref_by_page[page_num] = ref
-            next # remove this paragraph from page items
+            if ref
+              if (entry_info = queue.find { |info| info[:ref].equal?(ref) })
+                entry_info[:min_idx] = idx + 1
+              end
+              item.sentences.first.instance_variable_set(:@text, leading_match[2])
+              ref.add_sentences(item.sentences)
+              pending_refs[page_num].reject! { |info| info[:ref].equal?(ref) && info[:min_idx] <= idx }
+              last_ref_by_page[page_num] = ref
+              next
+            end
           elsif (info = queue.find { |data| data[:min_idx] <= idx })
             body_font = body_font_by_page[page_num]
             line_font = entry[:font_size]
-            if body_font && line_font && line_font < body_font - 0.5
+            if body_font && line_font && line_font < body_font.to_f - 1.0
               ref = info[:ref]
               info[:min_idx] = idx + 1
               ref.add_sentences(item.sentences)
               last_ref_by_page[page_num] = ref
+              pending_refs[page_num].delete(info)
               next
             end
           else
             ref = last_ref_by_page[page_num]
             body_font = body_font_by_page[page_num]
             line_font = entry[:font_size]
-            if ref && body_font && line_font && line_font < body_font - 0.5
+            if ref && (queue.nil? || queue.empty?) && body_font && line_font && line_font < body_font.to_f - 1.0
               ref.add_sentences(item.sentences)
               next
             end
@@ -281,7 +304,33 @@ module Audiobook
         end
         items_with_pages << entry
       end
-      
+
+      # Merge paragraphs split across pages when it looks like a continuation
+      merged_items = []
+      items_with_pages.each do |entry|
+        item = entry[:item]
+        if item.is_a?(Paragraph) && item.sentences.any? && merged_items.any?
+          prev_entry = merged_items[-1]
+          prev_item = prev_entry[:item]
+          if prev_item.is_a?(Paragraph)
+            page_changed = entry[:page] > prev_entry[:page]
+            font_close = entry[:font_size] && prev_entry[:font_size] ? (entry[:font_size] - prev_entry[:font_size]).abs < 0.6 : true
+            if page_changed && font_close
+              last_text = prev_item.sentences.last&.text.to_s.strip
+              first_text = item.sentences.first&.text.to_s.strip
+              looks_unfinished = last_text !~ /[.!?…]"?\)?$/
+              looks_continuation = first_text.match?(/\A[[:lower:]]/)
+              if (!last_text.empty? && looks_unfinished) || (!first_text.empty? && looks_continuation)
+                prev_item.sentences.concat(item.sentences)
+                next
+              end
+            end
+          end
+        end
+        merged_items << entry
+      end
+      items_with_pages = merged_items
+ 
       # Group items by their page number
       pages_hash = Hash.new { |h, k| h[k] = [] }
       items_with_pages.each do |item_data|
