@@ -26,8 +26,8 @@ module Audiobook
       words = @text.split(/\s+/)
       return false if words.empty? || words.size > 10
       
-      # Very short (1-3 words) without sentence-ending punctuation
-      return true if words.size <= 3 && @text !~ /[.!?]$/
+      # Very short (1-3 words) without sentence-ending punctuation, must start with capital
+      return true if words.size <= 3 && starts_with_capital? && @text !~ /[.!?]$/
       
       # Mostly uppercase (>60% of words)
       upper_ratio = words.count { |w| w == w.upcase && w.length > 1 }.fdiv(words.size)
