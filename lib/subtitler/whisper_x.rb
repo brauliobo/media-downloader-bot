@@ -1,7 +1,9 @@
 require 'net/http/post/multipart'
 require 'tempfile'
-require_relative '../zipper'
 require 'iso-639'
+require 'active_support/core_ext/module/attribute_accessors'
+
+require_relative '../zipper'
 
 class Subtitler
   module WhisperX

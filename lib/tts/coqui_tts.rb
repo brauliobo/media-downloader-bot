@@ -2,6 +2,8 @@ require 'mechanize'
 require 'tempfile'
 require 'fileutils'
 require 'concurrent'
+require 'active_support/core_ext/module/attribute_accessors'
+
 require_relative '../zipper'
 
 class TTS
