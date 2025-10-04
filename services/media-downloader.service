@@ -25,7 +25,7 @@ ExecStartPre=/usr/bin/curl ifconfig.co
 
 WorkingDirectory=/srv/media-downloader-bot
 ReadWritePaths=/srv/media-downloader-bot
-ExecStart=/usr/local/rvm/wrappers/ruby-3.3.6/bundle exec bin/bot
+ExecStart=/usr/local/rvm/wrappers/ruby-3.4.4/bundle exec bin/bot
 
 Environment=BUNDLE_DEPLOYMENT=true
 Environment=BUNDLE_FROZEN=false
