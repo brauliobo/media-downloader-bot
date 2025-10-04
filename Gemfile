@@ -35,7 +35,7 @@ gem 'nokogiri'
 
 gem 'srt'
 
-unless ENV['SKIP_TD_BOT']
+if ENV['TD_BOT']
   gem 'tdlib-schema', source(github: 'brauliobo/tdlib-schema', dir: 'tdlib-schema')
   gem 'tdlib-ruby',   source(github: 'brauliobo/tdlib-ruby',   dir: 'tdlib-ruby')
 end
