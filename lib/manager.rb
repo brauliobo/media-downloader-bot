@@ -29,6 +29,7 @@ require_relative 'tagger'
 require_relative 'translator'
 require_relative 'msg_helpers'
 require_relative 'ocr'
+require_relative 'audiobook'
 
 require_relative 'bot/status'
 require_relative 'bot/url_shortner'
@@ -88,7 +89,7 @@ class Manager
   end
 
   def start
-    daemon('tdlib'){ start_td_bot } unless ENV['SKIP_TD_BOT']
+    daemon('tdlib'){ start_td_bot } if ENV['TD_BOT']
     daemon('tlbot'){ start_tl_bot } unless ENV['SKIP_TL_BOT']
     sleep 1.year while true
   end
