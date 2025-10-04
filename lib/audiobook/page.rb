@@ -90,7 +90,11 @@ module Audiobook
         when Heading
           [item]  # Heading is a Sentence
         when Paragraph, Image
-          item.sentences
+          # Paragraph sentences plus any reference sentences attached to them
+          item.sentences.flat_map do |s|
+            refs = (s.references || []).flat_map { |r| r.sentences }
+            [s, *refs]
+          end
         else
           []
         end
