@@ -11,7 +11,7 @@ WorkingDirectory=/srv/coqui-ai-TTS
 
 ExecStart=/srv/coqui-ai-TTS/venv/bin/python3 /srv/coqui-ai-TTS/http_server.py
 
-Environment=CUDA_VISIBLE_DEVICES=1
+#Environment=CUDA_VISIBLE_DEVICES=1
 
 RestartSec=30
 
