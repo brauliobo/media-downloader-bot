@@ -42,10 +42,11 @@ module Audiobook
     protected
 
     def synthesize_audio(wav_path, lang)
-      if text.empty?
+      spoken = text.sub(/\s*[\p{P}]+\z/u, '')
+      if spoken.empty?
         super # generate silence
       else
-        TTS.synthesize(text: text, lang: lang, out_path: wav_path)
+        TTS.synthesize(text: spoken, lang: lang, out_path: wav_path)
       end
     end
 
