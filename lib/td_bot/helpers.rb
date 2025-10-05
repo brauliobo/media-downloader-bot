@@ -112,23 +112,24 @@ class TDBot
     def send_message(msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **params)
       t = type.to_s
       
-      throttle! msg.chat.id, :high
-      
-      # Add reply-to information if original message exists
-      reply_to = nil
-      if msg.respond_to?(:id)
-        reply_to = msg.id
-      elsif msg.respond_to?(:message_id)
-        reply_to = msg.message_id
-      end
-      
-      dlog "[TD_SEND_MESSAGE] reply_to=#{reply_to} msg.class=#{msg.class}"
-      
-      result = nil
-      Manager.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0) do |attempt|
-        reply_to = nil if attempt == 1
+      ret = td_with_rate_limit('send_message') do
+        throttle! msg.chat.id, :high
+
+        # Add reply-to information if original message exists
+        reply_to = nil
+        if msg.respond_to?(:id)
+          reply_to = msg.id
+        elsif msg.respond_to?(:message_id)
+          reply_to = msg.message_id
+        end
+        dlog "[TD_SEND_MESSAGE] reply_to=#{reply_to} msg.class=#{msg.class}"
+
+        result = nil
         if t.in? %w[message text]
-          result = message_sender.send_text(msg.chat.id, text, parse_mode: parse_mode, reply_to: reply_to)
+          Manager.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0) do |attempt|
+            reply_to = nil if attempt == 1
+            result = message_sender.send_text(msg.chat.id, text, parse_mode: parse_mode, reply_to: reply_to)
+          end
         elsif params[:audio]
           result = message_sender.send_audio(msg.chat.id, text, reply_to: reply_to, **params)
         elsif params[:video]
@@ -140,33 +141,18 @@ class TDBot
           dlog "[TD_SEND] type=#{type} chat=#{msg.chat.id} text=#{preview}"
           result = { message_id: (Time.now.to_f * 1000).to_i, text: text }
         end
-        mid = (result.is_a?(Hash) ? result[:message_id] : result.message_id) rescue 0
-        raise StandardError, 'send_failed' if mid.to_i <= 0
+        SymMash.new(result)
       end
-      
-      SymMash.new(result)
-    rescue TD::Error => e
-      if e.message.include?('429') || e.message.include?('Too Many Requests')
-        ra = td_retry_after_seconds(e); dlog "[RATE_LIMIT] TDLib sleeping #{ra}s (send_message)"; sleep ra; retry
-      end
-      dlog "[TD_SEND_ERROR] #{e.class}: #{e.message}"; SymMash.new(message_id: 0, text: text)
-    rescue => e
-      dlog "[TD_SEND_ERROR] #{e.class}: #{e.message}"
-      SymMash.new(message_id: 0, text: text)
+      ret || SymMash.new(message_id: 0, text: text)
     end
 
     def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', **params)
-      return if throttle!(msg.chat.id, :low, discard: true) == :discard
-      Manager.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0) do |_attempt|
-        message_sender.edit_message(msg.chat.id, id, text, parse_mode: parse_mode)
+      td_with_rate_limit('edit_message') do
+        return if throttle!(msg.chat.id, :low, discard: true, message_id: id) == :discard
+        Manager.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0) do |_attempt|
+          message_sender.edit_message(msg.chat.id, id, text, parse_mode: parse_mode)
+        end
       end
-    rescue TD::Error => e
-      if e.message.include?('429') || e.message.include?('Too Many Requests')
-        ra = td_retry_after_seconds(e); dlog "[RATE_LIMIT] TDLib sleeping #{ra}s (edit_message)"; sleep ra; retry
-      end
-      dlog "[TD_EDIT_ERROR] #{e.class}: #{e.message}"
-    rescue => e
-      dlog "[TD_EDIT_ERROR] #{e.class}: #{e.message}"
     end
 
     def delete_message(msg, id, wait: nil)
@@ -185,6 +171,23 @@ class TDBot
     # Legacy compatibility method for direct editing - use edit_message instead
     def edit(msg, text)
       edit_message(msg, msg.id, text: text)
+    end
+
+    private
+
+    def td_with_rate_limit(tag)
+      begin
+        return yield
+      rescue TD::Error => e
+        if e.message.include?('429') || e.message.include?('Too Many Requests')
+          ra = td_retry_after_seconds(e); dlog "[RATE_LIMIT] TDLib sleeping #{ra}s (#{tag})"; sleep ra; retry
+        end
+        dlog "[TD_ERROR] #{e.class}: #{e.message}"
+        nil
+      rescue => e
+        dlog "[TD_ERROR] #{e.class}: #{e.message}"
+        nil
+      end
     end
   end
 end
