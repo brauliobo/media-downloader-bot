@@ -30,6 +30,28 @@ RSpec.describe 'Page paragraph cross-page merge' do
     last_para_p3 = page3.items.grep(Audiobook::Paragraph).last
     expect(paragraph_text(last_para_p3)).to eq(PAGE_3_TO_4_PARAGRAPH)
   end
+
+  it 'does not create headings from numeric markers and attaches refs to correct sentences' do
+    book = Audiobook::Book.from_input(fixture_path('page-paragraphs-merge.pdf'))
+    page1 = book.pages[0]
+    # Ensure there is no heading like "1 2"
+    expect(page1.items.grep(Audiobook::Heading).map { |h| h.text.to_s }).not_to include('1 2')
+
+    # Find the paragraph around Chrétien line and ensure references include 1,2,3 and are not nested
+    para = page1.items.grep(Audiobook::Paragraph).find do |p|
+      p.sentences.any? { |s| s.text.include?('Wolfram von Eschenbach') }
+    end
+    expect(para).not_to be_nil
+    # The sentence ending with "Chrétien de Troyes." should carry ref 1
+    troyes_sent = para.sentences.find { |s| s.text.strip.end_with?('Chrétien de Troyes.') }
+    expect(troyes_sent).not_to be_nil
+    expect(Array(troyes_sent.references).map(&:id)).to include('1')
+
+    # The sentence containing Eschenbach should carry refs 2 and 3
+    esch_sent = para.sentences.find { |s| s.text.include?('Eschenbach') }
+    expect(esch_sent).not_to be_nil
+    expect(Array(esch_sent.references).map(&:id)).to include('2', '3')
+  end
 end
 
 

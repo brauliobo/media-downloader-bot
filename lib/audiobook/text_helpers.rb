@@ -21,10 +21,27 @@ module Audiobook
       normalize_text(raw)
     end
 
+    # Returns true if a text begins with one or more numeric reference markers
+    # Examples: "1", "1)", "1 2]", "1 2 3."
+    def self.starts_with_ref_markers?(text)
+      text.to_s.strip.match?(/\A\d+[)\.\]]*(?:\s+\d+[)\.\]]*)*/)
+    end
+
+    # Remove inline numeric markers like "Troyes.1", returns [clean_text, ids]
+    def self.strip_inline_markers(text)
+      ids = []
+      clean = text.to_s.gsub(/([\p{L}\)\]\.,;:\"])(\s*)(\d{1,3})(?=(\s|$))/u) do
+        ids << $3
+        "#{$1}#{$2}"
+      end
+      [clean, ids]
+    end
+
     # Split a paragraph into sentences with a simple, diacritic-aware rule
     def self.split_sentences(text)
       Array(text).join
-        .gsub(/([.!?…]"?)\s+(?=\p{Lu})/u, "\\1\n")
+        # Allow footnote markers (e.g., ".1 ") between punctuation and the next sentence
+        .gsub(/([.!?…]"?)(?:\s*\d{1,3})?\s+(?=\p{Lu})/u, "\\1\n")
         .split(/\n+/)
         .map { |s| s.strip }
         .reject(&:empty?)
