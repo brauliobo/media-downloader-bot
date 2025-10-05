@@ -14,7 +14,7 @@ class TTS
     SYNTH_PATH  = '/synthesize'.freeze
     MAX_TOKENS  = 400
     CHUNK_CHARS = 500
-    CONCURRENCY = ENV['COQUITTS_CONCURRENCY']&.to_i || 2
+    CONCURRENCY = ENV['COQUITTS_CONCURRENCY']&.to_i || 6
 
     mattr_accessor :semaphore
     self.semaphore = Concurrent::Semaphore.new(CONCURRENCY)
