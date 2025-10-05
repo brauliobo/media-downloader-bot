@@ -8,10 +8,12 @@ module Bot
     included do
       class_attribute :rate_limiter_global, :rate_limiter_chats
       class_attribute :rl_mutex, :send_waiting_global, :send_waiting_by_chat
+      class_attribute :msg_edit_limiter_by_message
 
       self.rl_mutex = Mutex.new
       self.send_waiting_global = 0
       self.send_waiting_by_chat = Hash.new(0)
+      self.msg_edit_limiter_by_message = Hash.new { |h, k| h[k] = Limiter::RateQueue.new((ENV['STATUS_EDITS_PER_SEC'] || '1').to_i, interval: 1) }
     end
 
     class_methods do
@@ -21,7 +23,7 @@ module Bot
       end
     end
 
-    def throttle!(chat_id, priority = :high, discard: false)
+    def throttle!(chat_id, priority = :high, discard: false, message_id: nil)
       if priority == :high
         rl_mutex.synchronize { self.send_waiting_global += 1; self.send_waiting_by_chat[chat_id] += 1 }
         begin
@@ -30,6 +32,10 @@ module Bot
           rl_mutex.synchronize { self.send_waiting_global -= 1; self.send_waiting_by_chat[chat_id] -= 1 }
         end
       else
+        # Per-message edit limiter: default 1 edit/sec
+        if message_id
+          begin msg_edit_limiter_by_message[message_id].shift rescue nil end
+        end
         # If allowed to discard, drop low-priority work when queues are busy
         if discard && rl_mutex.synchronize { send_waiting_global.positive? || send_waiting_by_chat[chat_id].positive? }
           return :discard
