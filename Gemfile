@@ -13,6 +13,7 @@ gem 'dotenv'
 gem 'hashie'
 gem 'chronic'
 gem 'chronic_duration'
+gem 'retriable'
 gem 'ruby-limiter', require: 'limiter'
 
 gem 'iso-639'

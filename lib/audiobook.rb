@@ -47,24 +47,24 @@ module Audiobook
 
       @stl&.update "Generating audio"
       Dir.mktmpdir do |dir|
-        # Count total paragraphs across all pages
-        total_paragraphs = pages.sum { |page| page.items.count { |i| i.is_a?(Audiobook::Paragraph) } }
-        
-        # Process pages sequentially to maintain status update order
-        wavs = []
-        para_offset = 0
+        # Precompute per-page paragraph offsets to keep numbering while parallelizing pages
+        para_counts  = pages.map { |p| p.items.count { |i| i.is_a?(Audiobook::Paragraph) } }
+        total_paras  = para_counts.sum
+        para_offsets = []
+        run = 0
+        para_counts.each { |c| para_offsets << run; run += c }
+
+        wavs = Array.new(pages.size)
         total_pages = pages.size
-        
-        pages.each.with_index do |page, idx|
-          wav = page.to_wav(dir, format('%04d', idx + 1), 
-                            lang: @lang, stl: @stl,
-                            para_context: { current: para_offset, total: total_paragraphs },
-                            page_context: { current: idx + 1, total: total_pages },
-                            book_metadata: @book.metadata)
-          wavs << wav if wav
-          
-          # Update offset for next page
-          para_offset += page.items.count { |i| i.is_a?(Audiobook::Paragraph) }
+
+        pages.each.with_index.peach do |page, idx|
+          wavs[idx] = page.to_wav(
+            dir, format('%04d', idx + 1),
+            lang: @lang, stl: @stl,
+            para_context: { current: para_offsets[idx], total: total_paras },
+            page_context: { current: idx + 1, total: total_pages },
+            book_metadata: @book.metadata
+          )
         end
 
         # Remove nil entries (empty pages)
