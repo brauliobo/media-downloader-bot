@@ -14,6 +14,7 @@ require 'rack/mime'
 require 'mechanize'
 require 'roda'
 require 'drb/drb'
+require 'retriable'
 
 require 'srt'
 require 'iso-639'
@@ -56,7 +57,7 @@ class Manager
   end
 
   def self.http
-    @http ||= Mechanize.new.tap do |a|
+    Thread.current[:manager_http] ||= Mechanize.new.tap do |a|
       t = ENV['HTTP_TIMEOUT']&.to_i || 30.minutes
       a.open_timeout = t; a.read_timeout = t
     end
@@ -92,6 +93,29 @@ class Manager
     daemon('tdlib'){ start_td_bot } if ENV['TD_BOT']
     daemon('tlbot'){ start_tl_bot } unless ENV['SKIP_TL_BOT']
     sleep 1.year while true
+  end
+
+  # Simple retry helper with Telegram-aware sleep.
+  # Yields the current attempt index (0 for first call) to the block.
+  # Customization via kwargs: :tries, :base_interval, :multiplier, :on, :max_interval,
+  # :randomization_factor, :retry_after_extractor (-> ex { seconds.to_f }), :on_retry (hook).
+  def self.retriable(**opts)
+    defaults = { tries: 3, base_interval: 0.3, multiplier: 2.0, on: [StandardError] }
+    user_on_retry = opts.delete(:on_retry)
+    retry_after_extractor = opts.delete(:retry_after_extractor) || ->(ex){
+      m = ex.message.to_s[/retry after (\d+(?:\.\d+)?)/, 1] rescue nil
+      m ? m.to_f : 0.0
+    }
+
+    attempt = 0
+    Retriable.retriable(**defaults.merge(opts), on_retry: ->(ex, try, elapsed, next_interval) do
+      ra = begin retry_after_extractor.call(ex).to_f rescue 0 end
+      sleep ra if ra > 0
+      attempt = try + 1
+      user_on_retry&.call(ex, try, elapsed, next_interval)
+    end) do
+      yield(attempt)
+    end
   end
 
   START_MSG = <<-EOS
