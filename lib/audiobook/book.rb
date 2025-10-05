@@ -203,22 +203,46 @@ module Audiobook
         #   attach them to the last reference on that page (supports multi-paragraph notes)
       ref_map = Hash.new { |h, k| h[k] = {} } # { page => { '5' => Reference } }
       pending_refs = Hash.new { |h, k| h[k] = [] }
+      # For markers that appear between lines inside a paragraph (e.g., after a word),
+      # when the previous paragraph's last sentence doesn't end with punctuation yet,
+      # defer attaching and bind to the first sentence of the next paragraph on the same page.
+      attach_to_next = Hash.new { |h, k| h[k] = [] }
       last_ref_by_page = {}
       last_para_by_page = {}
 
+      # Pre-pass: detect inline markers appended to words/punctuation, e.g., "Troyes.1" or "Eschenbach2"
+      # Remove the numeric token from the sentence and attach the reference to this sentence
+      items_with_pages.each do |entry|
+        item = entry[:item]
+        next unless item.is_a?(Paragraph)
+        page_num = entry[:page]
+        item.sentences.each do |sent|
+          new_text, ids = Audiobook::TextHelpers.strip_inline_markers(sent.text)
+          if ids.any?
+            sent.instance_variable_set(:@text, new_text)
+            ids.each do |id|
+              ref = ref_map[page_num][id] ||= Reference.new(id)
+              sent.add_reference(ref)
+              last_ref_by_page[page_num] = ref
+            end
+          end
+        end
+      end
+
       marker_id_for = lambda do |item|
-        extract_id = lambda do |raw|
+        extract_ids = lambda do |raw|
           text = raw.to_s.strip
-          match = text.match(/^(\d+)[\)\.\]]*$/)
-          match && match[1]
+          # Accept sequences like "1" or "1 2" or "1,2" as multiple markers
+          tokens = text.scan(/\d+/)
+          tokens
         end
 
         case item
         when Paragraph
           next unless item.sentences.size == 1
-          extract_id.call(item.sentences.first.text)
+          extract_ids.call(item.sentences.first.text)
         when Heading
-          extract_id.call(item.text)
+          extract_ids.call(item.text)
         end
       end
 
@@ -230,24 +254,55 @@ module Audiobook
 
         item_font = entry[:font_size]
 
-        if (ref_id = marker_id_for.call(item))
-          if ref_map[page_num].key?(ref_id) && body_font_by_page[page_num] && item_font && item_font < body_font_by_page[page_num].to_f - 1.0
-            next
-          end
-          ref = ref_map[page_num][ref_id] ||= Reference.new(ref_id)
+        if (ref_ids = marker_id_for.call(item)) && !ref_ids.empty?
+          # Attach each marker id to the last sentence of the previous paragraph
+          ref_ids.each do |ref_id|
+            if ref_map[page_num].key?(ref_id) && body_font_by_page[page_num] && item_font && item_font < body_font_by_page[page_num].to_f - 1.0
+              next
+            end
+            ref = ref_map[page_num][ref_id] ||= Reference.new(ref_id)
 
-          if (prev_para = last_para_by_page[page_num]) && prev_para.sentences.any?
-            last_sentence = prev_para.sentences.last
-            ref = last_sentence.add_reference(ref) || ref
-            ref_map[page_num][ref_id] = ref
-          end
+            if (prev_para = last_para_by_page[page_num]) && prev_para.sentences.any?
+              last_sentence = prev_para.sentences.last
+              if last_sentence.text.to_s.strip.match?(/[.!?…]"?\)?$/)
+                ref = last_sentence.add_reference(ref) || ref
+                ref_map[page_num][ref_id] = ref
+                last_ref_by_page[page_num] = ref
+              else
+                attach_to_next[page_num] << ref
+              end
+            else
+              attach_to_next[page_num] << ref
+            end
 
-          pending_refs[page_num] << { ref: ref, min_idx: processed.size }
-          last_ref_by_page[page_num] = ref
+            pending_refs[page_num] << { ref: ref, min_idx: processed.size }
+          end
           next
         end
 
-        last_para_by_page[page_num] = item if item.is_a?(Paragraph)
+        if item.is_a?(Paragraph)
+          # If there were deferred refs waiting for the next paragraph, attach/distribute now
+          if attach_to_next[page_num].any?
+            refs = attach_to_next[page_num]
+            sentences = item.sentences
+            if sentences.any?
+              # Attach the first id to the first sentence
+              sentences.first.add_reference(refs.shift)
+              # Distribute the rest across subsequent sentences
+              sentences.drop(1).each do |s|
+                break if refs.empty?
+                s.add_reference(refs.shift)
+              end
+              # If still remaining, attach to the last sentence
+              if refs.any?
+                refs.each { |r| sentences.last.add_reference(r) }
+              end
+              last_ref_by_page[page_num] = sentences.last.references&.last || last_ref_by_page[page_num]
+            end
+            attach_to_next[page_num].clear
+          end
+          last_para_by_page[page_num] = item
+        end
         processed << entry
       end
 
@@ -259,6 +314,7 @@ module Audiobook
         queue = pending_refs[page_num]
         if item.is_a?(Paragraph) && item.sentences.any?
           first_text = item.sentences.first.text
+          # If paragraph starts with multiple markers like "1 2 Texto...", drop the first id and keep text
           leading_match = first_text.match(/^(\d+)[\)\.]?\s+(.*)$/)
           if leading_match
             lead_id = leading_match[1]
@@ -305,7 +361,7 @@ module Audiobook
         items_with_pages << entry
       end
 
-      # Merge paragraphs split across pages when it looks like a continuation
+      # Merge paragraphs split across pages or within a page when it looks like a continuation
       merged_items = []
       items_with_pages.each do |entry|
         item = entry[:item]
@@ -315,13 +371,28 @@ module Audiobook
           if prev_item.is_a?(Paragraph)
             page_changed = entry[:page] > prev_entry[:page]
             font_close = entry[:font_size] && prev_entry[:font_size] ? (entry[:font_size] - prev_entry[:font_size]).abs < 0.6 : true
-            if page_changed && font_close
+            if font_close
               last_text = prev_item.sentences.last&.text.to_s.strip
               first_text = item.sentences.first&.text.to_s.strip
               looks_unfinished = last_text !~ /[.!?…]"?\)?$/
               looks_continuation = first_text.match?(/\A[[:lower:]]/)
               if (!last_text.empty? && looks_unfinished) || (!first_text.empty? && looks_continuation)
-                prev_item.sentences.concat(item.sentences)
+                if looks_unfinished && !first_text.empty?
+                  # Join first sentence text and references into the previous last sentence
+                  prev_last = prev_item.sentences.last
+                  next_first = item.sentences.first
+                  if prev_last && next_first
+                    merged_text = [prev_last.text, next_first.text].join(' ').gsub(/\s+/, ' ').strip
+                    prev_last.instance_variable_set(:@text, merged_text)
+                    Array(next_first.references).each { |r| prev_last.add_reference(r) }
+                    # append remaining sentences from the next paragraph
+                    prev_item.sentences.concat(item.sentences.drop(1))
+                  else
+                    prev_item.sentences.concat(item.sentences)
+                  end
+                else
+                  prev_item.sentences.concat(item.sentences)
+                end
                 next
               end
             end

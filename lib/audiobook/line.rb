@@ -23,6 +23,9 @@ module Audiobook
 
     # Check if this line looks like a heading based on text patterns
     def heading_like?
+      # Never treat pure numeric (or non-letter) lines as headings
+      return false if @text.strip.match?(/\A[^\p{L}]*\z/u)
+
       words = @text.split(/\s+/)
       return false if words.empty? || words.size > 10
       

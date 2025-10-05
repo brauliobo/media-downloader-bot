@@ -101,11 +101,14 @@ module Audiobook
           
           # default break rules
           should_break = is_only_numbers || font_changed || (prev_line.ends_with_punctuation? && line.starts_with_capital?)
-          
-          # Only break on short+capital if NOT a multi-line heading
-          if !both_heading_like && prev_line.word_count <= 10 && !prev_line.ends_with_punctuation? && line.starts_with_capital?
-            should_break = true
+
+          # If the new line begins with inline reference marker(s) like "1 " or "1 2 ",
+          # it is a continuation of the same paragraph, not a new one.
+          if should_break
+            should_break = false if Audiobook::TextHelpers.starts_with_ref_markers?(line.text)
           end
+          
+          # Do not force a break on short+capital lines; this often splits normal paragraphs (e.g., proper names)
           
           # Override: if page changed but no punctuation and no font change, continue the paragraph
           if page_changed && !prev_line.ends_with_punctuation? && !font_changed && !is_only_numbers
@@ -183,7 +186,10 @@ module Audiobook
         
         # Detect heading vs paragraph
         first_line = group.first
-        item = if sentences.size == 1 && (first_line.heading_like? || heading_like?(sentences.first.text))
+        # Never create a heading from numeric-only or non-letter tokens (e.g., "1", "1 2")
+        numeric_only = sentences.size == 1 && sentences.first.text.strip.match?(/\A[^\p{L}]*\z/u)
+
+        item = if !numeric_only && sentences.size == 1 && (first_line.heading_like? || heading_like?(sentences.first.text))
           heading_sentence = sentences.first
           heading_sentence.font_size = first_line.font_size if heading_sentence.respond_to?(:font_size=)
           Heading.new(heading_sentence)
@@ -201,6 +207,8 @@ module Audiobook
 
     def self.heading_like?(text)
       return false unless text
+      # Never consider numeric-only or non-letter tokens as a heading
+      return false if text.strip.match?(/\A[^\p{L}]*\z/u)
       words = text.split(/\s+/)
       return false if words.empty? || words.size > 10
       
