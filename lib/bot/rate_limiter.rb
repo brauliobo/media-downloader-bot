@@ -21,7 +21,7 @@ module Bot
       end
     end
 
-    def throttle!(chat_id, priority = :high)
+    def throttle!(chat_id, priority = :high, discard: false)
       if priority == :high
         rl_mutex.synchronize { self.send_waiting_global += 1; self.send_waiting_by_chat[chat_id] += 1 }
         begin
@@ -30,6 +30,10 @@ module Bot
           rl_mutex.synchronize { self.send_waiting_global -= 1; self.send_waiting_by_chat[chat_id] -= 1 }
         end
       else
+        # If allowed to discard, drop low-priority work when queues are busy
+        if discard && rl_mutex.synchronize { send_waiting_global.positive? || send_waiting_by_chat[chat_id].positive? }
+          return :discard
+        end
         sleep 0.02 while rl_mutex.synchronize { send_waiting_global.positive? || send_waiting_by_chat[chat_id].positive? }
         rate_limiter_chats[chat_id].shift; rate_limiter_global.shift
       end

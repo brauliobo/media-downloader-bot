@@ -29,7 +29,7 @@ class TDBot
       client.setup_authentication_handlers
 
       # Rate limiters
-      rate_limits global: 25, per_chat: 1
+      rate_limits global: 20, per_chat: 1
     end
     
     def td_retry_after_seconds(e)
@@ -156,7 +156,7 @@ class TDBot
     end
 
     def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', **params)
-      throttle! msg.chat.id, :low
+      return if throttle!(msg.chat.id, :low, discard: true) == :discard
       Manager.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0) do |_attempt|
         message_sender.edit_message(msg.chat.id, id, text, parse_mode: parse_mode)
       end
