@@ -38,5 +38,6 @@ class TTS
       File.binwrite(out_path, res.body)
       out_path
     end
+
   end
-end 
+end

@@ -15,6 +15,12 @@
 		{
 			"name": "coqui-ai-TTS",
 			"path": "../coqui-ai-TTS"
+		},
+		{
+			"path": "../chatterbox"
+		},
+		{
+			"path": "../OuteTTS"
 		}
 	],
 	"settings": {}

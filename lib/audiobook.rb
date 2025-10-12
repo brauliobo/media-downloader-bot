@@ -104,8 +104,12 @@ module Audiobook
 
     def encode_audio_file(input_wav, out_audio)
       zip_opts = SymMash.new(@opts || {})
-      zip_opts[:format] = Zipper.choose_format(Zipper::Types.audio, zip_opts, nil)
-      Zipper.zip_audio(input_wav, out_audio, opts: zip_opts)
+      zip_opts.format  = Zipper::Types.audio.aac
+      zip_opts.bitrate = 32
+      # Ensure output filename matches selected format extension
+      ext = ".#{zip_opts.format.ext}"
+      target = out_audio.to_s.sub(/\.[^.]+\z/, ext)
+      Zipper.zip_audio(input_wav, target, opts: zip_opts)
     end
   end
 end

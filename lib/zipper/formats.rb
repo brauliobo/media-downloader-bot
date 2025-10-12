@@ -23,7 +23,7 @@ class Zipper
     AUDIO_ENC = SymMash.new(
       opus: {
         percent: 0.95,
-        encode:  '-ac 2 -c:a libopus -b:a %{abrate}k'.freeze,
+        encode:  '-ac 1 -ar 48000 -c:a libopus -b:a %{abrate}k'.freeze,
       },
       aac:  {
         percent: 0.98,
@@ -97,7 +97,7 @@ class Zipper
 
         opus: {
           ext:    :opus,
-          mime:   'audio/aac',
+          mime:   'audio/ogg',
           opts:   {bitrate: 96, percent: AUDIO_ENC.opus.percent},
           encode: AUDIO_ENC.opus.encode,
         },

@@ -157,10 +157,10 @@ class Manager
 
       vstrea = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
       thumb  = if bot.td_bot? then i.thumb else Faraday::UploadIO.new(i.thumb, 'image/jpeg') end if i.thumb
-      
+
       mime  = i.mime.presence || i.opts.format&.mime || 'application/octet-stream'
       fn_io = if bot.td_bot? then i.fn_out else Faraday::UploadIO.new(i.fn_out, mime) end
-      
+
       # Common send logic for both cases
       paid  = (ENV['PAID'] || msg.from.id.in?([6884159818])) && !is_doc
       type  = i.type

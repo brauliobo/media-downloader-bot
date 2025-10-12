@@ -1,8 +1,11 @@
 require_relative 'tts/piper'
 require_relative 'tts/coqui_tts'
+require_relative 'tts/outetts'
 
 class TTS
-  BACKEND_CLASS = const_get(ENV['TTS'] || 'CoquiTTS')
+  BACKEND = const_get(ENV['TTS'] || 'CoquiTTS')
 
-  extend BACKEND_CLASS
+  def self.synthesize(**args)
+    BACKEND.synthesize(**args)
+  end
 end
