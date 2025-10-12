@@ -97,17 +97,21 @@ class Zipper
   def self.prepend_silence! wav_path, seconds, dir: nil
     return wav_path if seconds.to_f <= 0
     dir ||= File.dirname(wav_path)
-    
+
     out = File.join(dir, "out_#{SecureRandom.hex(4)}.wav")
+    # Use adelay to insert leading silence while preserving format
+    info = Prober.for(wav_path)
+    a = info.streams.find { |s| s.codec_type == 'audio' }
+    ch = (a&.channels || 1).to_i
+    ms = (seconds.to_f * 1000).round
+    delays = Array.new(ch, ms).join('|')
     cmd = [
       'ffmpeg -y',
-      "-f lavfi -i anullsrc=channel_layout=mono:sample_rate=22050:duration=#{seconds.to_f}",
       '-i', Sh.escape(wav_path),
-      '-filter_complex "[0:a][1:a]concat=n=2:v=0:a=1[a]"',
-      '-map "[a]"',
+      "-af adelay=#{delays}",
       Sh.escape(out)
     ].join(' ')
-    
+
     Sh.run cmd
     FileUtils.mv out, wav_path, force: true
     wav_path
@@ -269,6 +273,8 @@ class Zipper
     acodec      = acodec_tmpl % {abrate: opts.bitrate}
 
     audio_post_opts = AUDIO_POST_OPTS % {metadata: metadata_args}
+
+    # Do not force channels; let encoder decide (previously caused artifacts)
 
     cmd_params = {
       infile:  Sh.escape(infile),
