@@ -29,8 +29,8 @@ module Audiobook
 
     return SymMash.new(yaml: yaml_path) if opts.onlyyml
 
-    Runner.new(book, stl, opts).process_to_audio(out_audio)
-    SymMash.new(yaml: yaml_path, audio: out_audio)
+    final_audio = Runner.new(book, stl, opts).process_to_audio(out_audio)
+    SymMash.new(yaml: yaml_path, audio: final_audio)
   end
 
   class Runner
@@ -46,6 +46,7 @@ module Audiobook
       return create_silent_audiobook(out_audio) if pages.empty?
 
       @stl&.update "Generating audio"
+      final_audio = nil
       Dir.mktmpdir do |dir|
         # Precompute per-page paragraph offsets to keep numbering while parallelizing pages
         para_counts  = pages.map { |p| p.items.count { |i| i.is_a?(Audiobook::Paragraph) } }
@@ -76,9 +77,10 @@ module Audiobook
         Zipper.concat_audio(wavs, combined_wav, stl: @stl)
 
         @stl&.update 'Encoding combined audio'
-        encode_audio_file(combined_wav, out_audio)
+        final_audio = encode_audio_file(combined_wav, out_audio)
         @stl&.update 'Audiobook ready'
       end
+      final_audio
     end
 
     private
@@ -86,12 +88,14 @@ module Audiobook
     def create_silent_audiobook(out_audio)
       @stl&.update 'No text found anywhere - creating silent audio file'
 
+      final_audio = nil
       Dir.mktmpdir do |dir|
         silent_wav = create_silent_wav(dir)
-        encode_audio_file(silent_wav, out_audio) if File.exist?(silent_wav)
+        final_audio = encode_audio_file(silent_wav, out_audio) if File.exist?(silent_wav)
       end
 
       @stl&.update 'Silent audiobook created (no text found)'
+      final_audio
     end
 
     def create_silent_wav(dir)
@@ -104,12 +108,20 @@ module Audiobook
 
     def encode_audio_file(input_wav, out_audio)
       zip_opts = SymMash.new(@opts || {})
-      zip_opts.format  = Zipper::Types.audio.aac
-      zip_opts.bitrate = 32
-      # Ensure output filename matches selected format extension
-      ext = ".#{zip_opts.format.ext}"
-      target = out_audio.to_s.sub(/\.[^.]+\z/, ext)
+      # Pick format based on requested extension; default to opus
+      requested_ext = File.extname(out_audio.to_s).downcase
+      case requested_ext
+      when '.m4a', '.aac'
+        zip_opts.format = Zipper::Types.audio.aac
+      when '.mp3'
+        zip_opts.format = Zipper::Types.audio.mp3
+      else
+        zip_opts.format = Zipper::Types.audio.opus
+      end
+      zip_opts.bitrate ||= 32
+      target = out_audio.to_s
       Zipper.zip_audio(input_wav, target, opts: zip_opts)
+      target
     end
   end
 end
