@@ -17,10 +17,10 @@
 			"path": "../coqui-ai-TTS"
 		},
 		{
-			"path": "../chatterbox"
+			"path": "../../../../srv/chatterbox"
 		},
 		{
-			"path": "../OuteTTS"
+			"path": "../../../../srv/OuteTTS"
 		}
 	],
 	"settings": {}
