@@ -8,6 +8,14 @@ class Zipper
   # All subtitle-related responsibilities live here.
   module Subtitle
     module_function
+    def sanitize_vtt(vtt)
+      return vtt unless vtt
+      vtt
+        .gsub(/\{\\[^}]*\}/, '')   # remove ASS override blocks {\...}
+        .gsub(/\\h/i, ' ')           # hard space -> space
+        .gsub(/\\t/i, ' ')           # tab -> space
+        .gsub(/\\[Nn]/, "\n")      # forced newline -> real newline
+    end
     def maybe_translate_vtt(zipper, vtt, tsp, from_lang, to_lang)
       return [vtt, from_lang, tsp] unless to_lang
       return [vtt, from_lang, tsp] if from_lang && to_lang.to_s == from_lang.to_s
@@ -36,11 +44,12 @@ class Zipper
       return if !zipper.opts.lang && !zipper.opts.subs && !zipper.opts.onlysrt && !zipper.opts.sub_vtt
 
       if (sv = zipper.opts.sub_vtt).present?
-        vtt, lng = sv.to_s, (zipper.opts.sub_lang || zipper.opts.lang)
+        vtt, lng = sanitize_vtt(sv.to_s), (zipper.opts.sub_lang || zipper.opts.lang)
       else
         vtt, lng, tsp = prepare(zipper)
       end
       vtt, lng, tsp = maybe_translate_vtt(zipper, vtt, tsp, lng, zipper.opts.lang)
+      vtt = sanitize_vtt(vtt)
       zipper.stl&.update 'transcoding'
 
       # generate ASS subtitle directly (scales font automatically for portrait videos)
@@ -77,7 +86,7 @@ class Zipper
 
       vtt, lng, tsp = maybe_translate_vtt(zipper, vtt, tsp, lng, zipper.opts.lang)
 
-      [vtt, lng, tsp]
+      [sanitize_vtt(vtt), lng, tsp]
     end
 
     # Slice a VTT by time and optionally rebase to 00:00:00
@@ -214,7 +223,7 @@ class Zipper
     def subtitle_to_vtt(body, ext)
       File.write "sub.#{ext}", body
       vtt, = Sh.run "ffmpeg -i sub.#{ext} -c:s webvtt -f webvtt -"
-      vtt
+      sanitize_vtt(vtt)
     end
 
     def extract_vtt(zipper, lang_or_index)
@@ -223,7 +232,7 @@ class Zipper
               subs.index { |s| s.tags.language == lang_or_index }
 
       vtt, = Sh.run "ffmpeg -loglevel error -i #{Sh.escape zipper.infile} -map 0:s:#{index} -c:s webvtt -f webvtt -"
-      vtt
+      sanitize_vtt(vtt)
     end
 
     def fetch(zipper)

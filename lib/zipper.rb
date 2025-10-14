@@ -295,7 +295,7 @@ class Zipper
     vtt, _, _ = Sh.run <<-EOC
 ffmpeg -i sub.#{ext} -c:s webvtt -f webvtt -
     EOC
-    vtt
+    Zipper::Subtitle.sanitize_vtt vtt
   end
 
   def extract_vtt lang_or_index
@@ -307,7 +307,7 @@ ffmpeg -i sub.#{ext} -c:s webvtt -f webvtt -
     vtt, _, _ = Sh.run <<-EOC
 ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s webvtt -f webvtt -
     EOC
-    vtt
+    Zipper::Subtitle.sanitize_vtt vtt
   end
 
   def self.audio_to_wav path
@@ -351,6 +351,7 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s webvtt -f w
       lng = opts.lang
     end
 
+    vtt = Zipper::Subtitle.sanitize_vtt(vtt)
     [vtt, lng, tsp]
   end
 
