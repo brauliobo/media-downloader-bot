@@ -37,6 +37,12 @@ class Manager
 
     delegate_missing_to :bot
 
+    # Unified processing API: default to download
+    def process(*args, **kwargs)
+      return download(*args, **kwargs) if respond_to?(:download)
+      raise NotImplementedError, "process not implemented"
+    end
+
     def self.probe i
       mtype  = Rack::Mime.mime_type File.extname i.fn_in
       return i unless mtype&.match?(/audio|video/)
