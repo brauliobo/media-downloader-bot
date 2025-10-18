@@ -16,11 +16,16 @@ vendor
 
 # test media
 input
+
+*epub
+*pdf
 *yml
+
 /*mp4
 /*webm
+
 /*srt
 /*vtt
+
 /*opus
 /*wav
-/*pdf
