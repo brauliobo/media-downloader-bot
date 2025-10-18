@@ -68,13 +68,40 @@ class Manager
         end
 
         popts = {dir: work_dir, bot:, msg:, st: @st}
-        is_doc = msg.audio.present? || msg.video.present? || pdf_document? || epub_document?
-        klass = is_doc ? Manager::FileProcessor : Manager::UrlProcessor
-        procs = msg.text.to_s.split("\n").reject(&:blank?).map { |l| klass.new line: l, **popts }
-        procs << klass.new(**popts) if procs.empty? && is_doc
+        lines = msg.text.to_s.split("\n").reject(&:blank?)
+        doc   = pdf_document? || epub_document?
+        media = msg.audio.present? || msg.video.present?
+
+        if lines.present?
+          has_url = lines.any? { |l| l =~ URI::DEFAULT_PARSER.make_regexp }
+          if has_url
+            klass = Manager::UrlProcessor
+            procs = lines.map { |l| klass.new line: l, **popts }
+          elsif doc
+            klass = Manager::DocumentProcessor
+            procs = [klass.new(line: lines.join(' '), **popts)]
+          elsif media
+            klass = Manager::FileProcessor
+            procs = [klass.new(line: lines.join(' '), **popts)]
+          else
+            klass = Manager::UrlProcessor
+            procs = lines.map { |l| klass.new line: l, **popts }
+          end
+        else
+          if doc
+            klass = Manager::DocumentProcessor
+            procs = [klass.new(**popts)]
+          elsif media
+            klass = Manager::FileProcessor
+            procs = [klass.new(**popts)]
+          else
+            klass = Manager::UrlProcessor
+            procs = []
+          end
+        end
         msg.resp = send_message msg, me('Downloading metadata...')
         procs.each.with_index do |p, i|
-          inputs[i] = p.download
+          inputs[i] = p.process
         end
         inputs.flatten!
 
