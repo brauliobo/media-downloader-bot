@@ -21,6 +21,9 @@
 		},
 		{
 			"path": "../../../../srv/OuteTTS"
+		},
+		{
+			"path": "../higgs-audio"
 		}
 	],
 	"settings": {}
