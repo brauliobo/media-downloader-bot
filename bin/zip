@@ -38,12 +38,13 @@ path.peach do |u|
 
   if u =~ URI::regexp
     klass = Manager::UrlProcessor
-  elsif File.extname(u).downcase == '.pdf'
-    # Direct PDF to audiobook (OCR + TTS)
+  elsif File.extname(u).downcase.in?(['.pdf', '.epub'])
+    # Direct PDF/EPUB to audiobook (OCR/parse + TTS)
     require_relative '../lib/audiobook'
 
     fmt_spec  = Zipper.choose_format Zipper::Types.audio, opts, nil
-    audio_out = "#{dir}/#{File.basename(u, '.pdf')}.#{fmt_spec.ext}"
+    base_name = File.basename(u, File.extname(u))
+    audio_out = "#{dir}/#{base_name}.#{fmt_spec.ext}"
     result = Audiobook.generate u, audio_out, stl: stl, opts: opts
 
     puts "YAML saved to #{result.yaml}" if result.respond_to?(:yaml) && result.yaml
