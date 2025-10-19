@@ -10,7 +10,6 @@ class Manager
 
       local_path = bot.download_file(info, dir: dir)
       aopts = SymMash.new(self.opts.deep_dup.presence || {})
-      aopts.onlysrt ||= 1
 
       SymMash.new(
         fn_in: local_path,
