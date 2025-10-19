@@ -33,6 +33,7 @@ gem 'httparty'
 gem 'pdf-reader'
 gem 'epub-parser'
 gem 'nokogiri'
+gem 'puppeteer-ruby'
 
 gem 'srt'
 

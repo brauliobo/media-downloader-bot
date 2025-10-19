@@ -41,6 +41,7 @@ require_relative 'bot/video_processor'
 require_relative 'bot/document_processor'
 require_relative 'bot/url_processor'
 require_relative 'bot/worker'
+require_relative 'bot/commands/cookie'
 
 # deprecated behavior
  ActiveSupport.to_time_preserves_timezone = :zone
@@ -181,6 +182,8 @@ EOS
     return send_help msg if msg.text&.starts_with? '/start'
     return send_help msg if msg.text&.starts_with? '/help'
     raise 'user blocked' if msg.from.id.in? BLOCKED_USERS
+
+    return Manager::Commands::Cookie.new(bot, msg).process if msg.text&.starts_with? '/cookie'
 
     download msg
   rescue => e

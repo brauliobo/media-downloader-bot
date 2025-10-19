@@ -2,8 +2,10 @@ require 'json'
 require 'yaml'
 require 'set'
 require 'fileutils'
+require 'uri'
 require_relative 'parsers/pdf'
 require_relative 'parsers/epub'
+require_relative 'parsers/kindle'
 require_relative 'text_helpers'
 require_relative '../ocr'
 require_relative 'line'
@@ -31,6 +33,18 @@ module Audiobook
 
     def self.from_input(input_path, opts: nil, stl: nil)
       ext = File.extname(input_path).downcase
+      # Kindle web reader URLs
+      if input_path.to_s.start_with?('http')
+        begin
+          uri = URI.parse(input_path)
+          if Audiobook::Parsers::Kindle::READ_HOSTS.include?(uri.host)
+            stl&.update "Capturing Kindle reader via browser and running OCR..."
+            data = Parsers::Kindle.parse(input_path, stl: stl, opts: opts)
+            return new(data: data, opts: opts, stl: stl)
+          end
+        rescue StandardError
+        end
+      end
       case ext
       when '.yml', '.yaml' then from_yaml(input_path, opts: opts, stl: stl)
       when '.json'
