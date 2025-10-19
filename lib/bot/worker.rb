@@ -200,6 +200,7 @@ class Manager
         width:     vstrea&.width,
         height:    vstrea&.height,
         thumb:     thumb,
+        thumbnail: thumb,
         title:     info.title,
         performer: info.uploader,
         supports_streaming: true,
