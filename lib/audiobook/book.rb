@@ -32,38 +32,64 @@ module Audiobook
     end
 
     def self.from_input(input_path, opts: nil, stl: nil)
-      ext = File.extname(input_path).downcase
-      # Kindle web reader URLs
-      if input_path.to_s.start_with?('http')
-        begin
-          uri = URI.parse(input_path)
-          if Audiobook::Parsers::Kindle::READ_HOSTS.include?(uri.host)
-            stl&.update "Capturing Kindle reader via browser and running OCR..."
-            data = Parsers::Kindle.parse(input_path, stl: stl, opts: opts)
-            return new(data: data, opts: opts, stl: stl)
-          end
-        rescue StandardError
-        end
-      end
-      case ext
+      return parse_url_kindle(input_path, opts: opts, stl: stl) if url_kindle?(input_path)
+      case File.extname(input_path).downcase
       when '.yml', '.yaml' then from_yaml(input_path, opts: opts, stl: stl)
-      when '.json'
-        data = SymMash.new(JSON.parse(File.read(input_path)))
-        new(data: data, opts: opts, stl: stl)
-      when '.pdf'
-        stl&.update "Analyzing document and extracting text..."
-        data = Parsers::Pdf.parse(input_path, stl: stl, opts: opts)
-        stl&.update "Structuring content and processing images..."
-        new(data: data, opts: opts, stl: stl)
-      when '.epub'
-        stl&.update "Analyzing document and extracting text..."
-        data = Parsers::Epub.parse(input_path, stl: stl, opts: opts)
-        stl&.update "Structuring content and processing images..."
-        new(data: data, opts: opts, stl: stl)
-          else
-            data = Ocr.transcribe(input_path, opts: opts, stl: stl)
-            new(data: data, opts: opts, stl: stl)
+      when '.json'         then new(data: parse_json(input_path, opts: opts), opts: opts, stl: stl)
+      when '.pdf'          then new(data: parse_pdf(input_path, stl: stl, opts: opts), opts: opts, stl: stl)
+      when '.epub'         then new(data: parse_epub(input_path, stl: stl, opts: opts), opts: opts, stl: stl)
+      else                      new(data: parse_fallback_ocr(input_path, stl: stl, opts: opts), opts: opts, stl: stl)
       end
+    end
+
+    def self.url_kindle?(input_path)
+      s = input_path.to_s
+      return false unless s.start_with?('http')
+      host = URI.parse(s).host rescue nil
+      Audiobook::Parsers::Kindle::READ_HOSTS.include?(host)
+    end
+
+    def self.parse_url_kindle(input_path, opts: nil, stl: nil)
+      stl&.update 'Capturing Kindle reader via browser...'
+      data = Parsers::Kindle.parse(input_path, stl: stl, opts: opts)
+      pdf_path = data.content&.pdf || data.pdf
+      if pdf_path && File.exist?(pdf_path)
+        stl&.update 'Analyzing document and extracting text...'
+        parsed = Parsers::Pdf.parse(pdf_path, stl: stl, opts: opts)
+        # Preserve the compiled PDF path in metadata for downstream upload
+        begin
+          md = parsed[:metadata] || parsed['metadata'] || SymMash.new
+          md['kindle_pdf'] = pdf_path
+          md[:kindle_pdf] = pdf_path
+          parsed[:metadata] = md if parsed.is_a?(Hash)
+          parsed['metadata'] = md if parsed.is_a?(Hash)
+        rescue
+        end
+        return new(data: parsed, opts: opts, stl: stl)
+      end
+      new(data: data, opts: opts, stl: stl)
+    end
+
+    def self.parse_json(json_path, opts: nil)
+      SymMash.new(JSON.parse(File.read(json_path)))
+    end
+
+    def self.parse_pdf(pdf_path, stl: nil, opts: nil)
+      stl&.update 'Analyzing document and extracting text...'
+      data = Parsers::Pdf.parse(pdf_path, stl: stl, opts: opts)
+      stl&.update 'Structuring content and processing images...'
+      data
+    end
+
+    def self.parse_epub(epub_path, stl: nil, opts: nil)
+      stl&.update 'Analyzing document and extracting text...'
+      data = Parsers::Epub.parse(epub_path, stl: stl, opts: opts)
+      stl&.update 'Structuring content and processing images...'
+      data
+    end
+
+    def self.parse_fallback_ocr(path, stl: nil, opts: nil)
+      Ocr.transcribe(path, opts: opts, stl: stl)
     end
 
     def self.from_yaml(yaml_path, opts: nil, stl: nil)
@@ -192,20 +218,7 @@ module Audiobook
       items_with_pages = Paragraph.discover_from_lines(lines)
 
       # Pre-compute body font per page as the most frequent paragraph font size
-      body_font_by_page = Hash.new { |h, k| h[k] = nil }
-      font_counts_by_page = Hash.new { |h, k| h[k] = Hash.new(0) }
-      items_with_pages.each do |entry|
-        item = entry[:item]
-        next unless item.is_a?(Paragraph)
-        fs = entry[:font_size]
-        next unless fs
-        # round to 0.1 to merge tiny variations
-        font_counts_by_page[entry[:page]][(fs.to_f * 10).round / 10.0] += 1
-      end
-      font_counts_by_page.each do |page, counts|
-        mode_pair = counts.max_by { |_, c| c }
-        body_font_by_page[page] = mode_pair&.first
-      end
+      body_font_by_page = compute_body_font_by_page(items_with_pages)
 
       # Attach inline reference markers and collect footnote paragraphs
       # Strategy:
@@ -243,22 +256,7 @@ module Audiobook
         end
       end
 
-      marker_id_for = lambda do |item|
-        extract_ids = lambda do |raw|
-          text = raw.to_s.strip
-          # Accept sequences like "1" or "1 2" or "1,2" as multiple markers
-          tokens = text.scan(/\d+/)
-          tokens
-        end
-
-        case item
-        when Paragraph
-          next unless item.sentences.size == 1
-          extract_ids.call(item.sentences.first.text)
-        when Heading
-          extract_ids.call(item.text)
-        end
-      end
+      marker_id_for = method(:marker_ids_for)
 
       # First pass: identify markers and attach to previous paragraph's last sentence
       processed = []
@@ -417,11 +415,7 @@ module Audiobook
       items_with_pages = merged_items
  
       # Group items by their page number
-      pages_hash = Hash.new { |h, k| h[k] = [] }
-      items_with_pages.each do |item_data|
-        page_num = item_data[:page]
-        pages_hash[page_num] << item_data[:item]
-      end
+      pages_hash = group_items_by_page(items_with_pages)
       
       # Add Image objects for image-only pages (they will OCR themselves)
       total_pages = @metadata.page_count
@@ -429,7 +423,10 @@ module Audiobook
         page_num = img_data['page']
         path = img_data['path']
         next unless path
-        
+
+        # Only add image if this page has no textual items
+        next if pages_hash.key?(page_num) && pages_hash[page_num].any?
+
         page_context = total_pages ? { current: page_num, total: total_pages } : nil
         # Image will handle rasterization and OCR in its initializer
         pages_hash[page_num] << Image.new(path, stl: @stl, page_context: page_context)
@@ -437,6 +434,37 @@ module Audiobook
       
       # Create Page objects
       pages_hash.sort.map { |page_num, items| Page.new(page_num, items) }
+    end
+
+    def compute_body_font_by_page(items_with_pages)
+      font_counts_by_page = Hash.new { |h, k| h[k] = Hash.new(0) }
+      items_with_pages.each do |entry|
+        item = entry[:item]
+        next unless item.is_a?(Paragraph)
+        fs = entry[:font_size]
+        next unless fs
+        font_counts_by_page[entry[:page]][(fs.to_f * 10).round / 10.0] += 1
+      end
+      font_counts_by_page.each_with_object(Hash.new { |h, k| h[k] = nil }) do |(page, counts), acc|
+        acc[page] = counts.max_by { |_, c| c }&.first
+      end
+    end
+
+    def marker_ids_for(item)
+      extract_ids = ->(raw) { raw.to_s.strip.scan(/\d+/) }
+      case item
+      when Paragraph
+        return nil unless item.sentences.size == 1
+        extract_ids.call(item.sentences.first.text)
+      when Heading
+        extract_ids.call(item.text)
+      end
+    end
+
+    def group_items_by_page(items_with_pages)
+      items_with_pages.each_with_object(Hash.new { |h, k| h[k] = [] }) do |item_data, h|
+        h[item_data[:page]] << item_data[:item]
+      end
     end
 
     # Build pages from legacy paragraph format

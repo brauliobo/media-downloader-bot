@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
 require 'json'
+require 'addressable/uri'
 require_relative 'ocr'
 require_relative 'tts'
 require_relative 'zipper'
-require_relative 'sh'
+require_relative 'utils/sh'
 require_relative 'exts/sym_mash'
 require_relative 'translator'
 require_relative 'audiobook/book'
@@ -16,7 +17,9 @@ require 'yaml'
 
 module Audiobook
   def self.generate(input_path, out_audio, stl: nil, opts: nil)
-    raise "Input not found: #{input_path}" unless File.exist?(input_path)
+    unless input_path.to_s =~ /\Ahttps?:/i
+      raise "Input not found: #{input_path}" unless File.exist?(input_path)
+    end
 
     opts ||= SymMash.new
     book = Audiobook::Book.from_input(input_path, opts: opts, stl: stl)
@@ -30,7 +33,61 @@ module Audiobook
     return SymMash.new(yaml: yaml_path) if opts.onlyyml
 
     final_audio = Runner.new(book, stl, opts).process_to_audio(out_audio)
-    SymMash.new(yaml: yaml_path, audio: final_audio)
+    # If Book came from Kindle capture, it may carry the compiled PDF path in metadata
+    pdf_path = book.metadata['kindle_pdf'] || book.metadata[:kindle_pdf]
+    SymMash.new(yaml: yaml_path, audio: final_audio, pdf: pdf_path)
+  end
+
+  # Unified helper to generate audiobook and return ready-to-upload entries
+  def self.generate_uploads(source, dir:, stl:, opts: SymMash.new)
+    base = base_from_source(source)
+    audio_out = File.join(dir, "#{base}.opus")
+    result = generate(source, audio_out, stl: stl, opts: opts)
+    raise 'Failed to generate audiobook files' unless File.exist?(result.yaml) && File.exist?(result.audio)
+
+    uploads = [
+      SymMash.new(
+        fn_out: result.yaml,
+        type: SymMash.new(name: :document),
+        info: SymMash.new(title: base, uploader: ''),
+        mime: 'application/x-yaml',
+        opts: SymMash.new(format: SymMash.new(mime: 'application/x-yaml'))
+      ),
+      SymMash.new(
+        fn_out: result.audio,
+        type: SymMash.new(name: :audio),
+        info: SymMash.new(title: base, uploader: ''),
+        mime: 'audio/ogg',
+        opts: SymMash.new(format: SymMash.new(mime: 'audio/ogg')),
+        oprobe: Prober.for(result.audio)
+      ),
+    ]
+
+    if result.respond_to?(:pdf) && result.pdf && File.exist?(result.pdf)
+      uploads << SymMash.new(
+        fn_out: result.pdf,
+        type: SymMash.new(name: :document),
+        info: SymMash.new(title: base, uploader: ''),
+        mime: 'application/pdf',
+        opts: SymMash.new(format: SymMash.new(mime: 'application/pdf'))
+      )
+    end
+
+    uploads
+  end
+
+  def self.base_from_source(source)
+    if File.exist?(source.to_s)
+      File.basename(source, File.extname(source))
+    else
+      begin
+        uri = Addressable::URI.parse(source.to_s)
+        qv  = uri.query_values || {}
+        qv['asin'].presence || 'audiobook'
+      rescue
+        'audiobook'
+      end
+    end
   end
 
   class Runner
@@ -120,6 +177,7 @@ module Audiobook
       end
       zip_opts.bitrate ||= 32
       target = out_audio.to_s
+      zip_opts.skip_metamark = true
       Zipper.zip_audio(input_wav, target, opts: zip_opts)
       target
     end
