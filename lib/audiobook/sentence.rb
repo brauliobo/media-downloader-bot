@@ -46,7 +46,11 @@ module Audiobook
       if spoken.empty?
         super # generate silence
       else
-        TTS.synthesize(text: spoken, lang: lang, out_path: wav_path)
+        # Retry TTS and fail hard if output is missing
+        Manager.retriable(tries: 4, base_interval: 0.5, multiplier: 2.0) do |_attempt|
+          TTS.synthesize(text: spoken, lang: lang, out_path: wav_path)
+          raise 'TTS produced no audio' unless File.exist?(wav_path) && File.size?(wav_path)
+        end
       end
     end
 

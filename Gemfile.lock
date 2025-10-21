@@ -1,8 +1,8 @@
 GIT
   remote: git@github.com:brauliobo/telegram-bot-ruby.git
-  revision: abd0c60322d4b5d4a5811cd58a7df022db864ef8
+  revision: 82697eda57a9471d028f405a3a36d846e9c86b79
   specs:
-    telegram-bot-ruby (2.0.0)
+    telegram-bot-ruby (2.4.0)
       dry-struct (~> 1.6)
       faraday (~> 2.0)
       faraday-multipart (~> 1.0)
@@ -74,7 +74,7 @@ GEM
       epub-cfi
       rchardet (>= 1.6.1)
       rexml
-    faraday (2.13.4)
+    faraday (2.14.0)
       faraday-net_http (>= 2.0, < 3.5)
       json
       logger
@@ -96,7 +96,7 @@ GEM
     io-like (0.4.0)
     iso-639 (0.3.8)
       csv
-    json (2.13.2)
+    json (2.15.1)
     logger (1.7.0)
     mechanize (2.14.0)
       addressable (~> 2.8)
@@ -151,7 +151,13 @@ GEM
       hashery (~> 2.0)
       ruby-rc4
       ttfunk
-    pg (1.5.9)
+    pg (1.6.2)
+    pg (1.6.2-aarch64-linux)
+    pg (1.6.2-aarch64-linux-musl)
+    pg (1.6.2-arm64-darwin)
+    pg (1.6.2-x86_64-darwin)
+    pg (1.6.2-x86_64-linux)
+    pg (1.6.2-x86_64-linux-musl)
     pry (0.15.2)
       coderay (~> 1.1)
       method_source (~> 1.0)
@@ -194,7 +200,7 @@ GEM
       bigdecimal (~> 3.1)
     tzinfo (2.0.6)
       concurrent-ruby (~> 1.0)
-    uri (1.0.3)
+    uri (1.0.4)
     webrick (1.9.1)
     webrobots (0.1.2)
     websocket-driver (0.8.0)
@@ -223,6 +229,7 @@ DEPENDENCIES
   epub-parser
   faraday
   hashie
+  http-cookie
   httparty
   iso-639
   mechanize
