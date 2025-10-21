@@ -1,7 +1,7 @@
 require 'base64'
-require_relative '../sh'
 require 'mechanize'
 require 'timeout'
+require_relative '../utils/sh'
 require_relative '../audiobook/text_helpers'
 
 class Ocr
@@ -38,7 +38,7 @@ class Ocr
       sample_text = paragraphs.first(5).map { |p| p[:text] }.join("\n")[0, 1000]
       messages = [{ role: :user, content: LANG_PROMPT_TEMPLATE + """\n#{sample_text}\n""" }]
       ans = chat(messages, timeout: timeout_sec, format: LANG_SCHEMA)
-      lang = (JSON.parse(ans)['lang'] rescue nil)&.downcase&.strip
+      lang = JSON.parse(ans)['lang']&.downcase&.strip
       lang&.match?(/^[a-z]{2}$/) ? lang : nil
     rescue StandardError
       nil
@@ -54,8 +54,8 @@ class Ocr
             { role: :assistant, content: '' },
             { role: :user, content: "FIRST:\n#{prev[:text]}\nSECOND:\n#{para[:text]}" }
           ]
-          ans = chat(messages, timeout: timeout_sec) rescue nil
-          if ans&.upcase == 'YES'
+          ans = chat(messages, timeout: timeout_sec)
+          if ans.upcase == 'YES'
             prev[:text] << ' ' << para[:text]
             prev[:page_numbers] |= para[:page_numbers]
             prev[:merged] = true

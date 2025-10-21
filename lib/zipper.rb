@@ -20,8 +20,7 @@ class Zipper
   VF_SCALE_M8 = "scale=%{width}:trunc(ow/a/8)*8".freeze
 
   META_MARK  = '-metadata downloaded_with=t.me/media_downloader_2bot'.freeze
-  META_OPTS  = '-map_metadata 0 -id3v2_version 3 -movflags use_metadata_tags -write_id3v1 1'
-  META_OPTS << " #{META_MARK} %{metadata}"
+  META_OPTS  = '-map_metadata 0 -id3v2_version 3 -movflags use_metadata_tags -write_id3v1 1 %{metadata}'.freeze
 
   AUDIO_POST_OPTS  = ''
   AUDIO_POST_OPTS << " #{META_OPTS}" unless ENV['SKIP_META']
@@ -435,7 +434,10 @@ ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s webvtt -f w
   end
 
   def metadata_args
-    (opts.metadata || {}).map{ |k,v| "-metadata #{Sh.escape k}=#{Sh.escape v}" }.join ' '
+    parts = []
+    parts << META_MARK unless ENV['SKIP_METAMARK'] || opts.skip_metamark
+    parts.concat((opts.metadata || {}).map { |k, v| "-metadata #{Sh.escape k}=#{Sh.escape v}" })
+    parts.join(' ')
   end
 
   def apply_cut

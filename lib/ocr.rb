@@ -1,5 +1,5 @@
 require 'base64'
-require_relative 'sh'
+require_relative 'utils/sh'
 require 'mechanize'
 require 'timeout'
 require_relative 'audiobook/text_helpers'

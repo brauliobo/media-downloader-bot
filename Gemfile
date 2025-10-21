@@ -29,6 +29,7 @@ gem 'addressable'
 gem 'mechanize'
 gem 'faraday'
 gem 'httparty'
+gem 'http-cookie'
 
 gem 'pdf-reader'
 gem 'epub-parser'

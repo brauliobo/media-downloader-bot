@@ -2,7 +2,7 @@ require 'pdf-reader'
 require 'shellwords'
 require_relative 'base'
 require_relative '../text_helpers'
-require_relative '../../sh'
+require_relative '../../utils/sh'
 require_relative '../../ocr'
 
 module Audiobook
@@ -38,7 +38,7 @@ module Audiobook
       def self.has_text?(pdf_path, pages_to_check: 3)
         reader = PDF::Reader.new(pdf_path)
         reader.pages.first(pages_to_check).any? do |page|
-          txt = (page.text rescue nil).to_s.strip
+          txt = page.text.to_s.strip
           return true if txt.length.positive?
           has_run = false
           begin
@@ -46,7 +46,7 @@ module Audiobook
           rescue StandardError
           end
           return true if has_run
-          raw = (page.raw_content rescue nil).to_s
+          raw = page.raw_content.to_s
           raw.include?(" Tj") || raw.include?(" TJ")
         end
       rescue StandardError
@@ -109,12 +109,12 @@ module Audiobook
         add_line.call(joined, current_font_size, current_y)
 
         if page_lines.empty?
-          page.text.to_s.split(/\r?\n+/).each { |l| add_line.call(l) } rescue nil
+          page.text.to_s.split(/\r?\n+/).each { |l| add_line.call(l) }
         end
 
         if page_lines.empty?
           cmd = "pdftotext -enc UTF-8 -layout -f #{page_num} -l #{page_num} '#{pdf_path}' - 2>/dev/null"
-          `#{cmd}`.to_s.split(/\r?\n+/).each { |l| add_line.call(l) } rescue nil
+          `#{cmd}`.to_s.split(/\r?\n+/).each { |l| add_line.call(l) }
         end
 
         page_lines.any? ? { lines: page_lines } : { image: true, page: page_num, path: "#{pdf_path}#page=#{page_num}" }

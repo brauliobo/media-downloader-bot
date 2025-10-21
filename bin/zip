@@ -1,7 +1,10 @@
 #!/usr/bin/env ruby
 
+STDOUT.sync = true
 ENV['PRINT_CMD'] = '1'
 ENV['SKIP_META'] = '1'
+ENV['DB'] = '1' if ENV['SESSION_UID']
+ENV['PUPPETEER_HEADLESS'] ||= '0'
 
 Dir.chdir File.expand_path "#{File.realpath __dir__}/.." do
   require_relative '../lib/manager'
@@ -14,7 +17,7 @@ lopts = []
 while ARGV[-1] and !File.exist?(ARGV[-1]) and ARGV[-1] !~ URI::regexp
   opt = ARGV.pop
   lopts.push opt
-  Manager::UrlProcessor.add_opt opts, opt
+  Processors::Base.add_opt opts, opt
 end
 
 Zipper.size_mb_limit = ENV['SIZE_MB_LIMIT']&.to_i
@@ -24,20 +27,20 @@ class Stdout
   mock
 end
 bot = Stdout.new
-st  = Manager::Status.new do |line|
+st  = Bot::Status.new do |line|
   puts line
 end
-stl = Manager::Status::Line.new '', status: st
+stl = Bot::Status::Line.new '', status: st
 
 raise "No files found" if ARGV.blank?
 path = if ARGV.size > 1 then ARGV else ARGV.first&.split "\n" end
 path.peach do |u|
   base_dir = u =~ URI::regexp ? Dir.pwd : File.dirname(u)
   dir      = "#{base_dir}/converted"
-  Dir.mkdir dir rescue nil
+  FileUtils.mkdir_p dir
 
   if u =~ URI::regexp
-    klass = Manager::UrlProcessor
+    klass = Processors::Url
   elsif File.extname(u).downcase.in?(['.pdf', '.epub'])
     # Direct PDF/EPUB to audiobook (OCR/parse + TTS)
     require_relative '../lib/audiobook'
@@ -51,10 +54,10 @@ path.peach do |u|
     puts "Audiobook saved to #{result.audio}" if result.respond_to?(:audio) && result.audio
     next
   else
-    klass = Manager::Processor
+    klass = Processors::Base
   end
 
-  if klass == Manager::UrlProcessor
+  if klass == Processors::Url
     line = "#{u} #{lopts.join ' '}"
     prc  = klass.new(dir:, line:, bot:, st:, stline: stl)
     prc.download.peach do |i|
