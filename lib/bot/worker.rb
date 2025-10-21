@@ -6,7 +6,7 @@ require_relative '../audiobook'
 
 Faraday::UploadIO = Faraday::Multipart::FilePart unless defined?(Faraday::UploadIO)
 
-class Manager
+module Bot
   class Worker
 
     attr_reader :bot
@@ -28,8 +28,8 @@ class Manager
     end
 
     def load_session
-      return unless defined? Session
-      @session = Session.find_or_create uid: msg.from.id
+      return unless defined? Models::Session
+      @session = Models::Session.find_or_create uid: msg.from.id
       @session.daylog.reject!{ |l| l['sent_at'].to_time < 1.day.ago }
       @session.daylog << {
         msg:     msg,
@@ -62,7 +62,7 @@ class Manager
         procs  = []
         inputs = []
 
-        @st = Status.new do |text, *args, **params|
+        @st = Bot::Status.new do |text, *args, **params|
           text = me text unless params[:parse_mode]
           edit_message msg, msg.resp.message_id, *args, text: text, **params
         end
@@ -75,27 +75,27 @@ class Manager
         if lines.present?
           has_url = lines.any? { |l| l =~ URI::DEFAULT_PARSER.make_regexp }
           if has_url
-            klass = Manager::UrlProcessor
+            klass = Processors::Url
             procs = lines.map { |l| klass.new line: l, **popts }
           elsif doc
-            klass = Manager::DocumentProcessor
+            klass = Processors::Document
             procs = [klass.new(line: lines.join(' '), **popts)]
           elsif media
-            klass = Manager::FileProcessor
+            klass = Processors::File
             procs = [klass.new(line: lines.join(' '), **popts)]
           else
-            klass = Manager::UrlProcessor
+            klass = Processors::Url
             procs = lines.map { |l| klass.new line: l, **popts }
           end
         else
           if doc
-            klass = Manager::DocumentProcessor
+            klass = Processors::Document
             procs = [klass.new(**popts)]
           elsif media
-            klass = Manager::FileProcessor
+            klass = Processors::File
             procs = [klass.new(**popts)]
           else
-            klass = Manager::UrlProcessor
+            klass = Processors::Url
             procs = []
           end
         end
@@ -183,34 +183,25 @@ class Manager
       return send_message msg, caption if opts.simulate
 
       vstrea = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
-      thumb  = if bot.td_bot? then i.thumb else Faraday::UploadIO.new(i.thumb, 'image/jpeg') end if i.thumb
-
+      thumb_path = i.thumb if i.thumb
       mime  = i.mime.presence || i.opts.format&.mime || 'application/octet-stream'
-      fn_io = if bot.td_bot? then i.fn_out else Faraday::UploadIO.new(i.fn_out, mime) end
+      file_path = i.fn_out
 
       # Common send logic for both cases
       paid  = (ENV['PAID'] || msg.from.id.in?([6884159818])) && !is_doc
       type  = i.type
       typek = paid ? :media : type.name
 
-      media  = SymMash.new(
-        type:      type.name,
-        typek =>   fn_io,
-        duration:  durat,
-        width:     vstrea&.width,
-        height:    vstrea&.height,
-        thumb:     thumb,
-        thumbnail: thumb,
-        title:     info.title,
-        performer: info.uploader,
-        supports_streaming: true,
-      )
+      media  = SymMash.new(type: type.name, duration: durat, width: vstrea&.width, height: vstrea&.height, title: info.title, performer: info.uploader, supports_streaming: true)
+      bot.td_bot? ? media.merge!(typek => file_path, thumb: thumb_path, thumbnail: thumb_path) : media.merge!("#{typek}_path".to_sym => file_path, "#{typek}_mime".to_sym => mime, thumb_path: thumb_path, thumbnail_path: thumb_path)
       ret_msg = i.ret_msg = SymMash.new star_count: (20 if paid)
       if paid
-        file = media.media
-        media.media = 'attach://file'
-        ret_msg.merge! media: [media], type: :paid_media, file: file
+        media[:media] = 'attach://file'
+        bot.td_bot? ? ret_msg.merge!(media: [media], type: :paid_media, file: file_path) : ret_msg.merge!(media: [media], type: :paid_media, file_path: file_path, file_mime: mime)
       else ret_msg.merge! media end
+
+      # Ensure endpoint type is set for non-paid media (video/audio/document)
+      ret_msg[:type] ||= type.name
 
       pp ret_msg if ENV['DEBUG']
       caption = 'paid' if paid

@@ -16,7 +16,7 @@ class Manager
           return bot.send_message msg, bot.me("Usage: /cookie <domain> <cookie>")
         end
 
-        s = Session.find_or_create uid: msg.from.id
+        s = Models::Session.find_or_create uid: msg.from.id
         data = (s.cookies || {}).dup
         data[domain] = cookie
         s.update cookies: data

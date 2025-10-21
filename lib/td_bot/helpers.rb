@@ -29,7 +29,7 @@ class TDBot
       client.setup_authentication_handlers
 
       # Rate limiters
-      rate_limits global: 20, per_chat: 1
+      rate_limits global: 10, per_chat: 1
     end
     
     def td_retry_after_seconds(e)

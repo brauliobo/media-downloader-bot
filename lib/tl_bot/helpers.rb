@@ -70,13 +70,6 @@ class TlBot
       sleep 1 until net_up?
     end
 
-    def retry_after_seconds(e)
-      (e.message[/retry after (\d+)/, 1]&.to_i).presence || begin
-        body = JSON.parse(e.response.body) rescue nil
-        body && body.dig('parameters', 'retry_after')
-      end.to_i
-    end
-
     def tg_text_payload msg, text, parse_mode
       t = parse_text text, parse_mode: parse_mode
       { chat_id: msg.chat.id, text: t, caption: t, parse_mode: parse_mode }
@@ -85,14 +78,10 @@ class TlBot
     def edit_message msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', **params
       throttle! msg.chat.id, :low
       api.send "edit_message_#{type}", **tg_text_payload(msg, text, parse_mode), message_id: id, **params
-
     rescue ::Telegram::Bot::Exceptions::ResponseError => e
-      resp = SymMash.new(JSON.parse(e.response.body)) rescue nil
+      resp = SymMash.new(JSON.parse(e.response.body))
       return if resp&.description&.match(/exactly the same as a current content/)
-      if (ra = retry_after_seconds(e)) > 0 then sleep ra; retry end
       raise
-    rescue
-      # ignore
     end
 
     class ::Telegram::Bot::Types::Message
@@ -102,7 +91,11 @@ class TlBot
     def send_message msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **params
       _text = text
       throttle! msg.chat.id, :high
-      resp  = SymMash.new api.send("send_#{type}", **tg_text_payload(msg, text, parse_mode), reply_to_message_id: msg.message_id, **params).to_h
+      ep = "send_#{type}"
+      payload = tg_text_payload(msg, text, parse_mode)
+      payload.delete(:text) if type.to_s != 'message'
+      payload[:reply_to_message_id] = msg.message_id
+      resp  = SymMash.new api.send(ep, **payload, **wrap_upload_params(params)).to_h
       resp.text = _text
 
       delete = delete_both if delete_both
@@ -110,15 +103,21 @@ class TlBot
       delete_message msg, msg.message_id, wait: delete_both if delete_both
 
       resp
-    rescue *RETRY_ERRORS
-      retry
-    rescue ::Telegram::Bot::Exceptions::ResponseError => e
-      if (ra = retry_after_seconds(e)) > 0 then sleep ra; retry end
-      raise
     rescue => e
-      retry if e.message.index 'Internal Server Error'
-      binding.pry if ENV['PRY_SEND_MESSAGE']
-      raise "#{e.class}: #{e.message}, msg: #{text}"
+      raise e
+    end
+
+    def wrap_upload_params(p)
+      p = p.dup
+      p[:file] = build_upload_io(p.delete(:file_path), p.delete(:file_mime)) if p[:type].to_s == 'paid_media' && p[:file_path]
+      %i[audio video document].each { |k| kp = :"#{k}_path"; km = :"#{k}_mime"; p[k] = build_upload_io(p.delete(kp), p.delete(km)) if p[kp] }
+      p[:thumb] = build_upload_io(p.delete(:thumb_path), 'image/jpeg') if p[:thumb_path]
+      p[:thumbnail] = build_upload_io(p.delete(:thumbnail_path), 'image/jpeg') if p[:thumbnail_path]
+      p
+    end
+
+    def build_upload_io(path, mime=nil)
+      path && Faraday::UploadIO.new(path, mime || Rack::Mime.mime_type(File.extname(path)) || 'application/octet-stream')
     end
 
     def delete_message msg, id, wait: 30.seconds

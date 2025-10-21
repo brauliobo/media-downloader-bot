@@ -1,10 +1,9 @@
-require_relative '../downloader'
+require_relative '../downloaders/base'
 
-class TDBot
-  class Downloader < ::Downloader
+module Downloaders
+  class Telegram < Base
     # Downloads a file from a public t.me link using TDLib.
-    # Returns a single input object (SymMash) compatible with the rest of the
-    # processing pipeline.
+    # Returns a single input object (SymMash) compatible with the rest of the pipeline.
     def download
       rx = %r{https?://t\.me/(?:(?<slug>[A-Za-z0-9_]+)/(?<msg>\d+)|c/(?<cid>-?\d+)/(?<msg2>\d+))}
       m  = url.to_s.match(rx)
