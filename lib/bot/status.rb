@@ -1,6 +1,6 @@
 require 'limiter'
 
-class Manager
+module Bot
   class Status < Array
 
     class Line < SimpleDelegator

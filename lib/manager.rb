@@ -15,6 +15,7 @@ require 'mechanize'
 require 'roda'
 require 'drb/drb'
 require 'retriable'
+require 'ostruct'
 
 require 'srt'
 require 'iso-639'
@@ -24,22 +25,24 @@ require_relative 'exts/peach'
 
 require_relative 'zipper'
 require_relative 'prober'
-require_relative 'sh'
+require_relative 'utils/sh'
 require_relative 'subtitler'
 require_relative 'tagger'
 require_relative 'translator'
 require_relative 'msg_helpers'
 require_relative 'ocr'
 require_relative 'audiobook'
+require_relative 'downloaders'
 
 require_relative 'bot/status'
-require_relative 'bot/url_shortner'
-require_relative 'bot/processor'
-require_relative 'bot/file_processor'
-require_relative 'bot/audio_processor'
-require_relative 'bot/video_processor'
-require_relative 'bot/document_processor'
-require_relative 'bot/url_processor'
+require_relative 'utils/url_shortener'
+require_relative 'processors/base'
+require_relative 'processors/file'
+require_relative 'processors/audio'
+require_relative 'processors/video'
+require_relative 'processors/document'
+require_relative 'processors/shorts'
+require_relative 'processors/url'
 require_relative 'bot/worker'
 require_relative 'bot/commands/cookie'
 
@@ -49,7 +52,7 @@ require_relative 'bot/commands/cookie'
 if ENV['DB']
   require 'sequel'
   require_relative 'sequel'
-  require_relative 'bot/session' if !$0.index('sequel') and DB
+  require_relative 'models/session' if !$0.index('sequel') and DB
 end
 
 class Manager
@@ -193,7 +196,7 @@ EOS
 
   def download msg
     msg    = SymMash.new msg.to_h
-    worker = Manager::Worker.new msg.bot, msg
+    worker = Bot::Worker.new msg.bot, msg
     resp   = worker.process
   ensure
     msg.bot.delete_message msg, resp.message_id, wait: nil if resp
