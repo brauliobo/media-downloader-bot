@@ -151,13 +151,6 @@ GEM
       hashery (~> 2.0)
       ruby-rc4
       ttfunk
-    pg (1.6.2)
-    pg (1.6.2-aarch64-linux)
-    pg (1.6.2-aarch64-linux-musl)
-    pg (1.6.2-arm64-darwin)
-    pg (1.6.2-x86_64-darwin)
-    pg (1.6.2-x86_64-linux)
-    pg (1.6.2-x86_64-linux-musl)
     pry (0.15.2)
       coderay (~> 1.1)
       method_source (~> 1.0)
@@ -169,7 +162,7 @@ GEM
       mime-types (>= 3.0)
       websocket-driver (>= 0.6.0)
     racc (1.8.1)
-    rack (3.2.1)
+    rack (3.2.3)
     rchardet (1.10.0)
     retriable (3.1.2)
     rexml (3.4.4)
@@ -193,8 +186,6 @@ GEM
     rubyntlm (0.6.5)
       base64
     securerandom (0.4.1)
-    sequel (5.97.0)
-      bigdecimal
     srt (0.1.5)
     ttfunk (1.8.0)
       bigdecimal (~> 3.1)
@@ -235,7 +226,6 @@ DEPENDENCIES
   mechanize
   nokogiri
   pdf-reader
-  pg
   pry
   puma
   puppeteer-ruby
@@ -244,7 +234,6 @@ DEPENDENCIES
   roda
   rspec
   ruby-limiter
-  sequel
   srt
   telegram-bot-ruby!
 
