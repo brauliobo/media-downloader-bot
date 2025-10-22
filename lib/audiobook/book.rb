@@ -220,6 +220,22 @@ module Audiobook
       # Pre-compute body font per page as the most frequent paragraph font size
       body_font_by_page = compute_body_font_by_page(items_with_pages)
 
+      # Ensure OCR image-only pages participate in the normal merge flow by
+      # injecting Image paragraphs before downstream merging/grouping logic.
+      if images_data && !images_data.empty?
+        pages_with_items = items_with_pages.each_with_object(Hash.new(0)) { |e, h| h[e[:page]] += 1 }
+        total_pages = @metadata.page_count
+        images_data.each do |img_data|
+          page_num = img_data['page']
+          path = img_data['path']
+          next unless path && page_num
+          next if pages_with_items[page_num] && pages_with_items[page_num] > 0
+
+          page_context = total_pages ? { current: page_num, total: total_pages } : nil
+          items_with_pages << { item: Image.new(path, stl: @stl, page_context: page_context), page: page_num, font_size: nil }
+        end
+      end
+
       # Attach inline reference markers and collect footnote paragraphs
       # Strategy:
         # - Detect numeric-only paragraphs as reference markers (e.g., "5") on a page
