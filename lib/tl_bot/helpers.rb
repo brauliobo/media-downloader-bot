@@ -76,7 +76,7 @@ class TlBot
     end
 
     def edit_message msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', **params
-      throttle! msg.chat.id, :low
+      return if throttle!(msg.chat.id, :low, discard: true, message_id: id) == :discard
       api.send "edit_message_#{type}", **tg_text_payload(msg, text, parse_mode), message_id: id, **params
     rescue ::Telegram::Bot::Exceptions::ResponseError => e
       resp = SymMash.new(JSON.parse(e.response.body))
