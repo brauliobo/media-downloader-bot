@@ -43,10 +43,8 @@ if ENV['TD_BOT']
   gem 'tdlib-ruby',   source(github: 'brauliobo/tdlib-ruby',   dir: 'tdlib-ruby')
 end
 
-if ENV['DB']
-  gem 'pg'
-  gem 'sequel'
-end
+gem 'pg'
+gem 'sequel'
 
 group :development do
   gem 'pry'
