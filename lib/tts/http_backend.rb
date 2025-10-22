@@ -51,13 +51,33 @@ class TTS
       end
     end
 
-    def segment_text(text, limit)
-      sents = text.split(/(?<=[.!?…])\s+/)
-      segments = sents
-               .chunk_while { |a, b| (a.size + b.size + 1) <= limit }
-               .map { |arr| arr.join(' ') }
-      segments.empty? ? [text] : segments
-    end
+      def segment_text(text, limit)
+        return [text] if text.size <= limit
+        sents = text.split(/(?<=[.!?…:;])\s+/)
+        segments = []
+        buf = +''
+        sents.each do |part|
+          if buf.empty?
+            buf = part
+          elsif (buf.size + 1 + part.size) <= limit
+            buf << ' ' << part
+          else
+            segments << buf
+            buf = part
+          end
+        end
+        segments << buf unless buf.empty?
+        # Hard split leftovers exceeding limit (no sentence boundaries found)
+        final = []
+        segments.each do |seg|
+          if seg.size <= limit
+            final << seg
+          else
+            seg.scan(/.{1,#{limit}}/m) { |chunk| final << chunk }
+          end
+        end
+        final
+      end
 
     def synth_segment(agent, url, payload, lang, speaker_wav, kwargs, dir, idx)
       wav = File.join(dir, format('%04d.wav', idx))
