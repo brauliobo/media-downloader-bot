@@ -148,9 +148,8 @@ EOS
     ENV['CUDA'] = '1' #faster and don't work with maxrate for limiting
     Zipper.size_mb_limit = 2_000
     @bot = TDBot.connect
-    # Set up listener; unread processing is handled inside listen/authorization READY
     @bot.listen do |msg|
-      react msg # threading now handled in MessageHandler
+      Thread.new{ react msg }
     end
     sleep 1.year while true
   end
