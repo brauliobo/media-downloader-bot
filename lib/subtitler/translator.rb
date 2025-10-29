@@ -3,6 +3,8 @@ require_relative '../text_helpers'
 class Subtitler
   class Translator
 
+    MAX_SUBTITLE_CHARS = 84
+
     def self.translate(verbose_json, from:, to:)
       mash       = SymMash.new(verbose_json)
       sentences  = sentences_for(mash.segments || [])
@@ -10,7 +12,8 @@ class Subtitler
       tl_texts   = batch_translate_texts(texts, from: from, to: to)
       apply_translations!(sentences, tl_texts)
       mash.segments = rebuild_segments(sentences)
-      merge_segments_for_stdsub(mash)
+      split_long_segments!(mash, max_chars: MAX_SUBTITLE_CHARS)
+      merge_segments_for_stdsub(mash, max_chars: MAX_SUBTITLE_CHARS)
       mash
     end
 
@@ -43,6 +46,75 @@ class Subtitler
       end
     end
 
+    def self.split_long_segments!(mash, max_chars:)
+      segments = Array(mash.segments)
+      mash.segments = segments.flat_map { |seg| split_segment(seg, max_chars) }
+      mash
+    end
+
+    def self.split_segment(seg, max_chars)
+      text = seg.text.to_s.strip
+      return [seg] if text.length <= max_chars
+      words = Array(seg.words).reject { |w| w.word.to_s.strip.empty? }
+      return split_segment_without_words(seg, max_chars) if words.empty?
+      buckets = []
+      buffer = []
+      words.each do |word|
+        sample = (buffer + [word]).map { |w| w.word.to_s.strip }.join(' ').strip
+        if sample.length > max_chars && buffer.any?
+          buckets << buffer
+          buffer = [word]
+        else
+          buffer << word
+        end
+      end
+      buckets << buffer if buffer.any?
+      buckets.map { |chunk| build_segment(seg, chunk) }
+    end
+
+    def self.build_segment(source, words)
+      clones = words.map { |w| SymMash.new(w.to_h) }
+      data   = source.to_h
+      SymMash.new(data.merge(
+        text: clones.map { |w| w.word.to_s.strip }.join(' '),
+        start: clones.first&.start || source.start,
+        end: clones.last&.end   || source.end,
+        words: clones
+      ))
+    end
+
+    def self.split_segment_without_words(seg, max_chars)
+      text = seg.text.to_s.strip
+      return [seg] if text.length <= max_chars
+      tokens = text.split(/\s+/)
+      parts  = []
+      bucket = []
+      tokens.each do |tok|
+        sample = ([*bucket, tok].join(' ')).strip
+        if sample.length > max_chars && bucket.any?
+          parts << bucket.join(' ')
+          bucket = [tok]
+        else
+          bucket << tok
+        end
+      end
+      parts << bucket.join(' ') if bucket.any?
+      return [seg] if parts.size <= 1
+      total    = parts.sum(&:length)
+      duration = [seg.end.to_f - seg.start.to_f, 0].max
+      cursor   = seg.start.to_f
+      parts.map.with_index do |part, idx|
+        span = total.zero? ? 0 : duration * part.length.to_f / total
+        dup  = SymMash.new(seg.to_h)
+        dup.text  = part
+        dup.words = []
+        dup.start = cursor
+        cursor   += span
+        dup.end   = idx == parts.length - 1 ? seg.end : cursor
+        dup
+      end
+    end
+
     def self.tokenize_text(text)
       raw = text.to_s.scan(/\p{L}+[\p{L}\p{M}'’\-]*|\d+|[^\p{L}\d\s]+/)
       out = []
@@ -67,7 +139,7 @@ class Subtitler
       end
     end
 
-    def self.merge_segments_for_stdsub(mash, max_chars: 84, gap_threshold: 1.0)
+    def self.merge_segments_for_stdsub(mash, max_chars: MAX_SUBTITLE_CHARS, gap_threshold: 1.0)
       segments = mash.segments || []
       return mash if segments.empty?
 
