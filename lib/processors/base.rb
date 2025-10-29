@@ -254,9 +254,9 @@ module Processors
           titles = Shorts.generate_titles_for_segments(srt, cuts, language: lang)
           cuts.each_with_index { |c, idx| c[:title] = titles[idx].presence || "Short #{idx+1}" }
         rescue => e
-          vtt_src = srt.include?('WEBVTT') ? srt : Zipper::Subtitle.srt_text_to_vtt(srt)
+          vtt_src = srt.include?('WEBVTT') ? srt : Subtitler::VTT.srt_to_vtt(srt)
           cuts.each_with_index do |c, idx|
-            guess = Shorts.title_from_vtt(Zipper::Subtitle.slice_vtt(vtt_src, from: c[:start], to: c[:end]))
+          guess = Shorts.title_from_vtt(Subtitler::VTT.slice(vtt_src, from: c[:start], to: c[:end]))
             c[:title] = (guess.presence || "Short #{idx+1}")
           end
           @stl&.update "fallback titles used (#{e.message})"
@@ -277,10 +277,10 @@ module Processors
         locopts[:genshorts] = nil
         locopts[:caption] = 1
         if srt && srt.include?('-->')
-          vtt_src = srt.include?('WEBVTT') ? srt : Zipper::Subtitle.srt_text_to_vtt(srt)
+          vtt_src = srt.include?('WEBVTT') ? srt : Subtitler::VTT.srt_to_vtt(srt)
         end
         if vtt_src
-          slice_vtt = Zipper::Subtitle.slice_vtt(vtt_src, from: c[:start], to: c[:end])
+          slice_vtt = Subtitler::VTT.slice(vtt_src, from: c[:start], to: c[:end])
           locopts[:sub_vtt] = slice_vtt
           locopts[:sub_lang] = lang if lang
           locopts[:_sub_prefix] = "sub_#{idx+1}"

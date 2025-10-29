@@ -98,43 +98,9 @@ class Subtitler
       out
     end
 
-    # Convert whisper.cpp verbose_json output to WEBVTT with inline per-word timings.
-    # Accepts either a Hash (already parsed) or a JSON string.
-    # Returns the VTT as a single string.
-    # When normalize: true (default), merges adjacent short segments to typical movie style.
-    # Backward-compat: legacy stdsub overrides normalize when provided.
+    # Delegate to centralized VTT converter
     def vtt_convert verbose_json, normalize: true, word_tags: true, stdsub: nil
-      mash = SymMash.new verbose_json
-      use_norm = stdsub.nil? ? normalize : stdsub
-      merge_segments_for_stdsub!(mash) if use_norm
-
-      ts = ->(t){ h, rem = t.divmod(3600); m, s = rem.divmod(60); "%02d:%02d:%06.3f" % [h, m, s] }
-
-      vtt = +"WEBVTT\n\n"
-      (mash.segments || []).each do |seg|
-        start  = ts.call(seg.start)
-        finish = ts.call(seg.end)
-
-        words = seg.words || []
-        line = if words.empty?
-          seg.text.to_s.strip
-        else
-          words.each_with_index.map do |w,idx|
-            word     = w.word.to_s.strip
-            w_start  = ts.call(w.start)
-            if word_tags
-              idx.zero? ? word : "<#{w_start}>#{word}"
-            else
-              word
-            end
-          end.join(' ')
-        end
-
-        vtt << "#{start} --> #{finish}\n"
-        vtt << "#{line}\n\n"
-      end
-
-      vtt
+      Subtitler::VTT.build(verbose_json, normalize: normalize, word_tags: word_tags, stdsub: stdsub)
     end
 
     # Translate using sentence-aware regrouping handled by Subtitler::Translator
