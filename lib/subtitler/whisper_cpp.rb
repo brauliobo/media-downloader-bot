@@ -4,6 +4,7 @@ require 'iso-639'
 require 'active_support/core_ext/module/attribute_accessors'
 
 require_relative '../zipper'
+require_relative 'translator'
 
 class Subtitler
   module WhisperCpp
@@ -136,63 +137,9 @@ class Subtitler
       vtt
     end
 
-    # Translate all segment texts (and their word entries) of a whisper.cpp
-    # verbose_json structure using the global Translator backend.
-    # Params:
-    #   verbose_json – Hash, SymMash or JSON String returned by whisper.cpp
-    #   from:        – source ISO-639-1 language (e.g. 'en')
-    #   to:          – target ISO-639-1 language (e.g. 'pt')
-    # Returns the same structure (SymMash) but with translated strings.
+    # Translate using sentence-aware regrouping handled by Subtitler::Translator
     def translate verbose_json, from:, to:
-      mash = SymMash.new verbose_json
-
-      segments = mash.segments || []
-      texts = segments.map(&:text)
-      translations = texts.each_slice(Translator::BATCH_SIZE).with_object([]) do |slice, acc|
-        acc.concat Array.wrap(Translator.translate slice, from: from, to: to)
-      end
-
-      segments.each_with_index do |seg, idx|
-        ttext = translations[idx].to_s
-        seg.text = ttext
-
-        # Tokenize and attach trailing punctuation to previous token
-        raw_tokens = ttext.scan(/\p{L}+[\p{L}\p{M}'’\-]*|\d+|[^\p{L}\d\s]+/)
-        translated_words = []
-        raw_tokens.each do |tok|
-          if tok.match?(/\A[^\p{L}\d\s]+\z/) && translated_words.any?
-            translated_words[-1] << tok
-          else
-            translated_words << tok
-          end
-        end
-
-        # Fuzzy per-word replacement: keep timings, swap words.
-        src_n = seg.words.size
-        trg_n = translated_words.size
-
-        if src_n == trg_n
-          seg.words.each_with_index { |w,i| w.word = translated_words[i] }
-        elsif trg_n < src_n
-          # Fewer translated tokens – assign unique token to each timestamp; leftover words get empty string
-          seg.words.each_with_index do |w,i|
-            w.word = i < trg_n ? translated_words[i] : ""
-          end
-        else # trg_n > src_n
-          # More translated tokens – pack several into one slot
-          seg.words.each_with_index do |w,i|
-            s_idx = ((i    ) * trg_n) / src_n
-            e_idx = (((i+1) * trg_n) / src_n) - 1
-            slice = translated_words[s_idx..e_idx]
-            w.word = slice.join(' ')
-          end
-        end
-
-        # Remove empty word placeholders to avoid visual artefacts
-        seg.words.reject! { |w| w.word.to_s.strip.empty? }
-      end
-
-      mash
+      Subtitler::Translator.translate verbose_json, from: from, to: to
     end
 
     private
