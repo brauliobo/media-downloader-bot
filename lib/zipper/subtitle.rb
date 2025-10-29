@@ -7,6 +7,7 @@ require 'mechanize'
 class Zipper
   # All subtitle-related responsibilities live here.
   module Subtitle
+
     module_function
     def sanitize_vtt(vtt)
       return vtt unless vtt
@@ -16,17 +17,20 @@ class Zipper
         .gsub(/\\t/i, ' ')           # tab -> space
         .gsub(/\\[Nn]/, "\n")      # forced newline -> real newline
     end
+
     def maybe_translate_vtt(zipper, vtt, tsp, from_lang, to_lang)
-      return [vtt, from_lang, tsp] unless to_lang
-      return [vtt, from_lang, tsp] if from_lang && to_lang.to_s == from_lang.to_s
+      n_from = normalize_lang(from_lang)
+      n_to   = normalize_lang(to_lang)
+      return [vtt, n_from, tsp] unless n_to
+      return [vtt, n_from, tsp] if n_from && n_to == n_from
       zipper&.stl&.update 'translating'
       if tsp
-        tsp = Subtitler.translate(tsp, from: (from_lang if from_lang.present?), to: to_lang)
+        tsp = Subtitler.translate(tsp, from: n_from, to: n_to)
         vtt = Subtitler.vtt_convert(tsp, word_tags: !zipper.opts.nowords)
       else
-        vtt = Translator.translate_vtt(vtt, from: (from_lang if from_lang.present?), to: to_lang)
+        vtt = Translator.translate_vtt(vtt, from: n_from, to: n_to)
       end
-      [vtt, to_lang, tsp]
+      [vtt, n_to, tsp]
     end
 
     NOISE_DOTS_LINE = /\A\s*\d(?:\s*\.\s*\d){3,}\.??\s*\z/
@@ -206,9 +210,9 @@ class Zipper
       end
 
       # Ensure final SRT is in the requested language when provided
-      if opts.lang && lng.to_s != opts.lang.to_s
-        srt_content = Translator.translate_srt(srt_content, from: (lng if lng.present?), to: opts.lang) rescue srt_content
-        lng = opts.lang
+      if (n_to = normalize_lang(opts.lang)) && lng.to_s != n_to.to_s
+        srt_content = Translator.translate_srt(srt_content, from: (lng if lng.present?), to: n_to) rescue srt_content
+        lng = n_to
       end
 
       srt_content = filter_noise_srt(srt_content)
@@ -238,7 +242,7 @@ class Zipper
     def fetch(zipper)
       # 1) scraped subtitles -------------------------------------------------
       if (subs = zipper.info&.subtitles).present?
-        candidates = [zipper.opts.lang, :en, subs.keys.first]
+        candidates = [normalize_lang(zipper.opts.lang), :en, subs.keys.first]
         lng, lsub = candidates.find { |c| subs.key?(c) }, nil
         return [nil, nil] unless lng
         lsub = subs[lng].find { |s| s.ext == 'vtt' } || subs[lng][0]
@@ -264,6 +268,13 @@ class Zipper
 
     def http
       Mechanize.new
+    end
+
+    def normalize_lang(lang)
+      return nil if lang.nil?
+      raw = lang.to_s.strip.downcase
+      entry = ISO_639.find_by_code(raw) || ISO_639.find_by_english_name(raw.capitalize)
+      entry&.alpha2
     end
 
   end
