@@ -120,14 +120,21 @@ module Downloaders
           videof = audiof = nil
         end
 
+        # Force audio-only path when onlysrt or audio is requested
+        if opts.onlysrt || opts.audio
+          videof = nil
+          audiof = (url.index('bandcamp.com') ? 'mp3-320' : 'bestaudio/best')
+        end
+
         bcmd << " -f '#{videof}+#{audiof}/best'" if videof && audiof
+        bcmd << " -f '#{audiof}'" if videof.nil? && audiof
 
         ml = opts.audio ? AL : VL
         opts.limit ||= ml if opts.after
         opts.limit   = ml if ml && opts.limit && opts.limit.to_i > ml && !from_admin?(msg)
         bcmd << " --playlist-end #{opts.limit.to_i}" if opts.limit.to_i.positive?
 
-        bcmd << ' -x' if opts.audio
+        bcmd << ' -x' if opts.audio || opts.onlysrt
 
         opts.slice(*DOWN_OPTS).each do |k, v|
           v.gsub! "'", "\\'"
