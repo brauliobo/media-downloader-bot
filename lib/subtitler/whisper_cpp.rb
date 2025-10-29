@@ -32,8 +32,8 @@ class Subtitler
       file = UploadIO.new wav, 'audio/wav', File.basename(wav)
       params = {
         file:             file,
+        language:         'auto',
         temperature:      '0.0',
-        temperature_inc:  '0.2',
         response_format:  format,
         **extra
       }
