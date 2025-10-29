@@ -1,281 +1,155 @@
 # frozen_string_literal: true
 
 require_relative '../subtitler/ass'
+require_relative '../subtitler'
 require_relative '../translator'
 require 'mechanize'
 
 class Zipper
   # All subtitle-related responsibilities live here.
   module Subtitle
+    extend self
 
-    module_function
-    def sanitize_vtt(vtt)
-      return vtt unless vtt
-      vtt
-        .gsub(/\{\\[^}]*\}/, '')   # remove ASS override blocks {\...}
-        .gsub(/\\h/i, ' ')           # hard space -> space
-        .gsub(/\\t/i, ' ')           # tab -> space
-        .gsub(/\\[Nn]/, "\n")      # forced newline -> real newline
-    end
-
-    def maybe_translate_vtt(zipper, vtt, tsp, from_lang, to_lang)
-      n_from = normalize_lang(from_lang)
-      n_to   = normalize_lang(to_lang)
-      return [vtt, n_from, tsp] unless n_to
-      return [vtt, n_from, tsp] if n_from && n_to == n_from
-      zipper&.stl&.update 'translating'
-      if tsp
-        tsp = Subtitler.translate(tsp, from: n_from, to: n_to)
-        vtt = Subtitler.vtt_convert(tsp, word_tags: !zipper.opts.nowords)
-      else
-        vtt = Translator.translate_vtt(vtt, from: n_from, to: n_to)
-      end
-      [vtt, n_to, tsp]
-    end
-
-    NOISE_DOTS_LINE = /\A\s*\d(?:\s*\.\s*\d){3,}\.??\s*\z/
-
-    def filter_noise_srt(srt)
-      srt.split(/\r?\n\r?\n+/).reject { |blk|
-        blk.lines.reject { |l| l.strip.empty? || l.strip =~ /^\d+$/ || l.include?("-->") }
-           .any? { |tl| tl.strip.match?(NOISE_DOTS_LINE) }
-      }.join("\n\n")
-    end
-
-    # Public entry -----------------------------------------------------------
-    # Attach subtitles to a Zipper instance (video only).
     def apply(zipper)
-      return if !zipper.opts.lang && !zipper.opts.subs && !zipper.opts.onlysrt && !zipper.opts.sub_vtt
+      return unless subtitles_requested?(zipper.opts)
 
-      if (sv = zipper.opts.sub_vtt).present?
-        vtt, lng = sanitize_vtt(sv.to_s), (zipper.opts.sub_lang || zipper.opts.lang)
-      else
-        vtt, lng, tsp = prepare(zipper)
-      end
-      vtt, lng, tsp = maybe_translate_vtt(zipper, vtt, tsp, lng, zipper.opts.lang)
-      vtt = sanitize_vtt(vtt)
+      vtt, lng, tsp = source_vtt(zipper, translate_to: zipper.opts.lang)
+      vtt = Subtitler::VTT.clean(vtt)
       zipper.stl&.update 'transcoding'
 
-      # generate ASS subtitle directly (scales font automatically for portrait videos)
-      vstrea       = zipper.probe.streams.find { |s| s.codec_type == 'video' }
-      is_portrait  = vstrea.width < vstrea.height
-      ass_content  = Subtitler::Ass.from_vtt(vtt, portrait: is_portrait,
-                                             mode: zipper.opts.nowords ? :plain : :instagram)
+      stream = zipper.probe.streams.find { |s| s.codec_type == 'video' }
+      portrait = stream.width < stream.height
+      ass_mode = zipper.opts.nowords ? :plain : :instagram
+      ass_body = Subtitler::Ass.from_vtt(vtt, portrait:, mode: ass_mode)
 
       prefix = zipper.opts._sub_prefix || 'sub'
-      assp = "#{prefix}.ass"
-      File.write assp, ass_content
-      zipper.fgraph << "ass=#{assp}"
+      ass_path = "#{prefix}.ass"
+      File.write ass_path, ass_body
+      zipper.fgraph << "ass=#{ass_path}"
 
-      # Write VTT (needed for embedding)
-      subp = "#{prefix}.vtt"
-      File.write subp, vtt
-      zipper.iopts << " -i #{subp}"
-      zipper.oopts << " -c:s mov_text -metadata:s:s:0 language=#{lng} -metadata:s:s:0 title=#{lng}" if zipper.opts.speed == 1
+      vtt_path = "#{prefix}.vtt"
+      File.write vtt_path, vtt
+      zipper.iopts << " -i #{vtt_path}"
+      if zipper.opts.speed == 1
+        meta = " -c:s mov_text -metadata:s:s:0 language=#{lng} -metadata:s:s:0 title=#{lng}"
+        zipper.oopts << meta
+      end
     end
 
-    # Prepare subtitles (download, transcribe, translate)
-    # Returns [vtt_string, language_iso, whisper_json_or_nil]
-    def prepare(zipper)
+    # Prepare subtitles (download, transcribe, translate) and return
+    # [vtt_string, language_iso, whisper_json_or_nil]
+    def prepare(zipper, translate_to: nil)
       vtt = lng = tsp = nil
       vtt, lng = fetch(zipper) unless zipper.opts.gensubs
 
       if vtt.nil?
         zipper.stl&.update 'transcribing'
         res = Subtitler.transcribe(zipper.infile)
-        tsp, lng = res.output, res.lang
-        vtt = Subtitler.vtt_convert(tsp, word_tags: !zipper.opts.nowords)
+        tsp = res.output
+        lng = res.lang
+        vtt = Subtitler::VTT.build(tsp, word_tags: !zipper.opts.nowords)
         zipper.info.language ||= lng if zipper.info.respond_to?(:language)
       end
 
-      vtt, lng, tsp = maybe_translate_vtt(zipper, vtt, tsp, lng, zipper.opts.lang)
-
-      [sanitize_vtt(vtt), lng, tsp]
+      vtt, lng, tsp = Subtitler::VTT.translate_if_needed(zipper, vtt, tsp, lng, translate_to)
+      [Subtitler::VTT.clean(vtt), lng, tsp]
     end
-
-    # Slice a VTT by time and optionally rebase to 00:00:00
-    # from/to are HH:MM:SS strings
-    def slice_vtt(vtt, from:, to:, rebase: true)
-      from_s = hms_to_seconds(from)
-      to_s   = hms_to_seconds(to)
-      out = +"WEBVTT\n\n"
-      i = 0
-      vtt.each_line.slice_when { |prev, line| line.strip.empty? && !prev.strip.empty? }.each do |blk|
-        cue = blk.join
-        next unless cue.include?("-->")
-        lines = cue.lines
-        timing = lines.find { |l| l.include?("-->") }
-        next unless timing
-        ts, te = timing.strip.split("-->").map(&:strip)
-        ts_s = hms_ms_to_seconds(ts)
-        te_s = hms_ms_to_seconds(te)
-        next if te_s <= from_s || ts_s >= to_s
-        n_ts = [ts_s - from_s, 0].max
-        n_te = [te_s - from_s, 0].max
-        n_ts = [n_ts, to_s - from_s].min
-        n_te = [n_te, to_s - from_s].min
-        if rebase
-          nts = seconds_to_hms_ms(n_ts)
-          nte = seconds_to_hms_ms(n_te)
-        else
-          nts = seconds_to_hms_ms(ts_s)
-          nte = seconds_to_hms_ms(te_s)
-        end
-        text = (lines - [timing]).join.strip
-        next if text.blank?
-        i += 1
-        out << "#{i}\n#{nts} --> #{nte}\n#{text}\n\n"
-      end
-      out
-    end
-
-    # Convert SRT string to simple VTT string (no styling), in-memory.
-    def srt_text_to_vtt(srt)
-      out = +"WEBVTT\n\n"
-      buf = []
-      srt.each_line do |line|
-        if line.strip.empty?
-          out << buf.join if buf.any?
-          out << "\n"
-          buf.clear
-          next
-        end
-
-        if line.include?("-->")
-          # 00:00:01,000 --> 00:00:02,000  =>  00:00:01.000 --> 00:00:02.000
-          buf << line.tr(',', '.')
-        elsif line.strip =~ /^\d+$/
-          # drop numeric index lines
-        else
-          buf << line
-        end
-      end
-      out << buf.join if buf.any?
-      out
-    end
-
-    def hms_to_seconds(hms)
-      return unless hms
-      if hms =~ /(\d{1,2}):(\d{2}):(\d{2})/
-        $1.to_i*3600 + $2.to_i*60 + $3.to_i
-      end
-    end
-
-    def hms_ms_to_seconds(hms)
-      return unless hms
-      if hms =~ /(\d{1,2}):(\d{2}):(\d{2})([\.,](\d{3}))?/
-        base = $1.to_i*3600 + $2.to_i*60 + $3.to_i
-        ms = $5.to_i
-        base + ms/1000.0
-      end
-    end
-
-    def seconds_to_hms_ms(sec)
-      sec = sec.to_f
-      h = (sec/3600).floor
-      m = ((sec%3600)/60).floor
-      s = (sec%60).floor
-      ms = ((sec - sec.floor) * 1000).round
-      format('%02d:%02d:%02d.%03d', h, m, s, ms)
-    end
-
-    # ----------------------------------------------------------------------
-    #  Class-level convenience wrappers (keep public API unchanged)
-    # ----------------------------------------------------------------------
 
     def prepare_subtitle(infile, info:, probe:, stl:, opts:)
       zipper = Zipper.new(infile, nil, info: info, probe: probe, stl: stl, opts: opts)
-      prepare(zipper)
+      prepare(zipper, translate_to: opts&.lang)
     end
 
     def generate_srt(infile, dir:, info:, probe:, stl:, opts:)
       opts ||= SymMash.new
       opts.format ||= Zipper::Types.audio.opus unless opts.respond_to?(:format) && opts.format
-      opts.audio  ||= 1 # audio-only download is enough for transcription
+      opts.audio  ||= 1
 
       vtt, lng, tsp = prepare_subtitle(infile, info: info, probe: probe, stl: stl, opts: opts)
 
       require_relative '../output'
       srt_path = Output.filename(info, dir: dir, ext: 'srt')
-      if tsp
-        # Avoid per-word timestamp tags in SRT for external processors (onlysrt)
-        srt_content = Subtitler.srt_convert(tsp, word_tags: (!opts.nowords && !opts.onlysrt))
+      srt_content = if tsp
+        Subtitler.srt_convert(tsp, word_tags: (!opts.nowords && !opts.onlysrt))
       else
-        # If onlysrt, drop inline word tags from VTT before conversion
-        clean_vtt = opts.onlysrt ? Subtitler.strip_word_tags(vtt) : vtt
-        vtt_path = File.join(dir, 'sub.vtt')
-        File.write vtt_path, clean_vtt
-        srt_content, _, status = Sh.run "ffmpeg -loglevel error -y -i #{Sh.escape vtt_path} -f srt -"
+        vtt_for_conversion = opts.onlysrt ? Subtitler.strip_word_tags(vtt) : vtt
+        tmp_vtt = File.join(dir, 'sub.vtt')
+        File.write tmp_vtt, vtt_for_conversion
+        content, _, status = Sh.run "ffmpeg -loglevel error -y -i #{Sh.escape tmp_vtt} -f srt -"
         raise 'srt conversion failed' unless status.success?
+        content
       end
 
-      # Ensure final SRT is in the requested language when provided
-      if (n_to = normalize_lang(opts.lang)) && lng.to_s != n_to.to_s
-        srt_content = Translator.translate_srt(srt_content, from: (lng if lng.present?), to: n_to) rescue srt_content
-        lng = n_to
+      if (target_lang = Subtitler.normalize_lang(opts.lang)) && lng.to_s != target_lang.to_s
+        from_lang = lng if lng.present?
+        srt_content = Translator.translate_srt(srt_content, from: from_lang, to: target_lang) rescue srt_content
+        lng = target_lang
       end
 
-      srt_content = filter_noise_srt(srt_content)
+      srt_content = Subtitler::SRT.filter_noise(srt_content)
       File.binwrite srt_path, "\uFEFF" + srt_content.encode('UTF-8')
       srt_path
     end
 
-    # ----------------------------------------------------------------------
-    #  Internal helpers (mostly copied from original implementation)
-    # ----------------------------------------------------------------------
-
-    def subtitle_to_vtt(body, ext)
-      File.write "sub.#{ext}", body
-      vtt, = Sh.run "ffmpeg -i sub.#{ext} -c:s webvtt -f webvtt -"
-      sanitize_vtt(vtt)
+    def subtitles_requested?(opts)
+      opts.lang || opts.subs || opts.onlysrt || opts.sub_vtt
     end
 
-    def extract_vtt(zipper, lang_or_index)
-      subs  = zipper.probe.streams.select { |s| s.codec_type == 'subtitle' }
-      index = lang_or_index.is_a?(Numeric) ? lang_or_index :
-              subs.index { |s| s.tags.language == lang_or_index }
-
-      vtt, = Sh.run "ffmpeg -loglevel error -i #{Sh.escape zipper.infile} -map 0:s:#{index} -c:s webvtt -f webvtt -"
-      sanitize_vtt(vtt)
+    def source_vtt(zipper, translate_to:)
+      if (provided = zipper.opts.sub_vtt).present?
+        initial = Subtitler::VTT.clean(provided.to_s)
+        Subtitler::VTT.translate_if_needed(zipper, initial, nil, zipper.opts.sub_lang || zipper.opts.lang, translate_to)
+      else
+        prepare(zipper, translate_to: translate_to)
+      end
     end
 
     def fetch(zipper)
-      # 1) scraped subtitles -------------------------------------------------
-      if (subs = zipper.info&.subtitles).present?
-        candidates = [normalize_lang(zipper.opts.lang), :en, subs.keys.first]
-        lng, lsub = candidates.find { |c| subs.key?(c) }, nil
-        return [nil, nil] unless lng
-        lsub = subs[lng].find { |s| s.ext == 'vtt' } || subs[lng][0]
-        sub  = http.get(lsub.url).body
-        vtt  = subtitle_to_vtt(sub, lsub.ext)
-        zipper.stl&.update "subs:scraped:#{lng}"
-        return [vtt, lng]
-      end
+      subtitles = zipper.info&.subtitles
+      return fetch_scraped(zipper, subtitles) if subtitles.present?
 
-      # 2) embedded subtitles ----------------------------------------------
-      if (esubs = zipper.probe.streams.select { |s| s.codec_type == 'subtitle' }).present?
-        esubs.each { |s| s.lang = ISO_639.find_by_code(s.tags.language).alpha2 }
-        idx = esubs.index { |s| zipper.opts.lang.in? [s.lang, s.tags.language, s.tags.title] }
-        return [nil, nil] unless idx
-        vtt = extract_vtt(zipper, idx)
-        lng = esubs[idx].lang
-        zipper.stl&.update "subs:embedded:#{lng}"
-        return [vtt, lng]
-      end
+      fetch_embedded(zipper)
+    end
 
-      [nil, nil]
+    def fetch_scraped(zipper, subtitles)
+      lang = preferred_lang(zipper, subtitles)
+      return [nil, nil] unless lang
+
+      entry = subtitles[lang].find { |sub| sub.ext == 'vtt' } || subtitles[lang].first
+      body  = http.get(entry.url).body
+      vtt   = Subtitler::VTT.to_vtt(body, entry.ext)
+      zipper.stl&.update "subs:scraped:#{lang}"
+      [vtt, lang]
+    end
+
+    def fetch_embedded(zipper)
+      streams = zipper.probe.streams.select { |s| s.codec_type == 'subtitle' }
+      return [nil, nil] if streams.blank?
+
+      streams.each { |stream| stream.lang = ISO_639.find_by_code(stream.tags.language)&.alpha2 }
+      index = streams.index { |stream| subtitle_match?(zipper.opts.lang, stream) }
+      return [nil, nil] unless index
+
+      vtt = Subtitler::VTT.extract_embedded(zipper, index)
+      lang = streams[index].lang
+      zipper.stl&.update "subs:embedded:#{lang}"
+      [vtt, lang]
+    end
+
+    def preferred_lang(zipper, subtitles)
+      candidates = [Subtitler.normalize_lang(zipper.opts.lang), :en, subtitles.keys.first].compact
+      candidates.find { |code| subtitles.key?(code) }
+    end
+
+    def subtitle_match?(desired, stream)
+      desired.present? && desired.in?([stream.lang, stream.tags.language, stream.tags.title])
     end
 
     def http
-      Mechanize.new
+      @http ||= Mechanize.new
     end
 
-    def normalize_lang(lang)
-      return nil if lang.nil?
-      raw = lang.to_s.strip.downcase
-      entry = ISO_639.find_by_code(raw) || ISO_639.find_by_english_name(raw.capitalize)
-      entry&.alpha2
-    end
-
+    private :subtitles_requested?, :source_vtt, :fetch, :fetch_scraped,
+            :fetch_embedded, :preferred_lang, :subtitle_match?, :http
   end
 end
