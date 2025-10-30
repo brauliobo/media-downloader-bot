@@ -27,7 +27,7 @@ module Audiobook
     # Run OCR and extract sentences
     def ocr!
       return if @sentences.any?
-      
+
       page_str = ""
       if @page_context
         page_str = "page #{@page_context[:current]}/#{@page_context[:total]}, "
@@ -45,41 +45,41 @@ module Audiobook
         page_num = $2.to_i
         base = File.join(Dir.tmpdir, "page-#{page_num}-#{SecureRandom.hex(4)}")
         tmp_png = "#{base}.png"
-        
-        @stl&.update "Processing #{page_str}rasterizing"
+
         # 1) pdftoppm
         system("pdftoppm -f #{page_num} -l #{page_num} -png -singlefile '#{pdf_path}' '#{base}'")
-        
+
         unless File.exist?(tmp_png)
           # 2) pdfimages
           system("pdfimages -png -f #{page_num} -l #{page_num} '#{pdf_path}' '#{base}'")
           candidate = Dir["#{base}*.png"].min
           FileUtils.mv(candidate, tmp_png) if candidate && !File.exist?(tmp_png)
         end
-        
+
         unless File.exist?(tmp_png)
           # 3) Ghostscript
           system("gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=pngalpha -r200 -dFirstPage=#{page_num} -dLastPage=#{page_num} -sOutputFile='#{tmp_png}' '#{pdf_path}' 2>&1 >/dev/null")
         end
-        
+
         if File.exist?(tmp_png)
           input = tmp_png
         else
           return
         end
       end
-      
-      @stl&.update "Processing #{page_str}running OCR"
+
+      ocr_msg = path.to_s =~ /^(.+\.pdf)#page=(\d+)$/i ? "rasterizing and running OCR" : "running OCR"
+      @stl&.update "Processing #{page_str}#{ocr_msg}"
       data = Ocr.transcribe(input, stl: @stl)
-      
+
       unless data && (data.text || data.content&.text)
         return
       end
-      
+
       text = data.text || data.content&.text || ''
-      
+
       return if text.strip.empty?
-      
+
       normalized = Audiobook::TextHelpers.normalize_text(text)
       parts = normalized.gsub(/([.!?…]\"?)\s+(?=\p{Lu})/u, "\\1\n").split(/\n+/)
       @sentences = parts.map { |s| Sentence.new(s) }.reject { |s| s.text.empty? }
