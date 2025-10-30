@@ -44,6 +44,7 @@ require_relative 'processors/document'
 require_relative 'processors/shorts'
 require_relative 'processors/url'
 require_relative 'bot/worker'
+require_relative 'bot/user_queue'
 require_relative 'bot/commands/cookie'
 
 # deprecated behavior
@@ -60,6 +61,7 @@ class Manager
   attr_reader :bot
 
   def initialize
+    @user_queue = Bot::UserQueue.new
   end
 
   def self.http
@@ -147,6 +149,7 @@ EOS
 
     ENV['CUDA'] = '1' #faster and don't work with maxrate for limiting
     Zipper.size_mb_limit = 2_000
+    Bot::UserQueue.queue_size = 3
     @bot = TDBot.connect
     @bot.listen do |msg|
       Thread.new{ react msg }
@@ -158,6 +161,7 @@ EOS
     require_relative 'tl_bot'
 
     Zipper.size_mb_limit = 50
+    Bot::UserQueue.queue_size = 1
     @bot = TlBot.connect
     @bot.listen do |msg|
       next unless msg.is_a? Telegram::Bot::Types::Message
@@ -194,11 +198,14 @@ EOS
   end
 
   def download msg
-    msg    = SymMash.new msg.to_h
-    worker = Bot::Worker.new msg.bot, msg
-    resp   = worker.process
+    msg = SymMash.new(msg.to_h).tap { |m| m.bot ||= bot }
+    worker = Bot::Worker.new(msg.bot, msg)
+
+    @user_queue.wait_for_slot(msg.from.id, msg) { |text| worker.wait_in_queue(text) } unless MsgHelpers.from_admin?(msg)
+    resp = worker.process
   ensure
-    msg.bot.delete_message msg, resp.message_id, wait: nil if resp
+    msg.bot.delete_message(msg, resp.message_id, wait: nil) if resp
+    @user_queue.release_slot(msg.from.id) { |next_msg| download(next_msg) }
   end
 
 end

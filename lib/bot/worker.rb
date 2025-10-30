@@ -55,17 +55,18 @@ module Bot
       end
     end
 
+    def wait_in_queue(status_text)
+      init_status
+      @queue_line = @st.add(status_text) { |line| line.keep }
+    end
+
     def process
-      # Processing starts: use a single workdir for all cases
+      @queue_line&.tap { |line| @st&.delete(line); @queue_line = nil }
       workdir do |work_dir|
         @dir = work_dir
         procs  = []
         inputs = []
-
-        @st = Bot::Status.new do |text, *args, **params|
-          text = me text unless params[:parse_mode]
-          edit_message msg, msg.resp.message_id, *args, text: text, **params
-        end
+        init_status
 
         popts = {dir: work_dir, bot:, msg:, st: @st}
         lines = msg.text.to_s.split("\n").reject(&:blank?)
@@ -99,7 +100,6 @@ module Bot
             procs = []
           end
         end
-        msg.resp = send_message msg, me('Downloading metadata...')
         procs.each.with_index do |p, i|
           inputs[i] = p.process
         end
@@ -163,6 +163,15 @@ module Bot
     end
 
     private
+
+    def init_status
+      return if @st
+      @st = Bot::Status.new do |text, *args, **params|
+        text = me text unless params[:parse_mode]
+        edit_message msg, msg.resp.message_id, *args, text: text, **params
+      end
+      msg.resp ||= send_message msg, me('Downloading metadata...')
+    end
 
     def upload_one i
       # Treat documents (e.g., SRT-only) via standard path using fn_out/type
