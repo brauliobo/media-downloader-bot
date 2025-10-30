@@ -17,7 +17,13 @@ module Audiobook
         reader.pages.each_with_index do |page, idx|
           stl&.update "Analyzing document: page #{idx + 1}/#{reader.page_count}" if stl
           res = process_page(page, pdf_path)
-          res[:lines] ? all_lines.concat(res[:lines]) : image_pages << res
+          if res[:lines]
+            all_lines.concat(res[:lines])
+          end
+          # Add image if page has images (can coexist with text)
+          if res[:image]
+            image_pages << res[:image]
+          end
         end
 
         sample_paras = all_lines.first(10).map { |l| { text: l[:text] || l['text'] } }.reject { |p| p[:text].to_s.strip.empty? }
@@ -117,7 +123,25 @@ module Audiobook
           `#{cmd}`.to_s.split(/\r?\n+/).each { |l| add_line.call(l) }
         end
 
-        page_lines.any? ? { lines: page_lines } : { image: true, page: page_num, path: "#{pdf_path}#page=#{page_num}" }
+        # Detect if page has images using pdfimages tool (more reliable)
+        has_images = begin
+          # Check if pdfimages can list images for this page
+          cmd = "pdfimages -f #{page_num} -l #{page_num} -list #{::Shellwords.escape(pdf_path)} 2>/dev/null"
+          output = `#{cmd}`
+          # pdfimages outputs header lines, then image lines starting with spaces+digits+"image"
+          # Skip header lines (starting with "page" or dashes) and check for image lines
+          output.lines.any? { |line| line.match?(/^\s+\d+\s+\d+\s+image/i) }
+        rescue StandardError
+          false
+        end
+
+        result = {}
+        result[:lines] = page_lines if page_lines.any?
+        if has_images || page_lines.empty?
+          result[:image] = { image: true, page: page_num, path: "#{pdf_path}#page=#{page_num}" }
+        end
+
+        result
       end
     end
   end
