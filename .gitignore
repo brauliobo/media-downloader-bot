@@ -1,5 +1,3 @@
-converted
-
 models
 
 # private
@@ -16,10 +14,11 @@ vendor
 
 # test media
 input
+converted
 
-*epub
-*pdf
-*yml
+/*epub
+/*pdf
+/*yml
 
 /*mp4
 /*webm
