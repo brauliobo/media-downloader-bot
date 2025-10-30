@@ -128,12 +128,12 @@ class Subtitler
 
     def self.to_vtt(body, ext)
       File.write "sub.#{ext}", body
-      vtt, = Sh.run "ffmpeg -i sub.#{ext} -c:s webvtt -f webvtt -"
+      vtt, = Sh.run "#{Zipper::FFMPEG} -i sub.#{ext} -c:s webvtt -f webvtt -"
       clean(vtt)
     end
 
     def self.extract_embedded(zipper, index)
-      vtt, = Sh.run "ffmpeg -loglevel error -i #{Sh.escape zipper.infile} -map 0:s:#{index} -c:s webvtt -f webvtt -"
+      vtt, = Sh.run "#{Zipper::FFMPEG} -i #{Sh.escape zipper.infile} -map 0:s:#{index} -c:s webvtt -f webvtt -"
       clean(vtt)
     end
 

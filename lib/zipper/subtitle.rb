@@ -75,7 +75,7 @@ class Zipper
         vtt_for_conversion = opts.onlysrt ? Subtitler.strip_word_tags(vtt) : vtt
         tmp_vtt = File.join(dir, 'sub.vtt')
         File.write tmp_vtt, vtt_for_conversion
-        content, _, status = Sh.run "ffmpeg -loglevel error -y -i #{Sh.escape tmp_vtt} -f srt -"
+        content, _, status = Sh.run "#{Zipper::FFMPEG} -i #{Sh.escape tmp_vtt} -f srt -"
         raise 'srt conversion failed' unless status.success?
         content
       end

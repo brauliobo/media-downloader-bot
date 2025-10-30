@@ -11,7 +11,6 @@ class Zipper
 
   class_attribute :size_mb_limit
 
-
   TIME_REGEX   = /(?:\d?\d:)(?:\d?\d:)\d\d/
 
   # Constants removed; quality defaults are set dynamically per instance.
@@ -79,11 +78,7 @@ class Zipper
       listfile = File.join(dir, 'concat.txt')
       File.write listfile, inputs.map { |p| "file '#{p}'" }.join("\n")
 
-      cmd = [
-        'ffmpeg', '-y', '-f', 'concat', '-safe', '0', '-i', Sh.escape(listfile),
-        '-c', 'copy',
-        Sh.escape(outfile)
-      ].join(' ')
+      cmd = "#{FFMPEG} -f concat -safe 0 -i #{Sh.escape(listfile)} -c copy #{Sh.escape(outfile)}"
 
       _, _, status = Sh.run cmd
       raise 'FFmpeg concat failed' unless status.success?
@@ -104,12 +99,7 @@ class Zipper
     ch = (a&.channels || 1).to_i
     ms = (seconds.to_f * 1000).round
     delays = Array.new(ch, ms).join('|')
-    cmd = [
-      'ffmpeg -y',
-      '-i', Sh.escape(wav_path),
-      "-af adelay=#{delays}",
-      Sh.escape(out)
-    ].join(' ')
+    cmd = "#{FFMPEG} -i #{Sh.escape(wav_path)} -af adelay=#{delays} #{Sh.escape(out)}"
 
     Sh.run cmd
     FileUtils.mv out, wav_path, force: true
@@ -291,9 +281,7 @@ class Zipper
 
   def subtitle_to_vtt body, ext
     File.write "sub.#{ext}", body
-    vtt, _, _ = Sh.run <<-EOC
-ffmpeg -i sub.#{ext} -c:s webvtt -f webvtt -
-    EOC
+    vtt, _, _ = Sh.run "#{FFMPEG} -i sub.#{ext} -c:s webvtt -f webvtt -"
     Zipper::Subtitle.sanitize_vtt vtt
   end
 
@@ -303,16 +291,14 @@ ffmpeg -i sub.#{ext} -c:s webvtt -f webvtt -
     subs  = probe.streams.select{ |s| s.codec_type == 'subtitle' }
     index = if lang_or_index.is_a? Numeric then lang_or_index else subs.index{ |s| s.tags.language == lang_or_index } end
 
-    vtt, _, _ = Sh.run <<-EOC
-ffmpeg -loglevel error -i #{Sh.escape infile} -map 0:s:#{index} -c:s webvtt -f webvtt -
-    EOC
+    vtt, _, _ = Sh.run "#{FFMPEG} -i #{Sh.escape infile} -map 0:s:#{index} -c:s webvtt -f webvtt -"
     Zipper::Subtitle.sanitize_vtt vtt
   end
 
   def self.audio_to_wav path
     wpath = File.join(Dir.tmpdir, "audio-#{SecureRandom.hex(6)}.wav")
 
-    cmd = ['ffmpeg', '-i', Sh.escape(path), '-y', Sh.escape(wpath)].join(' ')
+    cmd = "#{FFMPEG} -i #{Sh.escape(path)} #{Sh.escape(wpath)}"
     _, _, st = Sh.run cmd
     raise 'ffmpeg failed' unless st.success?
 
