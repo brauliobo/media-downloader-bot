@@ -202,11 +202,11 @@ module Bot
       typek = paid ? :media : type.name
 
       media  = SymMash.new(type: type.name, duration: durat, width: vstrea&.width, height: vstrea&.height, title: info.title, performer: info.uploader, supports_streaming: true)
-      bot.td_bot? ? media.merge!(typek => file_path, thumb: thumb_path, thumbnail: thumb_path) : media.merge!("#{typek}_path".to_sym => file_path, "#{typek}_mime".to_sym => mime, thumb_path: thumb_path, thumbnail_path: thumb_path)
+      media.merge!("#{typek}_path".to_sym => file_path, "#{typek}_mime".to_sym => mime, thumb_path: thumb_path, thumbnail_path: thumb_path)
       ret_msg = i.ret_msg = SymMash.new star_count: (20 if paid)
       if paid
         media[:media] = 'attach://file'
-        bot.td_bot? ? ret_msg.merge!(media: [media], type: :paid_media, file: file_path) : ret_msg.merge!(media: [media], type: :paid_media, file_path: file_path, file_mime: mime)
+        ret_msg.merge!(media: [media], type: :paid_media, file_path: file_path, file_mime: mime)
       else ret_msg.merge! media end
 
       # Ensure endpoint type is set for non-paid media (video/audio/document)
