@@ -108,9 +108,28 @@ class TDBot
       text
     end
 
+    def normalize_params(params)
+      p = params.dup
+      
+      if p[:type] == :paid_media && (media = p.delete(:media)&.first)
+        p[:file] = p.delete(:file_path)
+        p[media[:type]] = media[:media_path] if media[:type]
+        p[:thumb] = media[:thumb_path] || media[:thumb]
+        p.merge!(media.slice(:duration, :width, :height, :title, :performer, :supports_streaming).compact)
+      else
+        %i[audio video document].each { |k| p[k] = p.delete(:"#{k}_path") if p[:"#{k}_path"] }
+        p[:thumb] = p.delete(:thumb_path) || p.delete(:thumbnail_path) || p.delete(:thumbnail)
+      end
+      
+      p
+    end
+
     # High-level message sending interface
     def send_message(msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **params)
       t = type.to_s
+      
+      # Normalize params for TDBot format
+      params = normalize_params(params) unless t.in?(%w[message text])
       
       ret = td_with_rate_limit('send_message') do
         throttle! msg.chat.id, :high
