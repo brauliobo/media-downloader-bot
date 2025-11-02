@@ -2,7 +2,7 @@ require 'base64'
 require_relative 'utils/sh'
 require 'mechanize'
 require 'timeout'
-require_relative 'audiobook/text_helpers'
+require_relative 'text_helpers'
 require_relative 'ocr/ollama'
 
 class Ocr

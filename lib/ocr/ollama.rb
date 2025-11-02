@@ -2,7 +2,7 @@ require 'base64'
 require 'mechanize'
 require 'timeout'
 require_relative '../utils/sh'
-require_relative '../audiobook/text_helpers'
+require_relative '../text_helpers'
 
 class Ocr
   module Ollama

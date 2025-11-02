@@ -75,7 +75,7 @@ module Audiobook
     # Legacy discover for text strings (EPUB, etc)
     def self.discover(raw_paragraphs)
       raw_paragraphs.map do |para_text|
-        normalized = Audiobook::TextHelpers.normalize_text(para_text)
+        normalized = TextHelpers.normalize_text(para_text)
         next if normalized.empty?
         
         sentences = normalized.gsub(/([.!?…]\"?)\s+(?=\p{Lu})/u, "\\1\n").split(/\n+/)

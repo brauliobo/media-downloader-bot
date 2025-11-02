@@ -82,7 +82,7 @@ module Audiobook
 
       return if text.strip.empty?
 
-      normalized = Audiobook::TextHelpers.normalize_text(text)
+      normalized = TextHelpers.normalize_text(text)
       parts = normalized.gsub(/([.!?…]\"?)\s+(?=\p{Lu})/u, "\\1\n").split(/\n+/)
       @sentences = parts.map { |s| Sentence.new(s) }.reject { |s| s.text.empty? }
     ensure
