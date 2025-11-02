@@ -77,19 +77,20 @@ class TDBot
 
     # Download any Telegram file (audio, video, document) via TDLib
     def download_file(file_id_or_info, priority: 32, offset: 0, limit: 0, synchronous: true, dir: nil)
-      # Use the enhanced file_manager method
-      result = file_manager.download_file(file_id_or_info, priority: priority, offset: offset, limit: limit, synchronous: synchronous, dir: dir)
+      result = file_manager.download_file(
+        file_id_or_info, priority: priority, offset: offset, limit: limit,
+        synchronous: synchronous, dir: dir
+      )
       
-      # Check for errors in the download result
       if result.is_a?(Hash) && result[:error]
         raise "Failed to download file: #{result[:error]}"
       end
       
-      # Extract the local path from the file manager result hash
       local_path = result.is_a?(Hash) ? result[:local_path] : nil
       
-      # Ensure we always return a string path
-      raise "Failed to download file: no local path available (got: #{result.inspect})" unless local_path && !local_path.empty?
+      unless local_path && !local_path.empty?
+        raise "Failed to download file: no local path available (got: #{result.inspect})"
+      end
       
       local_path
     end
@@ -102,7 +103,9 @@ class TDBot
         text  = "_#{me i.info.title}_"
         text << "\n#{me i.info.uploader}" if i.info.uploader
       end
-      text << "\n\n_#{me i.info.description.strip}_" if i.respond_to?(:opts) && i.opts.description && i.info.description.strip.presence
+      if i.respond_to?(:opts) && i.opts.description && i.info.description.strip.presence
+        text << "\n\n_#{me i.info.description.strip}_"
+      end
       # Format URL as clickable link for TDLib
       text << "\n\n#{i.url}" if i.url  # Don't escape URLs - TDLib handles them automatically
       text
