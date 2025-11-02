@@ -45,18 +45,18 @@ module Audiobook
         status_line << " (OCR)" if defined?(@is_ocr) && @is_ocr
         
         stl&.update status_line
+        pause_file = sent.pause_file(dir)
         main_wav = sent.to_wav(dir, "#{idx}_#{sidx}", lang: lang || 'en')
         ref_wavs = (sent.references || []).each_with_index.flat_map do |ref, ridx|
           stl&.update "Processing reference #{ref.id} for sentence #{sidx+1}/#{sentences.size}"
-          ref.sentences.each_with_index.map do |rs, j|
+          ref_pause = (ridx == 0 ? Zipper.get_pause_file(0.15, dir) : nil)
+          ref.sentences.each_with_index.flat_map do |rs, j|
+            rs_pause = rs.pause_file(dir)
             wav_path = rs.to_wav(dir, "#{idx}_#{sidx}_r#{ridx}_#{j}", lang: lang || 'en')
-            if j == 0
-              Zipper.prepend_silence!(wav_path, 0.15, dir: dir)
-            end
-            wav_path
+            [j == 0 ? ref_pause : nil, rs_pause, wav_path].compact
           end
         end
-        [main_wav, *ref_wavs]
+        [pause_file, main_wav, *ref_wavs].compact
       end
       
       combined = File.join(dir, "para_#{idx}.wav")
@@ -68,6 +68,11 @@ module Audiobook
     # Returns array of { item:, page: } hashes
     def self.discover_from_lines(lines)
       return [] if lines.empty?
+      
+      # Calculate baseline spacing and indentation thresholds
+      baseline_spacing = calculate_baseline_spacing(lines)
+      spacing_threshold = baseline_spacing * 1.5 # Paragraph break threshold
+      indent_threshold = calculate_indent_threshold(lines)
       
       items_with_pages = []
       buf = []
@@ -81,9 +86,14 @@ module Audiobook
         if buf.any? && prev_line
           # Dehyphenate across lines
           if prev_line.ends_with_hyphen? && line.starts_with_lowercase?
-            buf[-1] = Audiobook::Line.new(buf.last.text.chomp('-') + line.text, 
-                                          font_size: prev_line.font_size, 
-                                          page_number: prev_line.page_number)
+            buf[-1] = Audiobook::Line.new(
+              buf.last.text.chomp('-') + line.text, 
+              font_size: prev_line.font_size, 
+              page_number: prev_line.page_number,
+              x_position: prev_line.x_position,
+              top_spacing: prev_line.top_spacing,
+              bottom_spacing: prev_line.bottom_spacing
+            )
             prev_line = buf.last
             next
           end
@@ -95,12 +105,33 @@ module Audiobook
           # Always break if line is only numbers (page numbers, etc)
           is_only_numbers = line.text.match?(/^\d+$/)
           
+          # Check spacing - larger spacing indicates paragraph break
+          spacing_break = false
+          if prev_line.bottom_spacing && line.top_spacing
+            spacing = [prev_line.bottom_spacing, line.top_spacing].max
+            spacing_break = spacing > spacing_threshold && spacing > 0
+          elsif prev_line.bottom_spacing
+            spacing_break = prev_line.bottom_spacing > spacing_threshold
+          elsif line.top_spacing
+            spacing_break = line.top_spacing > spacing_threshold
+          end
+          
+          # Check indentation - significant x_position difference indicates paragraph start
+          indent_break = false
+          if prev_line.x_position && line.x_position && indent_threshold > 0
+            x_diff = (line.x_position - prev_line.x_position).abs
+            indent_break = x_diff >= indent_threshold && line.x_position > prev_line.x_position
+          end
+          
           # Check if both lines look like parts of a multi-line heading
           both_heading_like = prev_line.word_count <= 5 && line.word_count <= 5 && 
                              !prev_line.ends_with_punctuation? && !line.ends_with_punctuation? && prev_line.starts_with_capital? && line.starts_with_capital?
           
           # default break rules
           should_break = is_only_numbers || font_changed || (prev_line.ends_with_punctuation? && line.starts_with_capital?)
+          
+          # Add spacing and indentation based breaks
+          should_break = true if spacing_break || indent_break
 
           # If the new line begins with inline reference marker(s) like "1 " or "1 2 ",
           # it is a continuation of the same paragraph, not a new one.
@@ -111,7 +142,7 @@ module Audiobook
           # Do not force a break on short+capital lines; this often splits normal paragraphs (e.g., proper names)
           
           # Override: if page changed but no punctuation and no font change, continue the paragraph
-          if page_changed && !prev_line.ends_with_punctuation? && !font_changed && !is_only_numbers
+          if page_changed && !prev_line.ends_with_punctuation? && !font_changed && !is_only_numbers && !spacing_break && !indent_break
             should_break = false
           end
         end
@@ -133,6 +164,30 @@ module Audiobook
       end
       
       items_with_pages.reject { |data| data[:item].is_a?(Paragraph) && data[:item].empty? }
+    end
+    
+    def self.calculate_baseline_spacing(lines)
+      spacings = lines.compact.map(&:top_spacing).compact.select { |s| s > 0 }
+      return 0 if spacings.empty?
+      
+      # Use median to avoid outliers
+      sorted = spacings.sort
+      mid = sorted.size / 2
+      sorted.size.odd? ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2.0
+    end
+    
+    def self.calculate_indent_threshold(lines)
+      x_positions = lines.compact.map(&:x_position).compact.select { |x| x && x > 0 }
+      return 0 if x_positions.empty?
+      
+      # Find common x positions (mode detection)
+      rounded = x_positions.map { |x| (x / 10).round * 10 }
+      counts = rounded.each_with_object(Hash.new(0)) { |x, h| h[x] += 1 }
+      most_common = counts.max_by { |_, c| c }&.first || 0
+      
+      # Threshold is 50% of the most common x position (for typical paragraph indentation)
+      threshold = most_common > 0 ? most_common * 0.5 : 20
+      threshold
     end
 
     # Legacy discover for text strings (EPUB, etc)
