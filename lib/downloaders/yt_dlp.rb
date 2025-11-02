@@ -55,7 +55,12 @@ module Downloaders
         info.title = format('%02d %s', i + 1, info.title) if mult && opts.number
         info.title = MsgHelpers.limit info.title, percent: 90
 
-        cands = [Array(info.fragments).sum { |f| f.duration.to_f }, Array(info.formats).map { |f| [f.duration.to_f, Array(f.fragments).sum { |fr| fr.duration.to_f }].max }.max]
+        cands = [
+          Array(info.fragments).sum { |f| f.duration.to_f },
+          Array(info.formats).map { |f|
+            [f.duration.to_f, Array(f.fragments).sum { |fr| fr.duration.to_f }].max
+          }.max
+        ]
         info.duration ||= cands.compact.select { |d| d.to_f > 0 }.max&.to_i
 
         max_len = VID_MAX_LENGTH[]

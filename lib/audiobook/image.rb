@@ -58,7 +58,9 @@ module Audiobook
 
         unless File.exist?(tmp_png)
           # 3) Ghostscript
-          system("gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=pngalpha -r200 -dFirstPage=#{page_num} -dLastPage=#{page_num} -sOutputFile='#{tmp_png}' '#{pdf_path}' 2>&1 >/dev/null")
+          system("gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=pngalpha -r200 " \
+                 "-dFirstPage=#{page_num} -dLastPage=#{page_num} " \
+                 "-sOutputFile='#{tmp_png}' '#{pdf_path}' 2>&1 >/dev/null")
         end
 
         if File.exist?(tmp_png)
