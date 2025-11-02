@@ -8,7 +8,8 @@ module Audiobook
     PAUSE = 0.20
 
     attr_reader :sentences
-    attr_accessor :para_idx, :para_total, :page_num, :item_idx, :item_total, :lang, :stl, :dir, :idx, :page_idx, :page_total, :is_ocr
+    attr_accessor :para_idx, :para_total, :page_num, :item_idx, :item_total, :lang, :stl, :dir,
+                  :idx, :page_idx, :page_total, :is_ocr
 
     def initialize(sentences = [])
       @sentences = sentences
@@ -124,8 +125,9 @@ module Audiobook
           end
           
           # Check if both lines look like parts of a multi-line heading
-          both_heading_like = prev_line.word_count <= 5 && line.word_count <= 5 && 
-                             !prev_line.ends_with_punctuation? && !line.ends_with_punctuation? && prev_line.starts_with_capital? && line.starts_with_capital?
+          both_heading_like = prev_line.word_count <= 5 && line.word_count <= 5 &&
+                              !prev_line.ends_with_punctuation? && !line.ends_with_punctuation? &&
+                              prev_line.starts_with_capital? && line.starts_with_capital?
           
           # default break rules
           should_break = is_only_numbers || font_changed || (prev_line.ends_with_punctuation? && line.starts_with_capital?)
