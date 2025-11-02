@@ -24,7 +24,8 @@ module Audiobook
     # dir: directory to write into
     # idx: index label for file naming (string or integer)
     # lang: tts language
-    def to_wav(dir, idx, lang: 'en')
+    # stl: status line object (optional, for compatibility)
+    def to_wav(dir, idx, lang: 'en', stl: nil)
       wav_path = File.join(dir, "#{idx}.wav")
       return wav_path if File.exist?(wav_path)
 
