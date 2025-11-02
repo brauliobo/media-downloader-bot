@@ -10,6 +10,7 @@ require_relative 'zipper/subtitle'
 class Zipper
 
   class_attribute :size_mb_limit
+  class_attribute :pause_cache
 
   TIME_REGEX   = /(?:\d?\d:)(?:\d?\d:)\d\d/
 
@@ -87,21 +88,31 @@ class Zipper
     outfile
   end
 
-  # Prepend silence of given seconds to the beginning of wav_path (in-place)
+  self.pause_cache = {}
+
+  def self.get_pause_file seconds, dir
+    return nil if seconds.to_f <= 0
+    key = seconds.to_f.round(3)
+    cache_key = "#{dir}:#{key}"
+    pause_cache[cache_key] ||= File.join(dir, "pause_#{key.to_s.gsub('.', '_')}.wav").then do |pause_file|
+      unless File.exist?(pause_file)
+        cmd = "#{FFMPEG} -f lavfi -i anullsrc=channel_layout=mono:sample_rate=22050 -t #{key} #{Sh.escape(pause_file)}"
+        Sh.run cmd
+        raise 'Failed to create pause file' unless File.exist?(pause_file)
+      end
+      pause_file
+    end
+  end
+
   def self.prepend_silence! wav_path, seconds, dir: nil
     return wav_path if seconds.to_f <= 0
     dir ||= File.dirname(wav_path)
 
-    out = File.join(dir, "out_#{SecureRandom.hex(4)}.wav")
-    # Use adelay to insert leading silence while preserving format
-    info = Prober.for(wav_path)
-    a = info.streams.find { |s| s.codec_type == 'audio' }
-    ch = (a&.channels || 1).to_i
-    ms = (seconds.to_f * 1000).round
-    delays = Array.new(ch, ms).join('|')
-    cmd = "#{FFMPEG} -i #{Sh.escape(wav_path)} -af adelay=#{delays} #{Sh.escape(out)}"
+    pause_file = get_pause_file(seconds, dir)
+    return wav_path unless pause_file
 
-    Sh.run cmd
+    out = File.join(dir, "out_#{SecureRandom.hex(4)}.wav")
+    concat_audio([pause_file, wav_path], out)
     FileUtils.mv out, wav_path, force: true
     wav_path
   end
