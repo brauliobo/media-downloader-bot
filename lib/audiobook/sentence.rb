@@ -1,5 +1,6 @@
 require_relative 'speech'
 require_relative '../tts'
+require_relative '../text_helpers'
 
 module Audiobook
   # Represents a sentence of text to speak.
@@ -58,6 +59,10 @@ module Audiobook
       h = { 'text' => text }
       h['references'] = references.map(&:to_h) if references && !references.empty?
       h
+    end
+
+    def self.ends_with_punctuation?(text)
+      TextHelpers.ends_with_punctuation?(text)
     end
   end
 end

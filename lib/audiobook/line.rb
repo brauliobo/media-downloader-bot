@@ -1,3 +1,5 @@
+require_relative '../text_helpers'
+
 module Audiobook
   # Represents a line of text extracted from a document with optional formatting metadata
   class Line
@@ -44,7 +46,7 @@ module Audiobook
     end
 
     def ends_with_punctuation?
-      @text =~ /[\.!?¡¿；。？！]"?$/
+      TextHelpers.ends_with_punctuation?(@text)
     end
 
     def starts_with_capital?
