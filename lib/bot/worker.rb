@@ -70,30 +70,28 @@ module Bot
 
         popts = {dir: work_dir, bot:, msg:, st: @st}
         lines = msg.text.to_s.split("\n").reject(&:blank?)
-        doc   = pdf_document? || epub_document?
-        media = msg.audio.present? || msg.video.present?
 
         if lines.present?
           has_url = lines.any? { |l| l =~ URI::DEFAULT_PARSER.make_regexp }
           if has_url
             klass = Processors::Url
             procs = lines.map { |l| klass.new line: l, **popts }
-          elsif doc
+          elsif Processors::Document.can_handle?(msg)
             klass = Processors::Document
             procs = [klass.new(line: lines.join(' '), **popts)]
-          elsif media
-            klass = Processors::File
+          elsif Processors::Media.can_handle?(msg)
+            klass = Processors::Media
             procs = [klass.new(line: lines.join(' '), **popts)]
           else
             klass = Processors::Url
             procs = lines.map { |l| klass.new line: l, **popts }
           end
         else
-          if doc
+          if Processors::Document.can_handle?(msg)
             klass = Processors::Document
             procs = [klass.new(**popts)]
-          elsif media
-            klass = Processors::File
+          elsif Processors::Media.can_handle?(msg)
+            klass = Processors::Media
             procs = [klass.new(**popts)]
           else
             klass = Processors::Url
@@ -139,19 +137,6 @@ module Bot
         return if inputs.blank? or @st.keep?
       end
       msg.resp
-    end
-
-    # --- PDF support -----------------------------------------------------
-
-    def pdf_document?
-      doc = msg.document
-      doc && (doc.mime_type == 'application/pdf' || doc.file_name.to_s.downcase.end_with?('.pdf'))
-    end
-
-    def epub_document?
-      doc = msg.document
-      fname = doc&.file_name.to_s.downcase
-      doc && (doc.mime_type == 'application/epub+zip' || fname.end_with?('.epub'))
     end
 
     def upload i
