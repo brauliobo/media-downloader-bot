@@ -204,16 +204,7 @@ EOS
     @user_queue.wait_for_slot(msg.from.id, msg) { |text| worker.wait_in_queue(text) } unless MsgHelpers.from_admin?(msg)
     resp = worker.process
   ensure
-    if resp
-      if msg.bot.td_bot?
-        Thread.new do
-          sleep 5
-          msg.bot.delete_message(msg, resp.message_id, wait: nil)
-        end
-      else
-        msg.bot.delete_message(msg, resp.message_id, wait: nil)
-      end
-    end
+    msg.bot.delete_message(msg, resp.message_id, wait: nil) if resp
     @user_queue.release_slot(msg.from.id) { |next_msg| download(next_msg) }
   end
 
