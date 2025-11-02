@@ -21,11 +21,8 @@ module Audiobook
       { 'heading' => { 'text' => text } }
     end
 
-    # Generate audio with prepended pause (overrides Sentence#to_wav)
-    def to_wav(dir, idx, lang: 'en', stl: nil, **_kwargs)
-      wav = super(dir, idx, lang: lang)
-      Zipper.prepend_silence!(wav, PAUSE, dir: dir) if wav
-      wav
+    def pause_file(dir)
+      Zipper.get_pause_file(PAUSE, dir)
     end
   end
 end
