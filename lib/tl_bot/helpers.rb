@@ -109,15 +109,23 @@ class TlBot
 
     def wrap_upload_params(p)
       p = p.dup
-      p[:file] = build_upload_io(p.delete(:file_path), p.delete(:file_mime)) if p[:type].to_s == 'paid_media' && p[:file_path]
-      %i[audio video document].each { |k| kp = :"#{k}_path"; km = :"#{k}_mime"; p[k] = build_upload_io(p.delete(kp), p.delete(km)) if p[kp] }
+      if p[:type].to_s == 'paid_media' && p[:file_path]
+        p[:file] = build_upload_io(p.delete(:file_path), p.delete(:file_mime))
+      end
+      %i[audio video document].each do |k|
+        kp = :"#{k}_path"
+        km = :"#{k}_mime"
+        p[k] = build_upload_io(p.delete(kp), p.delete(km)) if p[kp]
+      end
       p[:thumb] = build_upload_io(p.delete(:thumb_path), 'image/jpeg') if p[:thumb_path]
       p[:thumbnail] = build_upload_io(p.delete(:thumbnail_path), 'image/jpeg') if p[:thumbnail_path]
       p
     end
 
     def build_upload_io(path, mime=nil)
-      path && Faraday::UploadIO.new(path, mime || Rack::Mime.mime_type(File.extname(path)) || 'application/octet-stream')
+      return unless path
+      mime ||= Rack::Mime.mime_type(File.extname(path)) || 'application/octet-stream'
+      Faraday::UploadIO.new(path, mime)
     end
 
     def delete_message msg, id, wait: 30.seconds
