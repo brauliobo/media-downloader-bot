@@ -37,7 +37,7 @@ RSpec.describe 'Image handling in PDFs with text' do
     images = page1.items.grep(Audiobook::Image)
     paragraphs = page1.items.select { |i| i.is_a?(Audiobook::Paragraph) && !i.is_a?(Audiobook::Image) }
     headings = page1.items.grep(Audiobook::Heading)
-    
+
     # First page should have at least an image
     expect(images.size).to be >= 1
     expect(images.first).to be_a(Audiobook::Image)
@@ -51,7 +51,7 @@ RSpec.describe 'Image handling in PDFs with text' do
       page = book.pages[page_idx]
       images = page.items.grep(Audiobook::Image)
       paragraphs = page.items.select { |i| i.is_a?(Audiobook::Paragraph) && !i.is_a?(Audiobook::Image) }
-      
+
       expect(images.size).to be >= 1, "Page #{page_idx + 1} should have at least one image"
       expect(paragraphs.size).to be >= 1, "Page #{page_idx + 1} should have at least one paragraph"
       expect(images.first).to be_a(Audiobook::Image)
