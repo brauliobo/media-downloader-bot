@@ -21,6 +21,7 @@ module Bot
 
     def release_slot(user_id, &block)
       @mutex.synchronize do
+        return if @running[user_id] <= 0
         @running[user_id] -= 1
         return unless (next_job = @queues[user_id].shift)
         Thread.new { block.call(next_job[:msg]) }
