@@ -6,7 +6,7 @@ require 'uri'
 require_relative 'parsers/pdf'
 require_relative 'parsers/epub'
 require_relative 'parsers/kindle'
-require_relative 'text_helpers'
+require_relative '../text_helpers'
 require_relative '../ocr'
 require_relative 'line'
 require_relative 'sentence'
@@ -58,11 +58,10 @@ module Audiobook
         parsed = Parsers::Pdf.parse(pdf_path, stl: stl, opts: opts)
         # Preserve the compiled PDF path in metadata for downstream upload
         begin
-          md = parsed[:metadata] || parsed['metadata'] || SymMash.new
-          md['kindle_pdf'] = pdf_path
-          md[:kindle_pdf] = pdf_path
-          parsed[:metadata] = md if parsed.is_a?(Hash)
-          parsed['metadata'] = md if parsed.is_a?(Hash)
+          parsed = SymMash.new(parsed) unless parsed.is_a?(SymMash)
+          md = parsed.metadata || SymMash.new
+          md.kindle_pdf = pdf_path
+          parsed.metadata = md
         rescue
         end
         return new(data: parsed, opts: opts, stl: stl)
@@ -93,21 +92,21 @@ module Audiobook
     end
 
     def self.from_yaml(yaml_path, opts: nil, stl: nil)
-      data = YAML.load_file(yaml_path) || {}
+      data = SymMash.new(YAML.load_file(yaml_path) || {})
       # Support both new format (no metadata) and legacy format (with metadata)
-      metadata = data['metadata'] || {}
+      metadata = data.metadata || SymMash.new
       
       # Parse pages or legacy items
-      pages = if data['pages']
-        (data['pages'] || []).map do |page_data|
-          page_info = page_data['page'] || {}
-          number = page_info['number'] || 0
-          items = (page_info['items'] || []).map { |item| parse_item(item) }.compact
+      pages = if data.pages
+        (data.pages || []).map do |page_data|
+          page_info = (page_data.is_a?(Hash) ? SymMash.new(page_data) : page_data).page || SymMash.new
+          number = page_info.number || 0
+          items = (page_info.items || []).map { |item| parse_item(item.is_a?(Hash) ? SymMash.new(item) : item) }.compact
           Page.new(number, items)
         end
       else
         # Legacy format: single page with all items
-        items = (data['items'] || []).map { |item| parse_item(item) }.compact
+        items = (data.items || []).map { |item| parse_item(item.is_a?(Hash) ? SymMash.new(item) : item) }.compact
         [Page.new(1, items)]
       end
       
@@ -116,37 +115,40 @@ module Audiobook
       obj.instance_variable_set(:@metadata, metadata)
       obj.instance_variable_set(:@opts, opts || SymMash.new)
       obj.instance_variable_set(:@stl, stl)
-      obj.instance_variable_set(:@lang, metadata['language'] || 'en')
+      obj.instance_variable_set(:@lang, metadata.language || 'en')
       obj.instance_variable_set(:@pages, pages)
       obj
     end
 
     def self.parse_item(item)
+      item = SymMash.new(item) unless item.is_a?(SymMash)
       # Item is a hash with single key indicating type
-      if item['heading']
-        Heading.new(item['heading']['text'])
-      elsif item['reference']
-        ref_info = item['reference']
-        sentences = (ref_info['sentences'] || []).map do |s|
-          sent = Sentence.new(s['text'])
-          # nested references unlikely, ignore
+      if item.heading
+        Heading.new(item.heading.text)
+      elsif item.reference
+        ref_info = item.reference
+        sentences = (ref_info.sentences || []).map do |s|
+          s = SymMash.new(s) unless s.is_a?(SymMash)
+          sent = Sentence.new(s.text)
           sent
         end
-        Reference.new(ref_info['id'], sentences)
-      elsif item['image']
+        Reference.new(ref_info.id, sentences)
+      elsif item.image
         img = Image.allocate
-        img.instance_variable_set(:@path, item['image']['path'] || '')
-        sentences = (item['image']['sentences'] || []).map { |s| Sentence.new(s['text']) }
+        img.instance_variable_set(:@path, item.image.path || '')
+        sentences = (item.image.sentences || []).map { |s| Sentence.new((s.is_a?(Hash) ? SymMash.new(s) : s).text) }
         img.instance_variable_set(:@sentences, sentences)
         img
-      elsif item['paragraph']
-        sentences = (item['paragraph']['sentences'] || []).map do |s|
-          sent = Sentence.new(s['text'])
-          if s['references']
-            sent.references = s['references'].map do |r|
-              ref_info = r['reference'] || r
-              ref_sents = (ref_info['sentences'] || []).map { |rs| Sentence.new(rs['text']) }
-              Reference.new(ref_info['id'], ref_sents)
+      elsif item.paragraph
+        sentences = (item.paragraph.sentences || []).map do |s|
+          s = SymMash.new(s) unless s.is_a?(SymMash)
+          sent = Sentence.new(s.text)
+          if s.references
+            sent.references = s.references.map do |r|
+              ref_info = r.reference || r
+              ref_info = SymMash.new(ref_info) unless ref_info.is_a?(SymMash)
+              ref_sents = (ref_info.sentences || []).map { |rs| Sentence.new((rs.is_a?(Hash) ? SymMash.new(rs) : rs).text) }
+              Reference.new(ref_info.id, ref_sents)
             end
           end
           sent
@@ -154,18 +156,18 @@ module Audiobook
         Paragraph.new(sentences)
       else
         # Legacy format fallback with 'type' field
-        type = item['type']
+        type = item.type
         case type
         when 'Heading'
-          Heading.new(item['text'])
+          Heading.new(item.text)
         when 'Image'
           img = Image.allocate
-          img.instance_variable_set(:@path, item['path'] || '')
-          sentences = (item['sentences'] || []).map { |s| Sentence.new(s['text']) }
+          img.instance_variable_set(:@path, item.path || '')
+          sentences = (item.sentences || []).map { |s| Sentence.new((s.is_a?(Hash) ? SymMash.new(s) : s).text) }
           img.instance_variable_set(:@sentences, sentences)
           img
         else
-          sentences = (item['sentences'] || []).map { |s| Sentence.new(s['text']) }
+          sentences = (item.sentences || []).map { |s| Sentence.new((s.is_a?(Hash) ? SymMash.new(s) : s).text) }
           Paragraph.new(sentences)
         end
       end
@@ -173,9 +175,12 @@ module Audiobook
 
     def initialize(data:, opts: nil, stl: nil)
       @data = data
-      @metadata = @data.metadata || {}
+      @metadata = @data.metadata || SymMash.new
       @opts = opts || SymMash.new
       @stl = stl
+      
+      # Detect language from parsed content
+      detect_language_from_content
       @lang = @metadata.language || 'en'
       
       # Handle new line-based format or legacy paragraph format
@@ -192,8 +197,8 @@ module Audiobook
 
     # Write YAML file following class hierarchy representation
     def write(yaml_path)
-      lang_code = @metadata['language'] || @lang || 'en'
-      book_hash = { 'language' => lang_code, 'pages' => pages.map(&:to_h) }
+      lang_code = @metadata.language || @lang || 'en'
+      book_hash = SymMash.new('language' => lang_code, 'pages' => pages.map(&:to_h))
       begin
         File.write(yaml_path, YAML.dump(book_hash, line_width: -1))
       rescue ArgumentError
@@ -203,6 +208,27 @@ module Audiobook
 
     private
 
+    def detect_language_from_content
+      return if @metadata.language
+      
+      sample_paras = if @data.content&.lines
+        @data.content.lines.first(10).map { |l| SymMash.new(text: l[:text] || l['text']) }.reject { |p| p.text.to_s.strip.empty? }
+      elsif @data.content&.paragraphs
+        @data.content.paragraphs.first(10).map { |p| SymMash.new(text: p['text'] || p[:text]) }.reject { |p| p.text.to_s.strip.empty? }
+      elsif @data.content&.text
+        [SymMash.new(text: @data.content.text)]
+      elsif @data.text
+        [SymMash.new(text: @data.text)]
+      else
+        []
+      end
+      
+      return if sample_paras.empty?
+      
+      lang = Ocr.detect_language(sample_paras) || 'en'
+      @metadata.language = lang
+    end
+
     # Build pages from Line objects (new format with font metadata)
     def pages_from_lines(lines_data, images_data = [])
       # Filter headers/footers unless includeall option is set
@@ -211,19 +237,20 @@ module Audiobook
       
       # Create Line objects
       lines = filtered_lines.map do |l|
+        l = SymMash.new(l) unless l.is_a?(SymMash)
         Line.new(
-          l['text'], 
-          font_size: l['font_size'], 
-          y_position: l['y'], 
-          page_number: l['page'],
-          x_position: l['x'],
-          top_spacing: l['top_spacing'],
-          bottom_spacing: l['bottom_spacing']
+          l.text, 
+          font_size: l.font_size, 
+          y_position: l.y, 
+          page_number: l.page,
+          x_position: l.x,
+          top_spacing: l.top_spacing,
+          bottom_spacing: l.bottom_spacing
         )
       end.reject(&:empty?)
       
       # Discover paragraphs across all pages (handles cross-page paragraphs)
-      items_with_pages = Paragraph.discover_from_lines(lines)
+      items_with_pages = Paragraph.discover_from_lines(lines).map { |e| SymMash.new(e) }
 
       # Pre-compute body font per page as the most frequent paragraph font size
       body_font_by_page = compute_body_font_by_page(items_with_pages)
@@ -239,23 +266,23 @@ module Audiobook
         #   into the Reference object and remove them from the items list
         # - If subsequent paragraphs (same font size as footnotes) appear before the next marker,
         #   attach them to the last reference on that page (supports multi-paragraph notes)
-      ref_map = Hash.new { |h, k| h[k] = {} } # { page => { '5' => Reference } }
-      pending_refs = Hash.new { |h, k| h[k] = [] }
+      ref_map = SymMash.new { |h, k| h[k] = SymMash.new } # { page => { '5' => Reference } }
+      pending_refs = SymMash.new { |h, k| h[k] = [] }
       # For markers that appear between lines inside a paragraph (e.g., after a word),
       # when the previous paragraph's last sentence doesn't end with punctuation yet,
       # defer attaching and bind to the first sentence of the next paragraph on the same page.
-      attach_to_next = Hash.new { |h, k| h[k] = [] }
+      attach_to_next = SymMash.new { |h, k| h[k] = [] }
       last_ref_by_page = {}
       last_para_by_page = {}
 
       # Pre-pass: detect inline markers appended to words/punctuation, e.g., "Troyes.1" or "Eschenbach2"
       # Remove the numeric token from the sentence and attach the reference to this sentence
       items_with_pages.each do |entry|
-        item = entry[:item]
+        item = entry.item
         next unless item.is_a?(Paragraph)
-        page_num = entry[:page]
+        page_num = entry.page
         item.sentences.each do |sent|
-          new_text, ids = Audiobook::TextHelpers.strip_inline_markers(sent.text)
+          new_text, ids = TextHelpers.strip_inline_markers(sent.text)
           if ids.any?
             sent.instance_variable_set(:@text, new_text)
             ids.each do |id|
@@ -272,10 +299,10 @@ module Audiobook
       # First pass: identify markers and attach to previous paragraph's last sentence
       processed = []
       items_with_pages.each do |entry|
-        item = entry[:item]
-        page_num = entry[:page]
+        item = entry.item
+        page_num = entry.page
 
-        item_font = entry[:font_size]
+        item_font = entry.font_size
 
         if (ref_ids = marker_id_for.call(item)) && !ref_ids.empty?
           # Attach each marker id to the last sentence of the previous paragraph
@@ -298,7 +325,7 @@ module Audiobook
               attach_to_next[page_num] << ref
             end
 
-            pending_refs[page_num] << { ref: ref, min_idx: processed.size }
+            pending_refs[page_num] << SymMash.new(ref: ref, min_idx: processed.size)
           end
           next
         end
@@ -332,8 +359,8 @@ module Audiobook
       # Second pass: move footnote paragraphs into existing references on same page
       items_with_pages = []
       processed.each_with_index do |entry, idx|
-        item = entry[:item]
-        page_num = entry[:page]
+        item = entry.item
+        page_num = entry.page
         queue = pending_refs[page_num]
         if item.is_a?(Paragraph) && item.sentences.any?
           first_text = item.sentences.first.text
@@ -351,21 +378,21 @@ module Audiobook
               ref_map[page_num][lead_id] = ref
             end
             if ref
-              if (entry_info = queue.find { |info| info[:ref].equal?(ref) })
-                entry_info[:min_idx] = idx + 1
+              if (entry_info = queue.find { |info| info.ref.equal?(ref) })
+                entry_info.min_idx = idx + 1
               end
               item.sentences.first.instance_variable_set(:@text, leading_match[2])
               ref.add_sentences(item.sentences)
-              pending_refs[page_num].reject! { |info| info[:ref].equal?(ref) && info[:min_idx] <= idx }
+              pending_refs[page_num].reject! { |info| info.ref.equal?(ref) && info.min_idx <= idx }
               last_ref_by_page[page_num] = ref
               next
             end
-          elsif (info = queue.find { |data| data[:min_idx] <= idx })
+          elsif (info = queue.find { |data| data.min_idx <= idx })
             body_font = body_font_by_page[page_num]
-            line_font = entry[:font_size]
+            line_font = entry.font_size
             if body_font && line_font && line_font < body_font.to_f - 1.0
-              ref = info[:ref]
-              info[:min_idx] = idx + 1
+              ref = info.ref
+              info.min_idx = idx + 1
               ref.add_sentences(item.sentences)
               last_ref_by_page[page_num] = ref
               pending_refs[page_num].delete(info)
@@ -374,7 +401,7 @@ module Audiobook
           else
             ref = last_ref_by_page[page_num]
             body_font = body_font_by_page[page_num]
-            line_font = entry[:font_size]
+            line_font = entry.font_size
             if ref && (queue.nil? || queue.empty?) && body_font && line_font && line_font < body_font.to_f - 1.0
               ref.add_sentences(item.sentences)
               next
@@ -387,13 +414,13 @@ module Audiobook
       # Merge paragraphs split across pages or within a page when it looks like a continuation
       merged_items = []
       items_with_pages.each do |entry|
-        item = entry[:item]
+        item = entry.item
         if item.is_a?(Paragraph) && item.sentences.any? && merged_items.any?
           prev_entry = merged_items[-1]
-          prev_item = prev_entry[:item]
+          prev_item = prev_entry.item
           if prev_item.is_a?(Paragraph)
-            page_changed = entry[:page] > prev_entry[:page]
-            font_close = entry[:font_size] && prev_entry[:font_size] ? (entry[:font_size] - prev_entry[:font_size]).abs < 0.6 : true
+            page_changed = entry.page > prev_entry.page
+            font_close = entry.font_size && prev_entry.font_size ? (entry.font_size - prev_entry.font_size).abs < 0.6 : true
             if font_close
               last_text = prev_item.sentences.last&.text.to_s.strip
               first_text = item.sentences.first&.text.to_s.strip
@@ -431,12 +458,13 @@ module Audiobook
       # Add Image objects for pages with images (can coexist with text on same page)
       total_pages = @metadata.page_count
       images_data.each do |img_data|
-        page_num = img_data['page']
-        path = img_data['path']
+        img_data = SymMash.new(img_data) unless img_data.is_a?(SymMash)
+        page_num = img_data.page
+        path = img_data.path
         next unless path && page_num
         next if images_added.include?([page_num, path])
 
-        page_context = total_pages ? { current: page_num, total: total_pages } : nil
+        page_context = total_pages ? SymMash.new(current: page_num, total: total_pages) : nil
         # Image will handle rasterization and OCR in its initializer
         pages_hash[page_num] ||= []
         pages_hash[page_num] << Image.new(path, stl: @stl, page_context: page_context)
@@ -448,16 +476,17 @@ module Audiobook
     end
 
     def compute_body_font_by_page(items_with_pages)
-      font_counts_by_page = Hash.new { |h, k| h[k] = Hash.new(0) }
+      font_counts_by_page = SymMash.new { |h, k| h[k] = SymMash.new }
       items_with_pages.each do |entry|
-        item = entry[:item]
+        item = entry.item
         next unless item.is_a?(Paragraph)
-        fs = entry[:font_size]
+        fs = entry.font_size
         next unless fs
-        font_counts_by_page[entry[:page]][(fs.to_f * 10).round / 10.0] += 1
+        font_counts_by_page[entry.page][(fs.to_f * 10).round / 10.0] ||= 0
+        font_counts_by_page[entry.page][(fs.to_f * 10).round / 10.0] += 1
       end
-      font_counts_by_page.each_with_object(Hash.new { |h, k| h[k] = nil }) do |(page, counts), acc|
-        acc[page] = counts.max_by { |_, c| c }&.first
+      font_counts_by_page.each_with_object(SymMash.new) do |(page, counts), acc|
+        acc[page] = counts.to_a.max_by { |_, c| c }&.first
       end
     end
 
@@ -473,23 +502,22 @@ module Audiobook
     end
 
     def group_items_by_page(items_with_pages)
-      items_with_pages.each_with_object(Hash.new { |h, k| h[k] = [] }) do |item_data, h|
-        h[item_data[:page]] << item_data[:item]
+      items_with_pages.each_with_object(SymMash.new { |h, k| h[k] = [] }) do |item_data, h|
+        h[item_data.page] << item_data.item
       end
     end
 
     # Build pages from legacy paragraph format
     def pages_from_paragraphs
       paras_with_pages = extract_paragraphs_with_pages
-      pages_hash = {}
+      pages_hash = SymMash.new { |h, k| h[k] = [] }
       paras_with_pages.each do |para_data|
         page_nums = para_data[:page_numbers] || [1]
         page_num = page_nums.first
-        pages_hash[page_num] ||= []
         pages_hash[page_num] << para_data[:text]
       end
       
-      pages_hash.sort.map do |page_num, texts|
+      pages_hash.to_a.sort.map do |page_num, texts|
         items = Paragraph.discover(texts)
         Page.new(page_num, items)
       end
@@ -499,18 +527,18 @@ module Audiobook
     def extract_paragraphs_with_pages
       paras = @data.content&.paragraphs || []
       unless paras.empty?
-        return paras.map { |p| { text: p['text'], page_numbers: p['page_numbers'] || [1] } }
+        return paras.map { |p| SymMash.new(text: p['text'] || p[:text] || p.text, page_numbers: p['page_numbers'] || p[:page_numbers] || p.page_numbers || [1]) }
       end
 
       @stl&.update 'No paragraphs found, checking alternative text'
       alt = find_alternative_text
       return [] unless alt&.strip&.length&.positive?
-      [{ text: alt, page_numbers: [1] }]
+      [SymMash.new(text: alt, page_numbers: [1])]
     end
 
     def extract_raw_paragraphs
       paras = @data.content&.paragraphs || []
-      return paras.map { |p| p['text'] } unless paras.empty?
+      return paras.map { |p| p['text'] || p[:text] || p.text } unless paras.empty?
 
       @stl&.update 'No paragraphs found, checking alternative text'
       alt = find_alternative_text
@@ -526,7 +554,7 @@ module Audiobook
     end
 
     def extract_pages_text
-      pages_text = @data.content.pages.map { |page| page['text'] }.compact.join(' ')
+      pages_text = @data.content.pages.map { |page| page['text'] || page[:text] || page.text }.compact.join(' ')
       pages_text.empty? ? nil : pages_text
     end
 
@@ -544,16 +572,18 @@ module Audiobook
     end
 
     def process_header(page, prev_headers)
-      return unless page['header']&.strip&.length&.positive?
-      header_text = page['header'].strip
+      page = SymMash.new(page) unless page.is_a?(SymMash)
+      return unless page.header&.strip&.length&.positive?
+      header_text = page.header.strip
       result = header_text unless prev_headers.include?(header_text)
       prev_headers << header_text
       result
     end
 
     def process_footer(page, prev_footers)
-      return unless page['footer']&.strip&.length&.positive?
-      footer_text = page['footer'].strip
+      page = SymMash.new(page) unless page.is_a?(SymMash)
+      return unless page.footer&.strip&.length&.positive?
+      footer_text = page.footer.strip
       result = footer_text unless prev_footers.include?(footer_text)
       prev_footers << footer_text
       result
@@ -567,14 +597,16 @@ module Audiobook
       norm = ->(s) { s.downcase.gsub(/\d+/, '<d>').gsub(/\s+/, ' ').strip }
       
       # Group lines by page
-      pages_hash = lines_data.group_by { |l| l['page'] || l[:page] }
+      pages_hash = lines_data.group_by { |l| l['page'] || l[:page] || (l.is_a?(SymMash) ? l.page : nil) }
       hdrf_counts = Hash.new(0)
       
       # Count how often first/last lines appear across pages
       pages_hash.each do |_, page_lines|
-        first_text = page_lines.first&.dig('text') || page_lines.first&.dig(:text)
-        last_text = page_lines.last&.dig('text') || page_lines.last&.dig(:text)
-        [first_text, last_text].compact.map(&norm).each { |l| hdrf_counts[l] += 1 }
+        first_line = page_lines.first
+        last_line = page_lines.last
+        first_text = first_line&.dig('text') || first_line&.dig(:text) || (first_line.is_a?(SymMash) ? first_line.text : nil)
+        last_text = last_line&.dig('text') || last_line&.dig(:text) || (last_line.is_a?(SymMash) ? last_line.text : nil)
+        [first_text, last_text].compact.map(&norm).each { |l| hdrf_counts[l] ||= 0; hdrf_counts[l] += 1 }
       end
       
       # If a line appears on >30% of pages, it's likely a header/footer
@@ -583,7 +615,7 @@ module Audiobook
       
       # Filter out detected headers/footers
       lines_data.reject do |l|
-        text = l['text'] || l[:text]
+        text = l['text'] || l[:text] || (l.is_a?(SymMash) ? l.text : nil)
         hdrf_set.include?(norm.call(text))
       end
     end
@@ -591,10 +623,10 @@ module Audiobook
     # ---------- language detection ----------
     def refine_language_detection!
       @stl&.update 'Detecting language from OCR content'
-      sample_paras = pages.flat_map(&:all_sentences).first(5).map { |s| { text: s.text } }
+      sample_paras = pages.flat_map(&:all_sentences).first(5).map { |s| SymMash.new(text: s.text) }
       detected = Ocr.detect_language(sample_paras) || 'en'
       @lang = detected
-      @metadata['language'] = detected
+      @metadata.language = detected
       @stl&.update "Detected language: #{detected}"
     end
 
@@ -614,7 +646,7 @@ module Audiobook
         end
       end
       @lang = @opts.lang.to_s
-      @metadata['language'] = @lang
+      @metadata.language = @lang
     end
   end
 end
