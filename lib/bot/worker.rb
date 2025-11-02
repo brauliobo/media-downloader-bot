@@ -201,8 +201,14 @@ module Bot
       type  = i.type
       typek = paid ? :media : type.name
 
-      media  = SymMash.new(type: type.name, duration: durat, width: vstrea&.width, height: vstrea&.height, title: info.title, performer: info.uploader, supports_streaming: true)
-      media.merge!("#{typek}_path".to_sym => file_path, "#{typek}_mime".to_sym => mime, thumb_path: thumb_path, thumbnail_path: thumb_path)
+      media  = SymMash.new(
+        type: type.name, duration: durat, width: vstrea&.width, height: vstrea&.height,
+        title: info.title, performer: info.uploader, supports_streaming: true
+      )
+      media.merge!(
+        "#{typek}_path".to_sym => file_path, "#{typek}_mime".to_sym => mime,
+        thumb_path: thumb_path, thumbnail_path: thumb_path
+      )
       ret_msg = i.ret_msg = SymMash.new star_count: (20 if paid)
       if paid
         media[:media] = 'attach://file'
