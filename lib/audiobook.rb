@@ -59,28 +59,14 @@ module Audiobook
         type: SymMash.new(name: :audio),
         info: SymMash.new(title: base, uploader: ''),
         mime: 'audio/ogg',
-        opts: SymMash.new(format: SymMash.new(mime: 'audio/ogg')),
-        oprobe: Prober.for(result.audio)
-      ),
-    ]
-
-    pdf_path = result.respond_to?(:pdf) && result.pdf && File.exist?(result.pdf) ? result.pdf : nil
-
-    unless pdf_path
-      book = Book.from_yaml(result.yaml, opts: opts, stl: stl)
-      if TextPdf.should_generate?(book)
-        pdf_path = TextPdf.generate(book, File.join(dir, "#{base}.pdf"), stl: stl)
-      end
-    end
-
-    if pdf_path && File.exist?(pdf_path)
-      uploads << SymMash.new(
-        fn_out: pdf_path,
-        type: SymMash.new(name: :document),
-        info: SymMash.new(title: base, uploader: ''),
-        mime: 'application/pdf',
-        opts: SymMash.new(format: SymMash.new(mime: 'application/pdf'))
+        opts: SymMash.new(format: SymMash.new(mime: 'audio/ogg'))
       )
+    ]
+    
+    begin
+      uploads[1].oprobe = Prober.for(result.audio)
+    rescue => e
+      # Probe failed - upload_one will probe if needed
     end
 
     uploads
