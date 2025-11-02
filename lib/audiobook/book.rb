@@ -211,7 +211,15 @@ module Audiobook
       
       # Create Line objects
       lines = filtered_lines.map do |l|
-        Line.new(l['text'], font_size: l['font_size'], y_position: l['y'], page_number: l['page'])
+        Line.new(
+          l['text'], 
+          font_size: l['font_size'], 
+          y_position: l['y'], 
+          page_number: l['page'],
+          x_position: l['x'],
+          top_spacing: l['top_spacing'],
+          bottom_spacing: l['bottom_spacing']
+        )
       end.reject(&:empty?)
       
       # Discover paragraphs across all pages (handles cross-page paragraphs)
