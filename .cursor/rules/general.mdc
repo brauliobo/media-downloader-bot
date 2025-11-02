@@ -39,6 +39,22 @@ These rules guide any AI-assisted edits in this project. They encode the repo’
 - For file/command execution, `Dir.chdir dir` locally within a block and always exit the directory.
 - Respect `Bot::Worker.tmpdir` and `ENV['TMPDIR']` when present.
 
+### SymMash usage
+- **Always use SymMash instead of Hash**: Replace all hash literals `{}` with `SymMash.new`, and `Hash.new { ... }` with `SymMash.new { ... }`.
+- **Use dot notation**: Replace all bracket access `hash['key']` and `hash[:key]` with dot notation `hash.key`.
+- **Normalize early**: When converting external data (YAML, JSON, parsed documents), wrap in SymMash immediately: `SymMash.new(YAML.load_file(path))`.
+- **Normalize in loops**: When processing collections of hashes, normalize once before iteration rather than checking `is_a?(Hash)` repeatedly:
+  ```ruby
+  # Good: normalize once, then use
+  normalized = items.map { |i| i.is_a?(Hash) ? SymMash.new(i) : i }
+  normalized.each { |item| item.field }
+  
+  # Bad: checking on every access
+  items.each { |i| (i.is_a?(Hash) ? SymMash.new(i) : i).field }
+  ```
+- **Preserve compatibility**: When reading mixed data (hashes from external sources), check and convert: `data = SymMash.new(data) unless data.is_a?(SymMash)`.
+- **Access patterns**: After normalization, use dot notation consistently. Avoid mixing bracket and dot access in the same code path.
+
 ### Pipelines & architecture
 - Orchestrator: `Bot::Worker#process` manages status, batching, ordering, and uploading.
 - Inputs are represented as `SymMash` objects containing `fn_in`, `opts`, `info`, etc.
