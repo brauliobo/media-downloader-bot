@@ -1,5 +1,6 @@
 module TextHelpers
   EOS_PUNCT      = /[.!?…]$/
+  EOS_PUNCT_FULL = /[\.!?¡¿；。？！]"?$/
   CLOSERS_ONLY   = /\A["')\]]+\z/
   EOS_WITH_CLOSE = /[.!?…]["')\]]*$/
 
@@ -120,6 +121,10 @@ module TextHelpers
 
   def self.eos_punct?(raw)
     raw.strip.match?(EOS_PUNCT)
+  end
+
+  def self.ends_with_punctuation?(text)
+    text.to_s.strip.match?(EOS_PUNCT_FULL)
   end
 
   def self.closer_only?(raw)
