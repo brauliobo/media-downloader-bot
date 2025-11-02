@@ -1,9 +1,8 @@
 require 'pdf-reader'
 require 'shellwords'
 require_relative 'base'
-require_relative '../text_helpers'
+require_relative '../../text_helpers'
 require_relative '../../utils/sh'
-require_relative '../../ocr'
 
 module Audiobook
   module Parsers
@@ -17,23 +16,20 @@ module Audiobook
         reader.pages.each_with_index do |page, idx|
           stl&.update "Analyzing document: page #{idx + 1}/#{reader.page_count}" if stl
           res = process_page(page, pdf_path)
-          if res[:lines]
-            all_lines.concat(res[:lines])
+          if res.lines
+            all_lines.concat(res.lines)
           end
           # Add image if page has images (can coexist with text)
-          if res[:image]
-            image_pages << res[:image]
+          if res.image
+            image_pages << res.image
           end
         end
 
-        sample_paras = all_lines.first(10).map { |l| { text: l[:text] || l['text'] } }.reject { |p| p[:text].to_s.strip.empty? }
-        lang = Ocr.detect_language(sample_paras) || 'en'
-        
-        {
-          metadata: { language: lang, has_ocr_pages: image_pages.any?, page_count: reader.page_count },
-          content: { lines: all_lines, images: image_pages },
+        SymMash.new(
+          metadata: SymMash.new(has_ocr_pages: image_pages.any?, page_count: reader.page_count),
+          content: SymMash.new(lines: all_lines, images: image_pages),
           opts: opts
-        }
+        )
       end
 
       def self.extract_images(pdf_path, dir)
@@ -63,7 +59,7 @@ module Audiobook
         page_num = page.number
         page_lines = []
         add_line = ->(text, font_size = nil, y = nil, x = nil) { 
-          page_lines << { text: text, font_size: font_size, y: y, x: x, page: page_num } unless text.to_s.strip.empty? 
+          page_lines << SymMash.new(text: text, font_size: font_size, y: y, x: x, page: page_num) unless text.to_s.strip.empty? 
         }
 
         # Helper to join runs left-to-right within a line and get min x position
@@ -72,14 +68,15 @@ module Audiobook
           parts = []
           prev = nil
           min_x = nil
-          runs.sort_by { |r| r[:x] || 0 }.each do |r|
-            t = r[:text]
+          normalized_runs = runs.map { |r| r.is_a?(Hash) ? SymMash.new(r) : r }
+          normalized_runs.sort_by { |r| r.x || 0 }.each do |r|
+            t = r.text
             next if t.nil? || t.empty?
-            min_x = r[:x] if r[:x] && (min_x.nil? || r[:x] < min_x)
+            min_x = r.x if r.x && (min_x.nil? || r.x < min_x)
             if prev
               # add a space between segments unless hyphen-join
-              if prev[:text].end_with?('-')
-                parts[-1] = prev[:text].chomp('-') + t
+              if prev.text.end_with?('-')
+                parts[-1] = prev.text.chomp('-') + t
               else
                 parts << t.prepend(' ')
               end
@@ -106,12 +103,12 @@ module Audiobook
           if prev_y && (prev_y - y).abs > (min_font * 0.3)
             joined, min_x = join_runs.call(current_runs)
             add_line.call(joined, current_font_size, current_y, min_x)
-            current_runs = [{ text:, font_size:, y:, x: }]
+            current_runs = [SymMash.new(text: text, font_size: font_size, y: y, x: x)]
             current_font_size = font_size
             current_y = y
             current_x = x
           else
-            current_runs << { text:, font_size:, y:, x: }
+            current_runs << SymMash.new(text: text, font_size: font_size, y: y, x: x)
             current_font_size = [current_font_size, font_size].compact.max
             current_y ||= y
             current_x = x if current_x.nil? || (x && x < current_x)
@@ -132,24 +129,24 @@ module Audiobook
 
         # Calculate spacing between lines and add x_position
         page_lines.each_with_index do |line, idx|
-          next if line[:y].nil?
+          next if line.y.nil?
           
           # Calculate top spacing (distance from previous line's bottom)
-          if idx > 0 && page_lines[idx - 1][:y]
-            prev_bottom = page_lines[idx - 1][:y]
-            current_top = line[:y]
-            line[:top_spacing] = prev_bottom - current_top
+          if idx > 0 && page_lines[idx - 1].y
+            prev_bottom = page_lines[idx - 1].y
+            current_top = line.y
+            line.top_spacing = prev_bottom - current_top
           end
           
           # Calculate bottom spacing (distance to next line's top)
-          if idx < page_lines.size - 1 && page_lines[idx + 1][:y]
-            current_bottom = line[:y]
-            next_top = page_lines[idx + 1][:y]
-            line[:bottom_spacing] = current_bottom - next_top
+          if idx < page_lines.size - 1 && page_lines[idx + 1].y
+            current_bottom = line.y
+            next_top = page_lines[idx + 1].y
+            line.bottom_spacing = current_bottom - next_top
           end
           
           # Ensure x_position is set (default to 0 if not available)
-          line[:x] ||= 0
+          line.x ||= 0
         end
 
         # Detect if page has images using pdfimages tool (more reliable)
@@ -164,10 +161,10 @@ module Audiobook
           false
         end
 
-        result = {}
-        result[:lines] = page_lines if page_lines.any?
+        result = SymMash.new
+        result.lines = page_lines if page_lines.any?
         if has_images || page_lines.empty?
-          result[:image] = { image: true, page: page_num, path: "#{pdf_path}#page=#{page_num}" }
+          result.image = SymMash.new(image: true, page: page_num, path: "#{pdf_path}#page=#{page_num}")
         end
 
         result
