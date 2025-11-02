@@ -28,12 +28,12 @@ module Audiobook
       wav_path = File.join(dir, "#{idx}.wav")
       return wav_path if File.exist?(wav_path)
 
-      # Implemented by subclasses that have #text or other content.
       synthesize_audio(wav_path, lang)
-
-      # Prepend silence if pause requested
-      Zipper.prepend_silence!(wav_path, pause, dir: dir)
       wav_path
+    end
+
+    def pause_file(dir)
+      Zipper.get_pause_file(pause, dir) if pause > 0
     end
 
     protected
