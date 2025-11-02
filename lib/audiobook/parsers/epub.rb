@@ -1,8 +1,7 @@
 require 'epub/parser'
 require 'nokogiri'
 require_relative 'base'
-require_relative '../text_helpers'
-require_relative '../../ocr'
+require_relative '../../text_helpers'
 
 module Audiobook
   module Parsers
@@ -48,7 +47,7 @@ module Audiobook
 
             next unless block_of_interest?(node)
 
-            text = Audiobook::TextHelpers.normalize_text(extract_inline_text(node))
+            text = TextHelpers.normalize_text(extract_inline_text(node))
             next if text.empty?
 
             font = effective_font_size_for(node)
@@ -56,7 +55,7 @@ module Audiobook
             text.split(/\n{2,}/).each do |part|
               part = part.strip
               next if part.empty?
-              lines << { 'text' => part, 'font_size' => font, 'y' => nil, 'page' => current_page }
+              lines << SymMash.new('text' => part, 'font_size' => font, 'y' => nil, 'page' => current_page)
             end
           end
           # Ensure page number advances between spine items, even if no markers were found
@@ -64,12 +63,10 @@ module Audiobook
           max_page_seen = [max_page_seen, current_page].max
         end
 
-        sample_paras = lines.first(10).map { |l| { text: l['text'] } }.reject { |p| p[:text].to_s.strip.empty? }
-        lang = Ocr.detect_language(sample_paras) || 'en'
-        page_count = [max_page_seen, current_page, lines.map { |l| l['page'] }.max || 1].compact.max
+        page_count = [max_page_seen, current_page, lines.map { |l| l.page }.max || 1].compact.max
 
         # Word-based pagination estimate (default ~300 words/page). Use the larger estimate.
-        total_words = lines.sum { |l| l['text'].to_s.split(/\s+/).reject(&:empty?).size }
+        total_words = lines.sum { |l| l.text.to_s.split(/\s+/).reject(&:empty?).size }
         wpp = (opts&.wpp || 300).to_i
         wpp = 300 if wpp <= 0
         est_pages = [1, (total_words / wpp.to_f).ceil].max
@@ -80,18 +77,18 @@ module Audiobook
           acc = 0.0
           lines.each do |l|
             page_num = 1 + (acc / words_per_page).floor
-            l['page'] = [page_num, desired_pages].min
+            l.page = [page_num, desired_pages].min
             # Count at least one word to avoid zero-length lines skewing distribution
-            acc += [l['text'].to_s.split(/\s+/).reject(&:empty?).size, 1].max
+            acc += [l.text.to_s.split(/\s+/).reject(&:empty?).size, 1].max
           end
           page_count = desired_pages
         end
         
-        {
-          metadata: { language: lang, page_count: page_count },
-          content: { lines: lines, images: [] },
+        SymMash.new(
+          metadata: SymMash.new(page_count: page_count),
+          content: SymMash.new(lines: lines, images: []),
           opts: opts
-        }
+        )
       end
 
       def self.extract_inline_text(node)
