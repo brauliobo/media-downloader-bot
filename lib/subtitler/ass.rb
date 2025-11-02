@@ -53,7 +53,8 @@ class Subtitler
     def self.from_vtt vtt, portrait: false, mode: :instagram
       require 'cgi'
 
-      vtt = vtt.encode('UTF-8', invalid: :replace, undef: :replace, replace: '').sub(/^\uFEFF/, '').sub(/^WEBVTT.*?(\r?\n){2}/m, '')
+      vtt = vtt.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
+      vtt = vtt.sub(/^\uFEFF/, '').sub(/^WEBVTT.*?(\r?\n){2}/m, '')
 
       cues = vtt.split(/\r?\n\r?\n+/).filter_map do |block|
         lines = block.split(/\r?\n/)
@@ -82,7 +83,10 @@ class Subtitler
           case mode_sym
           when :instagram
             wt.each_with_index.map do |(ws,we,_), i|
-              dialogue(ws, we, words.each_with_index.map { |w,idx| idx==i ? "{\\c&H00ffff&}#{HIGHLIGHT_STYLE}#{w}{\\r}{\\c&Hffffff&}" : w }.join(' '))
+              highlighted = words.each_with_index.map do |w, idx|
+                idx == i ? "{\\c&H00ffff&}#{HIGHLIGHT_STYLE}#{w}{\\r}{\\c&Hffffff&}" : w
+              end.join(' ')
+              dialogue(ws, we, highlighted)
             end
           when :karaoke
             durs = wt.map { |ws,we,_| ((we-ws)*100).round }
