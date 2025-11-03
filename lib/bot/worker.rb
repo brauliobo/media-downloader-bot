@@ -70,34 +70,7 @@ module Bot
 
         popts = {dir: work_dir, bot:, msg:, st: @st}
         lines = msg.text.to_s.split("\n").reject(&:blank?)
-
-        if lines.present?
-          has_url = lines.any? { |l| l =~ URI::DEFAULT_PARSER.make_regexp }
-          if has_url
-            klass = Processors::Url
-            procs = lines.map { |l| klass.new line: l, **popts }
-          elsif Processors::Document.can_handle?(msg)
-            klass = Processors::Document
-            procs = [klass.new(line: lines.join(' '), **popts)]
-          elsif Processors::Media.can_handle?(msg)
-            klass = Processors::Media
-            procs = [klass.new(line: lines.join(' '), **popts)]
-          else
-            klass = Processors::Url
-            procs = lines.map { |l| klass.new line: l, **popts }
-          end
-        else
-          if Processors::Document.can_handle?(msg)
-            klass = Processors::Document
-            procs = [klass.new(**popts)]
-          elsif Processors::Media.can_handle?(msg)
-            klass = Processors::Media
-            procs = [klass.new(**popts)]
-          else
-            klass = Processors::Url
-            procs = []
-          end
-        end
+        procs = process_lines(lines, popts)
         procs.each.with_index do |p, i|
           inputs[i] = p.process
         end
@@ -148,6 +121,23 @@ module Bot
     end
 
     private
+
+    def process_lines(lines, popts)
+      url_lines = lines.select { |l| l =~ URI::DEFAULT_PARSER.make_regexp }
+      if url_lines.any?
+        klass = Processors::Url
+        url_lines.map { |l| klass.new line: l, **popts }
+      elsif Processors::Document.can_handle?(msg)
+        klass = Processors::Document
+        [klass.new(line: lines.join(' '), **popts)]
+      elsif Processors::Media.can_handle?(msg)
+        klass = Processors::Media
+        [klass.new(line: lines.join(' '), **popts)]
+      else
+        @st&.error('No URL or media provided')
+        []
+      end
+    end
 
     def init_status
       return if @st
