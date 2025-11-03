@@ -1,5 +1,4 @@
 require 'mechanize'
-require 'net/http'
 require 'uri'
 require 'tempfile'
 require 'fileutils'
@@ -7,6 +6,7 @@ require 'concurrent'
 require 'active_support/concern'
 require 'active_support/core_ext/module/attribute_accessors'
 require_relative '../zipper'
+require_relative '../manager'
 
 class TTS
   module HTTPBackend
@@ -97,17 +97,9 @@ class TTS
           file&.close
         end
       else
-        uri = URI.parse(url)
-        req = Net::HTTP::Post.new(uri)
-        req['Accept'] = 'audio/wav'
-        req.set_form_data(form)
-        t = (ENV['HTTP_TIMEOUT'] || 1800).to_i
-        Net::HTTP.start(uri.host, uri.port, open_timeout: t, read_timeout: t) do |http|
-          http.request(req) do |res|
-            raise "TTS failed: #{res.code}" unless res.is_a?(Net::HTTPSuccess)
-            File.open(wav, 'wb') { |f| res.read_body { |chunk| f.write(chunk) } }
-          end
-        end
+        res = agent.post(url, form)
+        raise "TTS failed: #{res.code}" unless res.code == '200'
+        File.binwrite(wav, res.body)
       end
       wav
     end

@@ -64,7 +64,7 @@ class TlBot
     REPORT_CHAT_ID = ENV['REPORT_CHAT_ID']&.to_i
 
     def net_up?
-      Net::HTTP.new('www.google.com').head('/').kind_of? Net::HTTPOK
+      Manager.http.head('http://www.google.com/').code == '200' rescue false
     end
     def wait_net_up
       sleep 1 until net_up?
