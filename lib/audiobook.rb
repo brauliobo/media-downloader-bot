@@ -46,6 +46,9 @@ module Audiobook
     result = generate(source, audio_out, stl: stl, opts: opts)
     raise 'Failed to generate audiobook files' unless File.exist?(result.yaml) && File.exist?(result.audio)
 
+    book = Audiobook::Book.from_input(source, opts: opts, stl: stl)
+    thumbnail_path = book.thumb(dir: dir, base: base)
+
     uploads = [
       SymMash.new(
         fn_out: result.yaml,
@@ -57,12 +60,12 @@ module Audiobook
       SymMash.new(
         fn_out: result.audio,
         type: SymMash.new(name: :audio),
-        info: SymMash.new(title: base, uploader: ''),
+        info: SymMash.new(title: base, uploader: '', thumbnail: thumbnail_path),
         mime: 'audio/ogg',
         opts: SymMash.new(format: SymMash.new(mime: 'audio/ogg'))
       )
     ]
-    
+
     begin
       uploads[1].oprobe = Prober.for(result.audio)
     rescue => e
