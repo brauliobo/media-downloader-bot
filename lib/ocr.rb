@@ -1,9 +1,5 @@
-require 'base64'
-require_relative 'utils/sh'
-require 'mechanize'
-require 'timeout'
-require_relative 'text_helpers'
 require_relative 'ocr/ollama'
+require_relative 'ocr/tesseract'
 
 class Ocr
   BACKEND_CLASS = (ENV['OCR'] || 'Ollama').to_sym
@@ -15,10 +11,5 @@ class Ocr
   # Delegate transcription to the configured backend
   def self.transcribe(input_path, **kwargs)
     backend.transcribe(input_path, **kwargs)
-  end
-
-  # Delegate paragraph merging to the configured backend
-  def self.ai_merge_paragraphs(paragraphs, **kwargs)
-    backend.ai_merge_paragraphs(paragraphs, **kwargs)
   end
 end
