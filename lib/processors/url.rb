@@ -3,7 +3,6 @@ require_relative '../downloaders'
 
 module Processors
   class Url < Base
-    # Only delegate download and download_one to downloader; keep handle_input in Base
     delegate :download, :download_one, to: :downloader
 
     def downloader
