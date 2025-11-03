@@ -178,15 +178,14 @@ module Processors
       m.url    = i.url
       i.opts.metadata = m
 
-      fn_out = Output.filename(i.info, dir: dir, ext: i.format.ext, pos: pos)
+      fn_out = File.expand_path(Output.filename(i.info, dir: dir, ext: i.format.ext, pos: pos))
+      fn_in = File.expand_path(i.fn_in)
 
-      Dir.chdir dir do
-        o, e, st = Zipper.send "zip_#{i.type.name}", i.fn_in, fn_out,
-          opts: i.opts, probe: i.probe, stl: @stl, info: i.info
-        if st != 0
-          @stl.error "convert failed: #{o}\n#{e}"
-          return
-        end
+      o, e, st = Zipper.send "zip_#{i.type.name}", fn_in, fn_out,
+        opts: i.opts, probe: i.probe, stl: @stl, info: i.info
+      if st != 0
+        @stl.error "convert failed: #{o}\n#{e}"
+        return
       end
 
       fn_out
@@ -262,10 +261,10 @@ module Processors
         chosen = Zipper.choose_format(Zipper::Types.video, locopts, s_dur)
         locopts.format = chosen || Zipper::Types.video.h264
 
-        Dir.chdir dir do
-          o, e, st = Zipper.zip_video(i.fn_in, fn_out, opts: locopts, probe: i.probe, stl: @stl, info: i.info)
-          next @stl&.error("convert failed: #{o}\n#{e}") if st != 0
-        end
+        fn_out_abs = File.expand_path(fn_out)
+        fn_in_abs = File.expand_path(i.fn_in)
+        o, e, st = Zipper.zip_video(fn_in_abs, fn_out_abs, opts: locopts, probe: i.probe, stl: @stl, info: i.info)
+        next @stl&.error("convert failed: #{o}\n#{e}") if st != 0
 
         uploads << SymMash.new(path: fn_out, caption: c[:title].to_s.strip.presence || i.info.title)
       end
