@@ -88,7 +88,8 @@ module Bot
 
         inputs.each.with_index.api_peach do |i, pos|
           @st.add 'downloading', prefix: i.info.title do |stline|
-            i.p = p = klass.new line: i.line, stline: stline, **popts
+            i.p = p = i.processor
+            p.stl = stline
 
             p.download_one i, pos: pos+1 if p.respond_to? :download_one
             next if stline.error?
@@ -102,7 +103,7 @@ module Bot
             stline.update 'uploading'
             upload i
           ensure
-            p.cleanup
+            p.cleanup if p
             up_queue.delete pos
           end
         end

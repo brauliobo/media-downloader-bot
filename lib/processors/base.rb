@@ -34,12 +34,15 @@ module Processors
     attr_reader :args
     attr_reader :url
     attr_reader :opts
+    attr_accessor :stl
 
     delegate_missing_to :bot
 
     def process(*args, **kwargs)
-      return download(*args, **kwargs) if respond_to?(:download)
-      raise NotImplementedError, "process not implemented"
+      result = download(*args, **kwargs) if respond_to?(:download)
+      result ||= raise NotImplementedError, "process not implemented"
+      Array(result).each { |r| r.processor = self if r.respond_to?(:processor=) }
+      result
     end
 
     def self.probe i
