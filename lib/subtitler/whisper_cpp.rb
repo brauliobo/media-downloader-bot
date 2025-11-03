@@ -1,10 +1,10 @@
-require 'net/http/post/multipart'
 require 'tempfile'
 require 'iso-639'
 require 'active_support/core_ext/module/attribute_accessors'
 
 require_relative '../zipper'
 require_relative 'translator'
+require_relative '../manager'
 
 class Subtitler
   module WhisperCpp
@@ -23,40 +23,50 @@ class Subtitler
     #                 emitted as two tokens (e.g. " test" + "ando").
     #   **extra     – passed directly to whisper.cpp
     def transcribe path, format: 'verbose_json', merge_words: true, **extra
-      @http ||= Net::HTTP.new(api.host, api.port).tap do |http|
-        http.read_timeout = 1.hour.to_i
-        http.use_ssl = api.scheme == 'https'
-      end
+      transcribe_with_params(path, format: format, merge_words: merge_words, language: 'auto', detect_lang: :full, **extra)
+    end
 
+    protected
+
+    def transcribe_with_params path, format:, merge_words:, language: nil, detect_lang: :simple, **extra
       wav  = Zipper.audio_to_wav path
-      file = UploadIO.new wav, 'audio/wav', File.basename(wav)
+      file = File.open(wav)
       params = {
         file:             file,
-        language:         'auto',
         temperature:      '0.0',
         response_format:  format,
         **extra
       }
+      params[:language] = language if language
 
-      req = Net::HTTP::Post::Multipart.new '/inference', params
-      res = @http.request req
+      url = "#{api.scheme}://#{api.host}:#{api.port}/inference"
+      res = Manager.http.post(url, params)
+      raise "TTS failed: #{res.code}" unless res.code == '200'
       out = res.body
 
       out = SymMash.new JSON.parse(out) if format.to_s.index('json')
 
-      # Accept both ISO codes ("es", "spa") and English names ("Spanish")
-      if out.is_a?(Hash) && out.language
-        raw = out.language.to_s.strip
-        entry = ISO_639.find_by_code(raw) || ISO_639.find_by_english_name(raw.capitalize)
-        lang = entry&.alpha2
-      end
+      lang = detect_language(out, detect_lang) if out.is_a?(Hash) && out.language
 
       merge_split_words!(out) if merge_words && out.respond_to?(:segments)
 
       SymMash.new output: out, lang: lang
 
     ensure
+      file&.close
       File.unlink wav if wav && File.exist?(wav)
+    end
+
+    def detect_language out, mode
+      return nil unless out.is_a?(Hash) && out.language
+      raw = out.language.to_s.strip
+      case mode
+      when :full
+        entry = ISO_639.find_by_code(raw) || ISO_639.find_by_english_name(raw.capitalize)
+        entry&.alpha2
+      when :simple
+        ISO_639.find_by_english_name(raw.capitalize)&.alpha2
+      end
     end
 
     # Convert verbose_json into SRT with inline per-word timings.
