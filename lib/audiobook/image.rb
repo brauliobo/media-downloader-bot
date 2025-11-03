@@ -53,7 +53,7 @@ module Audiobook
           # 2) pdfimages
           system("pdfimages -png -f #{page_num} -l #{page_num} '#{pdf_path}' '#{base}'")
           candidate = Dir["#{base}*.png"].min
-          FileUtils.mv(candidate, tmp_png) if candidate && !File.exist?(tmp_png)
+          FileUtils.mv(candidate, tmp_png) if candidate
         end
 
         unless File.exist?(tmp_png)
@@ -87,7 +87,7 @@ module Audiobook
       @sentences = parts.map { |s| Sentence.new(s) }.reject { |s| s.text.empty? }
     ensure
       FileUtils.rm_f(tmp_png) if tmp_png
-      Dir["#{base}*"].each { |f| FileUtils.rm_f(f) } if base && !base.empty?
+      Dir["#{base}*"].each { |f| FileUtils.rm_f(f) } if base
     end
   end
 end

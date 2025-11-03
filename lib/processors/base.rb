@@ -1,5 +1,6 @@
 require 'chronic_duration'
 require_relative '../output'
+require_relative '../utils/thumb'
 
 module Processors
   class Base
@@ -128,7 +129,7 @@ module Processors
         return i
       end
 
-      i.thumb = i.opts.thumb = thumb i.info
+      i.thumb = i.opts.thumb = Utils::Thumb.process(i.info, base_filename: i.info._filename, on_error: ->(e) { report_error(msg, e) })
       return unless i.fn_out = convert(i, pos: pos)
 
       if Zipper.size_mb_limit
@@ -153,35 +154,6 @@ module Processors
 
     def tag i
       Tagger.add_cover i.fn_out, i.thumb if i.thumb and i.type == Types.audio
-    end
-
-    THUMB_MAX_HEIGHT = 320
-    THUMB_RESIZE_CMD = "convert %{in} %{opts} -define jpeg:extent=190kb %{out}"
-
-    def thumb info
-      return if (url = info.thumbnail).blank?
-
-      im_in  = "#{info._filename}-ithumb.jpg"
-      im_out = "#{info._filename}-othumb.jpg"
-      ::File.write im_in, http.get(url).body
-
-      opts = if portrait? info
-        w,h = THUMB_MAX_HEIGHT * info.width/info.height, THUMB_MAX_HEIGHT
-        "-resize #{w}x#{h}\^ -gravity Center -extent #{w}x#{h}"
-      else
-        "-resize x#{THUMB_MAX_HEIGHT}"
-      end
-      Sh.run THUMB_RESIZE_CMD % {in: im_in, out: im_out, opts: opts}
-
-      im_out
-    rescue => e
-      report_error msg, e
-      nil
-    end
-
-    def portrait? info
-      return unless info.width
-      info.width < info.height
     end
 
     def convert i, pos: nil
@@ -218,10 +190,6 @@ module Processors
     end
 
     protected
-
-    def http
-      Mechanize.new
-    end
 
     def generate_and_upload_shorts(i)
       @stl&.update 'generating shorts plan'
@@ -318,10 +286,3 @@ module Processors
 
   end
 end
-
-module Processors
-  class Base
-  end
-end
-
-

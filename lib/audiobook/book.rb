@@ -8,6 +8,7 @@ require_relative 'parsers/epub'
 require_relative 'parsers/kindle'
 require_relative '../text_helpers'
 require_relative '../ocr'
+require_relative '../language'
 require_relative 'line'
 require_relative 'sentence'
 require_relative 'paragraph'
@@ -206,11 +207,36 @@ module Audiobook
       end
     end
 
+    def thumb(dir:, base:)
+      return nil unless (first_page = pages.first)
+      return nil unless (first_image = first_page.items.find { |item| item.is_a?(Audiobook::Image) })
+      return nil unless first_image.path
+
+      img_path = first_image.path.to_s
+      return img_path if File.exist?(img_path)
+
+      return nil unless img_path =~ /^(.+\.pdf)#page=(\d+)$/i
+      pdf_path = $1
+      page_num = $2.to_i
+      return nil unless File.exist?(pdf_path)
+      return nil unless page_num > 0
+
+      tmp_base = File.join(dir, "#{base}-thumb")
+      tmp_thumb = "#{tmp_base}.png"
+      return nil unless system("pdftoppm -f #{page_num} -l #{page_num} -png -singlefile '#{pdf_path}' '#{tmp_base}'")
+
+      candidate = Dir["#{tmp_base}*.png"].min
+      return nil unless candidate
+
+      FileUtils.mv(candidate, tmp_thumb) unless candidate == tmp_thumb
+      File.exist?(tmp_thumb) ? tmp_thumb : nil
+    end
+
     private
 
     def detect_language_from_content
       return if @metadata.language
-      
+
       sample_paras = if @data.content&.lines
         @data.content.lines.first(10).map { |l| SymMash.new(text: l[:text] || l['text']) }.reject { |p| p.text.to_s.strip.empty? }
       elsif @data.content&.paragraphs
@@ -225,7 +251,7 @@ module Audiobook
       
       return if sample_paras.empty?
       
-      lang = Ocr.detect_language(sample_paras) || 'en'
+      lang = Language.detect(sample_paras)
       @metadata.language = lang
     end
 
@@ -624,7 +650,7 @@ module Audiobook
     def refine_language_detection!
       @stl&.update 'Detecting language from OCR content'
       sample_paras = pages.flat_map(&:all_sentences).first(5).map { |s| SymMash.new(text: s.text) }
-      detected = Ocr.detect_language(sample_paras) || 'en'
+      detected = Language.detect(sample_paras)
       @lang = detected
       @metadata.language = detected
       @stl&.update "Detected language: #{detected}"

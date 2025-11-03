@@ -74,11 +74,6 @@ module Processors
         nil
       end
     end
-
-    protected
-    def http
-      Mechanize.new
-    end
   end
 end
 

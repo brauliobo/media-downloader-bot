@@ -57,7 +57,7 @@ module Audiobook
 
     def extra_hash
       h = { 'text' => text }
-      h['references'] = references.map(&:to_h) if references && !references.empty?
+      h['references'] = references.map(&:to_h) if references.any?
       h
     end
 

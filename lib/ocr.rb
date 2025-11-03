@@ -17,11 +17,6 @@ class Ocr
     backend.transcribe(input_path, **kwargs)
   end
 
-  # Delegate language detection to the configured backend
-  def self.detect_language(paragraphs, **kwargs)
-    backend.detect_language(paragraphs, **kwargs)
-  end
-
   # Delegate paragraph merging to the configured backend
   def self.ai_merge_paragraphs(paragraphs, **kwargs)
     backend.ai_merge_paragraphs(paragraphs, **kwargs)
