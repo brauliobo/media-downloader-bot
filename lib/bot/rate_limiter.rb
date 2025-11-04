@@ -8,19 +8,22 @@ module Bot
     included do
       class_attribute :rate_limiter_global, :rate_limiter_chats
       class_attribute :rl_mutex, :send_waiting_global, :send_waiting_by_chat
-      class_attribute :msg_edit_next_allowed_by_message, :edit_discard_interval_secs
+      class_attribute :last_edit_global, :last_edit_by_chat
+      class_attribute :global_rate_limit, :per_chat_rate_limit
 
       self.rl_mutex = Mutex.new
       self.send_waiting_global = 0
       self.send_waiting_by_chat = Hash.new(0)
-      self.msg_edit_next_allowed_by_message = Hash.new(0.0)
-      self.edit_discard_interval_secs = 1.0
+      self.last_edit_global = 0.0
+      self.last_edit_by_chat = Hash.new(0.0)
     end
 
     class_methods do
       def rate_limits(global:, per_chat:)
         self.rate_limiter_global = Limiter::RateQueue.new(global, interval: 1)
         self.rate_limiter_chats  = Hash.new { |h, k| h[k] = Limiter::RateQueue.new(per_chat, interval: 1) }
+        self.global_rate_limit = global
+        self.per_chat_rate_limit = per_chat
       end
     end
 
@@ -28,9 +31,12 @@ module Bot
       if priority == :high
         with_wait(chat_id) { shift_both(chat_id) }
       else
-        return :discard if discard && message_id && !allow_edit?(message_id)
-        sleep 0.02 while busy?(chat_id)
-        shift_both(chat_id)
+        if discard
+          return :discard if should_discard_edit?(chat_id)
+          update_edit_times(chat_id)
+        else
+          shift_both(chat_id)
+        end
       end
     end
 
@@ -45,11 +51,9 @@ module Bot
 
     def with_wait(chat_id)
       rl_mutex.synchronize { self.send_waiting_global += 1; self.send_waiting_by_chat[chat_id] += 1 }
-      begin
-        yield
-      ensure
-        rl_mutex.synchronize { self.send_waiting_global -= 1; self.send_waiting_by_chat[chat_id] -= 1 }
-      end
+      yield
+    ensure
+      rl_mutex.synchronize { self.send_waiting_global -= 1; self.send_waiting_by_chat[chat_id] -= 1 }
     end
 
     def busy?(chat_id)
@@ -60,15 +64,22 @@ module Bot
       rate_limiter_chats[chat_id].shift; rate_limiter_global.shift
     end
 
-    def allow_edit?(message_id)
-      return true unless message_id
+    def should_discard_edit?(chat_id)
       now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      interval = edit_discard_interval_secs.to_f.positive? ? edit_discard_interval_secs.to_f : 1.0
+      global_rate = global_rate_limit || 20
+      per_chat_rate = per_chat_rate_limit || 10
+      global_interval = 1.0 / global_rate
+      per_chat_interval = 1.0 / per_chat_rate
+      last_global = last_edit_global
+      last_chat = last_edit_by_chat[chat_id]
+      (now - last_global) < global_interval || (now - last_chat) < per_chat_interval
+    end
+
+    def update_edit_times(chat_id)
+      now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       rl_mutex.synchronize do
-        next_at = msg_edit_next_allowed_by_message[message_id]
-        return false if now < next_at
-        msg_edit_next_allowed_by_message[message_id] = now + interval
-        true
+        self.last_edit_global = now
+        last_edit_by_chat[chat_id] = now
       end
     end
   end
