@@ -71,10 +71,9 @@ module Bot
         popts = {dir: work_dir, bot:, msg:, st: @st}
         lines = msg.text.to_s.split("\n").reject(&:blank?)
         procs = process_lines(lines, popts)
-        procs.each.with_index do |p, i|
-          inputs[i] = p.process
+        procs.each do |p|
+          inputs.concat Array.wrap p.process
         end
-        inputs.flatten!
 
         return if inputs.first.blank? # error
 
