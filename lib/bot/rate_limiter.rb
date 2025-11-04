@@ -5,6 +5,8 @@ module Bot
   module RateLimiter
     extend ActiveSupport::Concern
 
+    INTERVAL = 60
+
     included do
       class_attribute :rate_limiter_global, :rate_limiter_chats
       class_attribute :rl_mutex, :send_waiting_global, :send_waiting_by_chat
@@ -20,8 +22,8 @@ module Bot
 
     class_methods do
       def rate_limits(global:, per_chat:)
-        self.rate_limiter_global = Limiter::RateQueue.new(global, interval: 1)
-        self.rate_limiter_chats  = Hash.new { |h, k| h[k] = Limiter::RateQueue.new(per_chat, interval: 1) }
+        self.rate_limiter_global = Limiter::RateQueue.new(global, interval: INTERVAL)
+        self.rate_limiter_chats  = Hash.new { |h, k| h[k] = Limiter::RateQueue.new(per_chat, interval: INTERVAL) }
         self.global_rate_limit = global
         self.per_chat_rate_limit = per_chat
       end
@@ -68,8 +70,8 @@ module Bot
       now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       global_rate = global_rate_limit || 20
       per_chat_rate = per_chat_rate_limit || 10
-      global_interval = 1.0 / global_rate
-      per_chat_interval = 1.0 / per_chat_rate
+      global_interval = INTERVAL.to_f / global_rate
+      per_chat_interval = INTERVAL.to_f / per_chat_rate
       last_global = last_edit_global
       last_chat = last_edit_by_chat[chat_id]
       (now - last_global) < global_interval || (now - last_chat) < per_chat_interval
