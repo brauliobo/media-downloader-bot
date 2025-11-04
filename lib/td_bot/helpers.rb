@@ -15,23 +15,20 @@ class TDBot
 
     included do
       class_attribute :td, :client, :message_handler, :message_sender, :file_manager
-      
+
       # Configure TDLib client
       TD::Client.configure_for_bot
-      
+
       # Initialize client and components
       self.client = self.td = TD::Client.new timeout: 1.minute
       self.message_handler = TD::MessageHandler.new(client)
       self.message_sender = TD::MessageSender.new(client)
       self.file_manager = TD::FileManager.new(client)
-      
+
       # Setup authentication
       client.setup_authentication_handlers
-
-      # Rate limiters
-      rate_limits global: 20, per_chat: 10
     end
-    
+
     def td_retry_after_seconds(e)
       e.message[/retry after (\d+)/, 1]&.to_i || 60
     end

@@ -18,6 +18,9 @@ module Bot
       self.send_waiting_by_chat = Hash.new(0)
       self.last_edit_global = 0.0
       self.last_edit_by_chat = Hash.new(0.0)
+
+      # default rate limits
+      rate_limits global: 60, per_chat: 30
     end
 
     class_methods do
