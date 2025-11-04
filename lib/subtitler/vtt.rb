@@ -42,7 +42,7 @@ class Subtitler
       zipper&.stl&.update 'translating'
 
       if tsp
-        tsp = Subtitler.translate(tsp, from: normalized_from, to: normalized_to)
+        tsp = Subtitler::Translator.translate(tsp, from: normalized_from, to: normalized_to)
         vtt = build(tsp, word_tags: !zipper.opts.nowords)
       else
         vtt = translate(vtt, to: normalized_to, from: normalized_from)
