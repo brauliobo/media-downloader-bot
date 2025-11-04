@@ -9,6 +9,15 @@ module Processors
       @downloader ||= Downloaders.for(self)
     end
 
+    def process
+      result = download
+      raise NotImplementedError, "process not implemented" unless result
+      Array.wrap(result).each{ |r| r.processor = self }
+      result
+    ensure
+      cleanup
+    end
+
     def kindle_url?
       return false if url.to_s.empty?
       host = URI(url).host rescue nil
