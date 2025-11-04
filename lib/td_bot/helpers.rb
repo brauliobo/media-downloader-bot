@@ -29,7 +29,7 @@ class TDBot
       client.setup_authentication_handlers
 
       # Rate limiters
-      rate_limits global: 10, per_chat: 1
+      rate_limits global: 20, per_chat: 10
     end
     
     def td_retry_after_seconds(e)
@@ -198,18 +198,16 @@ class TDBot
     private
 
     def td_with_rate_limit(tag)
-      begin
-        return yield
-      rescue TD::Error => e
-        if e.message.include?('429') || e.message.include?('Too Many Requests')
-          ra = td_retry_after_seconds(e); dlog "[RATE_LIMIT] TDLib sleeping #{ra}s (#{tag})"; sleep ra; retry
-        end
-        dlog "[TD_ERROR] #{e.class}: #{e.message}"
-        nil
-      rescue => e
-        dlog "[TD_ERROR] #{e.class}: #{e.message}"
-        nil
+      return yield
+    rescue TD::Error => e
+      if e.message.include?('429') || e.message.include?('Too Many Requests')
+        ra = td_retry_after_seconds(e); dlog "[RATE_LIMIT] TDLib sleeping #{ra}s (#{tag})"; sleep ra; retry
       end
+      dlog "[TD_ERROR] #{e.class}: #{e.message}"
+      nil
+    rescue => e
+      dlog "[TD_ERROR] #{e.class}: #{e.message}"
+      nil
     end
   end
 end
