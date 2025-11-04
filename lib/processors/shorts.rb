@@ -60,12 +60,12 @@ module Processors
       cuts.each_with_index do |c, idx|
         fn_out = Output.filename(i.info, dir: dir, ext: i.format&.ext || 'mp4', pos: idx+1)
         locopts = SymMash.new(i.opts.deep_dup)
-        locopts[:ss] = c[:start]
-        locopts[:to] = c[:end]
-        locopts[:subs] = nil
-        locopts[:onlysrt] = nil
-        locopts[:genshorts] = nil
-        locopts[:caption] = 1
+        locopts.ss = c[:start]
+        locopts.to = c[:end]
+        locopts.subs = nil
+        locopts.onlysrt = nil
+        locopts.genshorts = nil
+        locopts.caption = 1
         begin
             if srt && srt.include?('-->')
             vtt_src = srt.include?('WEBVTT') ? srt : Subtitler::VTT.srt_to_vtt(srt)
@@ -73,9 +73,9 @@ module Processors
         rescue; vtt_src = nil; end
         if vtt_src
           slice_vtt = Subtitler::VTT.slice(vtt_src, from: c[:start], to: c[:end])
-          locopts[:sub_vtt] = slice_vtt
-          locopts[:sub_lang] = lang if lang
-          locopts[:_sub_prefix] = "sub_#{idx+1}"
+          locopts.sub_vtt = slice_vtt
+          locopts.sub_lang = lang if lang
+          locopts._sub_prefix = "sub_#{idx+1}"
           (i.opts._vtt_slices ||= [])[idx] = slice_vtt
         end
         s_dur = (hms_to_seconds(c[:end]) || 0) - (hms_to_seconds(c[:start]) || 0)
@@ -83,8 +83,8 @@ module Processors
         chosen = Zipper.choose_format(Zipper::Types.video, locopts, s_dur)
         locopts.format = chosen || Zipper::Types.video.h264
 
-        fn_out_abs = File.expand_path(fn_out)
-        fn_in_abs = File.expand_path(i.fn_in)
+        fn_out_abs = ::File.expand_path(fn_out)
+        fn_in_abs = ::File.expand_path(i.fn_in)
         o, e, st = Zipper.zip_video(fn_in_abs, fn_out_abs, opts: locopts, probe: i.probe, stl: @stl, info: i.info)
         next @stl&.error("convert failed: #{o}\n#{e}") if st != 0
 
