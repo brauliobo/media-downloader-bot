@@ -21,7 +21,7 @@ class TlBot
       class_attribute :error_delete_time
       self.error_delete_time = 30.seconds
 
-      rate_limits global: 20, per_chat: 1
+      rate_limits global: 20, per_chat: 10
 
       def self.mock
         define_method :send_message do |msg, text, *args|

@@ -66,7 +66,7 @@ class Manager
 
   def self.http
     Thread.current[:manager_http] ||= Mechanize.new.tap do |a|
-      t = ENV['HTTP_TIMEOUT']&.to_i || 60.minutes
+      t = ENV['HTTP_TIMEOUT']&.to_i || 30.minutes
       a.open_timeout = t; a.read_timeout = t
     end
   end
