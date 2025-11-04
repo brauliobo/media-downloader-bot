@@ -1,8 +1,8 @@
-require_relative 'base'
+require_relative 'media'
 require_relative '../downloaders'
 
 module Processors
-  class Url < Base
+  class Url < Media
     delegate :download, :download_one, to: :downloader
 
     def downloader
