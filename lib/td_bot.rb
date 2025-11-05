@@ -16,8 +16,4 @@ class TDBot
     self.new
   end
 
-  def td_bot?
-    true
-  end
-
 end

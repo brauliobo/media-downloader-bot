@@ -22,8 +22,4 @@ class TlBot
     self.bot = bot
   end
 
-  def td_bot?
-    false
-  end
-
 end
