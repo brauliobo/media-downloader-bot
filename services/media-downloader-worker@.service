@@ -1,0 +1,38 @@
+[Unit]
+Description=media-downloader-bot worker %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+CPUQuota=900%
+LimitNOFILE=1001001
+User=mdb
+Nice=19
+ProtectHome=yes
+RuntimeDirectory=media_downloader_bot_worker_%i
+RuntimeDirectoryMode=0755
+
+RestrictAddressFamilies=AF_INET AF_UNIX
+WorkingDirectory=/srv/media-downloader-bot
+ReadWritePaths=/srv/media-downloader-bot
+ExecStart=/usr/local/rvm/wrappers/ruby-3.4.4/bundle exec bin/worker
+ExecReload=/bin/kill -TERM $MAINPID
+
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=300
+
+Environment=BUNDLE_DEPLOYMENT=true
+Environment=BUNDLE_FROZEN=false
+Environment=BOT_DRB=druby://localhost:8788
+Environment=BOT_HTTP=http://localhost:8080
+Environment=THREADS=6
+Environment=DB=1
+
+Restart=always
+RestartSec=1
+StartLimitInterval=0
+
+[Install]
+WantedBy=multi-user.target
+
