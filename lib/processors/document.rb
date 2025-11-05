@@ -2,6 +2,7 @@ require_relative 'file'
 
 module Processors
   class Document < File
+    self.attr = :document
     def self.pdf_document?(doc_or_msg)
       doc = doc_or_msg.respond_to?(:document) ? doc_or_msg.document : doc_or_msg
       doc && (doc.mime_type == 'application/pdf' || doc.file_name.to_s.downcase.end_with?('.pdf'))
@@ -49,7 +50,7 @@ module Processors
         end
         i
       rescue => e
-        @stl&.error "Audiobook generation failed: #{e.message}"
+        @stl&.error "Audiobook generation failed", exception: e
         nil
       end
     end
