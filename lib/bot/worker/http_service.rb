@@ -22,6 +22,16 @@ module Bot
       end
 
       route do |r|
+        r.get 'queue/dequeue' do
+          timeout = r.params['timeout']&.to_f
+          job = service.dequeue(timeout: timeout)
+          job ? {job: job, service_uri: service.bot_service_uri} : {job: nil}
+        end
+
+        r.get 'queue/size' do
+          {size: service.queue_size}
+        end
+
         r.post 'send_message' do
           params = normalize_params(r.params)
           msg = SymMash.new(params.delete(:msg))
@@ -53,14 +63,13 @@ module Bot
           {path: result}
         end
 
-        r.get 'queue/dequeue' do
-          timeout = r.params['timeout']&.to_f
-          job = service.dequeue(timeout: timeout)
-          job ? {job: job, service_uri: service.bot_service_uri} : {job: nil}
-        end
-
-        r.get 'queue/size' do
-          {size: service.queue_size}
+        r.post 'report_error' do
+          params = normalize_params(r.params)
+          msg = SymMash.new(params.delete(:msg))
+          e = StandardError.new(params.delete(:e))
+          e.define_singleton_method(:class) { OpenStruct.new(name: params.delete(:error_class)) }
+          service.bot.report_error(msg, e, context: params.delete(:context))
+          {success: true}
         end
       end
     end
