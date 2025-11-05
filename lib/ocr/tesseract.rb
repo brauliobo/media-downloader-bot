@@ -1,7 +1,6 @@
 require 'timeout'
 require 'iso-639'
 require_relative '../utils/sh'
-require_relative '../exts/sym_mash'
 
 class Ocr
   module Tesseract

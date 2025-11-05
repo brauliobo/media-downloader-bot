@@ -1,7 +1,6 @@
 require 'tempfile'
 require 'securerandom'
 require 'fileutils'
-require_relative 'exts/sym_mash'
 require_relative 'subtitler/ass'
 require_relative 'zipper/formats'
 require_relative 'zipper/limits'
