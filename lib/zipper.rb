@@ -6,6 +6,7 @@ require_relative 'subtitler/ass'
 require_relative 'zipper/formats'
 require_relative 'zipper/limits'
 require_relative 'zipper/subtitle'
+require_relative 'utils/http'
 
 class Zipper
 
@@ -410,7 +411,7 @@ class Zipper
       lng,lsub =  cads.each.with_object([]){ |s, r| break r = [s, subs[s]] if subs.key? s }
       return if lng.blank?
       lsub = lsub.find{ |s| s.ext == 'vtt' } || lsub[0]
-      sub  = http.get(lsub.url).body
+      sub  = Utils::HTTP.get(lsub.url).body
       vtt  = subtitle_to_vtt sub, lsub.ext
 
     # embedded subtitles
@@ -440,14 +441,6 @@ class Zipper
   def apply_cut
     iopts << " -ss #{opts.ss}" if opts.ss&.match(TIME_REGEX)
     oopts << " -to #{opts.to}" if opts.to&.match(TIME_REGEX)
-  end
-
-  def http
-    return Manager.http if defined?(Manager)
-    Mechanize.new.tap do |a|
-      t = (ENV['HTTP_TIMEOUT'] || 1800).to_i
-      a.open_timeout = t; a.read_timeout = t
-    end
   end
 
 end

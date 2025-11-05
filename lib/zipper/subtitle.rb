@@ -3,7 +3,8 @@
 require_relative '../subtitler/ass'
 require_relative '../subtitler'
 require_relative '../translator'
-require 'mechanize'
+require_relative '../output'
+require_relative '../utils/http'
 
 class Zipper
   # All subtitle-related responsibilities live here.
@@ -67,7 +68,6 @@ class Zipper
 
       vtt, lng, tsp = prepare_subtitle(infile, info: info, probe: probe, stl: stl, opts: opts)
 
-      require_relative '../output'
       srt_path = Output.filename(info, dir: dir, ext: 'srt')
       srt_content = if tsp
         Subtitler.srt_convert(tsp, word_tags: (!opts.nowords && !opts.onlysrt))
@@ -116,7 +116,7 @@ class Zipper
       return [nil, nil] unless lang
 
       entry = subtitles[lang].find { |sub| sub.ext == 'vtt' } || subtitles[lang].first
-      body  = http.get(entry.url).body
+      body  = Utils::HTTP.get(entry.url).body
       vtt   = Subtitler::VTT.to_vtt(body, entry.ext)
       zipper.stl&.update "subs:scraped:#{lang}"
       [vtt, lang]
@@ -145,11 +145,7 @@ class Zipper
       desired.present? && desired.in?([stream.lang, stream.tags.language, stream.tags.title])
     end
 
-    def http
-      @http ||= Mechanize.new
-    end
-
     private :subtitles_requested?, :source_vtt, :fetch, :fetch_scraped,
-            :fetch_embedded, :preferred_lang, :subtitle_match?, :http
+            :fetch_embedded, :preferred_lang, :subtitle_match?
   end
 end
