@@ -7,9 +7,9 @@ ENV['DB'] = '1' if ENV['SESSION_UID']
 ENV['PUPPETEER_HEADLESS'] ||= '0'
 
 Dir.chdir File.expand_path "#{File.realpath __dir__}/.." do
-  require_relative '../lib/manager'
-  require_relative '../lib/tl_bot'
-  require_relative '../lib/zipper'
+  require_relative '../lib/bot/base'
+  require_relative '../lib/worker'  # Requires active_support/all, processors, zipper, tagger, status, etc.
+  require_relative '../lib/bot/worker/service'
 end
 
 opts  = SymMash.new metadata: {}
@@ -22,11 +22,8 @@ end
 
 Zipper.size_mb_limit = ENV['SIZE_MB_LIMIT']&.to_i
 
-class Stdout
-  include TlBot::Helpers
-  mock
-end
-bot = Stdout.new
+bot = Bot::Mock.new
+Worker.worker = Bot::Worker::Service.new(bot)
 st  = Bot::Status.new do |line|
   puts line
 end
@@ -59,14 +56,14 @@ path.peach do |u|
 
   if klass == Processors::Url
     line = "#{u} #{lopts.join ' '}"
-    prc  = klass.new(dir:, line:, bot:, st:, stline: stl)
+    prc  = klass.new(dir:, line:, st:, stline: stl)
     prc.download.peach do |i|
       prc.download_one i
       prc.handle_input i
       prc.cleanup
     end
   else
-    prc = klass.new(dir:, bot:, st:)
+    prc = klass.new(dir:, st:)
     i   = prc.input_from_file u, opts
     prc.handle_input i
 
