@@ -1,9 +1,5 @@
 require_relative 'boot'
-require 'faraday'
-require 'json'
-require 'active_support/all'
 
-require_relative 'exts/sym_mash'
 require_relative 'bot/worker/client'
 require_relative 'worker'
 
@@ -94,7 +90,8 @@ class WorkerDaemon
     worker_uri = job[:worker_uri]
 
     msg = SymMash.new(message_data)
-    worker = Worker.new(msg, worker_uri)
+    Worker.service = Bot::Worker::Client.new worker_uri if worker_uri
+    worker = Worker.new msg
 
     worker.process
   rescue => e
