@@ -2,6 +2,7 @@ require 'puma'
 require 'roda'
 require 'limiter'
 require_relative '../bot/rate_limiter'
+require_relative '../utils/http'
 
 class TlBot
   module Helpers
@@ -62,7 +63,7 @@ class TlBot
     REPORT_CHAT_ID = ENV['REPORT_CHAT_ID']&.to_i
 
     def net_up?
-      Manager.http.head('http://www.google.com/').code == '200' rescue false
+      Utils::HTTP.head('http://www.google.com/').code == '200' rescue false
     end
     def wait_net_up
       sleep 1 until net_up?
@@ -184,7 +185,9 @@ class TlBot
     end
 
     # Download any Telegram file (audio, video, document) and store it locally.
-    def download_file(info, dir: Dir.tmpdir)
+    # Additional parameters (priority, offset, limit, synchronous) are accepted for compatibility
+    # but ignored as they are TDBot-specific.
+    def download_file(info, priority: 32, offset: 0, limit: 0, synchronous: true, dir: Dir.tmpdir)
       tg_path   = api.get_file(file_id: info.file_id).file_path or raise 'no file_path returned'
       file_name = info.respond_to?(:file_name) && info.file_name.present? ? info.file_name : File.basename(tg_path)
       local     = File.join dir, file_name
@@ -193,6 +196,7 @@ class TlBot
       File.write local, Mechanize.new.get(base_url + tg_path).body
       local
     end
+
 
   end
 end
