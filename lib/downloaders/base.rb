@@ -12,5 +12,3 @@ module Downloaders
     end
   end
 end
-
-
