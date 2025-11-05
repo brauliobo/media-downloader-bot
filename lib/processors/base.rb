@@ -66,7 +66,7 @@ module Processors
 
     def cleanup
       return if ENV['TMPDIR']
-      FileUtils.remove_entry tmp
+      FileUtils.remove_entry tmp if ::File.exist?(tmp)
     end
 
     def input_from_file f, opts
