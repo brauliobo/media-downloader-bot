@@ -1,11 +1,4 @@
-require 'bundler/setup'
-Dir.chdir __dir__ do
-  require 'dotenv'
-  Dotenv.load  '../.env.user'
-  Dotenv.load! '../.env'
-end
-
-require 'pry' rescue nil # fails with systemd
+require_relative 'boot'
 
 require 'active_support/all'
 require 'tmpdir'
