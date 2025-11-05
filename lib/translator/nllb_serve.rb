@@ -1,3 +1,5 @@
+require_relative '../utils/http'
+
 class Translator
   module NLLBServe
 
@@ -94,7 +96,7 @@ class Translator
 
     def translate text, from:, to:
       from,to = ISO_TO_NLLB.values_at from, to
-      res = Manager.http.post "#{API}/translate", source: text, src_lang: from, tgt_lang: to
+      res = Utils::HTTP.post "#{API}/translate", source: text, src_lang: from, tgt_lang: to
       res = SymMash.new JSON.parse res.body
       tr  = res.translation
       return tr.first if text.is_a? String
