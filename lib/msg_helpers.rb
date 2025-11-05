@@ -43,5 +43,9 @@ module MsgHelpers
     CGI::escapeHTML t
   end
 
+  def fake_msg(chat_id = nil)
+    SymMash.new from: {id: nil}, chat: {id: chat_id}, resp: {result: {}, text: ''}
+  end
+
   extend self
 end
