@@ -22,7 +22,7 @@ module Downloaders
       i.uploads = Audiobook.generate_uploads(url, dir: dir, stl: (stline || st), opts: opts)
       true
     rescue => e
-      (stline || st)&.error "Kindle processing failed: #{e.message}"
+      (stline || st)&.error "Kindle processing failed", exception: e
       false
     end
 

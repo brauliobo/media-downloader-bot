@@ -35,19 +35,6 @@ module Processors
       i
     end
 
-    def process
-      pdoc = Processors::Document.new(**init_params)
-      if pdoc.pdf_document? || pdoc.epub_document?
-        return pdoc.process
-      elsif msg.video.present?
-        return Processors::Video.new(**init_params).process
-      elsif msg.audio.present?
-        return Processors::Audio.new(**init_params).process
-      else
-        st.error('Unsupported message type')
-        return
-      end
-    end
 
     def handle_input(i, pos: nil, **_kwargs)
       raise 'no input provided' unless i
@@ -80,7 +67,7 @@ module Processors
         return i
       end
 
-      i.thumb = i.opts.thumb = Utils::Thumb.process(i.info, base_filename: i.info._filename, on_error: ->(e) { report_error(msg, e) })
+      i.thumb = i.opts.thumb = Utils::Thumb.process(i.info, base_filename: i.info._filename, on_error: ->(e) { Worker.service.report_error(msg, e) rescue nil })
       return unless i.fn_out = convert(i, pos: pos)
 
       if Zipper.size_mb_limit

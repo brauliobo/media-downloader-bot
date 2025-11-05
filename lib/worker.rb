@@ -1,11 +1,4 @@
-require 'faraday'
-require 'faraday/multipart'
-require 'rack/mime'
-require 'concurrent'
-require 'active_support/all'
-
-require_relative 'exts/sym_mash'
-require_relative 'exts/peach'
+require_relative 'boot'
 
 require_relative 'utils/sh'
 require_relative 'utils/url_shortener'
@@ -18,9 +11,11 @@ require_relative 'tagger'
 require_relative 'downloaders'
 
 require_relative 'processors/base'
+require_relative 'processors/router'
 require_relative 'processors/url'
 require_relative 'processors/document'
 require_relative 'processors/media'
+require_relative 'processors/local_file'
 
 require_relative 'bot/status'
 require_relative 'bot/worker/client'
@@ -31,19 +26,28 @@ Faraday::UploadIO = Faraday::Multipart::FilePart unless defined?(Faraday::Upload
 
 class Worker
 
+  class_attribute :service
+
   attr_reader :msg
   attr_reader :st
   attr_reader :dir
   attr_reader :opts
 
-  class_attribute :tmpdir, :worker
+  class_attribute :tmpdir
   self.tmpdir = ENV['TMPDIR'] || Dir.tmpdir
 
-  def initialize(msg, worker_uri)
+  def initialize msg
     @msg = msg
-    @worker_uri = worker_uri
-    self.class.worker = Bot::Worker::Client.new(worker_uri)
+    set_size_limit_from_bot
     load_session
+  end
+
+  delegate :send_message, :edit_message, :delete_message, :download_file, :report_error, to: :service
+
+  def set_size_limit_from_bot
+    return if Zipper.size_mb_limit
+    bot_class = msg.bot_type || msg.bot&.class&.name
+    Zipper.size_mb_limit = bot_class == 'TDBot' ? 2_000 : 50
   end
 
   def load_session
@@ -93,7 +97,7 @@ class Worker
         inputs.concat Array.wrap p.process
       end
 
-      return if inputs.first.blank? # error
+      return@st&.error('No inputs generated') if inputs.first.blank?
 
       inputs.uniq!{ |i| i.info.display_id }
       @opts = inputs.first&.opts || SymMash.new
@@ -119,8 +123,12 @@ class Worker
           sleep 0.1 while up_queue.first != pos if ordered
           stline.update 'uploading'
           upload i
+
+        rescue => e
+          stline.error "Processing error", exception: e
+          report_error(msg, e)
         ensure
-          p.cleanup if p
+          p.cleanup
           up_queue.delete pos
         end
       end
@@ -141,16 +149,9 @@ class Worker
   private
 
   def process_lines(lines, popts)
-    url_lines = lines.select { |l| l =~ URI::DEFAULT_PARSER.make_regexp }
-    if url_lines.any?
-      klass = Processors::Url
-      url_lines.map { |l| klass.new line: l, **popts }
-    elsif Processors::Document.can_handle?(msg)
-      klass = Processors::Document
-      [klass.new(line: lines.join(' '), **popts)]
-    elsif Processors::Media.can_handle?(msg)
-      klass = Processors::Media
-      [klass.new(line: lines.join(' '), **popts)]
+    processors = Processors::Router.for_message(msg, lines, **popts)
+    if processors
+      processors
     else
       @st&.error('No URL or media provided')
       []
@@ -161,9 +162,9 @@ class Worker
     return if @st
     @st = Bot::Status.new do |text, *args, **params|
       text = MsgHelpers.me(text) unless params[:parse_mode]
-      worker.edit_message msg, msg.resp.message_id, *args, text: text, **params
+      edit_message msg, msg.resp.message_id, *args, text: text, **params
     end
-    msg.resp ||= worker.send_message msg, MsgHelpers.me('Downloading metadata...')
+    msg.resp ||= send_message msg, MsgHelpers.me('Downloading metadata...')
   end
 
   def upload_one i
@@ -182,7 +183,7 @@ class Worker
     end
 
     caption = msg_caption i
-    return worker.send_message msg, caption if opts.simulate
+    return send_message msg, caption if opts.simulate
 
     vstrea = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
     thumb_path = i.thumb if i.thumb
@@ -213,7 +214,7 @@ class Worker
 
     pp ret_msg if ENV['DEBUG']
     caption = 'paid' if paid
-    worker.send_message msg, caption, **ret_msg
+    send_message msg, caption, **ret_msg
   end
 
   def msg_caption i

@@ -65,7 +65,7 @@ module Downloaders
 
         max_len = VID_MAX_LENGTH[]
         dur = (info.duration || 0).to_i
-        if info.video_ext != 'none' && Zipper.size_mb_limit && !opts.onlysrt && !from_admin?(msg) &&
+        if info.video_ext != 'none' && Zipper.size_mb_limit && !opts.onlysrt && !MsgHelpers.from_admin?(msg) &&
            dur.positive? && dur >= max_len.to_i
           return processor.st.error VID_MAX_NOTICE[]
         end
@@ -136,7 +136,7 @@ module Downloaders
 
         ml = opts.audio ? AL : VL
         opts.limit ||= ml if opts.after
-        opts.limit   = ml if ml && opts.limit && opts.limit.to_i > ml && !from_admin?(msg)
+        opts.limit   = ml if ml && opts.limit && opts.limit.to_i > ml && !MsgHelpers.from_admin?(msg)
         bcmd << " --playlist-end #{opts.limit.to_i}" if opts.limit.to_i.positive?
 
         bcmd << ' -x' if opts.audio || opts.onlysrt
@@ -205,7 +205,7 @@ module Downloaders
       return '' unless cfile
       " --cookies '#{cfile}' --cookie-jar '#{cjar}'"
     rescue StandardError => e
-      st.error "Cookie error: #{MsgHelpers.he e.message}"
+      st.error "Cookie error", exception: e
     end
   end
 end
