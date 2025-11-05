@@ -1,5 +1,3 @@
-require_relative '../exts/sym_mash'
-
 module Bot
   module Interface
     # Interface for bot implementations (TDBot, TlBot, MockBot)
@@ -49,6 +47,14 @@ module Bot
     # @return [Object, nil] File path or info
     def download_file(file_id_or_info, priority: 32, offset: 0, limit: 0, synchronous: true, dir: nil)
       nil
+    end
+
+    # Report an error
+    # @param msg [Object] The message object
+    # @param e [Exception] The error/exception
+    # @param context [String, nil] Additional context
+    def report_error(msg, e, context: nil)
+      STDERR.puts "error: #{e.class}: #{e.message}"
     end
 
   end
