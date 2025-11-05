@@ -1,6 +1,7 @@
 require 'puma'
 require 'roda'
 require 'limiter'
+require_relative '../msg_helpers'
 require_relative '../bot/rate_limiter'
 require_relative '../utils/http'
 
@@ -37,26 +38,6 @@ class TlBot
           raise e
         end
       end
-    end
-
-    class WebApp < Roda
-       plugin :indifferent_params
-       route do |r|
-          r.on 'admin_message' do
-            r.post do
-              ret = $bot.send_message $bot.admin_msg, r.params[:m], **r.params.to_h.symbolize_keys
-              ret.to_h.to_json
-            end
-          end
-       end
-    end
-
-    def start_webserver socket: "/tmp/#{bot_name}.socket"
-      server = Puma::Server.new WebApp.freeze.app, Puma::Events.strings
-      server.add_unix_listener socket
-      puts "Server listening at #{socket}"
-      server.run
-      [:INT, :TERM].each { |sig| trap(sig) { server.stop } }
     end
 
     ADMIN_CHAT_ID  = ENV['ADMIN_CHAT_ID']&.to_i
