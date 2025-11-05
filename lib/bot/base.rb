@@ -1,5 +1,3 @@
-require_relative '../exts/sym_mash'
-
 module Bot
   module Interface
     # Interface for bot implementations (TDBot, TlBot, MockBot)

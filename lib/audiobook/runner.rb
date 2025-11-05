@@ -1,6 +1,5 @@
 require 'tmpdir'
 require_relative '../zipper'
-require_relative '../exts/sym_mash'
 
 module Audiobook
   class Runner
