@@ -7,18 +7,15 @@ require 'roda'
 require 'retriable'
 require 'ostruct'
 
-require_relative 'worker'  # Worker requires processors, zipper, prober, translator, tagger, audiobook, downloaders, utils/url_shortener, utils/sh, msg_helpers, bot/status, exts/sym_mash, exts/peach, srt, iso-639, active_support/all, rack/mime, etc.
 require_relative 'bot/user_queue'
 require_relative 'bot/commands/cookie'
-require_relative 'bot/worker/service'
 require_relative 'bot/worker/drb_service'
 require_relative 'bot/worker/http_service'
+
+require_relative 'worker' if ENV['WITH_WORKER']
 require_relative 'utils/http'
 require_relative 'tl_bot'
 require_relative 'td_bot'
-
-# deprecated behavior
- ActiveSupport.to_time_preserves_timezone = :zone
 
 if ENV['DB']
   require 'sequel'
@@ -115,7 +112,6 @@ EOS
     DRb.start_service ENV['DRB_WORKER_TD'], self rescue nil
 
     ENV['CUDA'] = '1' #faster and don't work with maxrate for limiting
-    Zipper.size_mb_limit = 2_000
     Bot::UserQueue.queue_size = 3
     @bot = TDBot.connect
     start_bot_service
@@ -126,7 +122,6 @@ EOS
   end
 
   def start_tl_bot
-    Zipper.size_mb_limit = 50
     Bot::UserQueue.queue_size = 1
     @bot = TlBot.connect
     start_bot_service
@@ -162,7 +157,18 @@ EOS
 
   def enqueue_message(msg)
     msg = SymMash.new(msg.to_h).tap { |m| m.bot ||= bot }
-    @queue.enq(msg.to_h)
+    msg.bot_type = bot.class.name
+    if ENV['WITH_WORKER']
+      Thread.new do
+        Worker.service = bot
+        worker = Worker.new msg
+        worker.process
+      rescue => e
+        bot.report_error msg, e rescue nil
+      end
+    else
+      @queue.enq msg
+    end
   end
 
   def dequeue(timeout: nil)
@@ -180,13 +186,13 @@ EOS
       app_class = Bot::Worker::HTTPService.create(self)
       Thread.new do
         require 'puma'
-        server = Puma::Server.new(app_class.freeze.app, Puma::Events.strings)
+        server = Puma::Server.new(app_class.freeze.app)
         server.add_tcp_listener('0.0.0.0', port)
         puts "Bot HTTP service started on 0.0.0.0:#{port}"
         server.run
       end
     end
-    
+
     Bot::Worker::DRbService.start(self, ENV['BOT_DRB']) if ENV['BOT_DRB']
   end
 
