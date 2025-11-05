@@ -4,6 +4,7 @@ require 'json'
 require 'uri'
 require 'tempfile'
 require 'fileutils'
+require_relative '../utils/http'
 
 # Text-to-speech backend that talks to running Piper HTTP servers
 class TTS
@@ -25,7 +26,7 @@ class TTS
       payload[:voice] = voice if voice
       payload.merge!(kwargs)
 
-      agent = Manager.http
+      agent = Utils::HTTP.client
       res = agent.post(url, payload.to_json, 'Content-Type' => 'application/json')
       raise "TTS failed: #{res.code}" unless res.code == '200'
 

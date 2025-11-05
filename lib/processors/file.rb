@@ -18,11 +18,11 @@ module Processors
         return
       end
 
-      local_path = if !attr && bot.respond_to?(:td_bot?) && bot.td_bot?
-        fid = info.respond_to?(:document) && info.document.respond_to?(:id) ? info.document.id : info.document.id
-        bot.download_file(fid, dir: dir)
+      local_path = if !attr && info.respond_to?(:document) && info.document.respond_to?(:id)
+        fid = info.document.id
+        Worker.worker.download_file(fid, dir: dir)
       else
-        bot.download_file(info, dir: dir)
+        Worker.worker.download_file(info, dir: dir)
       end
 
       file_opts = SymMash.new(self.opts.deep_dup.presence || {})
