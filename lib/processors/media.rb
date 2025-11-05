@@ -1,4 +1,6 @@
 require_relative 'file'
+require_relative '../utils/thumb'
+require_relative '../zipper'
 
 module Processors
   class Media < File
@@ -58,7 +60,7 @@ module Processors
       return @stl&.error "Unknown type for #{i.fn_in}" unless i.type
 
       if i.opts.genshorts
-        Processors::Shorts.new(dir: dir, bot: bot, msg: msg, st: st, stline: @stl).generate_and_upload_shorts(i)
+        Processors::Shorts.new(dir: dir, msg: msg, st: st, stline: @stl).generate_and_upload_shorts(i)
         return i
       end
 
