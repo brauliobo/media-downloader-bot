@@ -1,6 +1,6 @@
 require 'chronic_duration'
+require 'rack/mime'
 require_relative '../output'
-require_relative '../utils/thumb'
 
 module Processors
   class Base
@@ -17,9 +17,8 @@ module Processors
     Rack::Mime::MIME_TYPES['.aac']  = 'audio/x-aac'
     Rack::Mime::MIME_TYPES['.mkv']  = 'video/x-matroska'
 
-    BLOCKED_DOMAINS = ENV['BLOCKED_DOMAINS'].split.map{ |u| URI.parse u }
+    BLOCKED_DOMAINS = (ENV['BLOCKED_DOMAINS'] || '').split.map{ |u| URI.parse u }
 
-    attr_reader :bot
     attr_reader :msg
     attr_reader :st
     attr_reader :dir, :tmp
@@ -29,16 +28,13 @@ module Processors
     attr_reader :opts
     attr_accessor :stl
 
-    delegate_missing_to :bot
-
-    def initialize dir:, bot:,
+    def initialize dir:,
       msg: nil, line: nil,
       st: nil, stline: nil, **params
 
       @dir  = dir
       @tmp  = Dir.mktmpdir 'input-', dir
-      @bot  = bot
-      @msg  = msg || bot.fake_msg
+      @msg  = msg || MsgHelpers.fake_msg
       @st   = st || stline.status
       @stl  = stline
 
@@ -86,7 +82,7 @@ module Processors
     protected
 
     def init_params
-      { dir: dir, bot: bot, msg: msg, line: @line, st: st, stline: @stl }
+      { dir: dir, msg: msg, line: @line, st: st, stline: @stl }
     end
 
 

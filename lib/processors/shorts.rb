@@ -2,11 +2,10 @@ module Processors
   class Shorts < Base
 
     # Purposefully avoid creating tmp dirs for this strategy-only processor
-    def initialize dir:, bot:, msg: nil, st: nil, stline: nil, **_params
+    def initialize dir:, msg: nil, st: nil, stline: nil, **_params
       @dir  = dir
       @tmp  = nil
-      @bot  = bot
-      @msg  = msg || bot.fake_msg
+      @msg  = msg || MsgHelpers.fake_msg
       @st   = st || stline.status
       @stl  = stline
     end

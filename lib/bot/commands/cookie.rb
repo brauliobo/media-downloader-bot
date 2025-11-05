@@ -13,7 +13,7 @@ class Manager
         _, domain, cookie = text.split(/[[:space:]]+/, 3)
 
         if domain.blank? || cookie.blank?
-          return bot.send_message msg, bot.me("Usage: /cookie <domain> <cookie>")
+          return bot.send_message msg, MsgHelpers.me("Usage: /cookie <domain> <cookie>")
         end
 
         s = Models::Session.find_or_create uid: msg.from.id
@@ -21,7 +21,7 @@ class Manager
         data[domain] = cookie
         s.update cookies: data
 
-        bot.send_message msg, bot.me("Cookie saved for #{domain}")
+        bot.send_message msg, MsgHelpers.me("Cookie saved for #{domain}")
       rescue => e
         bot.report_error msg, e, context: text
       end
