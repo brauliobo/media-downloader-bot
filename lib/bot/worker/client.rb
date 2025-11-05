@@ -41,6 +41,10 @@ module Bot
         end
       end
 
+      def report_error(msg, e, context: nil)
+        call(:report_error, msg: msg, e: e.to_s, error_class: e.class.name, context: context)
+      end
+
       private
 
       def call(method, **kwargs)
