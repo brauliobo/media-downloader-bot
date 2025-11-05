@@ -6,7 +6,6 @@ require 'shellwords'
 require 'rack/mime'
 require 'mechanize'
 require 'roda'
-require 'drb/drb'
 require 'retriable'
 require 'ostruct'
 
