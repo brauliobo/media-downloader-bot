@@ -4,13 +4,13 @@ require 'active_support/core_ext/module/attribute_accessors'
 
 require_relative '../zipper'
 require_relative 'translator'
-require_relative '../manager'
+require_relative '../utils/http'
 
 class Subtitler
   module WhisperCpp
 
     mattr_accessor :api
-    self.api = URI.parse ENV['WHISPER_CPP_SERVER']
+    self.api = URI.parse ENV['WHISPER_CPP_SERVER'] if ENV['WHISPER_CPP_SERVER']
 
     # Transcribe an audio file using whisper.cpp.
     # Params:
@@ -40,7 +40,7 @@ class Subtitler
       params[:language] = language if language
 
       url = "#{api.scheme}://#{api.host}:#{api.port}/inference"
-      res = Manager.http.post(url, params)
+      res = Utils::HTTP.post(url, params)
       raise "TTS failed: #{res.code}" unless res.code == '200'
       out = res.body
 
