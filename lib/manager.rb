@@ -1,43 +1,21 @@
 require_relative 'boot'
 
-require 'active_support/all'
 require 'tmpdir'
 require 'shellwords'
-require 'rack/mime'
 require 'mechanize'
 require 'roda'
 require 'retriable'
 require 'ostruct'
 
-require 'srt'
-require 'iso-639'
-
-require_relative 'exts/sym_mash'
-require_relative 'exts/peach'
-
-require_relative 'zipper'
-require_relative 'prober'
-require_relative 'utils/sh'
-require_relative 'subtitler'
-require_relative 'tagger'
-require_relative 'translator'
-require_relative 'msg_helpers'
-require_relative 'ocr'
-require_relative 'audiobook'
-require_relative 'downloaders'
-
-require_relative 'bot/status'
-require_relative 'utils/url_shortener'
-require_relative 'processors/base'
-require_relative 'processors/media'
-require_relative 'processors/audio'
-require_relative 'processors/video'
-require_relative 'processors/document'
-require_relative 'processors/shorts'
-require_relative 'processors/url'
-require_relative 'bot/worker'
+require_relative 'worker'  # Worker requires processors, zipper, prober, translator, tagger, audiobook, downloaders, utils/url_shortener, utils/sh, msg_helpers, bot/status, exts/sym_mash, exts/peach, srt, iso-639, active_support/all, rack/mime, etc.
 require_relative 'bot/user_queue'
 require_relative 'bot/commands/cookie'
+require_relative 'bot/worker/service'
+require_relative 'bot/worker/drb_service'
+require_relative 'bot/worker/http_service'
+require_relative 'utils/http'
+require_relative 'tl_bot'
+require_relative 'td_bot'
 
 # deprecated behavior
  ActiveSupport.to_time_preserves_timezone = :zone
@@ -51,20 +29,18 @@ end
 class Manager
 
   attr_reader :bot
+  attr_reader :queue
 
   def initialize
     @user_queue = Bot::UserQueue.new
+    @queue = Queue.new
   end
 
   def self.http
-    Thread.current[:manager_http] ||= Mechanize.new.tap do |a|
-      t = ENV['HTTP_TIMEOUT']&.to_i || 30.minutes
-      a.open_timeout = t; a.read_timeout = t
-    end
+    Utils::HTTP.client
   end
 
   def mock_start
-    require_relative 'tl_bot'
     TlBot.mock
     @bot = TlBot.new self
   end
@@ -136,13 +112,13 @@ https://soundcloud.com/br-ulio-bhavamitra/sets/didi-gunamrta caption number
 EOS
 
   def start_td_bot
-    require_relative 'td_bot'
     DRb.start_service ENV['DRB_WORKER_TD'], self rescue nil
 
     ENV['CUDA'] = '1' #faster and don't work with maxrate for limiting
     Zipper.size_mb_limit = 2_000
     Bot::UserQueue.queue_size = 3
     @bot = TDBot.connect
+    start_bot_service
     @bot.listen do |msg|
       Thread.new{ react msg }
     end
@@ -150,11 +126,10 @@ EOS
   end
 
   def start_tl_bot
-    require_relative 'tl_bot'
-
     Zipper.size_mb_limit = 50
     Bot::UserQueue.queue_size = 1
     @bot = TlBot.connect
+    start_bot_service
     @bot.listen do |msg|
       next unless msg.is_a? Telegram::Bot::Types::Message
       fork msg.text do
@@ -164,12 +139,8 @@ EOS
     end
   end
 
-  def td_bot?
-    defined?(TDBot) && bot.is_a?(TDBot)
-  end
-
   def send_help msg
-    msg.bot.send_message msg, bot.mnfe(START_MSG)
+    msg.bot.send_message msg, MsgHelpers.mnfe(START_MSG)
   end
 
   BLOCKED_USERS = ENV['BLOCKED_USERS'].split.map(&:to_i)
@@ -183,21 +154,44 @@ EOS
 
     return Manager::Commands::Cookie.new(bot, msg).process if msg.text&.starts_with? '/cookie'
 
-    download msg
+    enqueue_message msg
   rescue => e
-    report_error msg, e rescue nil
+    bot.report_error(msg, e) rescue nil if bot.respond_to?(:report_error)
     raise
   end
 
-  def download msg
+  def enqueue_message(msg)
     msg = SymMash.new(msg.to_h).tap { |m| m.bot ||= bot }
-    worker = Bot::Worker.new(msg.bot, msg)
+    @queue.enq(msg.to_h)
+  end
 
-    @user_queue.wait_for_slot(msg.from.id, msg) { |text| worker.wait_in_queue(text) } unless MsgHelpers.from_admin?(msg)
-    resp = worker.process
-  ensure
-    msg.bot.delete_message(msg, resp.message_id, wait: nil) if resp
-    @user_queue.release_slot(msg.from.id) { |next_msg| download(next_msg) }
+  def dequeue(timeout: nil)
+    @queue.deq(timeout: timeout)
+  end
+
+  def queue_size
+    @queue.size
+  end
+
+  def start_bot_service
+    if ENV['BOT_HTTP']
+      uri = URI.parse(ENV['BOT_HTTP'])
+      port = uri.port || 8080
+      app_class = Bot::Worker::HTTPService.create(self)
+      Thread.new do
+        require 'puma'
+        server = Puma::Server.new(app_class.freeze.app, Puma::Events.strings)
+        server.add_tcp_listener('0.0.0.0', port)
+        puts "Bot HTTP service started on 0.0.0.0:#{port}"
+        server.run
+      end
+    end
+    
+    Bot::Worker::DRbService.start(self, ENV['BOT_DRB']) if ENV['BOT_DRB']
+  end
+
+  def bot_service_uri
+    ENV['BOT_HTTP'] || ENV['BOT_DRB']
   end
 
 end
