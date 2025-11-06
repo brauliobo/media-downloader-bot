@@ -14,8 +14,11 @@ module Downloaders
 
     MAX_RES    = ENV['MAX_RES'] || 1080
     DOWN_BIN   = 'yt-dlp'
+    REMOTE_COMPONENTS = ENV.fetch('YT_DLP_REMOTE_COMPONENTS', 'ejs:github')
+    REMOTE_COMPONENTS = nil if REMOTE_COMPONENTS.to_s.strip.empty?
     DOWN_ARGS  = "-S 'res:#{MAX_RES}' --ignore-errors"
     DOWN_ARGS << ' --compat-options no-live-chat'
+    DOWN_ARGS << " --remote-components #{REMOTE_COMPONENTS}" if REMOTE_COMPONENTS
     DOWN_CMD   = "#{DOWN_BIN} #{DOWN_ARGS}".freeze
     USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36'
     DOWN_OPTS  = %i[referer]
@@ -53,7 +56,6 @@ module Downloaders
         info.title = info.track if info.track
         info.title = info.description || info.title if info.webpage_url.index 'instagram.com'
         info.title = format('%02d %s', i + 1, info.title) if mult && opts.number
-        info.title = MsgHelpers.limit info.title, percent: 90
 
         cands = [
           Array(info.fragments).sum { |f| f.duration.to_f },
