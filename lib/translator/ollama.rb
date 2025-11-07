@@ -1,5 +1,3 @@
-require_relative '../utils/http'
-
 class Translator
   module Ollama
 

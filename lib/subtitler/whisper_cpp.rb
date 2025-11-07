@@ -4,7 +4,6 @@ require 'active_support/core_ext/module/attribute_accessors'
 
 require_relative '../zipper'
 require_relative 'translator'
-require_relative '../utils/http'
 
 class Subtitler
   module WhisperCpp

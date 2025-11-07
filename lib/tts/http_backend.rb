@@ -2,10 +2,8 @@ require 'uri'
 require 'tempfile'
 require 'fileutils'
 require 'concurrent'
-require 'active_support/concern'
-require 'active_support/core_ext/module/attribute_accessors'
+
 require_relative '../zipper'
-require_relative '../utils/http'
 
 class TTS
   module HTTPBackend
