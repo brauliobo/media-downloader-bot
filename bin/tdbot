@@ -1,7 +1,6 @@
 #!/usr/bin/env ruby
 
-ENV['SKIP_TL_BOT'] = '1'
-ENV['TD_BOT']      = '1'
+ENV['TD_BOT'] = '1'
 require_relative '../lib/manager'
 
 $bot = Manager.new
