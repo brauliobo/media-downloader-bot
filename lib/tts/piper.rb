@@ -1,12 +1,3 @@
-# frozen_string_literal: true
-
-require 'json'
-require 'uri'
-require 'tempfile'
-require 'fileutils'
-require_relative '../utils/http'
-
-# Text-to-speech backend that talks to running Piper HTTP servers
 class TTS
   module Piper
     # Map ISO language codes to Piper HTTP server ports

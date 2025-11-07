@@ -17,3 +17,5 @@ require 'rack/mime'
 
 require_relative 'exts/sym_mash'
 require_relative 'exts/peach'
+
+require_relative 'utils/http'
