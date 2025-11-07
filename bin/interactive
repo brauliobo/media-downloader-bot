@@ -1,8 +1,0 @@
-#!/usr/bin/env ruby
-
-require_relative '../lib/manager'
-
-$bot = Manager.new
-Thread.new{ $bot.start }
-Pry.start $bot
-
