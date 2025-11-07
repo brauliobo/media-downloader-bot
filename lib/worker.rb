@@ -42,7 +42,7 @@ class Worker
     load_session
   end
 
-  delegate :send_message, :edit_message, :delete_message, :download_file, :report_error, to: :service
+  delegate :send_message, :edit_message, :delete_message, :download_file, :report_error, :msg_limit, to: :service
 
   def set_size_limit_from_bot
     return if Zipper.size_mb_limit
@@ -181,6 +181,8 @@ class Worker
       info.title       = Translator.translate info.title,       from: info.language, to: opts.lang
       info.description = Translator.translate info.description, from: info.language, to: opts.lang if opts.description
     end
+
+    info.title = msg_limit(info.title, percent: 90) if info.title
 
     caption = msg_caption i
     return send_message msg, caption if opts.simulate
