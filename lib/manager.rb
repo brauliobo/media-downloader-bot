@@ -13,9 +13,8 @@ require_relative 'bot/worker/drb_service'
 require_relative 'bot/worker/http_service'
 
 require_relative 'worker' if ENV['WITH_WORKER']
-require_relative 'utils/http'
-require_relative 'tl_bot'
-require_relative 'td_bot'
+require_relative 'tg_bot' if ENV['TG_BOT']
+require_relative 'td_bot' if ENV['TD_BOT']
 
 if ENV['DB']
   require 'sequel'
@@ -38,8 +37,7 @@ class Manager
   end
 
   def mock_start
-    TlBot.mock
-    @bot = TlBot.new self
+    @bot = TgBot.new self
   end
 
   def fork name
@@ -63,8 +61,8 @@ class Manager
   end
 
   def start
-    daemon('tdlib'){ start_td_bot } if ENV['TD_BOT']
-    daemon('tlbot'){ start_tl_bot } unless ENV['SKIP_TL_BOT']
+    start_td_bot if ENV['TD_BOT']
+    start_tg_bot if ENV['TG_BOT']
     sleep 1.year while true
   end
 
@@ -109,29 +107,11 @@ https://soundcloud.com/br-ulio-bhavamitra/sets/didi-gunamrta caption number
 EOS
 
   def start_td_bot
-    DRb.start_service ENV['DRB_WORKER_TD'], self rescue nil
-
-    ENV['CUDA'] = '1' #faster and don't work with maxrate for limiting
-    Bot::UserQueue.queue_size = 3
-    @bot = TDBot.connect
-    start_bot_service
-    @bot.listen do |msg|
-      Thread.new{ react msg }
-    end
-    sleep 1.year while true
+    @bot = TDBot.start(self) { |msg| react msg }
   end
 
-  def start_tl_bot
-    Bot::UserQueue.queue_size = 1
-    @bot = TlBot.connect
-    start_bot_service
-    @bot.listen do |msg|
-      next unless msg.is_a? Telegram::Bot::Types::Message
-      fork msg.text do
-        react SymMash.new(msg.to_h)
-      end
-      Thread.new{ sleep 1 and abort } if @exit # wait for other msg processing and trigger systemd restart
-    end
+  def start_tg_bot
+    @bot = TgBot.start(self) { |msg| react msg }
   end
 
   def send_help msg
