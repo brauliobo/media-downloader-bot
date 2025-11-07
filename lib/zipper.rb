@@ -5,7 +5,6 @@ require_relative 'subtitler/ass'
 require_relative 'zipper/formats'
 require_relative 'zipper/limits'
 require_relative 'zipper/subtitle'
-require_relative 'utils/http'
 
 class Zipper
 
@@ -307,7 +306,7 @@ class Zipper
   end
 
   def self.audio_to_wav path
-    wpath = File.join(Dir.tmpdir, "audio-#{SecureRandom.hex(6)}.wav")
+    wpath = File.join(Dir.pwd, "audio-#{SecureRandom.hex(6)}.wav")
 
     cmd = "#{FFMPEG} -i #{Sh.escape(path)} #{Sh.escape(wpath)}"
     _, _, st = Sh.run cmd
