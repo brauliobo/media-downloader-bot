@@ -1,10 +1,7 @@
-# frozen_string_literal: true
-
 require_relative '../subtitler/ass'
 require_relative '../subtitler'
 require_relative '../translator'
 require_relative '../output'
-require_relative '../utils/http'
 
 class Zipper
   # All subtitle-related responsibilities live here.
@@ -24,11 +21,12 @@ class Zipper
       ass_body = Subtitler::Ass.from_vtt(vtt, portrait:, mode: ass_mode)
 
       prefix = zipper.opts._sub_prefix || 'sub'
-      ass_path = "#{prefix}.ass"
+      dir = File.dirname(zipper.outfile || zipper.infile)
+      ass_path = File.join(dir, "#{prefix}.ass")
       File.write ass_path, ass_body
       zipper.fgraph << "ass=#{ass_path}"
 
-      vtt_path = "#{prefix}.vtt"
+      vtt_path = File.join(dir, "#{prefix}.vtt")
       File.write vtt_path, vtt
       zipper.iopts << " -i #{vtt_path}"
       if zipper.opts.speed == 1
