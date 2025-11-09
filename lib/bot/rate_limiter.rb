@@ -1,5 +1,4 @@
 require 'limiter'
-require 'active_support/concern'
 
 module Bot
   module RateLimiter

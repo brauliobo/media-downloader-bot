@@ -1,6 +1,5 @@
 require 'tempfile'
 require 'iso-639'
-require 'active_support/core_ext/module/attribute_accessors'
 
 require_relative '../zipper'
 require_relative 'translator'

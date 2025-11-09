@@ -1,5 +1,4 @@
 require 'fileutils'
-require 'active_support/core_ext/class/attribute'
 require_relative 'sh'
 require_relative 'http'
 
