@@ -1,5 +1,4 @@
 require_relative 'base'
-require 'active_support/core_ext/class/attribute'
 
 module Processors
   class File < Base
