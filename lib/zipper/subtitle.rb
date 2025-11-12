@@ -2,6 +2,7 @@ require_relative '../subtitler/ass'
 require_relative '../subtitler'
 require_relative '../translator'
 require_relative '../output'
+require_relative '../utils/sh'
 
 class Zipper
   # All subtitle-related responsibilities live here.
@@ -20,15 +21,15 @@ class Zipper
       ass_mode = zipper.opts.nowords ? :plain : :instagram
       ass_body = Subtitler::Ass.from_vtt(vtt, portrait:, mode: ass_mode)
 
-      prefix = zipper.opts._sub_prefix || 'sub'
       dir = File.dirname(zipper.outfile || zipper.infile)
+      prefix = zipper.outfile ? File.basename(zipper.outfile, File.extname(zipper.outfile)) : 'sub'
       ass_path = File.join(dir, "#{prefix}.ass")
       File.write ass_path, ass_body
-      zipper.fgraph << "ass=#{ass_path}"
+      zipper.fgraph << "ass=#{Sh.escape(ass_path)}"
 
       vtt_path = File.join(dir, "#{prefix}.vtt")
       File.write vtt_path, vtt
-      zipper.iopts << " -i #{vtt_path}"
+      zipper.iopts << " -i #{Sh.escape(vtt_path)}"
       if zipper.opts.speed == 1
         meta = " -c:s mov_text -metadata:s:s:0 language=#{lng} -metadata:s:s:0 title=#{lng}"
         zipper.oopts << meta
