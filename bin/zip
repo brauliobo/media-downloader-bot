@@ -1,5 +1,7 @@
 #!/usr/bin/env ruby
 
+require 'fileutils'
+
 STDOUT.sync = true
 ENV['PRINT_CMD'] = '1'
 ENV['SKIP_META'] = '1'
@@ -19,15 +21,20 @@ while ARGV[-1] and !File.exist?(ARGV[-1]) and ARGV[-1] !~ URI::regexp
   Processors::Base.add_opt opts, opt
 end
 
-Zipper.size_mb_limit = ENV['SIZE_MB_LIMIT']&.to_i
+Zipper.size_mb_limit = ENV['SIZE_MB_LIMIT']&.to_i || 2_000
 
 bot = Bot::Mock.new
 Worker.service = bot
 
+converted_dir = File.join(Dir.pwd, 'converted')
+FileUtils.mkdir_p converted_dir
+Worker.workdir_path = converted_dir
+Worker.skip_cleanup = true
+
 raise "No files found" if ARGV.blank?
 path = if ARGV.size > 1 then ARGV else ARGV.first&.split "\n" end
 path.peach do |u|
-  fake_msg = MsgHelpers.fake_msg
+  fake_msg = Bot::MsgHelpers.fake_msg
   fake_msg.bot = bot
 
   # Handle local files

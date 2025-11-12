@@ -2,7 +2,7 @@ require_relative 'boot'
 
 require_relative 'utils/sh'
 require_relative 'utils/url_shortener'
-require_relative 'msg_helpers'
+require_relative 'bot/msg_helpers'
 
 require_relative 'prober'
 require_relative 'zipper'
@@ -36,6 +36,9 @@ class Worker
   class_attribute :tmpdir
   self.tmpdir = ENV['TMPDIR'] || Dir.tmpdir
 
+  class_attribute :workdir_path
+  class_attribute :skip_cleanup
+
   def initialize msg
     @msg = msg
     set_size_limit_from_bot
@@ -47,7 +50,7 @@ class Worker
   def set_size_limit_from_bot
     return if Zipper.size_mb_limit
     bot_class = msg.bot_type || msg.bot&.class&.name
-    Zipper.size_mb_limit = bot_class == 'TDBot' ? 2_000 : 50
+    Zipper.size_mb_limit = bot_class == 'Bot::TDBot' ? 2_000 : 50
   end
 
   def load_session
@@ -63,10 +66,10 @@ class Worker
     end
 
   def workdir &block
-    @dir = Dir.mktmpdir "mdb-", tmpdir
+    @dir = workdir_path || Dir.mktmpdir("mdb-", tmpdir)
     yield @dir
   ensure
-    cleanup_workdir(@dir)
+    cleanup_workdir(@dir) unless skip_cleanup
   end
 
   def cleanup_workdir(dir)
@@ -161,10 +164,10 @@ class Worker
   def init_status
     return if @st
     @st = Bot::Status.new do |text, *args, **params|
-      text = MsgHelpers.me(text) unless params[:parse_mode]
+      text = Bot::MsgHelpers.me(text) unless params[:parse_mode]
       edit_message msg, msg.resp.message_id, *args, text: text, **params
     end
-    msg.resp ||= send_message msg, MsgHelpers.me('Downloading metadata...')
+    msg.resp ||= send_message msg, Bot::MsgHelpers.me('Downloading metadata...')
   end
 
   def upload_one i
@@ -223,11 +226,11 @@ class Worker
     return '' if opts.nocaption
     text = ''
     if opts.caption or i.type == Zipper::Types.video
-      text  = "_#{MsgHelpers.me(i.info.title)}_"
-      text << "\n#{MsgHelpers.me(i.info.uploader)}" if i.info.uploader
+      text  = "_#{Bot::MsgHelpers.me(i.info.title)}_"
+      text << "\n#{Bot::MsgHelpers.me(i.info.uploader)}" if i.info.uploader
     end
-    text << "\n\n_#{MsgHelpers.me(i.info.description.strip)}_" if opts.description and i.info.description.strip.presence
-    text << "\n\n#{MsgHelpers.me(i.url)}" if i.url
+    text << "\n\n_#{Bot::MsgHelpers.me(i.info.description.strip)}_" if opts.description and i.info.description.strip.presence
+    text << "\n\n#{Bot::MsgHelpers.me(i.url)}" if i.url
     text
   end
 

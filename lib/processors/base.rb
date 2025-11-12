@@ -34,7 +34,7 @@ module Processors
 
       @dir  = dir
       @tmp  = Dir.mktmpdir 'input-', dir
-      @msg  = msg || MsgHelpers.fake_msg
+      @msg  = msg || Bot::MsgHelpers.fake_msg
       @st   = st || stline.status
       @stl  = stline
 

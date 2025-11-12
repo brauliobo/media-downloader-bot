@@ -9,12 +9,12 @@ module Language
 
   def self.detect(paragraphs)
     return 'en' unless USE_AI_LANG && paragraphs.any?
-    sample_text = paragraphs.first(5).map { |p| p[:text] }.join("\n")[0, 1000]
+    sample_text = paragraphs.map{ |p| p[:text] }.join("\n")[0, 1000]
     messages = [{ role: :user, content: PROMPT_TEMPLATE + """\n#{sample_text}\n""" }]
     ans = AI::Ollama.chat(messages, format: SCHEMA)
     lang = JSON.parse(ans)['lang']&.downcase&.strip
     lang&.match?(/^[a-z]{2}$/) ? lang : 'en'
-  rescue StandardError
+  rescue Timeout::Error, StandardError
     'en'
   end
 end

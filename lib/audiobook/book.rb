@@ -180,15 +180,13 @@ module Audiobook
       @opts = opts || SymMash.new
       @stl = stl
       
-      # Detect language from parsed content
-      detect_language_from_content
+      # Detect language from first 5 pages of content
+      detect_language_from_first_pages
       @lang = @metadata.language || 'en'
       
       # Handle new line-based format or legacy paragraph format
       if @data.content&.lines
         @pages = pages_from_lines(@data.content.lines, @data.content.images || [])
-        # After OCR, refine language detection if there were OCR pages
-        refine_language_detection! if @metadata.has_ocr_pages
       else
         @pages = pages_from_paragraphs
       end
@@ -234,25 +232,48 @@ module Audiobook
 
     private
 
-    def detect_language_from_content
+    def detect_language_from_first_pages
       return if @metadata.language
 
-      sample_paras = if @data.content&.lines
-        @data.content.lines.first(10).map { |l| SymMash.new(text: l[:text] || l['text']) }.reject { |p| p.text.to_s.strip.empty? }
-      elsif @data.content&.paragraphs
-        @data.content.paragraphs.first(10).map { |p| SymMash.new(text: p['text'] || p[:text]) }.reject { |p| p.text.to_s.strip.empty? }
-      elsif @data.content&.text
-        [SymMash.new(text: @data.content.text)]
-      elsif @data.text
-        [SymMash.new(text: @data.text)]
-      else
-        []
-      end
-      
+      @stl&.update 'Detecting language from content'
+      sample_paras = extract_first_5_pages_text
       return if sample_paras.empty?
       
       lang = Language.detect(sample_paras)
       @metadata.language = lang
+      @stl&.update "Detected language: #{lang}"
+    rescue => e
+      @metadata.language ||= 'en'
+      @stl&.update "Language detection failed, defaulting to en"
+    end
+
+    def extract_first_5_pages_text
+      return extract_from_lines if @data.content&.lines&.any?
+      return extract_from_paragraphs if @data.content&.paragraphs&.any?
+      return [SymMash.new(text: @data.content.text)] if @data.content&.text
+      return [SymMash.new(text: @data.text)] if @data.text
+      []
+    end
+
+    def extract_from_lines
+      items = @data.content.lines.map { |l| normalize_symmash(l) }
+      extract_text_from_first_5_pages(items) { |item| item.page || 1 }
+    end
+
+    def extract_from_paragraphs
+      items = @data.content.paragraphs.map { |p| normalize_symmash(p) }
+      extract_text_from_first_5_pages(items) { |item| (item.page_numbers || [1]).first || 1 }
+    end
+
+    def extract_text_from_first_5_pages(items)
+      return [] if items.empty?
+      items_by_page = items.group_by { |item| yield(item) }
+      first_5_pages = items_by_page.sort_by { |page, _| page.to_i }.first(5).flat_map(&:last)
+      first_5_pages.filter_map { |item| text = item.text; SymMash.new(text: text) if text.to_s.strip != '' }
+    end
+
+    def normalize_symmash(obj)
+      obj.is_a?(SymMash) ? obj : SymMash.new(obj)
     end
 
     # Build pages from Line objects (new format with font metadata)
@@ -646,15 +667,6 @@ module Audiobook
       end
     end
 
-    # ---------- language detection ----------
-    def refine_language_detection!
-      @stl&.update 'Detecting language from OCR content'
-      sample_paras = pages.flat_map(&:all_sentences).first(5).map { |s| SymMash.new(text: s.text) }
-      detected = Language.detect(sample_paras)
-      @lang = detected
-      @metadata.language = detected
-      @stl&.update "Detected language: #{detected}"
-    end
 
     # ---------- translation ----------
     def translation_needed?

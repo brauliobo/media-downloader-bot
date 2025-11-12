@@ -13,8 +13,8 @@ require_relative 'bot/worker/drb_service'
 require_relative 'bot/worker/http_service'
 
 require_relative 'worker' if ENV['WITH_WORKER']
-require_relative 'tg_bot' if ENV['TG_BOT']
-require_relative 'td_bot' if ENV['TD_BOT']
+require_relative 'bot/tg_bot' if ENV['TG_BOT']
+require_relative 'bot/td_bot' if ENV['TD_BOT']
 
 if ENV['DB']
   require 'sequel'
@@ -37,7 +37,7 @@ class Manager
   end
 
   def mock_start
-    @bot = TgBot.new self
+    @bot = Bot::TgBot.new self
   end
 
   def fork name
@@ -107,15 +107,15 @@ https://soundcloud.com/br-ulio-bhavamitra/sets/didi-gunamrta caption number
 EOS
 
   def start_td_bot
-    @bot = TDBot.start(self) { |msg| react msg }
+    @bot = Bot::TDBot.start(self) { |msg| react msg }
   end
 
   def start_tg_bot
-    @bot = TgBot.start(self) { |msg| react msg }
+    @bot = Bot::TgBot.start(self) { |msg| react msg }
   end
 
   def send_help msg
-    msg.bot.send_message msg, MsgHelpers.mnfe(START_MSG)
+    msg.bot.send_message msg, Bot::MsgHelpers.mnfe(START_MSG)
   end
 
   BLOCKED_USERS = ENV['BLOCKED_USERS'].split.map(&:to_i)

@@ -31,7 +31,7 @@ module Downloaders
 
       o, e, st = Sh.run cmd, chdir: dir
       if st != 0
-        processor.st.error "Metadata errors:\n<pre>#{MsgHelpers.he e}</pre>", parse_mode: 'HTML'
+        processor.st.error "Metadata errors:\n<pre>#{Bot::MsgHelpers.he e}</pre>", parse_mode: 'HTML'
       end
 
       infos = Dir.glob("#{tmp}/*.info.json").sort_by { |f| File.mtime f }
@@ -67,7 +67,7 @@ module Downloaders
 
         max_len = VID_MAX_LENGTH[]
         dur = (info.duration || 0).to_i
-        if info.video_ext != 'none' && Zipper.size_mb_limit && !opts.onlysrt && !MsgHelpers.from_admin?(msg) &&
+        if info.video_ext != 'none' && Zipper.size_mb_limit && !opts.onlysrt && !Bot::MsgHelpers.from_admin?(msg) &&
            dur.positive? && dur >= max_len.to_i
           return processor.st.error VID_MAX_NOTICE[]
         end
@@ -138,7 +138,7 @@ module Downloaders
 
         ml = opts.audio ? AL : VL
         opts.limit ||= ml if opts.after
-        opts.limit   = ml if ml && opts.limit && opts.limit.to_i > ml && !MsgHelpers.from_admin?(msg)
+        opts.limit   = ml if ml && opts.limit && opts.limit.to_i > ml && !Bot::MsgHelpers.from_admin?(msg)
         bcmd << " --playlist-end #{opts.limit.to_i}" if opts.limit.to_i.positive?
 
         bcmd << ' -x' if opts.audio || opts.onlysrt

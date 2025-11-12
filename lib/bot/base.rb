@@ -1,5 +1,9 @@
 module Bot
+  require_relative 'msg_helpers'
+
   class Base
+    include MsgHelpers
+
     def send_message(msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **params)
       puts text
       SymMash.new(result: {message_id: 1}, text: text)
