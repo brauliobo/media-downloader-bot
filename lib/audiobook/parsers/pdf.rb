@@ -1,5 +1,4 @@
 require 'pdf-reader'
-require 'shellwords'
 require_relative 'base'
 require_relative '../../text_helpers'
 require_relative '../../utils/sh'
@@ -33,7 +32,7 @@ module Audiobook
       end
 
       def self.extract_images(pdf_path, dir)
-        Sh.run "pdftoppm -png -r 300 #{::Shellwords.escape(pdf_path)} #{File.join(dir, 'page')}"
+        Sh.run "pdftoppm -png -r 300 #{Sh.escape(pdf_path)} #{File.join(dir, 'page')}"
         Dir.glob("#{File.join(dir, 'page-*.png')}").sort_by { |f| File.basename(f, '.png').split('-').last.to_i }
       end
 
@@ -152,7 +151,7 @@ module Audiobook
         # Detect if page has images using pdfimages tool (more reliable)
         has_images = begin
           # Check if pdfimages can list images for this page
-          cmd = "pdfimages -f #{page_num} -l #{page_num} -list #{::Shellwords.escape(pdf_path)} 2>/dev/null"
+          cmd = "pdfimages -f #{page_num} -l #{page_num} -list #{Sh.escape(pdf_path)} 2>/dev/null"
           output = `#{cmd}`
           # pdfimages outputs header lines, then image lines starting with spaces+digits+"image"
           # Skip header lines (starting with "page" or dashes) and check for image lines
