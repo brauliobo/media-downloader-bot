@@ -1,4 +1,4 @@
-require 'shellwords'
+require_relative '../utils/sh'
 
 module Audiobook
   # Base speech unit for audio synthesis, path generation, YAML serialization.
@@ -41,7 +41,7 @@ module Audiobook
 
     def synthesize_audio(_wav_path, _lang)
       # Default: generate silence (0.5 s)
-      cmd = "#{Zipper::FFMPEG} -f lavfi -i anullsrc=channel_layout=mono:sample_rate=22050 -t 0.5 #{Shellwords.escape(_wav_path)}"
+      cmd = "#{Zipper::FFMPEG} -f lavfi -i anullsrc=channel_layout=mono:sample_rate=22050 -t 0.5 #{Sh.escape(_wav_path)}"
       system(cmd)
     end
 

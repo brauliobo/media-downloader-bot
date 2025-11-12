@@ -1,7 +1,6 @@
 require_relative 'boot'
 
 require 'tmpdir'
-require 'shellwords'
 require 'mechanize'
 require 'roda'
 require 'retriable'
