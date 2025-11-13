@@ -21,21 +21,19 @@ module Bot
     class_attribute :tg
     delegate_missing_to :tg
 
-    def initialize(tg)
-      self.tg = tg
-    end
-
-    def self.start(manager, &block)
+    def self.start &block
       Bot::UserQueue.queue_size = 1
-      bot = nil
-      Telegram::Bot::Client.run ENV['TG_BOT_TOKEN'], logger: Logger.new(STDOUT) do |tg_bot|
-        puts 'bot: started, listening'
-        bot = new(tg_bot) unless bot
-        manager.start_bot_service
-        tg_bot.listen do |msg|
-          next unless msg.is_a? Telegram::Bot::Types::Message
-          Thread.new do
-            block.call SymMash.new msg.to_h
+      Zipper.size_mb_limit = 50
+      bot = new
+      Thread.new do
+        Telegram::Bot::Client.run ENV['TG_BOT_TOKEN'], logger: Logger.new(STDOUT) do |tg_bot|
+          puts 'bot: started, listening'
+          bot.tg = tg_bot.api
+          tg_bot.listen do |msg|
+            next unless msg.is_a? Telegram::Bot::Types::Message
+            Manager.fork msg.text do
+              block.call SymMash.new msg.to_h
+            end
           end
         end
       end
