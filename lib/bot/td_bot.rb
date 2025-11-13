@@ -11,9 +11,10 @@ module Bot
     include TD::Logging
     include RateLimiter
 
-    class_attribute :cthread, :td, :message_handler, :message_sender, :file_manager
     self.max_caption = 4096
 
+    class_attribute :td
+    class_attribute :message_handler, :message_sender, :file_manager
     TD::Client.configure_for_bot
     self.td = TD::Client.new timeout: 1.minute
     self.message_handler = TD::MessageHandler.new(td)
@@ -21,18 +22,15 @@ module Bot
     self.file_manager    = TD::FileManager.new(td)
     td.setup_authentication_handlers
 
-    def self.start(manager, &block)
+    def self.start &block
       ENV['CUDA'] = '1'
-      Bot::UserQueue.queue_size = 3
-      self.cthread = Thread.new do
-        trap(:INT){ self.td.connect } # cause crash
-        at_exit{ self.td.connect }
-        td.connect
-      end
+      Zipper.size_mb_limit = 2_000
+      UserQueue.queue_size = 3
+
       bot = self.new
-      manager.start_bot_service
+      Thread.new{ td.connect }
       bot.listen do |msg|
-        Thread.new{ block.call(msg) }
+        Thread.new{ block.call msg }
       end
       bot
     end
@@ -67,7 +65,7 @@ module Bot
 
     def mfe(text)
       return text unless text
-      Bot::MsgHelpers::MARKDOWN_FORMAT.each { |c| text = text.gsub(c, "\\#{c}") }
+      MsgHelpers::MARKDOWN_FORMAT.each { |c| text = text.gsub(c, "\\#{c}") }
       text
     end
 
