@@ -41,17 +41,10 @@ class Worker
 
   def initialize msg
     @msg = msg
-    set_size_limit_from_bot
     load_session
   end
 
   delegate :send_message, :edit_message, :delete_message, :download_file, :report_error, :msg_limit, to: :service
-
-  def set_size_limit_from_bot
-    return if Zipper.size_mb_limit
-    bot_class = msg.bot_type || msg.bot&.class&.name
-    Zipper.size_mb_limit = bot_class == 'Bot::TDBot' ? 2_000 : 50
-  end
 
   def load_session
       return unless defined? Models::Session
@@ -100,7 +93,8 @@ class Worker
         inputs.concat Array.wrap p.process
       end
 
-      return@st&.error('No inputs generated') if inputs.first.blank?
+      return if inputs.first.blank? and @st&.any?{ |l| l.error? }
+      return @st&.error('No inputs generated') if inputs.first.blank?
 
       inputs.uniq!{ |i| i.info.display_id }
       @opts = inputs.first&.opts || SymMash.new
