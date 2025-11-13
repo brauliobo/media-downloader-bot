@@ -57,19 +57,52 @@ class Subtitler
       return [seg] if text.length <= max_chars
       words = Array(seg.words).reject { |w| w.word.to_s.strip.empty? }
       return split_segment_without_words(seg, max_chars) if words.empty?
+      min_next_size = (max_chars * 0.35).to_i
       buckets = []
       buffer = []
-      words.each do |word|
+      remaining = words.dup
+      words.each_with_index do |word, idx|
         sample = (buffer + [word]).map { |w| w.word.to_s.strip }.join(' ').strip
         if sample.length > max_chars && buffer.any?
-          buckets << buffer
-          buffer = [word]
+          next_words = remaining[idx..-1] || []
+          next_text = next_words.map { |w| w.word.to_s.strip }.join(' ').strip
+          if next_text.length < min_next_size && buffer.size > 1
+            split_idx = find_balanced_split(buffer, max_chars, min_next_size, next_text.length)
+            if split_idx && split_idx < buffer.size - 1
+              buckets << buffer[0..split_idx]
+              buffer = buffer[(split_idx + 1)..-1] + [word]
+            else
+              buckets << buffer
+              buffer = [word]
+            end
+          else
+            buckets << buffer
+            buffer = [word]
+          end
         else
           buffer << word
         end
       end
       buckets << buffer if buffer.any?
       buckets.map { |chunk| build_segment(seg, chunk) }
+    end
+
+    def self.find_balanced_split(buffer, max_chars, min_next_size, next_remaining)
+      return nil if buffer.size <= 1
+      best_idx = nil
+      best_score = Float::INFINITY
+      (0..buffer.size - 2).each do |idx|
+        first_text = buffer[0..idx].map { |w| w.word.to_s.strip }.join(' ').strip
+        next_text = buffer[(idx + 1)..-1].map { |w| w.word.to_s.strip }.join(' ').strip
+        next_total = next_text.length + next_remaining
+        next if first_text.length > max_chars || next_total < min_next_size
+        score = (max_chars - first_text.length).abs + (min_next_size - next_total).abs
+        if score < best_score
+          best_score = score
+          best_idx = idx
+        end
+      end
+      best_idx
     end
 
     def self.build_segment(source, words)
@@ -87,13 +120,28 @@ class Subtitler
       text = seg.text.to_s.strip
       return [seg] if text.length <= max_chars
       tokens = text.split(/\s+/)
+      min_next_size = (max_chars * 0.35).to_i
       parts  = []
       bucket = []
-      tokens.each do |tok|
+      remaining = tokens.dup
+      tokens.each_with_index do |tok, idx|
         sample = ([*bucket, tok].join(' ')).strip
         if sample.length > max_chars && bucket.any?
-          parts << bucket.join(' ')
-          bucket = [tok]
+          next_tokens = remaining[idx..-1] || []
+          next_text = next_tokens.join(' ').strip
+          if next_text.length < min_next_size && bucket.size > 1
+            split_idx = find_balanced_split_tokens(bucket, max_chars, min_next_size, next_text.length)
+            if split_idx && split_idx < bucket.size - 1
+              parts << bucket[0..split_idx].join(' ')
+              bucket = bucket[(split_idx + 1)..-1] + [tok]
+            else
+              parts << bucket.join(' ')
+              bucket = [tok]
+            end
+          else
+            parts << bucket.join(' ')
+            bucket = [tok]
+          end
         else
           bucket << tok
         end
@@ -113,6 +161,24 @@ class Subtitler
         dup.end   = idx == parts.length - 1 ? seg.end : cursor
         dup
       end
+    end
+
+    def self.find_balanced_split_tokens(bucket, max_chars, min_next_size, next_remaining)
+      return nil if bucket.size <= 1
+      best_idx = nil
+      best_score = Float::INFINITY
+      (0..bucket.size - 2).each do |idx|
+        first_text = bucket[0..idx].join(' ').strip
+        next_text = bucket[(idx + 1)..-1].join(' ').strip
+        next_total = next_text.length + next_remaining
+        next if first_text.length > max_chars || next_total < min_next_size
+        score = (max_chars - first_text.length).abs + (min_next_size - next_total).abs
+        if score < best_score
+          best_score = score
+          best_idx = idx
+        end
+      end
+      best_idx
     end
 
     def self.tokenize_text(text)
