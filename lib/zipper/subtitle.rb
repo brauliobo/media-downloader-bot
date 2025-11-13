@@ -82,7 +82,7 @@ class Zipper
 
       if (target_lang = Subtitler.normalize_lang(opts.lang)) && lng.to_s != target_lang.to_s
         from_lang = lng if lng.present?
-        srt_content = Translator.translate_srt(srt_content, from: from_lang, to: target_lang) 
+        srt_content = Translator.translate_srt srt_content, from: from_lang, to: target_lang
         lng = target_lang
       end
 
