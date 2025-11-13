@@ -52,7 +52,7 @@ RSpec.describe Subtitler::Translator do
     expect(mash.segments[1].start).to eq(2.5)
     expect(mash.segments[1].end).to eq(3.5)
 
-    vtt = backend.vtt_convert(mash, normalize: false, word_tags: false)
+    vtt = backend.send(:vtt_convert, mash, normalize: false, word_tags: false)
     expect(vtt).to eq(
       "WEBVTT\n\n" \
       "00:00:00.000 --> 00:00:00.900\n" \
@@ -198,7 +198,7 @@ RSpec.describe Subtitler::Translator do
     expect(mash.segments[1].start).to eq(4.0)
     expect(mash.segments[1].end).to eq(6.8)
 
-    vtt = backend.vtt_convert(mash, normalize: false, word_tags: false)
+    vtt = backend.send(:vtt_convert, mash, normalize: false, word_tags: false)
     expect(vtt).to eq(
       "WEBVTT\n\n" \
       "00:00:00.000 --> 00:00:02.500\n" \
@@ -233,7 +233,7 @@ RSpec.describe Subtitler::Translator do
     expect(mash.segments[0].start).to eq(0.0)
     expect(mash.segments[0].end).to eq(3.3)
 
-    vtt = backend.vtt_convert(mash, normalize: false, word_tags: false)
+    vtt = backend.send(:vtt_convert, mash, normalize: false, word_tags: false)
     expect(vtt).to eq(
       "WEBVTT\n\n" \
       "00:00:00.000 --> 00:00:03.300\n" \
@@ -267,16 +267,19 @@ RSpec.describe Subtitler::Translator do
     allow(::Translator).to receive(:translate).and_return([long1, long2])
 
     mash = described_class.translate(verbose_json, from: 'en', to: 'pt')
-    expect(mash.segments.size).to eq(2)
-    expect(mash.segments.map(&:text)).to eq([long1, long2])
+    expect(mash.segments.size).to eq(4)
+    expect((mash.segments[0].text + ' ' + mash.segments[1].text).strip).to eq(long1)
+    expect((mash.segments[2].text + ' ' + mash.segments[3].text).strip).to eq(long2)
     expect(mash.segments[0].start).to eq(0.0)
-    expect(mash.segments[0].end).to eq(2.3)
-    expect(mash.segments[1].start).to eq(2.5)
-    expect(mash.segments[1].end).to eq(4.1)
+    expect(mash.segments[1].end).to eq(2.3)
+    expect(mash.segments[2].start).to eq(2.5)
+    expect(mash.segments[3].end).to eq(4.1)
 
-    vtt = backend.vtt_convert(mash, normalize: false, word_tags: false)
-    expect(vtt).to include(long1)
-    expect(vtt).to include(long2)
+    vtt = backend.send(:vtt_convert, mash, normalize: false, word_tags: false)
+    expect(vtt).to include('Primeira frase muito extensa')
+    expect(vtt).to include('evitar mescla.')
+    expect(vtt).to include('Segunda sentença igualmente extensa')
+    expect(vtt).to include('comprimento máximo.')
   end
 
   it 'preserves per-word start/end timings after fuzzy token mapping' do
