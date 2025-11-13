@@ -67,7 +67,7 @@ module Processors
         return i
       end
 
-      i.thumb = i.opts.thumb = Utils::Thumb.process(i.info, base_filename: i.info._filename, on_error: ->(e) { Worker.service.report_error(msg, e)  })
+      i.thumb = i.opts.thumb = Utils::Thumb.process(i.info, base_filename: i.info._filename, on_error: -> e { Worker.service.report_error(msg, e)  })
       return unless i.fn_out = convert(i, pos: pos)
 
       if Zipper.size_mb_limit
