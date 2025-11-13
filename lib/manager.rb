@@ -23,23 +23,24 @@ end
 
 class Manager
 
-  attr_reader :bot
-  attr_reader :queue
+  START_MSG = <<-EOS
+Download and convert videos/audios from Youtube, Facebook, Instagram, etc.
+Options:
+- Use `audio` keyword after link to extract audio
+- Use `caption` to put title and uploader
+- Use `number` to add the number for each file in playlists
 
-  def initialize
-    @user_queue = Bot::UserQueue.new
-    @queue = Queue.new
-  end
+Report issues at https://github.com/brauliobo/media-downloader-bot/issues/new
 
-  def self.http
-    Utils::HTTP.client
-  end
+Examples:
+https://youtu.be/FtGEzUKcAnE
+https://youtu.be/n8TOOEXsrLw audio caption
+https://www.instagram.com/p/CTAXxxODblP/
+https://web.facebook.com/groups/590968084832296/posts/920964005166034 audio
+https://soundcloud.com/br-ulio-bhavamitra/sets/didi-gunamrta caption number
+EOS
 
-  def mock_start
-    @bot = Bot::TgBot.new self
-  end
-
-  def fork name
+  def self.fork name
     pid = Kernel.fork do
       DB.disconnect if defined? DB
       Process.setproctitle name.to_s
@@ -47,22 +48,6 @@ class Manager
     end
     Process.detach pid
     pid
-  end
-
-  def daemon name, &block
-    Thread.new do
-      loop do
-        puts "#{name}: starting"
-        pid = self.fork name, &block
-        Process.wait pid
-      end
-    end
-  end
-
-  def start
-    start_td_bot if ENV['TD_BOT']
-    start_tg_bot if ENV['TG_BOT']
-    sleep 1.year while true
   end
 
   # Simple retry helper with Telegram-aware sleep.
@@ -88,29 +73,35 @@ class Manager
     end
   end
 
-  START_MSG = <<-EOS
-Download and convert videos/audios from Youtube, Facebook, Instagram, etc.
-Options:
-- Use `audio` keyword after link to extract audio
-- Use `caption` to put title and uploader
-- Use `number` to add the number for each file in playlists
+  attr_reader :bot
+  attr_reader :queue
 
-Report issues at https://github.com/brauliobo/media-downloader-bot/issues/new
+  def initialize
+    @user_queue = Bot::UserQueue.new
+    @queue = Queue.new
+  end
 
-Examples:
-https://youtu.be/FtGEzUKcAnE
-https://youtu.be/n8TOOEXsrLw audio caption
-https://www.instagram.com/p/CTAXxxODblP/
-https://web.facebook.com/groups/590968084832296/posts/920964005166034 audio
-https://soundcloud.com/br-ulio-bhavamitra/sets/didi-gunamrta caption number
-EOS
+  def self.http
+    Utils::HTTP.client
+  end
+
+  def mock_start
+    @bot = Bot::TgBot.new self
+  end
+
+  def start
+    start_td_bot if ENV['TD_BOT']
+    start_tg_bot if ENV['TG_BOT']
+    start_bot_service
+    sleep 1.year while true
+  end
 
   def start_td_bot
-    @bot = Bot::TDBot.start(self) { |msg| react msg }
+    @bot = Bot::TDBot.start{ |msg| react msg }
   end
 
   def start_tg_bot
-    @bot = Bot::TgBot.start(self) { |msg| react msg }
+    @bot = Bot::TgBot.start{ |msg| react msg }
   end
 
   def send_help msg
@@ -121,6 +112,7 @@ EOS
 
   def react msg
     msg.bot = bot
+    msg.bot_type = bot.class.name
     return if msg.text.blank? && msg.video.blank? && msg.audio.blank? && msg.document.blank?
     return send_help msg if msg.text&.starts_with? '/start'
     return send_help msg if msg.text&.starts_with? '/help'
@@ -130,21 +122,16 @@ EOS
 
     enqueue_message msg
   rescue => e
-    bot.report_error(msg, e) rescue nil if bot.respond_to?(:report_error)
+    bot.report_error msg, e rescue nil
+    STDERR.puts e.full_message
     raise
   end
 
   def enqueue_message(msg)
-    msg = SymMash.new(msg.to_h).tap { |m| m.bot ||= bot }
-    msg.bot_type = bot.class.name
     if ENV['WITH_WORKER']
-      Thread.new do
-        Worker.service = bot
-        worker = Worker.new msg
-        worker.process
-      rescue => e
-        bot.report_error msg, e rescue nil
-      end
+      Worker.service = bot
+      worker = Worker.new msg
+      worker.process
     else
       @queue.enq msg
     end
