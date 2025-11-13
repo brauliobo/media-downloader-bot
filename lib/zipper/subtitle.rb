@@ -23,7 +23,8 @@ class Zipper
 
       dir = File.dirname(zipper.outfile || zipper.infile)
       prefix = zipper.outfile ? File.basename(zipper.outfile, File.extname(zipper.outfile)) : 'sub'
-      ass_path = File.join(dir, "#{prefix}.ass")
+      safe_prefix = prefix.gsub(/[:,\[\]]/, '_')
+      ass_path = File.join(dir, "#{safe_prefix}.ass")
       File.write ass_path, ass_body
       zipper.fgraph << "ass=#{Sh.escape(ass_path)}"
 
