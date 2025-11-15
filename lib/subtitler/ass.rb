@@ -9,7 +9,7 @@ class Subtitler
       BorderStyle:   1,
       Alignment:     2,
       MarginV:       32,
-      Shadow:        1,
+      Shadow:        2,
     ).freeze
 
     SECONDARY_COLOUR = '&H0000ffff'.freeze # yellow
