@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require_relative '../exts/sym_mash'
 require_relative 'formats'
 
 class Zipper

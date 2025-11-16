@@ -1,11 +1,3 @@
-# frozen_string_literal: true
-
-require 'json'
-require 'uri'
-require 'tempfile'
-require 'fileutils'
-
-# Text-to-speech backend that talks to running Piper HTTP servers
 class TTS
   module Piper
     # Map ISO language codes to Piper HTTP server ports
@@ -25,7 +17,7 @@ class TTS
       payload[:voice] = voice if voice
       payload.merge!(kwargs)
 
-      agent = Manager.http
+      agent = Utils::HTTP.client
       res = agent.post(url, payload.to_json, 'Content-Type' => 'application/json')
       raise "TTS failed: #{res.code}" unless res.code == '200'
 

@@ -1,9 +1,6 @@
 # frozen_string_literal: true
 
 require 'ostruct'
-require 'active_support/core_ext/object/blank'
-require 'active_support/core_ext/class/attribute'
-require_relative '../exts/sym_mash'
 
 class Zipper
   # Collection of codec definitions, encoder templates and helpers that are

@@ -1,7 +1,6 @@
 require 'tempfile'
 require 'securerandom'
 require 'fileutils'
-require_relative 'exts/sym_mash'
 require_relative 'subtitler/ass'
 require_relative 'zipper/formats'
 require_relative 'zipper/limits'
@@ -307,7 +306,7 @@ class Zipper
   end
 
   def self.audio_to_wav path
-    wpath = File.join(Dir.tmpdir, "audio-#{SecureRandom.hex(6)}.wav")
+    wpath = File.join(Dir.pwd, "audio-#{SecureRandom.hex(6)}.wav")
 
     cmd = "#{FFMPEG} -i #{Sh.escape(path)} #{Sh.escape(wpath)}"
     _, _, st = Sh.run cmd
@@ -410,7 +409,7 @@ class Zipper
       lng,lsub =  cads.each.with_object([]){ |s, r| break r = [s, subs[s]] if subs.key? s }
       return if lng.blank?
       lsub = lsub.find{ |s| s.ext == 'vtt' } || lsub[0]
-      sub  = http.get(lsub.url).body
+      sub  = Utils::HTTP.get(lsub.url).body
       vtt  = subtitle_to_vtt sub, lsub.ext
 
     # embedded subtitles
@@ -440,14 +439,6 @@ class Zipper
   def apply_cut
     iopts << " -ss #{opts.ss}" if opts.ss&.match(TIME_REGEX)
     oopts << " -to #{opts.to}" if opts.to&.match(TIME_REGEX)
-  end
-
-  def http
-    return Manager.http if defined?(Manager)
-    Mechanize.new.tap do |a|
-      t = (ENV['HTTP_TIMEOUT'] || 1800).to_i
-      a.open_timeout = t; a.read_timeout = t
-    end
   end
 
 end

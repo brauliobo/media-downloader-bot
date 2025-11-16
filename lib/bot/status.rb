@@ -31,8 +31,9 @@ module Bot
         @error
       end
 
-      def error text
+      def error text, exception: nil
         @error = true
+        text = "#{text}: #{exception.class}: #{exception.message}\n#{exception.backtrace.first(15).join("\n")}" if exception
         keep.update text
       end
     end
@@ -57,7 +58,9 @@ module Bot
       any?{ |l| l.kept }
     end
 
-    def error text, *args, **params
+    def error text, *args, exception: nil, **params
+      text = "#{text}\n#{exception.class}: #{exception.message}" if exception
+      text = "#{text}\n#{exception.backtrace.join("\n")}" if exception&.backtrace
       send_update text, *args, **params
       nil
     end

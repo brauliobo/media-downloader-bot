@@ -1,20 +1,18 @@
-require 'json'
 require 'addressable/uri'
+require 'tmpdir'
+require 'fileutils'
+require 'set'
+require 'yaml'
+
 require_relative 'ocr'
 require_relative 'tts'
 require_relative 'zipper'
 require_relative 'utils/sh'
-require_relative 'exts/sym_mash'
 require_relative 'translator'
 require_relative 'audiobook/book'
 require_relative 'audiobook/runner'
 require_relative 'audiobook/yaml'
 require_relative 'audiobook/text_pdf'
-
-require 'tmpdir'
-require 'fileutils'
-require 'set'
-require 'yaml'
 
 module Audiobook
   def self.generate(input_path, out_audio, stl: nil, opts: nil)
@@ -44,7 +42,6 @@ module Audiobook
     base = base_from_source(source)
     audio_out = File.join(dir, "#{base}.opus")
     result = generate(source, audio_out, stl: stl, opts: opts)
-    raise 'Failed to generate audiobook files' unless File.exist?(result.yaml) && File.exist?(result.audio)
 
     book = Audiobook::Book.from_input(source, opts: opts, stl: stl)
     thumbnail_path = book.thumb(dir: dir, base: base)

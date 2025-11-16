@@ -90,7 +90,7 @@ These rules guide any AI-assisted edits in this project. They encode the repo’
 - Run heavy work inside the per-job `dir` using `Dir.chdir dir do ... end`.
 
 ### ENV & configuration
-- Common flags: `DB`, `TMPDIR`, `CUDA`, `PAID`, `BLOCKED_USERS`, `BLOCKED_DOMAINS`, `PRY_BEFORE_CONVERT`, `DEBUG`, `SKIP_TL_BOT`, `TDLIB_PROCESS_UNREAD`.
+- Common flags: `DB`, `TMPDIR`, `CUDA`, `PAID`, `BLOCKED_USERS`, `BLOCKED_DOMAINS`, `PRY_BEFORE_CONVERT`, `DEBUG`, `TDLIB_PROCESS_UNREAD`.
 - **TDLIB_PROCESS_UNREAD**: Set to '1' to enable processing of unread messages on startup.
 - Validate and coerce ENV values near use sites; keep defaults conservative; feature-gate risky paths.
 
@@ -139,3 +139,8 @@ These rules guide any AI-assisted edits in this project. They encode the repo’
 - Validate changes against the codebase before editing; prefer high-level APIs over low-level calls.
 - Keep bullets short, DRY, and ≤120 cols with 2-space indentation.
 
+# General Notes
+
+## ActiveSupport
+
+**DO NOT require ActiveSupport anywhere** - it is already required in `lib/boot.rb` via `require 'active_support/all'`. All ActiveSupport extensions are available globally after boot.rb is loaded.

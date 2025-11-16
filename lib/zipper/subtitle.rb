@@ -1,9 +1,8 @@
-# frozen_string_literal: true
-
 require_relative '../subtitler/ass'
 require_relative '../subtitler'
 require_relative '../translator'
-require 'mechanize'
+require_relative '../output'
+require_relative '../utils/sh'
 
 class Zipper
   # All subtitle-related responsibilities live here.
@@ -22,14 +21,16 @@ class Zipper
       ass_mode = zipper.opts.nowords ? :plain : :instagram
       ass_body = Subtitler::Ass.from_vtt(vtt, portrait:, mode: ass_mode)
 
-      prefix = zipper.opts._sub_prefix || 'sub'
-      ass_path = "#{prefix}.ass"
+      dir = File.dirname(zipper.outfile || zipper.infile)
+      prefix = zipper.outfile ? File.basename(zipper.outfile, File.extname(zipper.outfile)) : 'sub'
+      safe_prefix = prefix.gsub(/[:,\[\]]/, '_')
+      ass_path = File.join(dir, "#{safe_prefix}.ass")
       File.write ass_path, ass_body
-      zipper.fgraph << "ass=#{ass_path}"
+      zipper.fgraph << "ass=#{Sh.escape(ass_path)}"
 
-      vtt_path = "#{prefix}.vtt"
+      vtt_path = File.join(dir, "#{prefix}.vtt")
       File.write vtt_path, vtt
-      zipper.iopts << " -i #{vtt_path}"
+      zipper.iopts << " -i #{Sh.escape(vtt_path)}"
       if zipper.opts.speed == 1
         meta = " -c:s mov_text -metadata:s:s:0 language=#{lng} -metadata:s:s:0 title=#{lng}"
         zipper.oopts << meta
@@ -67,7 +68,6 @@ class Zipper
 
       vtt, lng, tsp = prepare_subtitle(infile, info: info, probe: probe, stl: stl, opts: opts)
 
-      require_relative '../output'
       srt_path = Output.filename(info, dir: dir, ext: 'srt')
       srt_content = if tsp
         Subtitler.srt_convert(tsp, word_tags: (!opts.nowords && !opts.onlysrt))
@@ -82,7 +82,7 @@ class Zipper
 
       if (target_lang = Subtitler.normalize_lang(opts.lang)) && lng.to_s != target_lang.to_s
         from_lang = lng if lng.present?
-        srt_content = Translator.translate_srt(srt_content, from: from_lang, to: target_lang) rescue srt_content
+        srt_content = Translator.translate_srt srt_content, from: from_lang, to: target_lang
         lng = target_lang
       end
 
@@ -116,7 +116,7 @@ class Zipper
       return [nil, nil] unless lang
 
       entry = subtitles[lang].find { |sub| sub.ext == 'vtt' } || subtitles[lang].first
-      body  = http.get(entry.url).body
+      body  = Utils::HTTP.get(entry.url).body
       vtt   = Subtitler::VTT.to_vtt(body, entry.ext)
       zipper.stl&.update "subs:scraped:#{lang}"
       [vtt, lang]
@@ -145,11 +145,7 @@ class Zipper
       desired.present? && desired.in?([stream.lang, stream.tags.language, stream.tags.title])
     end
 
-    def http
-      @http ||= Mechanize.new
-    end
-
     private :subtitles_requested?, :source_vtt, :fetch, :fetch_scraped,
-            :fetch_embedded, :preferred_lang, :subtitle_match?, :http
+            :fetch_embedded, :preferred_lang, :subtitle_match?
   end
 end

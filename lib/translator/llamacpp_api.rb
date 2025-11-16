@@ -1,5 +1,3 @@
-require 'active_support/core_ext/module/attribute_accessors'
-
 class Translator
   module LlamacppApi
 
@@ -11,7 +9,7 @@ class Translator
       opts = {
         messages: text.map{ |t| {role: :user, content: t} },
       }
-      res  = Manager.http.post "#{api_host}#{api_path}", opts.to_json
+      res  = Utils::HTTP.post "#{api_host}#{api_path}", opts.to_json
       res  = SymMash.new JSON.parse res.body
       res  = SymMash.new JSON.parse res.message.content
       return tr.first if text.is_a? String

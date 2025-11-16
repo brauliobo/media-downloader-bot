@@ -1,32 +1,38 @@
+require 'tdlib-ruby'
 require 'set'
 require 'fileutils'
 require 'limiter'
 require 'retriable'
-require_relative '../bot/rate_limiter'
+require_relative 'base'
+require_relative 'rate_limiter'
 
-class TDBot
-  include TD::Logging
-  
-  module Helpers
+module Bot
+  class TDBot < Base
+    include TD::Logging
+    include RateLimiter
 
-    extend ActiveSupport::Concern
-    include MsgHelpers
-    include Bot::RateLimiter
+    self.max_caption = 4096
 
-    included do
-      class_attribute :td, :client, :message_handler, :message_sender, :file_manager
+    class_attribute :td
+    class_attribute :message_handler, :message_sender, :file_manager
+    TD::Client.configure_for_bot
+    self.td = TD::Client.new timeout: 1.minute
+    self.message_handler = TD::MessageHandler.new(td)
+    self.message_sender  = TD::MessageSender.new(td)
+    self.file_manager    = TD::FileManager.new(td)
+    td.setup_authentication_handlers
 
-      # Configure TDLib client
-      TD::Client.configure_for_bot
+    def self.start &block
+      ENV['CUDA'] = '1'
+      Zipper.size_mb_limit = 2_000
+      UserQueue.queue_size = 3
 
-      # Initialize client and components
-      self.client = self.td = TD::Client.new timeout: 1.minute
-      self.message_handler = TD::MessageHandler.new(client)
-      self.message_sender = TD::MessageSender.new(client)
-      self.file_manager = TD::FileManager.new(client)
-
-      # Setup authentication
-      client.setup_authentication_handlers
+      bot = self.new
+      Thread.new{ td.connect }
+      bot.listen do |msg|
+        Thread.new{ block.call msg }
+      end
+      bot
     end
 
     def td_retry_after_seconds(e)
@@ -35,15 +41,11 @@ class TDBot
 
     def listen(&handler)
       dlog "[LISTEN] waiting for messages..."
-      
-      # Setup message handling
       message_handler.setup_handlers(&handler)
-      
-      # Process unread messages if enabled
       if ENV['TDLIB_PROCESS_UNREAD'].to_s == '1'
         Thread.new do
           dlog "[UNREAD_THREAD] starting wait for auth"
-          if client.wait_for_ready(timeout: 600)
+          if td.wait_for_ready(timeout: 600)
             message_handler.process_unread_messages
           else
             dlog "[UNREAD_THREAD] timeout waiting for auth"
@@ -54,45 +56,34 @@ class TDBot
       end
     end
 
-    # TDLib-specific markdown escaping - minimal for proper formatting
     def me(text)
       return text unless text
-      # For TDLib, we need minimal escaping to allow markdown to work
-      text = text.gsub('\\', '\\\\')  # Escape backslashes first
-      text = text.gsub('`', '\\`')    # Escape backticks for code formatting
-      # Don't escape _ and * - we want them to work for formatting
-      # Don't escape [] - TDLib handles URLs automatically
-      text
+      text = text.gsub('\\', '\\\\')
+      text.gsub('`', '\\`')
     end
     alias_method :mnfe, :me
-    
+
     def mfe(text)
       return text unless text
       MsgHelpers::MARKDOWN_FORMAT.each { |c| text = text.gsub(c, "\\#{c}") }
       text
     end
 
-    # Download any Telegram file (audio, video, document) via TDLib
     def download_file(file_id_or_info, priority: 32, offset: 0, limit: 0, synchronous: true, dir: nil)
       result = file_manager.download_file(
         file_id_or_info, priority: priority, offset: offset, limit: limit,
         synchronous: synchronous, dir: dir
       )
-      
       if result.is_a?(Hash) && result[:error]
         raise "Failed to download file: #{result[:error]}"
       end
-      
       local_path = result.is_a?(Hash) ? result[:local_path] : nil
-      
       unless local_path && !local_path.empty?
         raise "Failed to download file: no local path available (got: #{result.inspect})"
       end
-      
       local_path
     end
 
-    # TDLib-specific caption formatting that handles URLs properly
     def msg_caption(i)
       return '' if i.respond_to?(:opts) && i.opts.nocaption
       text = ''
@@ -103,14 +94,12 @@ class TDBot
       if i.respond_to?(:opts) && i.opts.description && i.info.description.strip.presence
         text << "\n\n_#{me i.info.description.strip}_"
       end
-      # Format URL as clickable link for TDLib
-      text << "\n\n#{i.url}" if i.url  # Don't escape URLs - TDLib handles them automatically
+      text << "\n\n#{i.url}" if i.url
       text
     end
 
     def normalize_params(params)
       p = params.dup
-      
       if p[:type] == :paid_media && (media = p.delete(:media)&.first)
         p[:file] = p.delete(:file_path)
         p[media[:type]] = media[:media_path] if media[:type]
@@ -120,21 +109,14 @@ class TDBot
         %i[audio video document].each { |k| p[k] = p.delete(:"#{k}_path") if p[:"#{k}_path"] }
         p[:thumb] = p.delete(:thumb_path) || p.delete(:thumbnail_path) || p.delete(:thumbnail)
       end
-      
       p
     end
 
-    # High-level message sending interface
     def send_message(msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **params)
       t = type.to_s
-      
-      # Normalize params for TDBot format
       params = normalize_params(params) unless t.in?(%w[message text])
-      
       ret = td_with_rate_limit('send_message') do
         throttle! msg.chat.id, :high
-
-        # Add reply-to information if original message exists
         reply_to = nil
         if msg.respond_to?(:id)
           reply_to = msg.id
@@ -142,7 +124,6 @@ class TDBot
           reply_to = msg.message_id
         end
         dlog "[TD_SEND_MESSAGE] reply_to=#{reply_to} msg.class=#{msg.class}"
-
         result = nil
         if t.in? %w[message text]
           Manager.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0) do |attempt|
@@ -181,13 +162,12 @@ class TDBot
     end
 
     def mark_read(msg)
-      client.view_messages(chat_id: msg.chat_id, message_ids: [msg.id], source: nil, force_read: true)
+      td.view_messages(chat_id: msg.chat_id, message_ids: [msg.id], source: nil, force_read: true)
       dlog "[READ] chat=#{msg.chat_id} id=#{msg.id}"
     rescue => e
       dlog "[READ_ERROR] #{e.class}: #{e.message}"
     end
 
-    # Legacy compatibility method for direct editing - use edit_message instead
     def edit(msg, text)
       edit_message(msg, msg.id, text: text)
     end
@@ -208,3 +188,4 @@ class TDBot
     end
   end
 end
+

@@ -43,7 +43,7 @@ module Audiobook
       if path.to_s =~ /^(.+\.pdf)#page=(\d+)$/i
         pdf_path = $1
         page_num = $2.to_i
-        base = File.join(Dir.tmpdir, "page-#{page_num}-#{SecureRandom.hex(4)}")
+        base = File.join(Dir.pwd, "page-#{page_num}-#{SecureRandom.hex(4)}")
         tmp_png = "#{base}.png"
 
         # 1) pdftoppm

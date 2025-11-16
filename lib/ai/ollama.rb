@@ -1,9 +1,3 @@
-require 'base64'
-require 'mechanize'
-require 'json'
-require_relative '../manager'
-require_relative '../exts/sym_mash'
-
 module AI
   class Ollama
     API   = ENV['OLLAMA_HOST']
@@ -12,7 +6,7 @@ module AI
     def self.chat(messages, format: nil)
       payload = { model: MODEL, stream: false, options: {temperature: 0.0}, messages: messages }
       payload[:format] = format if format
-      res = Manager.http.post "#{API}/api/chat", payload.to_json
+      res = Utils::HTTP.post "#{API}/api/chat", payload.to_json
       raise "Ollama API HTTP error: #{res.code}" unless res.code.to_i == 200
       parsed = SymMash.new JSON.parse res.body
       if parsed.error

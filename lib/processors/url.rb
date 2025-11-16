@@ -11,11 +11,8 @@ module Processors
 
     def process
       result = download
-      raise NotImplementedError, "process not implemented" unless result
       Array.wrap(result).each{ |r| r.processor = self }
       result
-    ensure
-      cleanup
     end
 
     def kindle_url?

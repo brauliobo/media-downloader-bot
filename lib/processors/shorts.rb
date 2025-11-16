@@ -2,11 +2,10 @@ module Processors
   class Shorts < Base
 
     # Purposefully avoid creating tmp dirs for this strategy-only processor
-    def initialize dir:, bot:, msg: nil, st: nil, stline: nil, **_params
+    def initialize dir:, msg: nil, st: nil, stline: nil, **_params
       @dir  = dir
       @tmp  = nil
-      @bot  = bot
-      @msg  = msg || bot.fake_msg
+      @msg  = msg || Bot::MsgHelpers.fake_msg
       @st   = st || stline.status
       @stl  = stline
     end
@@ -75,7 +74,6 @@ module Processors
           slice_vtt = Subtitler::VTT.slice(vtt_src, from: c[:start], to: c[:end])
           locopts.sub_vtt = slice_vtt
           locopts.sub_lang = lang if lang
-          locopts._sub_prefix = "sub_#{idx+1}"
           (i.opts._vtt_slices ||= [])[idx] = slice_vtt
         end
         s_dur = (hms_to_seconds(c[:end]) || 0) - (hms_to_seconds(c[:start]) || 0)

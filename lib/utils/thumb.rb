@@ -1,7 +1,6 @@
 require 'fileutils'
-require 'active_support/core_ext/class/attribute'
 require_relative 'sh'
-require_relative '../manager'
+require_relative 'http'
 
 module Utils
   class Thumb
@@ -19,7 +18,7 @@ module Utils
       if File.exist?(url)
         FileUtils.cp url, im_in
       else
-        ::File.write im_in, Manager.http.get(url).body
+        ::File.write im_in, HTTP.get(url).body
       end
 
       opts = if portrait?(info)

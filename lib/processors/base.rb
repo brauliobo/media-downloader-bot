@@ -1,6 +1,6 @@
 require 'chronic_duration'
+require 'rack/mime'
 require_relative '../output'
-require_relative '../utils/thumb'
 
 module Processors
   class Base
@@ -17,9 +17,8 @@ module Processors
     Rack::Mime::MIME_TYPES['.aac']  = 'audio/x-aac'
     Rack::Mime::MIME_TYPES['.mkv']  = 'video/x-matroska'
 
-    BLOCKED_DOMAINS = ENV['BLOCKED_DOMAINS'].split.map{ |u| URI.parse u }
+    BLOCKED_DOMAINS = (ENV['BLOCKED_DOMAINS'] || '').split.map{ |u| URI.parse u }
 
-    attr_reader :bot
     attr_reader :msg
     attr_reader :st
     attr_reader :dir, :tmp
@@ -27,26 +26,25 @@ module Processors
     attr_reader :args
     attr_reader :url
     attr_reader :opts
+    attr_reader :session
     attr_accessor :stl
 
-    delegate_missing_to :bot
-
-    def initialize dir:, bot:,
+    def initialize dir:,
       msg: nil, line: nil,
-      st: nil, stline: nil, **params
+      st: nil, stline: nil, session: nil, **params
 
       @dir  = dir
       @tmp  = Dir.mktmpdir 'input-', dir
-      @bot  = bot
-      @msg  = msg || bot.fake_msg
+      @msg  = msg || Bot::MsgHelpers.fake_msg
       @st   = st || stline.status
       @stl  = stline
+      @session = session
 
       return unless line || msg
       @line = line || msg&.text
       if @line.blank?
         @args = []
-        @opts = SymMash.new
+        @opts = SymMash.new(session: session)
         return
       end
       @args = @line.split(/[[:space:]]+/)
@@ -54,7 +52,7 @@ module Processors
       @url  = @uri&.to_s
       raise 'Blocked domain' if @uri && @uri.host && BLOCKED_DOMAINS.any?{ |d| @uri.host.index d }
 
-      @opts = @args.each.with_object SymMash.new do |a, h|
+      @opts = @args.each.with_object SymMash.new(session: session) do |a, h|
         self.class.add_opt h, a
       end
     end
@@ -64,13 +62,11 @@ module Processors
       raise NotImplementedError, "process not implemented" unless result
       Array.wrap(result).each{ |r| r.processor = self }
       result
-    ensure
-      cleanup
     end
 
     def cleanup
       return if ENV['TMPDIR']
-      FileUtils.remove_entry tmp
+      FileUtils.remove_entry tmp if ::File.exist?(tmp)
     end
 
     def input_from_file f, opts
@@ -86,7 +82,7 @@ module Processors
     protected
 
     def init_params
-      { dir: dir, bot: bot, msg: msg, line: @line, st: st, stline: @stl }
+      { dir: dir, msg: msg, line: @line, st: st, stline: @stl }
     end
 
 
