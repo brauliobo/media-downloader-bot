@@ -1,12 +1,9 @@
-require 'mechanize'
 require 'uri'
 require 'tempfile'
 require 'fileutils'
 require 'concurrent'
-require 'active_support/concern'
-require 'active_support/core_ext/module/attribute_accessors'
+
 require_relative '../zipper'
-require_relative '../manager'
 
 class TTS
   module HTTPBackend
@@ -38,7 +35,7 @@ class TTS
     private
 
     def http_synthesize(text:, lang:, out_path:, speaker_wav: nil, **kwargs)
-      agent, url = Manager.http, "#{self.base_url}#{self.synth_path}"
+      agent, url = Utils::HTTP.client, "#{self.base_url}#{self.synth_path}"
       clean_text = text.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
       segments = segment_text(clean_text, self.segment_chars)
 

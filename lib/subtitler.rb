@@ -1,10 +1,12 @@
+require 'iso-639'
+
 require_relative 'subtitler/whisper_cpp'
 require_relative 'subtitler/vtt'
 require_relative 'subtitler/srt'
 
 class Subtitler
 
-  BACKEND_CLASS = const_get ENV['SUBTITLER'].to_sym
+  BACKEND_CLASS = const_get ENV['SUBTITLER'].to_sym if ENV['SUBTITLER']
 
   extend BACKEND_CLASS
 

@@ -1,5 +1,4 @@
 require 'addressable/uri'
-require_relative '../exts/sym_mash'
 require_relative '../prober'
 require_relative 'book'
 require_relative 'runner'

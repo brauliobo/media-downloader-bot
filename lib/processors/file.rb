@@ -1,28 +1,17 @@
 require_relative 'base'
-require 'active_support/core_ext/class/attribute'
 
 module Processors
   class File < Base
     class_attribute :attr
 
-
     def download
-      info = if attr
-        msg.send(attr)
-      else
-        msg.document
-      end
+      info = msg.send attr
+      return st.error("No #{attr}") unless info
 
-      unless info
-        st.error("No #{attr || 'document'}")
-        return
-      end
-
-      local_path = if !attr && bot.respond_to?(:td_bot?) && bot.td_bot?
-        fid = info.respond_to?(:document) && info.document.respond_to?(:id) ? info.document.id : info.document.id
-        bot.download_file(fid, dir: dir)
+      local_path = if info.respond_to?(:local_path) && ::File.exist?(info.local_path)
+        info.local_path
       else
-        bot.download_file(info, dir: dir)
+        Worker.service.download_file(info, dir: dir)
       end
 
       file_opts = SymMash.new(self.opts.deep_dup.presence || {})
@@ -32,13 +21,8 @@ module Processors
         ::File.basename(local_path, ::File.extname(local_path))
       end
 
-      SymMash.new(
-        fn_in: local_path,
-        opts:  file_opts,
-        info:  { title: title },
-      )
+      SymMash.new(fn_in: local_path, opts: file_opts, info: { title: title })
     end
+
   end
 end
-
-

@@ -25,11 +25,11 @@ ExecStartPre=/usr/bin/curl ifconfig.co
 
 WorkingDirectory=/srv/media-downloader-bot
 ReadWritePaths=/srv/media-downloader-bot
-ExecStart=/usr/local/rvm/wrappers/ruby-3.4.4/bundle exec bin/bot
+ExecStart=/usr/local/rvm/wrappers/ruby-3.4.4/bundle exec bin/tgbot
 
 Environment=BUNDLE_DEPLOYMENT=true
 Environment=BUNDLE_FROZEN=false
-#Environment=TL_BOT_TOKEN=xxx
+#Environment=TG_BOT_TOKEN=xxx
 Environment=THREADS=6
 #Environment=CUDA=1
 #Environment=CUDA_VISIBLE_DEVICES=1

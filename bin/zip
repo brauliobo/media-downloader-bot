@@ -1,5 +1,7 @@
 #!/usr/bin/env ruby
 
+require 'fileutils'
+
 STDOUT.sync = true
 ENV['PRINT_CMD'] = '1'
 ENV['SKIP_META'] = '1'
@@ -7,9 +9,8 @@ ENV['DB'] = '1' if ENV['SESSION_UID']
 ENV['PUPPETEER_HEADLESS'] ||= '0'
 
 Dir.chdir File.expand_path "#{File.realpath __dir__}/.." do
-  require_relative '../lib/manager'
-  require_relative '../lib/tl_bot'
-  require_relative '../lib/zipper'
+  require_relative '../lib/worker'
+  require_relative '../lib/bot/base'
 end
 
 opts  = SymMash.new metadata: {}
@@ -20,58 +21,32 @@ while ARGV[-1] and !File.exist?(ARGV[-1]) and ARGV[-1] !~ URI::regexp
   Processors::Base.add_opt opts, opt
 end
 
-Zipper.size_mb_limit = ENV['SIZE_MB_LIMIT']&.to_i
+Zipper.size_mb_limit = ENV['SIZE_MB_LIMIT']&.to_i || 2_000
 
-class Stdout
-  include TlBot::Helpers
-  mock
-end
-bot = Stdout.new
-st  = Bot::Status.new do |line|
-  puts line
-end
-stl = Bot::Status::Line.new '', status: st
+bot = Bot::Mock.new
+Worker.service = bot
+
+converted_dir = File.join(Dir.pwd, 'converted')
+FileUtils.mkdir_p converted_dir
+Worker.workdir_path = converted_dir
+Worker.skip_cleanup = true
 
 raise "No files found" if ARGV.blank?
 path = if ARGV.size > 1 then ARGV else ARGV.first&.split "\n" end
 path.peach do |u|
-  base_dir = u =~ URI::regexp ? Dir.pwd : File.dirname(u)
-  dir      = "#{base_dir}/converted"
-  FileUtils.mkdir_p dir
+  fake_msg = Bot::MsgHelpers.fake_msg
+  fake_msg.bot = bot
 
-  if u =~ URI::regexp
-    klass = Processors::Url
-  elsif File.extname(u).downcase.in?(['.pdf', '.epub'])
-    # Direct PDF/EPUB to audiobook (OCR/parse + TTS)
-    require_relative '../lib/audiobook'
-
-    fmt_spec  = Zipper.choose_format Zipper::Types.audio, opts, nil
-    base_name = File.basename(u, File.extname(u))
-    audio_out = "#{dir}/#{base_name}.#{fmt_spec.ext}"
-    result = Audiobook.generate u, audio_out, stl: stl, opts: opts
-
-    puts "YAML saved to #{result.yaml}" if result.respond_to?(:yaml) && result.yaml
-    puts "Audiobook saved to #{result.audio}" if result.respond_to?(:audio) && result.audio
-    next
+  # Handle local files
+  if File.exist?(u)
+    Processors::LocalFile.attach_to_message(fake_msg, u, opts: lopts)
   else
-    klass = Processors::Base
+    # Handle URLs
+    line = u =~ URI::regexp ? "#{u} #{lopts.join ' '}" : u
+    fake_msg.text = line
   end
 
-  if klass == Processors::Url
-    line = "#{u} #{lopts.join ' '}"
-    prc  = klass.new(dir:, line:, bot:, st:, stline: stl)
-    prc.download.peach do |i|
-      prc.download_one i
-      prc.handle_input i
-      prc.cleanup
-    end
-  else
-    prc = klass.new(dir:, bot:, st:)
-    i   = prc.input_from_file u, opts
-    prc.handle_input i
-
-    Tagger.copy u, i.fn_out if i.type && i.fn_out
-    prc.cleanup
-  end
+  worker = Worker.new fake_msg
+  worker.process
 end
 

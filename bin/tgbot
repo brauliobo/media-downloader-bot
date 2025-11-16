@@ -1,8 +1,8 @@
 #!/usr/bin/env ruby
 
+ENV['TG_BOT'] = '1'
 require_relative '../lib/manager'
 
 $bot = Manager.new
-Thread.new{ $bot.start }
-Pry.start $bot
+$bot.start
 

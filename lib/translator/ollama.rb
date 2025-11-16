@@ -52,7 +52,7 @@ class Translator
           { role: :user, content: { marker: MARKER, segments: segments, source_language_iso: from_iso, target_language_iso: to_iso }.to_json }
         ]
       }
-      res = Manager.http.post "#{API}/api/chat", opts.to_json
+      res = Utils::HTTP.post "#{API}/api/chat", opts.to_json
       body = res.body.to_s
       content = begin
         parsed = SymMash.new JSON.parse(body)
@@ -83,7 +83,7 @@ class Translator
               { role: :user, content: seg }
             ]
           }
-          fres   = Manager.http.post "#{API}/api/chat", f_opts.to_json
+          fres   = Utils::HTTP.post "#{API}/api/chat", f_opts.to_json
           f_body = fres.body.to_s
           begin
             f_parsed = SymMash.new JSON.parse(f_body)

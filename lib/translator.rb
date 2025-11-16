@@ -1,3 +1,4 @@
+require 'srt'
 require_relative 'translator/nllb_serve'
 require_relative 'translator/ollama'
 require_relative 'translator/llamacpp_api'
@@ -6,7 +7,7 @@ require_relative 'subtitler/vtt'
 
 class Translator
 
-  BACKEND_CLASS = const_get ENV['TRANSLATOR'].to_sym if ENV['TRANSLATOR']
+  BACKEND_CLASS = const_get ENV['TRANSLATOR']&.to_sym || :Madlad400
 
   extend BACKEND_CLASS
 
