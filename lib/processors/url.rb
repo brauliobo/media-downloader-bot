@@ -13,8 +13,6 @@ module Processors
       result = download
       Array.wrap(result).each{ |r| r.processor = self }
       result
-    ensure
-      cleanup
     end
 
     def kindle_url?

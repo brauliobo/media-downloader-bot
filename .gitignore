@@ -1,5 +1,3 @@
-models
-
 # private
 .bundle
 .env.user
@@ -8,6 +6,7 @@ models
 
 # bundle deployment
 vendor
+.serena
 
 # envs
 .venv

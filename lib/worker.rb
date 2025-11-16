@@ -3,6 +3,7 @@ require_relative 'boot'
 require_relative 'utils/sh'
 require_relative 'utils/url_shortener'
 require_relative 'bot/msg_helpers'
+require_relative 'models/session' if ENV['DB']
 
 require_relative 'prober'
 require_relative 'zipper'
@@ -32,6 +33,7 @@ class Worker
   attr_reader :st
   attr_reader :dir
   attr_reader :opts
+  attr_reader :session
 
   class_attribute :tmpdir
   self.tmpdir = ENV['TMPDIR'] || Dir.tmpdir
@@ -47,16 +49,16 @@ class Worker
   delegate :send_message, :edit_message, :delete_message, :download_file, :report_error, :msg_limit, to: :service
 
   def load_session
-      return unless defined? Models::Session
-      @session = Models::Session.find_or_create uid: msg.from.id
-      @session.daylog.reject!{ |l| l['sent_at'].to_time < 1.day.ago }
-      @session.daylog << {
-        msg:     msg,
-        sent_at: Time.now,
-      }
-      @session.msg_count += 1
-      @session.save
-    end
+    return unless defined? Models::Session
+    @session = Models::Session.find_or_create uid: ENV['SESSION_UID'] || msg.from.id
+    @session.daylog.reject!{ |l| l['sent_at'].to_time < 1.day.ago }
+    @session.daylog << {
+      msg:     msg,
+      sent_at: Time.now,
+    }
+    @session.msg_count += 1
+    @session.save
+  end
 
   def workdir &block
     @dir = workdir_path || Dir.mktmpdir("mdb-", tmpdir)
@@ -86,7 +88,7 @@ class Worker
       inputs = []
       init_status
 
-      popts = {dir: work_dir, msg:, st: @st}
+      popts = {dir: work_dir, msg:, st: @st, session: @session}
       lines = msg.text.to_s.split("\n").reject(&:blank?)
       procs = process_lines(lines, popts)
       procs.each do |p|

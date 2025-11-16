@@ -197,11 +197,25 @@ module Audiobook
     # Write YAML file following class hierarchy representation
     def write(yaml_path)
       lang_code = @metadata.language || @lang || 'en'
-      book_hash = SymMash.new('language' => lang_code, 'pages' => pages.map(&:to_h))
+      book_hash = { 'language' => lang_code, 'pages' => pages.map(&:to_h) }
+      book_hash = deep_to_h(book_hash)
       begin
         File.write(yaml_path, YAML.dump(book_hash, line_width: -1))
       rescue ArgumentError
         File.write(yaml_path, YAML.dump(book_hash))
+      end
+    end
+
+    def deep_to_h(obj)
+      case obj
+      when SymMash
+        obj.to_h.transform_values { |v| deep_to_h(v) }
+      when Hash
+        obj.transform_values { |v| deep_to_h(v) }
+      when Array
+        obj.map { |v| deep_to_h(v) }
+      else
+        obj
       end
     end
 
