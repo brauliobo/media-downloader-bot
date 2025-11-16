@@ -26,23 +26,25 @@ module Processors
     attr_reader :args
     attr_reader :url
     attr_reader :opts
+    attr_reader :session
     attr_accessor :stl
 
     def initialize dir:,
       msg: nil, line: nil,
-      st: nil, stline: nil, **params
+      st: nil, stline: nil, session: nil, **params
 
       @dir  = dir
       @tmp  = Dir.mktmpdir 'input-', dir
       @msg  = msg || Bot::MsgHelpers.fake_msg
       @st   = st || stline.status
       @stl  = stline
+      @session = session
 
       return unless line || msg
       @line = line || msg&.text
       if @line.blank?
         @args = []
-        @opts = SymMash.new
+        @opts = SymMash.new(session: session)
         return
       end
       @args = @line.split(/[[:space:]]+/)
@@ -50,7 +52,7 @@ module Processors
       @url  = @uri&.to_s
       raise 'Blocked domain' if @uri && @uri.host && BLOCKED_DOMAINS.any?{ |d| @uri.host.index d }
 
-      @opts = @args.each.with_object SymMash.new do |a, h|
+      @opts = @args.each.with_object SymMash.new(session: session) do |a, h|
         self.class.add_opt h, a
       end
     end
@@ -60,8 +62,6 @@ module Processors
       raise NotImplementedError, "process not implemented" unless result
       Array.wrap(result).each{ |r| r.processor = self }
       result
-    ensure
-      cleanup
     end
 
     def cleanup
