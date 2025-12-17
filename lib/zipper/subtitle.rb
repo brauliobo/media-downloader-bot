@@ -9,6 +9,12 @@ class Zipper
   module Subtitle
     extend self
 
+    def safe_ass_prefix(prefix)
+      s = prefix.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '').gsub(/[^0-9A-Za-z]+/, '_').gsub(/\A_+|_+\z/, '')
+      s = s[0, 120]
+      s.empty? ? 'sub' : s
+    end
+
     def apply(zipper)
       return unless subtitles_requested?(zipper.opts)
 
@@ -23,8 +29,7 @@ class Zipper
 
       dir = File.dirname(zipper.outfile || zipper.infile)
       prefix = zipper.outfile ? File.basename(zipper.outfile, File.extname(zipper.outfile)) : 'sub'
-      safe_prefix = prefix.gsub(/[:,\[\]]/, '_')
-      ass_path = File.join(dir, "#{safe_prefix}.ass")
+      ass_path = File.join(dir, "#{safe_ass_prefix(prefix)}.ass")
       File.write ass_path, ass_body
       zipper.fgraph << "ass=#{Sh.escape(ass_path)}"
 
@@ -147,5 +152,6 @@ class Zipper
 
     private :subtitles_requested?, :source_vtt, :fetch, :fetch_scraped,
             :fetch_embedded, :preferred_lang, :subtitle_match?
+    private :safe_ass_prefix
   end
 end

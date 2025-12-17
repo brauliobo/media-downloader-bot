@@ -118,7 +118,10 @@ module Processors
 
       o, e, st = Zipper.send "zip_#{i.type.name}", fn_in, fn_out,
         opts: i.opts, probe: i.probe, stl: @stl, info: i.info
-      return @stl.error "convert failed: #{o}\n#{e}" if st != 0
+      unless st.success?
+        @stl.error "convert failed: #{o}\n#{e}"
+        return nil
+      end
 
       fn_out
     end
