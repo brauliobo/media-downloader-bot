@@ -1,15 +1,12 @@
 require 'chronic_duration'
 require 'rack/mime'
+require 'active_support/core_ext/module/delegation'
 require_relative '../output'
+require_relative '../utils/input_parser'
+require_relative '../context'
 
 module Processors
   class Base
-
-    def self.add_opt h, o
-      k, v = o.split('=', 2)
-      h[k] = v || 1
-    end
-
     # missing mimes
     Rack::Mime::MIME_TYPES['.opus'] = 'audio/ogg'
     Rack::Mime::MIME_TYPES['.flac'] = 'audio/x-flac'
@@ -19,42 +16,30 @@ module Processors
 
     BLOCKED_DOMAINS = (ENV['BLOCKED_DOMAINS'] || '').split.map{ |u| URI.parse u }
 
-    attr_reader :msg
-    attr_reader :st
-    attr_reader :dir, :tmp
+    attr_reader :ctx
+    delegate :msg, :st, :dir, :tmp, :url, :opts, :session, :stl, :stl=, to: :ctx
 
-    attr_reader :args
-    attr_reader :url
-    attr_reader :opts
-    attr_reader :session
-    attr_accessor :stl
+    # Maintain backward compatibility for readers if needed, but prefer delegating to ctx
+    def args; @args; end
 
-    def initialize dir:,
-      msg: nil, line: nil,
-      st: nil, stline: nil, session: nil, **params
+    def initialize(ctx)
+      @ctx = ctx
+      @ctx.tmp ||= Dir.mktmpdir('input-', ctx.dir)
+      
+      parse_input if ctx.msg || ctx.line
+    end
 
-      @dir  = dir
-      @tmp  = Dir.mktmpdir 'input-', dir
-      @msg  = msg || Bot::MsgHelpers.fake_msg
-      @st   = st || stline.status
-      @stl  = stline
-      @session = session
+    def parse_input
+      line = ctx.line || ctx.msg&.text
+      return if line.blank?
+      
+      parsed = Utils::InputParser.parse(line)
+      @ctx.url = parsed.url&.to_s
+      
+      raise 'Blocked domain' if parsed.url && parsed.url.host && BLOCKED_DOMAINS.any?{ |d| parsed.url.host.include?(d) }
 
-      return unless line || msg
-      @line = line || msg&.text
-      if @line.blank?
-        @args = []
-        @opts = SymMash.new(session: session)
-        return
-      end
-      @args = @line.split(/[[:space:]]+/)
-      @uri  = Addressable::URI.parse(@args.shift) if @args.first&.match?(URI::DEFAULT_PARSER.make_regexp)
-      @url  = @uri&.to_s
-      raise 'Blocked domain' if @uri && @uri.host && BLOCKED_DOMAINS.any?{ |d| @uri.host.index d }
-
-      @opts = @args.each.with_object SymMash.new(session: session) do |a, h|
-        self.class.add_opt h, a
-      end
+      @ctx.opts = SymMash.new(parsed.opts.merge(session: @ctx.session))
+      @args = [] # Deprecated but kept for safety if child classes use it
     end
 
     def process(*args, **kwargs)
@@ -82,9 +67,8 @@ module Processors
     protected
 
     def init_params
-      { dir: dir, msg: msg, line: @line, st: st, stline: @stl }
+      { dir: dir, msg: msg, st: st, stline: stl }
     end
-
 
   end
 end

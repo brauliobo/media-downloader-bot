@@ -1,10 +1,13 @@
+require 'active_support/core_ext/module/delegation'
+
 module Downloaders
   class Base
-    attr_reader :processor
-    delegate_missing_to :processor
+    attr_reader :ctx
 
-    def initialize(processor)
-      @processor = processor
+    delegate :url, :opts, :dir, :tmp, :st, :session, :msg, :stl, to: :ctx
+
+    def initialize(ctx)
+      @ctx = ctx
     end
 
     def download

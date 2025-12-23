@@ -5,9 +5,9 @@ module Downloaders
 
     Downloaders.register(self)
 
-    def self.supports?(processor)
-      return false if processor.url.to_s.empty?
-      host = URI(processor.url).host rescue nil
+    def self.supports?(ctx)
+      return false if ctx.url.to_s.empty?
+      host = URI(ctx.url).host rescue nil
       Audiobook::Parsers::Kindle::READ_HOSTS.include?(host)
     end
     def download
@@ -17,15 +17,13 @@ module Downloaders
     end
 
     def download_one(i, pos: nil)
-      stline = processor.instance_variable_get(:@stl)
-      (stline || st)&.update 'OCR & TTS (Kindle)'
-      i.uploads = Audiobook.generate_uploads(url, dir: dir, stl: (stline || st), opts: opts)
+      (stl || st)&.update 'OCR & TTS (Kindle)'
+      i.uploads = Audiobook.generate_uploads(url, dir: dir, stl: (stl || st), opts: opts)
       true
     rescue => e
-      (stline || st)&.error "Kindle processing failed", exception: e
+      (stl || st)&.error "Kindle processing failed", exception: e
       false
     end
 
   end
 end
-
