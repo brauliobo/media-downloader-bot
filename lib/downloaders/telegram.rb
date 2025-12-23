@@ -3,17 +3,17 @@ require_relative 'base'
 module Downloaders
   class Telegram < Base
     Downloaders.register(self)
-    def self.supports?(processor)
-      processor.url.to_s.match?(%r{\Ahttps?://t\.me/})
+    def self.supports?(ctx)
+      ctx.url.to_s.match?(%r{\Ahttps?://t\.me/})
     end
     # Downloads a file from a public t.me link using TDLib.
     # Returns a single input object (SymMash) compatible with the rest of the pipeline.
     def download
       rx = %r{https?://t\.me/(?:(?<slug>[A-Za-z0-9_]+)/(?<msg>\d+)|c/(?<cid>-?\d+)/(?<msg2>\d+))}
       m  = url.to_s.match(rx)
-      return processor.st.error('Invalid t.me link') unless m
+      return st.error('Invalid t.me link') unless m
 
-      td = processor.bot.td
+      td = msg.bot.td
 
       chat_id, message_id = if m[:slug]
         chat   = td.search_public_chat(username: m[:slug]).value
@@ -32,7 +32,7 @@ module Downloaders
       when TD::Types::MessageContent::Video
         [msg_data.content.video.video.id, msg_data.content.video.file_name]
       else
-        return processor.st.error('Unsupported t.me message type')
+        return st.error('Unsupported t.me message type')
       end
 
       td.download_file(file_id: file_id, priority: 1, synchronous: true)
@@ -49,5 +49,3 @@ module Downloaders
     end
   end
 end
-
-

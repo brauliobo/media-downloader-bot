@@ -14,6 +14,23 @@ module Bot
           end
         end
       end
+      
+      def self.start(service, port)
+        app_class = create(service)
+        Thread.new do
+          require 'puma'
+          server = Puma::Server.new(app_class.freeze.app)
+          begin
+            server.add_tcp_listener('0.0.0.0', port)
+          rescue Errno::EADDRINUSE
+            puts "Port #{port} in use, trying #{port + 1}..."
+            port += 1
+            retry
+          end
+          puts "Bot HTTP service started on 0.0.0.0:#{port}"
+          server.run
+        end
+      end
 
       def normalize_params(params)
         params = params.dup
@@ -75,4 +92,3 @@ module Bot
     end
   end
 end
-

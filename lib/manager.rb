@@ -149,14 +149,7 @@ EOS
     if ENV['BOT_HTTP']
       uri = URI.parse(ENV['BOT_HTTP'])
       port = uri.port || 8080
-      app_class = Bot::Worker::HTTPService.create(self)
-      Thread.new do
-        require 'puma'
-        server = Puma::Server.new(app_class.freeze.app)
-        server.add_tcp_listener('0.0.0.0', port)
-        puts "Bot HTTP service started on 0.0.0.0:#{port}"
-        server.run
-      end
+      Bot::Worker::HTTPService.start(self, port)
     end
 
     Bot::Worker::DRbService.start(self, ENV['BOT_DRB']) if ENV['BOT_DRB']
@@ -167,5 +160,3 @@ EOS
   end
 
 end
-
-

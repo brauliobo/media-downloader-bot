@@ -4,6 +4,7 @@ require_relative 'utils/sh'
 require_relative 'utils/url_shortener'
 require_relative 'bot/msg_helpers'
 require_relative 'models/session' if ENV['DB']
+require_relative 'context'
 
 require_relative 'prober'
 require_relative 'zipper'
@@ -88,9 +89,11 @@ class Worker
       inputs = []
       init_status
 
-      popts = {dir: work_dir, msg:, st: @st, session: @session}
+      ctx = Context.new(dir: work_dir, msg: msg, st: @st, session: @session)
+      
       lines = msg.text.to_s.split("\n").reject(&:blank?)
-      procs = process_lines(lines, popts)
+      procs = process_lines(lines, ctx)
+      
       procs.each do |p|
         inputs.concat Array.wrap p.process
       end
@@ -147,8 +150,8 @@ class Worker
 
   private
 
-  def process_lines(lines, popts)
-    processors = Processors::Router.for_message(msg, lines, **popts)
+  def process_lines(lines, ctx)
+    processors = Processors::Router.for_message(ctx, lines)
     if processors
       processors
     else
