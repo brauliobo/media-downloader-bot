@@ -151,6 +151,7 @@ module Bot
         return if throttle!(msg.chat.id, :low, discard: true, message_id: id) == :discard
         Manager.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0) do |_attempt|
           message_sender.edit_message(msg.chat.id, id, text, parse_mode: parse_mode)
+          true
         end
       end
     end
