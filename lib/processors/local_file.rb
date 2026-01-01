@@ -21,8 +21,8 @@ module Processors
       msg
     end
 
-    def initialize(**params)
-      super(**params)
+    def initialize(ctx)
+      super(ctx)
       self.attr = :video if msg.video&.respond_to?(:local_path)
       self.attr = :audio if msg.audio&.respond_to?(:local_path)
       self.attr ||= :document
