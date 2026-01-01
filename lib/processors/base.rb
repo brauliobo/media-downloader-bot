@@ -17,7 +17,8 @@ module Processors
     BLOCKED_DOMAINS = (ENV['BLOCKED_DOMAINS'] || '').split.map{ |u| URI.parse u }
 
     attr_reader :ctx
-    delegate :msg, :st, :dir, :tmp, :url, :opts, :session, :stl, :stl=, to: :ctx
+    delegate :msg, :st, :dir, :tmp, :url, :opts, :session, to: :ctx
+    attr_reader :stl
 
     # Maintain backward compatibility for readers if needed, but prefer delegating to ctx
     def args; @args; end
@@ -25,8 +26,14 @@ module Processors
     def initialize(ctx)
       @ctx = ctx
       @ctx.tmp ||= Dir.mktmpdir('input-', ctx.dir)
+      @stl = ctx.stl
       
       parse_input if ctx.msg || ctx.line
+    end
+
+    def stl=(v)
+      @stl = v
+      ctx.stl = v
     end
 
     def parse_input
@@ -62,6 +69,36 @@ module Processors
           title: ::File.basename(f, ::File.extname(f)),
         },
       )
+    end
+
+    # Backwards-compatible option parser used by CLI wrappers (e.g. bin/zip, mediazip).
+    # Supports:
+    # - flags: "audio" => opts.audio = 1
+    # - key/values: "lang=pt" => opts.lang = "pt"
+    # - metadata: "meta.artist=Foo" / "metadata.title=Bar" / "artist=Foo" (common tags)
+    def self.add_opt(opts, raw)
+      return opts unless opts && raw
+      s = raw.to_s.strip
+      return opts if s.empty?
+
+      k, v = s.split('=', 2)
+      v = 1 if v.nil?
+
+      key = k.to_s.strip
+      return opts if key.empty?
+
+      meta_prefix = key.start_with?('meta.') || key.start_with?('metadata.')
+      meta_key = meta_prefix ? key.split('.', 2).last : key
+
+      common_meta = %w[title artist album performer genre date comment track]
+      if meta_prefix || common_meta.include?(meta_key)
+        opts[:metadata] ||= SymMash.new
+        opts[:metadata][meta_key.to_sym] = v
+      else
+        opts[key.to_sym] = v
+      end
+
+      opts
     end
 
     protected
