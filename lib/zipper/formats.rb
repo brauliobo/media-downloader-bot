@@ -119,14 +119,40 @@ class Zipper
 
     # Original helper moved out of Zipper – kept verbatim for BC.
     def choose_format(type_hash, opts, durat)
-      fmt   = opts && opts.format
-      fmt ||= if durat && durat >= 10.minutes
-                type_hash[:ldefault]
-              else
-                type_hash[:default]
-              end
+      fmt = opts && opts.format
+
+      # allow callers to pass the already-resolved spec
+      return fmt if fmt.respond_to?(:mime)
+
+      # Only accept user-provided format selectors as String/Symbol.
+      # Any other truthy value (e.g. {}, 1) is treated as "no format specified".
+      fmt = fmt.to_sym if fmt.is_a?(String)
+      fmt = nil unless fmt.is_a?(Symbol)
+
+      # Accept common container/alias names and map them to internal codec keys.
+      # Users often pass extensions (mp4/m4a) rather than codec identifiers.
+      if fmt
+        kind = (type_hash[:name] || type_hash['name']).to_s
+        if kind == 'video'
+          fmt = :h264 if fmt.in?(%i[mp4 x264 h.264])
+          fmt = :h265 if fmt.in?(%i[hevc x265 h.265])
+          fmt = :vp9  if fmt == :webm
+        elsif kind == 'audio'
+          fmt = :aac  if fmt == :m4a
+          fmt = :opus if fmt == :ogg
+        end
+      end
+
+      defk  = type_hash[:default]  || type_hash['default']
+      ldefk = type_hash[:ldefault] || type_hash['ldefault']
+      fmt ||= (durat && durat >= 10.minutes) ? ldefk : defk
       fmt   = :aac if Zipper.size_mb_limit && fmt == :opus && durat && durat <= 122
-      type_hash[fmt]
+      chosen = type_hash[fmt] || type_hash[fmt.to_s]
+      return chosen if chosen
+
+      # Unknown user-provided fmt: fall back to defaults instead of returning nil.
+      fmt = (durat && durat >= 10.minutes) ? ldefk : defk
+      type_hash[fmt] || type_hash[fmt.to_s]
     end
 
 end
