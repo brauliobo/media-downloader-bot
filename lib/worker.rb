@@ -123,7 +123,8 @@ class Worker
 
           stline.update 'queued to upload' if ordered
           sleep 0.1 while up_queue.first != pos if ordered
-          stline.update 'uploading'
+          t = i.type&.name || i.type
+          stline.update "uploading #{t}"
           upload i
 
         rescue => e
@@ -164,7 +165,8 @@ class Worker
     return if @st
     @st = Bot::Status.new do |text, *args, **params|
       text = Bot::MsgHelpers.me(text) unless params[:parse_mode]
-      edit_message msg, msg.resp.message_id, *args, text: text, **params
+      ok = edit_message msg, msg.resp.message_id, *args, text: text, **params
+      msg.resp = send_message msg, text, type: 'message', parse_mode: (params[:parse_mode] || 'MarkdownV2') if ok.nil?
     end
     msg.resp ||= send_message msg, Bot::MsgHelpers.me('Downloading metadata...')
   end
