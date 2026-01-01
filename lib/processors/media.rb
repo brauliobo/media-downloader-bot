@@ -1,6 +1,7 @@
 require_relative 'file'
 require_relative '../utils/thumb'
 require_relative '../zipper'
+require 'timeout'
 
 module Processors
   class Media < File
@@ -67,7 +68,9 @@ module Processors
         return i
       end
 
-      i.thumb = i.opts.thumb = Utils::Thumb.process(i.info, base_filename: i.info._filename, on_error: -> e { Worker.service.report_error(msg, e)  })
+      i.thumb = i.opts.thumb = Timeout.timeout(15) do
+        Utils::Thumb.process(i.info, base_filename: i.info._filename, on_error: -> e { Worker.service.report_error(msg, e) })
+      end rescue nil
       return unless i.fn_out = convert(i, pos: pos)
 
       if Zipper.size_mb_limit
@@ -101,6 +104,10 @@ module Processors
       durat   -= ChronicDuration.parse i.opts.ss if i.opts.ss
 
       chosen   = Zipper.choose_format i.type, i.opts, durat
+      unless chosen
+        @stl&.error('Unsupported format')
+        return nil
+      end
 
       i.format = i.opts.format = chosen
       i.mime   = i.format.mime
