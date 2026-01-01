@@ -1,5 +1,6 @@
 require_relative 'base'
 require_relative '../utils/cookie_jar'
+require_relative '../prober'
 require 'fileutils'
 
 module Downloaders
@@ -12,9 +13,8 @@ module Downloaders
     REMOTE   = ENV['YT_DLP_REMOTE_COMPONENTS']
 
     def download
-      cmd = "#{base_cmd} --write-info-json --no-clean-infojson --skip-download -o 'info-%(playlist_index)s.%(ext)s' '#{url}'"
-      cmd << " --match-filter 'live_status != is_upcoming'" if url.match?(/youtu\.?be/)
-      cmd << " --extractor-args 'youtube:lang=#{opts.lang}'" if opts.lang
+      cmd = "#{base_cmd} --write-info-json --no-clean-infojson --skip-download -o #{Sh.escape("info-%(playlist_index)s.%(ext)s")} #{Sh.escape(url)}"
+      cmd << " --match-filter #{Sh.escape('live_status != is_upcoming')}" if url.match?(/youtu\.?be/)
       
       _, e, s = Sh.run cmd, chdir: dir
       return st.error("Metadata errors:\n<pre>#{Bot::MsgHelpers.he e}</pre>", parse_mode: 'HTML') unless s == 0
@@ -24,30 +24,50 @@ module Downloaders
 
     def download_one(i, pos: 1)
       fn = "input-#{pos}"
-      cmd = "#{base_cmd} -o '#{fn}.%(ext)s' '#{i.url}'"
+      cmd = "#{base_cmd} -o #{Sh.escape("#{fn}.%(ext)s")} #{Sh.escape(i.url)}"
       _, e, s = Sh.run cmd, chdir: dir
       return st.error("download error #{e}") unless s == 0
 
-      # Fix for regression: ensure we pick the video file if multiple files exist (e.g. split audio/video)
-      files = Dir["#{tmp}/#{fn}.*"]
-      i.fn_in = files.find { |f| f.match?(/\.(mp4|mkv|webm)$/i) } || files.first
+      files = Dir["#{tmp}/#{fn}.*"].reject { |f| f.end_with?('.part') }.sort
+      want_video = !(opts.onlysrt || opts.audio)
+      i.fn_in = pick_downloaded_file(files, want_video: want_video)
       
-      return st.error("can't find file") unless i.fn_in && File.exist?(i.fn_in)
+      return st.error(want_video ? "can't find video stream" : "can't find file") unless i.fn_in && File.exist?(i.fn_in)
       true
     end
 
     private
 
+    def pick_downloaded_file(files, want_video:)
+      files = Array(files).select { |f| f && File.exist?(f) }
+      return nil if files.empty?
+      return files.first unless want_video
+
+      files.each do |f|
+        probe = Prober.for(f) rescue nil
+        next unless probe&.streams
+        return f if probe.streams.any? { |s| s.codec_type == 'video' }
+      end
+
+      nil
+    end
+
     def base_cmd
       @base_cmd ||= begin
         cmd = [BASE_CMD]
-        cmd << "--remote-components #{REMOTE}" unless REMOTE.to_s.strip.empty?
-        cmd << "--paths #{tmp} --cache-dir #{tmp}/cache"
+        cmd << "--remote-components #{Sh.escape(REMOTE)}" unless REMOTE.to_s.strip.empty?
+        cmd << "--paths #{tmp}"
         cmd << '-s' if opts.simulate
+
+        if url.match?(/youtu\.?be/)
+          yargs = "youtube:player_client=web"
+          yargs << ";lang=#{opts.lang}" if opts.lang
+          cmd << "--extractor-args #{Sh.escape(yargs)}"
+        end
         
         begin
           if (cp = Utils::CookieJar.write(session, tmp))
-            cmd << "--cookies '#{cp}'"
+            cmd << "--cookies #{Sh.escape(cp)}"
           end
         rescue StandardError => e
           st.error "Cookie error: #{e.class}: #{e.message}"
@@ -59,18 +79,21 @@ module Downloaders
           args = []
           args << "-ss #{opts.ss}" if opts.ss
           args << "-to #{opts.to}" if opts.to
-          cmd << "--downloader-args \"ffmpeg_i:#{args.join(' ')}\""
+          cmd << "--downloader-args #{Sh.escape("ffmpeg_i:#{args.join(' ')}")}"
         else
           # Format selection
           is_audio = opts.onlysrt || opts.audio
           bandcamp = url.include?('bandcamp.com')
-          videof = is_audio ? nil : 'bestvideo[ext=mp4]'
-          audiof = bandcamp ? 'mp3-320' : (is_audio ? 'bestaudio/best' : 'bestaudio[ext=mp4]')
-
-          cmd << (videof ? "-f '#{videof}+#{audiof}/best'" : "-f '#{audiof}'")
-          
-          # Ensure we merge to mp4 if video is requested, to avoid split files causing ambiguity
-          cmd << "--merge-output-format mp4" unless is_audio
+          if is_audio
+            audiof = bandcamp ? 'mp3-320' : 'bestaudio/best'
+            cmd << "-f #{Sh.escape(audiof)}"
+          elsif url.match?(/youtu\.?be/)
+            # YouTube: prefer progressive formats (avoids cases where only a progressive mp4 is exposed)
+            cmd << "-f #{Sh.escape('best[ext=mp4]/best')}"
+          else
+            cmd << "-f #{Sh.escape('bestvideo*+bestaudio*/best')}"
+            cmd << "--merge-output-format mp4"
+          end
         end
 
         # Playlist/Limit logic
@@ -90,7 +113,7 @@ module Downloaders
 
         cmd << '-x' if opts.audio || opts.onlysrt
         
-        %i[referer].each { |k| cmd << "--#{k} '#{opts[k].gsub("'", "\\'")}'" if opts[k] }
+        %i[referer].each { |k| cmd << "--#{k} #{Sh.escape(opts[k])}" if opts[k] }
         
         cmd.join(' ')
       end
