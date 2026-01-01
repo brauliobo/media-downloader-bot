@@ -7,6 +7,7 @@ require 'retriable'
 require 'ostruct'
 
 require_relative 'bot/user_queue'
+require_relative 'bot/base'
 require_relative 'bot/commands/cookie'
 require_relative 'bot/worker/drb_service'
 require_relative 'bot/worker/http_service'
@@ -86,7 +87,7 @@ EOS
   end
 
   def mock_start
-    @bot = Bot::TgBot.new self
+    @bot = Bot::Mock.new
   end
 
   def start
@@ -113,6 +114,7 @@ EOS
   def react msg
     msg.bot = bot
     msg.bot_type = bot.class.name
+    return if msg.respond_to?(:is_outgoing) && msg.is_outgoing
     return if msg.text.blank? && msg.video.blank? && msg.audio.blank? && msg.document.blank?
     return send_help msg if msg.text&.starts_with? '/start'
     return send_help msg if msg.text&.starts_with? '/help'
