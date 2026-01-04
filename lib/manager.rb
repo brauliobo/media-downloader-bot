@@ -120,7 +120,8 @@ EOS
     return send_help msg if msg.text&.starts_with? '/help'
     raise 'user blocked' if msg.from.id.in? BLOCKED_USERS
 
-    return Commands::Cookie.new(bot, msg).process if msg.text&.starts_with?('/cookies') || (msg.document&.file_name&.downcase == 'cookies.txt')
+    cmd_text = msg.text.presence || msg.caption.presence
+    return Commands::Cookie.new(bot, msg).process if cmd_text&.starts_with?('/cookies') || (msg.document&.file_name&.downcase == 'cookies.txt')
 
     enqueue_message msg
   rescue => e

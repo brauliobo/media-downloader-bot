@@ -19,7 +19,7 @@ class Manager
         return if cookie_content.nil?
 
         cookies_by_domain = parse_netscape_format(cookie_content)
-        return if cookies_by_domain.empty?
+        return bot.send_message(msg, Bot::MsgHelpers.me("No cookies found. Send a Netscape cookies.txt file or paste its contents after /cookies")) if cookies_by_domain.empty?
 
         s = Models::Session.find_or_create uid: msg.from.id
         data = (s.cookies || {}).dup
@@ -37,9 +37,12 @@ class Manager
           return File.read(local_path) if local_path && File.exist?(local_path)
         end
 
-        if msg.text.present?
-          text = msg.text.strip
-          text.split(/[[:space:]]+/, 2)[1] || ''
+        text = (msg.text.presence || msg.caption.presence)&.to_s&.strip
+        if text.present?
+          content = text.split(/[[:space:]]+/, 2)[1]
+          return content if content.present?
+          bot.send_message msg, Bot::MsgHelpers.me("Usage: /cookies (send Netscape cookie file as document or paste content)")
+          nil
         else
           bot.send_message msg, Bot::MsgHelpers.me("Usage: /cookies (send Netscape cookie file as document or paste content)")
           nil
@@ -52,9 +55,14 @@ class Manager
 
         content.each_line do |line|
           line = line.strip
-          next if line.empty? || line.start_with?('#')
+          next if line.empty?
+          if line.start_with?('#HttpOnly_')
+            line = line.sub(/\A#HttpOnly_/, '')
+          elsif line.start_with?('#')
+            next
+          end
 
-          parts = line.split("\t")
+          parts = line.split(/\s+/, 7)
           next if parts.size < 7
 
           domain, _flag, _path, _secure, _expiration, name, value = parts
