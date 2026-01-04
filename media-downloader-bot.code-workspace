@@ -30,6 +30,9 @@
 		},
 		{
 			"path": "../booktalk"
+		},
+		{
+			"path": "../whisper.cpp"
 		}
 	],
 	"settings": {}
