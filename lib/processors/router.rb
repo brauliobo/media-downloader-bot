@@ -1,6 +1,7 @@
 require_relative 'base'
 require_relative 'document'
 require_relative 'local_file'
+require_relative 'srt'
 require_relative 'url'
 require_relative 'video'
 require_relative 'audio'
@@ -24,6 +25,7 @@ module Processors
       c.line = line
 
       return [Document.new(c)] if Document.can_handle?(c.msg)
+      return [Srt.new(c)] if Srt.can_handle?(c)
 
       file = c.msg.video || c.msg.audio || c.msg.document
       return [LocalFile.new(c)] if file&.respond_to?(:local_path) && ::File.exist?(file.local_path)
