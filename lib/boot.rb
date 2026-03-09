@@ -11,7 +11,6 @@ end
 require 'active_support/all'
 require 'json'
 require 'faraday'
-require 'faraday'
 require 'faraday/multipart'
 require 'rack/mime'
 
