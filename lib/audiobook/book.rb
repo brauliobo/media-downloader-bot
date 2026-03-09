@@ -17,6 +17,7 @@ require_relative 'heading'
 require_relative 'image'
 require_relative 'page'
 require_relative '../translator'
+require_relative '../utils/sh'
 
 module Audiobook
   # Represents an intermediate structured manuscript that can be saved as YAML.
@@ -235,7 +236,7 @@ module Audiobook
 
       tmp_base = File.join(dir, "#{base}-thumb")
       tmp_thumb = "#{tmp_base}.png"
-      return nil unless system("pdftoppm -f #{page_num} -l #{page_num} -png -singlefile '#{pdf_path}' '#{tmp_base}'")
+      return nil unless system("pdftoppm", "-f", page_num.to_s, "-l", page_num.to_s, "-png", "-singlefile", pdf_path, tmp_base)
 
       candidate = Dir["#{tmp_base}*.png"].min
       return nil unless candidate

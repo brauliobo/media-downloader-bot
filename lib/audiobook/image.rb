@@ -4,6 +4,7 @@ require 'fileutils'
 require 'tmpdir'
 require_relative 'paragraph'
 require_relative '../ocr'
+require_relative '../utils/sh'
 
 module Audiobook
   # Represents an image that needs OCR, then generates audio like a paragraph
@@ -47,20 +48,21 @@ module Audiobook
         tmp_png = "#{base}.png"
 
         # 1) pdftoppm
-        system("pdftoppm -f #{page_num} -l #{page_num} -png -singlefile '#{pdf_path}' '#{base}'")
+        system("pdftoppm", "-f", page_num.to_s, "-l", page_num.to_s, "-png", "-singlefile", pdf_path, base)
 
         unless File.exist?(tmp_png)
           # 2) pdfimages
-          system("pdfimages -png -f #{page_num} -l #{page_num} '#{pdf_path}' '#{base}'")
+          system("pdfimages", "-png", "-f", page_num.to_s, "-l", page_num.to_s, pdf_path, base)
           candidate = Dir["#{base}*.png"].min
           FileUtils.mv(candidate, tmp_png) if candidate
         end
 
         unless File.exist?(tmp_png)
           # 3) Ghostscript
-          system("gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=pngalpha -r200 " \
-                 "-dFirstPage=#{page_num} -dLastPage=#{page_num} " \
-                 "-sOutputFile='#{tmp_png}' '#{pdf_path}' 2>&1 >/dev/null")
+          system("gs", "-dSAFER", "-dBATCH", "-dNOPAUSE", "-sDEVICE=pngalpha", "-r200",
+                 "-dFirstPage=#{page_num}", "-dLastPage=#{page_num}",
+                 "-sOutputFile=#{tmp_png}", pdf_path,
+                 out: File::NULL, err: [:child, :out])
         end
 
         if File.exist?(tmp_png)
