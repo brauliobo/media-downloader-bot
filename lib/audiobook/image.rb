@@ -47,20 +47,20 @@ module Audiobook
         tmp_png = "#{base}.png"
 
         # 1) pdftoppm
-        system("pdftoppm -f #{page_num} -l #{page_num} -png -singlefile '#{pdf_path}' '#{base}'")
+        Sh.run "pdftoppm -f #{page_num} -l #{page_num} -png -singlefile #{Sh.escape(pdf_path)} #{Sh.escape(base)}"
 
         unless File.exist?(tmp_png)
           # 2) pdfimages
-          system("pdfimages -png -f #{page_num} -l #{page_num} '#{pdf_path}' '#{base}'")
+          Sh.run "pdfimages -png -f #{page_num} -l #{page_num} #{Sh.escape(pdf_path)} #{Sh.escape(base)}"
           candidate = Dir["#{base}*.png"].min
           FileUtils.mv(candidate, tmp_png) if candidate
         end
 
         unless File.exist?(tmp_png)
           # 3) Ghostscript
-          system("gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=pngalpha -r200 " \
+          Sh.run "gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=pngalpha -r200 " \
                  "-dFirstPage=#{page_num} -dLastPage=#{page_num} " \
-                 "-sOutputFile='#{tmp_png}' '#{pdf_path}' 2>&1 >/dev/null")
+                 "-sOutputFile=#{Sh.escape(tmp_png)} #{Sh.escape(pdf_path)}"
         end
 
         if File.exist?(tmp_png)
