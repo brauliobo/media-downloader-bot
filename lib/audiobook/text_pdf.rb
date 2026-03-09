@@ -1,5 +1,6 @@
 require 'cgi'
 require_relative 'book'
+require_relative '../utils/sh'
 
 module Audiobook
   class TextPdf
@@ -134,13 +135,11 @@ module Audiobook
     end
 
     def wkhtmltopdf_convert(html_path, pdf_path)
-      cmd = "wkhtmltopdf --page-size A4 --margin-top 20mm --margin-bottom 20mm --margin-left 20mm --margin-right 20mm '#{html_path}' '#{pdf_path}'"
-      system(cmd) || raise('wkhtmltopdf conversion failed')
+      system("wkhtmltopdf", "--page-size", "A4", "--margin-top", "20mm", "--margin-bottom", "20mm", "--margin-left", "20mm", "--margin-right", "20mm", html_path, pdf_path) || raise('wkhtmltopdf conversion failed')
     end
 
     def pandoc_convert(html_path, pdf_path)
-      cmd = "pandoc -f html -t pdf -o '#{pdf_path}' '#{html_path}'"
-      system(cmd) || raise('pandoc conversion failed')
+      system("pandoc", "-f", "html", "-t", "pdf", "-o", pdf_path, html_path) || raise('pandoc conversion failed')
     end
   end
 end

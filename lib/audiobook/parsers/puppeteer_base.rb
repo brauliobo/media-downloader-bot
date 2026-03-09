@@ -4,6 +4,7 @@ require 'tmpdir'
 require 'digest'
 require 'puppeteer'
 require_relative 'base'
+require_relative '../../utils/sh'
 
 module Audiobook
   module Parsers
@@ -54,11 +55,9 @@ module Audiobook
         sorted = images.sort
         # Prefer img2pdf when available; fallback to ImageMagick convert
         if system('which img2pdf >/dev/null 2>&1')
-          args = sorted.map { |p| "'#{p}'" }.join(' ')
-          system("img2pdf #{args} -o '#{out_pdf}'")
+          system("img2pdf", *sorted, "-o", out_pdf)
         else
-          args = sorted.map { |p| "'#{p}'" }.join(' ')
-          system("convert #{args} '#{out_pdf}'")
+          system("convert", *sorted, out_pdf)
         end
         out_pdf
       end
