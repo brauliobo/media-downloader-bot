@@ -25,7 +25,7 @@ class Zipper
       stream = zipper.probe.streams.find { |s| s.codec_type == 'video' }
       portrait = stream.width < stream.height
       ass_mode = zipper.opts.nowords ? :plain : :instagram
-      ass_body = Subtitler::Ass.from_vtt(vtt, portrait:, mode: ass_mode)
+      ass_body = Subtitler::Ass.from_vtt(vtt, portrait:, mode: ass_mode, preset: zipper.opts.subpreset)
 
       dir = File.dirname(zipper.outfile || zipper.infile)
       prefix = zipper.outfile ? File.basename(zipper.outfile, File.extname(zipper.outfile)) : 'sub'
@@ -33,10 +33,10 @@ class Zipper
       File.write ass_path, ass_body
       zipper.fgraph << "ass=#{Sh.escape(ass_path)}"
 
-      vtt_path = File.join(dir, "#{prefix}.vtt")
-      File.write vtt_path, vtt
-      zipper.iopts << " -i #{Sh.escape(vtt_path)}"
       if zipper.opts.speed == 1
+        vtt_path = File.join(dir, "#{prefix}.vtt")
+        File.write vtt_path, vtt
+        zipper.iopts << " -i #{Sh.escape(vtt_path)}"
         meta = " -c:s mov_text -metadata:s:s:0 language=#{lng} -metadata:s:s:0 title=#{lng}"
         zipper.oopts << meta
       end
