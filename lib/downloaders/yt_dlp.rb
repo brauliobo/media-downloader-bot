@@ -59,10 +59,8 @@ module Downloaders
         cmd << "--paths #{tmp}"
         cmd << '-s' if opts.simulate
 
-        if url.match?(/youtu\.?be/)
-          yargs = "youtube:player_client=web"
-          yargs << ";lang=#{opts.lang}" if opts.lang
-          cmd << "--extractor-args #{Sh.escape(yargs)}"
+        if url.match?(/youtu\.?be/) && opts.lang
+          cmd << "--extractor-args #{Sh.escape("youtube:lang=#{opts.lang}")}"
         end
         
         begin
