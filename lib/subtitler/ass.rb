@@ -13,9 +13,9 @@ class Subtitler
       # YouTube-like: semi-transparent black background box + word highlighting
       'default' => BASE_STYLE.merge(
         OutlineColour: '&H80000000',
-        BackColour:    '&H80000000',
+        BackColour:    '&H00000000',
         BorderStyle:   3,
-        Outline:       0,
+        Outline:       4,
         Shadow:        0,
       ).freeze,
       # Original look: outline + shadow, no background box
@@ -48,7 +48,7 @@ class Subtitler
     ASS_HEADER
 
     HIGHLIGHT_STYLES = {
-      'default' => '{\\bord0\\shad0\\3c&H000000&\\4c&H00ffff&}'.freeze,
+      'default' => '{\\shad0\\3c&H000000&\\4c&H00ffff&}'.freeze,
       'nobg'    => '{\\bord2\\shad0\\be1\\3c&H000000&\\4c&H00ffff&}'.freeze,
     }.freeze
 
