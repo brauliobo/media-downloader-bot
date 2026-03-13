@@ -164,8 +164,15 @@ class Worker
   def init_status
     return if @st
     @st = Bot::Status.new do |text, *args, **params|
+      raw = text
       text = Bot::MsgHelpers.me(text) unless params[:parse_mode]
-      edit_message msg, msg.resp.message_id, *args, text: text, force: true, **params
+      begin
+        result = edit_message msg, msg.resp.message_id, *args, text: text, force: true, **params
+        raise 'edit failed' unless result
+      rescue
+        # Fallback: retry without MarkdownV2 so error messages with special chars still display
+        edit_message(msg, msg.resp.message_id, text: raw, force: true, parse_mode: nil) rescue nil
+      end
     end
     msg.resp ||= send_message msg, Bot::MsgHelpers.me('Downloading metadata...')
   end
