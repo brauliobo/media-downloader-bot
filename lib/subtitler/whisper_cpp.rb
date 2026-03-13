@@ -24,6 +24,45 @@ class Subtitler
       transcribe_with_params(path, format: format, merge_words: merge_words, language: 'auto', detect_lang: :full, **extra)
     end
 
+    # Convert verbose_json into SRT with inline per-word timings.
+    # When normalize: true (default), adjacent short segments are merged to produce
+    # typical movie-style subtitles (max ~2 lines / similar length).
+    # Backward-compat: legacy stdsub overrides normalize when provided.
+    def srt_convert verbose_json, normalize: true, word_tags: true, stdsub: nil
+      mash = SymMash.new verbose_json
+      use_norm = stdsub.nil? ? normalize : stdsub
+      merge_segments_for_stdsub!(mash) if use_norm
+
+      ts = ->(t){ h, rem = t.divmod(3600); m, s = rem.divmod(60); "%02d:%02d:%02d,%03d" % [h, m, s.to_i, (s.modulo(1)*1000).round] }
+
+      out = +""
+      mash.segments&.each_with_index do |seg, idx|
+        start = ts.call(seg.start)
+        finish = ts.call(seg.end)
+
+        words = seg.words || []
+        line = if words.empty?
+          seg.text.to_s.strip
+        else
+          words.each_with_index.map do |w,i|
+            word    = w.word.to_s.strip
+            w_start = ts.call(w.start)
+            if word_tags
+              i.zero? ? word : "<#{w_start}>#{word}"
+            else
+              word
+            end
+          end.join(' ')
+        end
+
+        out << "#{idx+1}\n"
+        out << "#{start} --> #{finish}\n"
+        out << "#{line}\n\n"
+      end
+
+      out
+    end
+
     protected
 
     def transcribe_with_params path, format:, merge_words:, language: nil, detect_lang: :simple, **extra
@@ -65,45 +104,6 @@ class Subtitler
       when :simple
         ISO_639.find_by_english_name(raw.capitalize)&.alpha2
       end
-    end
-
-    # Convert verbose_json into SRT with inline per-word timings.
-    # When normalize: true (default), adjacent short segments are merged to produce
-    # typical movie-style subtitles (max ~2 lines / similar length).
-    # Backward-compat: legacy stdsub overrides normalize when provided.
-    def srt_convert verbose_json, normalize: true, word_tags: true, stdsub: nil
-      mash = SymMash.new verbose_json
-      use_norm = stdsub.nil? ? normalize : stdsub
-      merge_segments_for_stdsub!(mash) if use_norm
-
-      ts = ->(t){ h, rem = t.divmod(3600); m, s = rem.divmod(60); "%02d:%02d:%02d,%03d" % [h, m, s.to_i, (s.modulo(1)*1000).round] }
-
-      out = +""
-      mash.segments&.each_with_index do |seg, idx|
-        start = ts.call(seg.start)
-        finish = ts.call(seg.end)
-
-        words = seg.words || []
-        line = if words.empty?
-          seg.text.to_s.strip
-        else
-          words.each_with_index.map do |w,i|
-            word    = w.word.to_s.strip
-            w_start = ts.call(w.start)
-            if word_tags
-              i.zero? ? word : "<#{w_start}>#{word}"
-            else
-              word
-            end
-          end.join(' ')
-        end
-
-        out << "#{idx+1}\n"
-        out << "#{start} --> #{finish}\n"
-        out << "#{line}\n\n"
-      end
-
-      out
     end
 
     # Delegate to centralized VTT converter
