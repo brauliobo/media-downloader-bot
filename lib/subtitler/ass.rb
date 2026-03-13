@@ -1,16 +1,32 @@
 class Subtitler
   module Ass
 
-    STYLE = SymMash.new(
+    BASE_STYLE = {
       Fontsize:      20,
       Fontname:      'Roboto Medium',
       PrimaryColour: '&H00ffffff',
-      OutlineColour: '&H80000000',
-      BorderStyle:   1,
       Alignment:     2,
       MarginV:       32,
-      Shadow:        2,
-    ).freeze
+    }.freeze
+
+    PRESETS = {
+      # YouTube-like: semi-transparent black background box + word highlighting
+      'default' => BASE_STYLE.merge(
+        OutlineColour: '&H80000000',
+        BackColour:    '&H80000000',
+        BorderStyle:   3,
+        Outline:       0,
+        Shadow:        0,
+      ).freeze,
+      # Original look: outline + shadow, no background box
+      'nobg' => BASE_STYLE.merge(
+        OutlineColour: '&H80000000',
+        BackColour:    '&H00000000',
+        BorderStyle:   1,
+        Outline:       0,
+        Shadow:        2,
+      ).freeze,
+    }.freeze
 
     SECONDARY_COLOUR = '&H0000ffff'.freeze # yellow
 
@@ -25,13 +41,17 @@ class Subtitler
 
       [V4+ Styles]
       Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
-      Style: Default,%{Fontname},%{Fontsize},%{PrimaryColour},#{SECONDARY_COLOUR},%{OutlineColour},&H00000000,0,0,0,0,100,100,0,0,%{BorderStyle},0,%{Shadow},%{Alignment},10,10,%{MarginV},1
+      Style: Default,%{Fontname},%{Fontsize},%{PrimaryColour},#{SECONDARY_COLOUR},%{OutlineColour},%{BackColour},0,0,0,0,100,100,0,0,%{BorderStyle},%{Outline},%{Shadow},%{Alignment},10,10,%{MarginV},1
 
       [Events]
       Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     ASS_HEADER
 
-    HIGHLIGHT_STYLE = '{\\bord2\\shad0\\be1\\3c&H000000&\\4c&H00ffff&}'.freeze
+    HIGHLIGHT_STYLES = {
+      'default' => '{\\bord0\\shad0\\3c&H000000&\\4c&H00ffff&}'.freeze,
+      'nobg'    => '{\\bord2\\shad0\\be1\\3c&H000000&\\4c&H00ffff&}'.freeze,
+    }.freeze
+
     TIMESTAMP = /(?:(\d+):)?(\d{2}):(\d{2})\.(\d{3})/.freeze
     INLINE_TS = /<\d{2}:\d{2}:\d{2}\.\d{3}>/.freeze
 
@@ -50,8 +70,12 @@ class Subtitler
       "%d:%02d:%02d.%02d" % [h, m, s, cs.round]
     end
 
-    def self.from_vtt vtt, portrait: false, mode: :instagram
+    def self.from_vtt vtt, portrait: false, mode: :instagram, preset: 'default'
       require 'cgi'
+
+      preset = preset.to_s
+      preset = 'default' unless PRESETS.key?(preset)
+      highlight_style = HIGHLIGHT_STYLES[preset] || HIGHLIGHT_STYLES['default']
 
       vtt = vtt.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
       vtt = vtt.sub(/^\uFEFF/, '').sub(/^WEBVTT.*?(\r?\n){2}/m, '')
@@ -67,9 +91,9 @@ class Subtitler
         { start: start_str, end: end_str, text: (lines[(t_idx+1)..-1] || []).join("\n") }
       end
 
-      # Build ASS header using STYLE constants and template
-      style = STYLE.dup
-      style.Fontsize = (style.Fontsize * (portrait ? 0.6 : 1)).round
+      # Build ASS header using preset style and template
+      style = PRESETS[preset].dup
+      style[:Fontsize] = (style[:Fontsize] * (portrait ? 0.6 : 1)).round
       header = HEADER_TEMPLATE % style
 
       mode_sym = (mode || :instagram).to_sym
@@ -84,7 +108,7 @@ class Subtitler
           when :instagram
             wt.each_with_index.map do |(ws,we,_), i|
               highlighted = words.each_with_index.map do |w, idx|
-                idx == i ? "{\\c&H00ffff&}#{HIGHLIGHT_STYLE}#{w}{\\r}{\\c&Hffffff&}" : w
+                idx == i ? "{\\c&H00ffff&}#{highlight_style}#{w}{\\r}{\\c&Hffffff&}" : w
               end.join(' ')
               dialogue(ws, we, highlighted)
             end
