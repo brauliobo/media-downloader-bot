@@ -148,9 +148,11 @@ module Bot
 
     def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', force: false, **params)
       if force
-        Manager.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0) do |_attempt|
-          message_sender.edit_message(msg.chat.id, id, text, parse_mode: parse_mode)
-          true
+        td_with_rate_limit('edit_message') do
+          Manager.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0) do |_attempt|
+            message_sender.edit_message(msg.chat.id, id, text, parse_mode: parse_mode)
+            true
+          end
         end
       else
         td_with_rate_limit('edit_message') do

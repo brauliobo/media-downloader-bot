@@ -45,7 +45,7 @@ module Bot
       { chat_id: msg.chat.id, text: t, caption: t, parse_mode: parse_mode }
     end
 
-    def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', **params)
+    def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', force: false, **params)
       return if throttle!(msg.chat.id, :low, discard: true, message_id: id) == :discard
       tg.send "edit_message_#{type}", **tg_text_payload(msg, text, parse_mode), message_id: id, **params
     rescue ::Telegram::Bot::Exceptions::ResponseError => e

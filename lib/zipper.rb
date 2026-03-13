@@ -432,7 +432,7 @@ class Zipper
   def metadata_args
     parts = []
     parts << META_MARK unless ENV['SKIP_METAMARK'] || opts.skip_metamark
-    parts.concat((opts.metadata || {}).map { |k, v| "-metadata #{Sh.escape k}=#{Sh.escape v}" })
+    parts.concat((opts.metadata || {}).map { |k, v| "-metadata #{Sh.escape k}=#{Sh.escape v.to_s.strip}" })
     parts.join(' ')
   end
 
