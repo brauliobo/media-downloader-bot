@@ -18,7 +18,7 @@ module Enumerable
         block.call(*args)
       rescue => e
         raise if reraise
-        puts "error: #{e.message} \n#{e.backtrace.join "\n"}"
+        STDERR.puts "error: #{e.message} \n#{e.backtrace.join "\n"}"
       end
     end
 

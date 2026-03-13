@@ -63,7 +63,8 @@ module Audiobook
           md = parsed.metadata || SymMash.new
           md.kindle_pdf = pdf_path
           parsed.metadata = md
-        rescue
+        rescue => e
+          STDERR.puts "[KINDLE] metadata assign failed: #{e.class}: #{e.message}"
         end
         return new(data: parsed, opts: opts, stl: stl)
       end
