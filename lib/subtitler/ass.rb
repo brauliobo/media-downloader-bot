@@ -10,12 +10,16 @@ class Subtitler
     }.freeze
 
     PRESETS = {
-      # YouTube-like: semi-transparent black background box + word highlighting
+      # YouTube-like: semi-transparent black background box + word highlighting.
+      # BorderStyle 4 is a libass extension: one opaque box per event, drawn at the
+      # event level — unlike BorderStyle 3 which stacks a new box for every event
+      # active simultaneously, causing the double-box / overlap artifact.
+      # Outline controls the horizontal/vertical padding, Shadow must be 0.
       'default' => BASE_STYLE.merge(
-        OutlineColour: '&H80000000',
-        BackColour:    '&H00000000',
-        BorderStyle:   3,
-        Outline:       4,
+        OutlineColour: '&HFF000000',  # fully transparent — no text outline inside the box
+        BackColour:    '&H80000000',  # 50% transparent black box (YouTube style)
+        BorderStyle:   4,
+        Outline:       4,             # controls box padding, not visible outline colour
         Shadow:        0,
       ).freeze,
       # Original look: outline + shadow, no background box
@@ -47,9 +51,17 @@ class Subtitler
       Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     ASS_HEADER
 
+    # Highlight tag applied to the current word.
+    # For 'default' (BS4 bg preset): only change \1c (text colour) — never \4c.
     HIGHLIGHT_STYLES = {
-      'default' => '{\\shad0\\3c&H000000&\\4c&H00ffff&}'.freeze,
+      'default' => '{\\1c&H00ffff&}'.freeze,
       'nobg'    => '{\\bord2\\shad0\\be1\\3c&H000000&\\4c&H00ffff&}'.freeze,
+    }.freeze
+
+    # Tag to restore normal text colour after a highlighted word.
+    RESET_COLOUR = {
+      'default' => '{\\1c&Hffffff&}'.freeze,
+      'nobg'    => '{\\r}{\\c&Hffffff&}'.freeze,
     }.freeze
 
     TIMESTAMP = /(?:(\d+):)?(\d{2}):(\d{2})\.(\d{3})/.freeze
@@ -76,6 +88,7 @@ class Subtitler
       preset = preset.to_s
       preset = 'default' unless PRESETS.key?(preset)
       highlight_style = HIGHLIGHT_STYLES[preset] || HIGHLIGHT_STYLES['default']
+      reset_colour    = RESET_COLOUR[preset]    || RESET_COLOUR['nobg']
 
       vtt = vtt.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
       vtt = vtt.sub(/^\uFEFF/, '').sub(/^WEBVTT.*?(\r?\n){2}/m, '')
@@ -106,9 +119,13 @@ class Subtitler
           words = wt.map { |_,_,w| w }
           case mode_sym
           when :instagram
-            wt.each_with_index.map do |(ws,we,_), i|
+            # Each word gets its own event spanning [ws, we].
+            # With BorderStyle 4 (default preset), each event draws its own box but
+            # boxes don't compound/stack visually — BS4 draws at the event level, not
+            # additively. Non-bg presets (nobg) have no box so no overlap risk either.
+            wt.each_with_index.map do |(ws, we, _), i|
               highlighted = words.each_with_index.map do |w, idx|
-                idx == i ? "{\\c&H00ffff&}#{highlight_style}#{w}{\\r}{\\c&Hffffff&}" : w
+                idx == i ? "#{highlight_style}#{w}#{reset_colour}" : w
               end.join(' ')
               dialogue(ws, we, highlighted)
             end
