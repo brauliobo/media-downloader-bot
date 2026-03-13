@@ -165,8 +165,7 @@ class Worker
     return if @st
     @st = Bot::Status.new do |text, *args, **params|
       text = Bot::MsgHelpers.me(text) unless params[:parse_mode]
-      ok = edit_message msg, msg.resp.message_id, *args, text: text, force: true, **params
-      msg.resp = send_message msg, text, type: 'message', parse_mode: (params[:parse_mode] || 'MarkdownV2') if ok.nil?
+      edit_message msg, msg.resp.message_id, *args, text: text, force: true, **params
     end
     msg.resp ||= send_message msg, Bot::MsgHelpers.me('Downloading metadata...')
   end
