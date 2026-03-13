@@ -66,7 +66,7 @@ module Audiobook
     begin
       uploads[1].oprobe = Prober.for(result.audio)
     rescue => e
-      # Probe failed - upload_one will probe if needed
+      STDERR.puts "[AUDIOBOOK] probe failed: #{e.class}: #{e.message}"
     end
 
     uploads

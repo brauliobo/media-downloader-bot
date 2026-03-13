@@ -43,7 +43,7 @@ module Processors
         rescue => e
           begin
             vtt_src = srt.include?('WEBVTT') ? srt : Subtitler::VTT.srt_to_vtt(srt)
-          rescue; vtt_src = nil; end
+          rescue => e2; STDERR.puts "[SHORTS] VTT conversion: #{e2.message}"; vtt_src = nil; end
           cuts.each_with_index do |c, idx|
             guess = vtt_src ? Shorts.title_from_vtt(Subtitler::VTT.slice(vtt_src, from: c[:start], to: c[:end])) : nil
             c[:title] = (guess.presence || "Short #{idx+1}")
@@ -69,7 +69,7 @@ module Processors
             if srt && srt.include?('-->')
             vtt_src = srt.include?('WEBVTT') ? srt : Subtitler::VTT.srt_to_vtt(srt)
           end
-        rescue; vtt_src = nil; end
+        rescue => e; STDERR.puts "[SHORTS] VTT conversion: #{e.message}"; vtt_src = nil; end
         if vtt_src
           slice_vtt = Subtitler::VTT.slice(vtt_src, from: c[:start], to: c[:end])
           locopts.sub_vtt = slice_vtt

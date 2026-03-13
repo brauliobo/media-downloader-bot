@@ -181,9 +181,11 @@ module Bot
       if e.message.include?('429') || e.message.include?('Too Many Requests')
         ra = td_retry_after_seconds(e); dlog "[RATE_LIMIT] TDLib sleeping #{ra}s (#{tag})"; sleep ra; retry
       end
+      STDERR.puts "[TD_ERROR] #{e.class}: #{e.message}"
       dlog "[TD_ERROR] #{e.class}: #{e.message}"
       nil
     rescue => e
+      STDERR.puts "[TD_ERROR] #{e.class}: #{e.message}\n#{e.backtrace&.first(5)&.join("\n")}"
       dlog "[TD_ERROR] #{e.class}: #{e.message}"
       nil
     end
