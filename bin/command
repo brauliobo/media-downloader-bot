@@ -1,5 +1,8 @@
 #!/usr/bin/env ruby
 
+ENV['WITH_WORKER'] = '1'
+ENV['PRINT_CMD']   = '1'
+
 require_relative '../lib/manager'
 
 bot = Manager.new
@@ -9,5 +12,5 @@ puts "reacting to message: #{msg}"
 bot.react SymMash.new(
   from: {id: 1},
   text: msg,
-  chat: {},
+  chat: {id: 1},
 )
