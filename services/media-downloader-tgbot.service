@@ -25,6 +25,7 @@ ExecStartPre=/usr/bin/curl ifconfig.co
 
 WorkingDirectory=/srv/media-downloader-tgbot
 ReadWritePaths=/srv/media-downloader-tgbot
+PrivateTmp=true
 ExecStart=/usr/local/rvm/wrappers/ruby-3.4.4/bundle exec bin/tgbot
 
 Environment=BUNDLE_DEPLOYMENT=true

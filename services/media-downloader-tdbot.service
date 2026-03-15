@@ -25,6 +25,7 @@ ExecStartPre=/usr/bin/curl ifconfig.co
 
 WorkingDirectory=/srv/media-downloader-tdbot
 ReadWritePaths=/srv/media-downloader-tdbot
+PrivateTmp=true
 ExecStart=/usr/local/rvm/wrappers/ruby-3.4.4/bundle exec bin/tdbot
 
 Environment=BUNDLE_DEPLOYMENT=true
@@ -35,6 +36,7 @@ Environment=THREADS=6
 #Environment=DEBUG=1
 Environment=DB=1
 Environment=TDLOG=1
+Environment=TD_BOT=1
 
 Restart=always
 RestartSec=1
