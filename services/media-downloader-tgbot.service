@@ -1,5 +1,5 @@
 [Unit]
-Description=media-downloader-bot
+Description=media-downloader-tdbot
 After=network-online.target
 Wants=network-online.target
 
@@ -14,7 +14,7 @@ LimitNOFILE=1001001
 User=mdb
 Nice=19
 ProtectHome=yes
-RuntimeDirectory=media_downloader_bot
+RuntimeDirectory=media_downloader_tgbot
 RuntimeDirectoryMode=0755
 
 #NetworkNamespacePath=/var/run/netns/vpnspace
@@ -23,8 +23,8 @@ RuntimeDirectoryMode=0755
 RestrictAddressFamilies=AF_INET AF_UNIX
 ExecStartPre=/usr/bin/curl ifconfig.co
 
-WorkingDirectory=/srv/media-downloader-bot
-ReadWritePaths=/srv/media-downloader-bot
+WorkingDirectory=/srv/media-downloader-tgbot
+ReadWritePaths=/srv/media-downloader-tgbot
 ExecStart=/usr/local/rvm/wrappers/ruby-3.4.4/bundle exec bin/tgbot
 
 Environment=BUNDLE_DEPLOYMENT=true
