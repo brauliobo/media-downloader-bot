@@ -26,12 +26,17 @@ module Processors
     def self.probe i
       return i unless i && i.respond_to?(:fn_in) && i.fn_in.to_s.present?
       mtype  = Rack::Mime.mime_type ::File.extname(i.fn_in.to_s)
-      return i unless mtype&.match?(/audio|video/)
 
       i.probe  = Prober.for i.fn_in
       i.durat  = i.probe.format.duration.to_i
       i.durat -= ChronicDuration.parse i.opts.ss if i.opts.ss
-      i.type = if mtype.index 'video' then Types.video elsif mtype.index 'audio' then Types.audio end
+
+      # Derive type from MIME if recognized, otherwise fall back to ffprobe streams
+      i.type = if mtype&.index('video') then Types.video
+               elsif mtype&.index('audio') then Types.audio
+               elsif i.probe.streams&.any? { |s| s.codec_type == 'video' } then Types.video
+               elsif i.probe.streams&.any? { |s| s.codec_type == 'audio' } then Types.audio
+               end
       i.type = Types.audio if i.opts.audio
       i
     end
