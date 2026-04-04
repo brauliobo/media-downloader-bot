@@ -21,13 +21,11 @@ class Subtitler
       Shadow:        0,
     }.freeze
 
+    BOX_PRESET = BASE_STYLE.merge(BOX_STYLE).freeze
+
     PRESETS = {
-      # Grey words turn white as spoken — no highlight colour, just presence.
-      'default' => BASE_STYLE.merge(BOX_STYLE,
-        PrimaryColour: "&H00#{UNSPOKEN_COLOUR}",  # grey — unspoken words
-      ).freeze,
-      # Yellow highlight on current word over semi-transparent black box.
-      'hlword' => BASE_STYLE.merge(BOX_STYLE).freeze,
+      'default' => BOX_PRESET, # unspoken words greyed via RESET_COLOUR tag
+      'hlword'  => BOX_PRESET, # yellow highlight on current word
       # Original look: outline + shadow, no background box
       'nobg' => BASE_STYLE.merge(
         OutlineColour: '&H80000000',
@@ -56,7 +54,6 @@ class Subtitler
     ASS_HEADER
 
     # Highlight tag applied to the current word.
-    # For 'default' (BS4 bg preset): only change \1c (text colour) — never \4c.
     HIGHLIGHT_STYLES = {
       'default' => WHITE_TAG,
       'hlword'  => '{\\1c&H00ffff&}'.freeze,
@@ -67,12 +64,7 @@ class Subtitler
     RESET_COLOUR = {
       'default' => "{\\1c&H#{UNSPOKEN_COLOUR}&}".freeze,
       'hlword'  => WHITE_TAG,
-      'nobg'    => '{\\r}{\\c&Hffffff&}'.freeze,
-    }.freeze
-
-    # Tag for already-spoken words (nil = PrimaryColour is already correct).
-    PAST_COLOUR = {
-      'default' => WHITE_TAG,
+      'nobg'    => "{\\r}#{WHITE_TAG}".freeze,
     }.freeze
 
     TIMESTAMP = /(?:(\d+):)?(\d{2}):(\d{2})\.(\d{3})/.freeze
@@ -100,7 +92,6 @@ class Subtitler
       preset = 'default' unless PRESETS.key?(preset)
       highlight_style = HIGHLIGHT_STYLES[preset] || HIGHLIGHT_STYLES['default']
       reset_colour    = RESET_COLOUR[preset]    || RESET_COLOUR['nobg']
-      past_colour     = PAST_COLOUR[preset]
 
       vtt = vtt.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
       vtt = vtt.sub(/^\uFEFF/, '').sub(/^WEBVTT.*?(\r?\n){2}/m, '')
@@ -137,10 +128,7 @@ class Subtitler
             # additively. Non-bg presets (nobg) have no box so no overlap risk either.
             wt.each_with_index.map do |(ws, we, _), i|
               highlighted = words.each_with_index.map do |w, idx|
-                if idx == i then "#{highlight_style}#{w}#{reset_colour}"
-                elsif idx < i && past_colour then "#{past_colour}#{w}"
-                else w
-                end
+                idx == i ? "#{highlight_style}#{w}#{reset_colour}" : w
               end.join(' ')
               dialogue(ws, we, highlighted)
             end
