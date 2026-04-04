@@ -9,19 +9,25 @@ class Subtitler
       MarginV:       32,
     }.freeze
 
+    UNSPOKEN_COLOUR  = 'C0C0C0'.freeze
+    WHITE_TAG        = '{\\1c&Hffffff&}'.freeze
+    SECONDARY_COLOUR = '&H0000ffff'.freeze # yellow
+
+    BOX_STYLE = {
+      OutlineColour: '&HFF000000',
+      BackColour:    '&H80000000',
+      BorderStyle:   4,
+      Outline:       4,
+      Shadow:        0,
+    }.freeze
+
     PRESETS = {
-      # YouTube-like: semi-transparent black background box + word highlighting.
-      # BorderStyle 4 is a libass extension: one opaque box per event, drawn at the
-      # event level — unlike BorderStyle 3 which stacks a new box for every event
-      # active simultaneously, causing the double-box / overlap artifact.
-      # Outline controls the horizontal/vertical padding, Shadow must be 0.
-      'default' => BASE_STYLE.merge(
-        OutlineColour: '&HFF000000',  # fully transparent — no text outline inside the box
-        BackColour:    '&H80000000',  # 50% transparent black box (YouTube style)
-        BorderStyle:   4,
-        Outline:       4,             # controls box padding, not visible outline colour
-        Shadow:        0,
+      # Grey words turn white as spoken — no highlight colour, just presence.
+      'default' => BASE_STYLE.merge(BOX_STYLE,
+        PrimaryColour: "&H00#{UNSPOKEN_COLOUR}",  # grey — unspoken words
       ).freeze,
+      # Yellow highlight on current word over semi-transparent black box.
+      'hlword' => BASE_STYLE.merge(BOX_STYLE).freeze,
       # Original look: outline + shadow, no background box
       'nobg' => BASE_STYLE.merge(
         OutlineColour: '&H80000000',
@@ -31,8 +37,6 @@ class Subtitler
         Shadow:        2,
       ).freeze,
     }.freeze
-
-    SECONDARY_COLOUR = '&H0000ffff'.freeze # yellow
 
     HEADER_TEMPLATE = <<~ASS_HEADER.freeze
       [Script Info]
@@ -54,14 +58,21 @@ class Subtitler
     # Highlight tag applied to the current word.
     # For 'default' (BS4 bg preset): only change \1c (text colour) — never \4c.
     HIGHLIGHT_STYLES = {
-      'default' => '{\\1c&H00ffff&}'.freeze,
+      'default' => WHITE_TAG,
+      'hlword'  => '{\\1c&H00ffff&}'.freeze,
       'nobg'    => '{\\bord2\\shad0\\be1\\3c&H000000&\\4c&H00ffff&}'.freeze,
     }.freeze
 
     # Tag to restore normal text colour after a highlighted word.
     RESET_COLOUR = {
-      'default' => '{\\1c&Hffffff&}'.freeze,
+      'default' => "{\\1c&H#{UNSPOKEN_COLOUR}&}".freeze,
+      'hlword'  => WHITE_TAG,
       'nobg'    => '{\\r}{\\c&Hffffff&}'.freeze,
+    }.freeze
+
+    # Tag for already-spoken words (nil = PrimaryColour is already correct).
+    PAST_COLOUR = {
+      'default' => WHITE_TAG,
     }.freeze
 
     TIMESTAMP = /(?:(\d+):)?(\d{2}):(\d{2})\.(\d{3})/.freeze
@@ -89,6 +100,7 @@ class Subtitler
       preset = 'default' unless PRESETS.key?(preset)
       highlight_style = HIGHLIGHT_STYLES[preset] || HIGHLIGHT_STYLES['default']
       reset_colour    = RESET_COLOUR[preset]    || RESET_COLOUR['nobg']
+      past_colour     = PAST_COLOUR[preset]
 
       vtt = vtt.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
       vtt = vtt.sub(/^\uFEFF/, '').sub(/^WEBVTT.*?(\r?\n){2}/m, '')
@@ -125,7 +137,10 @@ class Subtitler
             # additively. Non-bg presets (nobg) have no box so no overlap risk either.
             wt.each_with_index.map do |(ws, we, _), i|
               highlighted = words.each_with_index.map do |w, idx|
-                idx == i ? "#{highlight_style}#{w}#{reset_colour}" : w
+                if idx == i then "#{highlight_style}#{w}#{reset_colour}"
+                elsif idx < i && past_colour then "#{past_colour}#{w}"
+                else w
+                end
               end.join(' ')
               dialogue(ws, we, highlighted)
             end
