@@ -89,7 +89,7 @@ module Downloaders
             # YouTube: prefer progressive formats (avoids cases where only a progressive mp4 is exposed)
             cmd << "-f #{Sh.escape('best[ext=mp4]/best')}"
           else
-            cmd << "-f #{Sh.escape('bestvideo*+bestaudio*/best')}"
+            cmd << "-f #{Sh.escape('bestvideo+bestaudio/best')}"
             cmd << "--merge-output-format mp4"
           end
         end
