@@ -33,6 +33,11 @@ module Downloaders
       i.fn_in = pick_downloaded_file(files, want_video: want_video)
       
       return st.error(want_video ? "can't find video stream" : "can't find file") unless i.fn_in && File.exist?(i.fn_in)
+
+      # --download-sections already cut the file; timestamps start at 0.
+      # Clear ss/to so the zipper doesn't double-cut or miscalculate duration.
+      opts.ss = nil if opts.ss
+      opts.to = nil if opts.to
       true
     end
 
@@ -71,27 +76,24 @@ module Downloaders
           st.error "Cookie error: #{e.class}: #{e.message}"
         end
 
-        # FFmpeg args (cuts)
+        # Download only the requested section (cuts during download, saves bandwidth)
         if opts.ss || opts.to
-          cmd << '--downloader ffmpeg'
-          args = []
-          args << "-ss #{opts.ss}" if opts.ss
-          args << "-to #{opts.to}" if opts.to
-          cmd << "--downloader-args #{Sh.escape("ffmpeg_i:#{args.join(' ')}")}"
+          from = opts.ss || '0'
+          to   = opts.to || 'inf'
+          cmd << "--download-sections #{Sh.escape("*#{from}-#{to}")}"
+        end
+
+        # Format selection
+        is_audio = opts.onlysrt || opts.audio
+        bandcamp = url.include?('bandcamp.com')
+        if is_audio
+          audiof = bandcamp ? 'mp3-320' : 'bestaudio/best'
+          cmd << "-f #{Sh.escape(audiof)}"
+        elsif url.match?(/youtu\.?be/)
+          cmd << "-f #{Sh.escape('best[ext=mp4]/best')}"
         else
-          # Format selection
-          is_audio = opts.onlysrt || opts.audio
-          bandcamp = url.include?('bandcamp.com')
-          if is_audio
-            audiof = bandcamp ? 'mp3-320' : 'bestaudio/best'
-            cmd << "-f #{Sh.escape(audiof)}"
-          elsif url.match?(/youtu\.?be/)
-            # YouTube: prefer progressive formats (avoids cases where only a progressive mp4 is exposed)
-            cmd << "-f #{Sh.escape('best[ext=mp4]/best')}"
-          else
-            cmd << "-f #{Sh.escape('bestvideo+bestaudio/best')}"
-            cmd << "--merge-output-format mp4"
-          end
+          cmd << "-f #{Sh.escape('bestvideo+bestaudio/best')}"
+          cmd << "--merge-output-format mp4"
         end
 
         # Playlist/Limit logic
