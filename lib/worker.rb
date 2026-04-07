@@ -17,6 +17,7 @@ require_relative 'processors/router'
 require_relative 'processors/url'
 require_relative 'processors/document'
 require_relative 'processors/media'
+require_relative 'processors/shorts'
 require_relative 'processors/local_file'
 
 require_relative 'bot/status'
