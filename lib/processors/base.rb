@@ -1,4 +1,4 @@
-require 'chronic_duration'
+require_relative '../utils/duration'
 require 'rack/mime'
 require 'active_support/core_ext/module/delegation'
 require_relative '../output'

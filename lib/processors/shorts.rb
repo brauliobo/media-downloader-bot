@@ -78,7 +78,7 @@ module Processors
         (i.opts._vtt_slices ||= [])[idx] = slice_vtt
       end
 
-      s_dur = (ChronicDuration.parse(c[:end]) || 0) - (ChronicDuration.parse(c[:start]) || 0)
+      s_dur = Utils::Duration.new(c[:end]) - Utils::Duration.new(c[:start])
       s_dur = 60 if s_dur <= 0
       locopts.delete(:format)
       chosen = Zipper.choose_format(Zipper::Types.video, locopts, s_dur)

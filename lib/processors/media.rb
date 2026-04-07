@@ -29,7 +29,7 @@ module Processors
 
       i.probe  = Prober.for i.fn_in
       i.durat  = i.probe.format.duration.to_i
-      i.durat -= ChronicDuration.parse i.opts.ss if i.opts.ss
+      i.durat -= Utils::Duration.new(i.opts.ss).to_i if i.opts.ss
 
       # Derive type from MIME if recognized, otherwise fall back to ffprobe streams
       i.type = if mtype&.index('video') then Types.video
@@ -106,7 +106,7 @@ module Processors
       speed    = i.opts.speed&.to_f
       durat    = i.durat
       durat   /= speed if speed
-      durat   -= ChronicDuration.parse i.opts.ss if i.opts.ss
+      durat   -= Utils::Duration.new(i.opts.ss).to_i if i.opts.ss
 
       chosen   = Zipper.choose_format i.type, i.opts, durat
       unless chosen
