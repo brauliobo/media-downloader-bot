@@ -686,7 +686,7 @@ module Audiobook
     # ---------- translation ----------
     def translation_needed?
       return false unless @opts&.lang
-      @opts.lang.to_s != @lang.to_s
+      @opts.slang.to_s != @lang.to_s
     end
 
     def translate!
@@ -694,11 +694,11 @@ module Audiobook
       @pages.each_with_index do |page, pidx|
         page.all_sentences.each_with_index do |sent, sidx|
           @stl&.update "Translating page #{pidx+1}/#{@pages.size} sentence #{sidx+1}"
-          sent_text = Translator.translate(sent.text, from: @lang, to: @opts.lang)
+          sent_text = Translator.translate(sent.text, from: @lang, to: @opts.slang)
           sent.instance_variable_set(:@text, sent_text)
         end
       end
-      @lang = @opts.lang.to_s
+      @lang = @opts.slang.to_s
       @metadata.language = @lang
     end
   end

@@ -64,8 +64,8 @@ module Downloaders
         cmd << "--paths #{tmp}"
         cmd << '-s' if opts.simulate
 
-        if url.match?(/youtu\.?be/) && opts.lang
-          cmd << "--extractor-args #{Sh.escape("youtube:lang=#{opts.lang}")}"
+        if opts.alang && url.match?(/youtu\.?be/)
+          cmd << "--extractor-args #{Sh.escape("youtube:lang=#{opts.alang}")}"
         end
         
         begin
@@ -86,13 +86,14 @@ module Downloaders
         # Format selection
         is_audio = opts.onlysrt || opts.audio
         bandcamp = url.include?('bandcamp.com')
+        al = opts.alang
         if is_audio
-          audiof = bandcamp ? 'mp3-320' : 'bestaudio/best'
+          audiof = bandcamp ? 'mp3-320' : (al ? "bestaudio[language^=#{al}]/bestaudio/best" : 'bestaudio/best')
           cmd << "-f #{Sh.escape(audiof)}"
         elsif url.match?(/youtu\.?be/)
-          cmd << "-f #{Sh.escape('best[ext=mp4]/best')}"
+          cmd << "-f #{Sh.escape(al ? "best[ext=mp4][language^=#{al}]/best[ext=mp4]/best" : 'best[ext=mp4]/best')}"
         else
-          cmd << "-f #{Sh.escape('bestvideo+bestaudio/best')}"
+          cmd << "-f #{Sh.escape(al ? "bestvideo+bestaudio[language^=#{al}]/bestvideo+bestaudio/best" : 'bestvideo+bestaudio/best')}"
           cmd << "--merge-output-format mp4"
         end
 

@@ -46,6 +46,7 @@ module Processors
       raise 'Blocked domain' if parsed.url && parsed.url.host && BLOCKED_DOMAINS.any?{ |d| parsed.url.host.include?(d) }
 
       @ctx.opts = SymMash.new(parsed.opts.merge(session: @ctx.session))
+      self.class.expand_lang_opt @ctx.opts
       @args = [] # Deprecated but kept for safety if child classes use it
     end
 
@@ -98,7 +99,14 @@ module Processors
         opts[key.to_sym] = v
       end
 
+      expand_lang_opt opts if key == 'lang'
       opts
+    end
+
+    def self.expand_lang_opt(opts)
+      return unless (lang = opts.delete(:lang))
+      opts.slang ||= lang
+      opts.alang ||= lang
     end
 
     protected
