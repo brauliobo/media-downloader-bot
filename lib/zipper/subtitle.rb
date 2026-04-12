@@ -18,7 +18,7 @@ class Zipper
     def apply(zipper)
       return unless subtitles_requested?(zipper.opts)
 
-      vtt, lng, tsp = source_vtt(zipper, translate_to: zipper.opts.lang)
+      vtt, lng, tsp = source_vtt(zipper, translate_to: zipper.opts.slang)
       vtt = Subtitler::VTT.clean(vtt)
       zipper.stl&.update 'transcoding'
 
@@ -85,7 +85,7 @@ class Zipper
         content
       end
 
-      if (target_lang = Subtitler.normalize_lang(opts.lang)) && lng.to_s != target_lang.to_s
+      if (target_lang = Subtitler.normalize_lang(opts.slang)) && lng.to_s != target_lang.to_s
         from_lang = lng if lng.present?
         srt_content = Translator.translate_srt srt_content, from: from_lang, to: target_lang
         lng = target_lang
@@ -97,13 +97,13 @@ class Zipper
     end
 
     def subtitles_requested?(opts)
-      opts.lang || opts.subs || opts.onlysrt || opts.sub_vtt
+      opts.slang || opts.subs || opts.onlysrt || opts.sub_vtt
     end
 
     def source_vtt(zipper, translate_to:)
       if (provided = zipper.opts.sub_vtt).present?
         initial = Subtitler::VTT.clean(provided.to_s)
-        Subtitler::VTT.translate_if_needed(zipper, initial, nil, zipper.opts.sub_lang || zipper.opts.lang, translate_to)
+        Subtitler::VTT.translate_if_needed(zipper, initial, nil, zipper.opts.sub_lang || zipper.opts.slang, translate_to)
       else
         prepare(zipper, translate_to: translate_to)
       end
@@ -132,7 +132,7 @@ class Zipper
       return [nil, nil] if streams.blank?
 
       streams.each { |stream| stream.lang = ISO_639.find_by_code(stream.tags.language)&.alpha2 }
-      index = streams.index { |stream| subtitle_match?(zipper.opts.lang, stream) }
+      index = streams.index { |stream| subtitle_match?(zipper.opts.slang, stream) }
       return [nil, nil] unless index
 
       vtt = Subtitler::VTT.extract_embedded(zipper, index)
@@ -142,7 +142,7 @@ class Zipper
     end
 
     def preferred_lang(zipper, subtitles)
-      candidates = [Subtitler.normalize_lang(zipper.opts.lang), :en, subtitles.keys.first].compact
+      candidates = [Subtitler.normalize_lang(zipper.opts.slang), :en, subtitles.keys.first].compact
       candidates.find { |code| subtitles.key?(code) }
     end
 

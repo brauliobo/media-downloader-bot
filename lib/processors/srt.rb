@@ -20,7 +20,7 @@ module Processors
       raise 'no input provided' unless i
       @stl&.update 'translating'
 
-      to_lang = Subtitler.normalize_lang(i.opts.lang)
+      to_lang = Subtitler.normalize_lang(i.opts.slang)
       srt_content = ::File.read(i.fn_in)
       translated = Translator.translate_srt(srt_content, to: to_lang)
 

@@ -335,15 +335,15 @@ class Zipper
       info.language ||= lng
     end
 
-    if opts.lang && lng && opts.lang.to_s != lng.to_s
+    if opts.slang && lng && opts.slang.to_s != lng.to_s
       stl&.update 'translating'
       if tsp
-        tsp = Subtitler.translate tsp, from: lng, to: opts.lang
+        tsp = Subtitler.translate tsp, from: lng, to: opts.slang
         vtt = Subtitler.vtt_convert tsp, word_tags: !opts.nowords
       else
-        vtt = Translator.translate_vtt vtt, from: lng, to: opts.lang
+        vtt = Translator.translate_vtt vtt, from: lng, to: opts.slang
       end
-      lng = opts.lang
+      lng = opts.slang
     end
 
     vtt = Zipper::Subtitle.sanitize_vtt(vtt)
@@ -405,7 +405,7 @@ class Zipper
   def fetch_subtitle
     # scraped subtitles
     if (subs = info&.subtitles).present?
-      cads = [opts.lang, :en, subs.keys.first]
+      cads = [opts.slang, :en, subs.keys.first]
       lng,lsub =  cads.each.with_object([]){ |s, r| break r = [s, subs[s]] if subs.key? s }
       return if lng.blank?
       lsub = lsub.find{ |s| s.ext == 'vtt' } || lsub[0]
@@ -415,7 +415,7 @@ class Zipper
     # embedded subtitles
     elsif (esubs = probe.streams.select{ |s| s.codec_type == 'subtitle' }).present?
       esubs.each{ |s| s.lang = ISO_639.find_by_code(s.tags.language).alpha2 }
-      index = esubs.index{ |s| opts.lang.in? [s.lang, s.tags.language, s.tags.title] }
+      index = esubs.index{ |s| opts.slang.in? [s.lang, s.tags.language, s.tags.title] }
       return unless index
       vtt   = extract_vtt index
       lng   = esubs[index].lang

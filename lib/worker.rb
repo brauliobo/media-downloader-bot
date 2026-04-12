@@ -188,9 +188,9 @@ class Worker
     durat  = oprobe&.format&.duration&.to_i
     opts   = i.opts
 
-    if info.language and opts.lang
-      info.title       = Translator.translate info.title,       from: info.language, to: opts.lang
-      info.description = Translator.translate info.description, from: info.language, to: opts.lang if opts.description
+    if info.language and opts.slang
+      info.title       = Translator.translate info.title,       from: info.language, to: opts.slang
+      info.description = Translator.translate info.description, from: info.language, to: opts.slang if opts.description
     end
 
     info.title = msg_limit(info.title, percent: 90) if info.title

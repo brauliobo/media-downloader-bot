@@ -21,7 +21,7 @@ module Processors
       else
         ::File.read Zipper.generate_srt(i.fn_in, dir: dir, info: i.info, probe: i.probe, stl: @stl, opts: i.opts)
       end
-      lang = i.opts.lang || (i.info.respond_to?(:language) ? i.info.language : nil)
+      lang = i.opts.slang || (i.info.respond_to?(:language) ? i.info.language : nil)
 
       cuts = begin
         ::Shorts.generate_cuts_from_srt(srt, language: lang)
