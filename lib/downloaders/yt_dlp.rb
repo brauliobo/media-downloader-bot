@@ -90,11 +90,9 @@ module Downloaders
         if is_audio
           audiof = bandcamp ? 'mp3-320' : (al ? "bestaudio[language^=#{al}]/bestaudio/best" : 'bestaudio/best')
           cmd << "-f #{Sh.escape(audiof)}"
-        elsif url.match?(/youtu\.?be/)
-          cmd << "-f #{Sh.escape(al ? "best[ext=mp4][language^=#{al}]/best[ext=mp4]/best" : 'best[ext=mp4]/best')}"
         else
-          cmd << "-f #{Sh.escape(al ? "bestvideo+bestaudio[language^=#{al}]/bestvideo+bestaudio/best" : 'bestvideo+bestaudio/best')}"
-          cmd << "--merge-output-format mp4"
+          fmt = al ? "bestvideo+bestaudio[language^=#{al}]/bestvideo+bestaudio/best" : 'bestvideo+bestaudio/best'
+          cmd << "-f #{Sh.escape(fmt)}"
         end
 
         # Playlist/Limit logic
