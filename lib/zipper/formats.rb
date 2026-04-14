@@ -117,6 +117,12 @@ class Zipper
 
     module_function
 
+    def default_width(size_mb_limit)
+      return 1920 if size_mb_limit.nil? || size_mb_limit > 500
+      return 1080 if size_mb_limit > 50
+      720
+    end
+
     # Original helper moved out of Zipper – kept verbatim for BC.
     def choose_format(type_hash, opts, durat)
       fmt = opts && opts.format
