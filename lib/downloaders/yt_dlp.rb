@@ -43,6 +43,14 @@ module Downloaders
 
     private
 
+    def format_selector
+      return 'mp3-320' if opts.audio && url.include?('bandcamp.com')
+      base = (opts.onlysrt || opts.audio) ? 'bestaudio' : 'bestvideo+bestaudio'
+      al = opts.alang
+      return "#{base}/best" unless al
+      "#{base}[language^=#{al}]/best[language^=#{al}]/#{base}/best"
+    end
+
     def pick_downloaded_file(files, want_video:)
       files = Array(files).select { |f| f && File.exist?(f) }
       return nil if files.empty?
@@ -83,17 +91,7 @@ module Downloaders
           cmd << "--download-sections #{Sh.escape("*#{from}-#{to}")}"
         end
 
-        # Format selection
-        is_audio = opts.onlysrt || opts.audio
-        bandcamp = url.include?('bandcamp.com')
-        al = opts.alang
-        if is_audio
-          audiof = bandcamp ? 'mp3-320' : (al ? "bestaudio[language^=#{al}]/bestaudio/best" : 'bestaudio/best')
-          cmd << "-f #{Sh.escape(audiof)}"
-        else
-          fmt = al ? "bestvideo+bestaudio[language^=#{al}]/bestvideo+bestaudio/best" : 'bestvideo+bestaudio/best'
-          cmd << "-f #{Sh.escape(fmt)}"
-        end
+        cmd << "-f #{Sh.escape(format_selector)}"
 
         # Playlist/Limit logic
         ml = opts.audio ? nil : 10
