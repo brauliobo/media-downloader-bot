@@ -138,9 +138,10 @@ class Zipper
     @probe   = probe ||= Prober.for infile
     @stl     = stl
 
-    @iopts = ''; @oopts = ''; @dopts = opts.format.opts
+    @iopts = ''; @oopts = ''; @dopts = opts.format.opts.dup
     @opts = opts
     @opts.custom_width = true if opts.width
+    @dopts.width = Formats.default_width(Zipper.size_mb_limit) if @dopts.width && !@opts.custom_width
     @opts.reverse_merge! dopts
 
     @fgraph = []
