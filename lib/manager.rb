@@ -78,7 +78,6 @@ EOS
   attr_reader :queue
 
   def initialize
-    @user_queue = Bot::UserQueue.new
     @queue = Queue.new
   end
 

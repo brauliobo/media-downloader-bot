@@ -25,7 +25,6 @@ module Bot
     def self.start &block
       ENV['CUDA'] = '1'
       Zipper.size_mb_limit = 2_000
-      UserQueue.queue_size = 3
 
       bot = self.new
       Thread.new{ td.connect }
