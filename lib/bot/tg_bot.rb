@@ -22,7 +22,6 @@ module Bot
     delegate_missing_to :tg
 
     def self.start &block
-      Bot::UserQueue.queue_size = 1
       Zipper.size_mb_limit = 50
       bot = new
       Thread.new do

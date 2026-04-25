@@ -21,6 +21,7 @@ require_relative 'processors/shorts'
 require_relative 'processors/local_file'
 
 require_relative 'bot/status'
+require_relative 'bot/user_queue'
 require_relative 'bot/worker/client'
 
 require_relative 'audiobook'
@@ -77,13 +78,27 @@ class Worker
     end
   end
 
-  def wait_in_queue(status_text)
-    init_status
-    @queue_line = @st.add(status_text) { |line| line.keep }
+  def process
+    user_id = msg.from.id
+    admin   = Bot::MsgHelpers.from_admin?(msg)
+    queue   = Bot::UserQueue.instance
+    return run if admin
+
+    if queue.queued?(user_id)
+      init_status
+      queue_line = @st.add(Bot::UserQueue::QUEUED_MSG) { |line| line.keep }
+      queue.acquire(user_id)
+      @st.delete(queue_line); @st.update
+    else
+      queue.acquire(user_id)
+    end
+
+    run
+  ensure
+    queue&.release(user_id) if user_id && !admin
   end
 
-  def process
-    @queue_line&.tap { |line| @st&.delete(line); @queue_line = nil }
+  def run
     workdir do |work_dir|
       @dir = work_dir
       procs  = []
