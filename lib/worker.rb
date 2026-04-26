@@ -72,10 +72,9 @@ class Worker
 
   def cleanup_workdir(dir)
     return unless dir && Dir.exist?(dir)
-    Thread.new do
-      sleep 30  # TDLib needs time to release file handles
-      FileUtils.remove_entry dir if Dir.exist?(dir)
-    end
+    # Detached subprocess survives parent fork exit; delay lets uploaders release file handles
+    pid = Process.spawn('sh', '-c', "sleep 30 && rm -rf #{dir.shellescape}")
+    Process.detach pid
   end
 
   def process
