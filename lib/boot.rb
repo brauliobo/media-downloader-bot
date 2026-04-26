@@ -9,6 +9,7 @@ Dir.chdir File.dirname(__FILE__) + '/..' do
 end
 
 require 'active_support/all'
+ActiveSupport.to_time_preserves_timezone = :zone
 require 'json'
 require 'faraday'
 require 'faraday/multipart'
