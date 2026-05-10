@@ -108,7 +108,7 @@ EOS
     msg.bot.send_message msg, Bot::MsgHelpers.mnfe(START_MSG)
   end
 
-  BLOCKED_USERS = ENV['BLOCKED_USERS'].split.map(&:to_i)
+  BLOCKED_USERS = ENV['BLOCKED_USERS'].to_s.split(/[\s,]+/).reject(&:empty?).map(&:to_i)
 
   def react msg
     msg.bot = bot
