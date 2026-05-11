@@ -127,7 +127,7 @@ class Worker
       inputs.each.with_index.api_peach do |i, pos|
         @st.add 'downloading', prefix: i.info.title do |stline|
           i.p = p = i.processor
-          p.stl = stline
+          i.stl = p.stl = stline
 
           p.download_one i, pos: pos+1 if p.respond_to? :download_one
           next if stline.error?
@@ -146,11 +146,11 @@ class Worker
           stline.error "Processing error", exception: e
           report_error(msg, e)
         ensure
-          p.cleanup
           up_queue.delete pos
         end
       end
 
+      inputs.map(&:processor).uniq.each(&:cleanup)
       return if inputs.blank? or @st.keep?
     end
     msg.resp
