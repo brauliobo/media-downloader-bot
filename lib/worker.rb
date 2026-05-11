@@ -21,7 +21,6 @@ require_relative 'processors/shorts'
 require_relative 'processors/local_file'
 
 require_relative 'bot/status'
-require_relative 'bot/user_queue'
 require_relative 'bot/worker/client'
 
 require_relative 'audiobook'
@@ -78,23 +77,7 @@ class Worker
   end
 
   def process
-    user_id = msg.from.id
-    admin   = Bot::MsgHelpers.from_admin?(msg)
-    queue   = Bot::UserQueue.instance
-    return run if admin
-
-    if queue.queued?(user_id)
-      init_status
-      queue_line = @st.add(Bot::UserQueue::QUEUED_MSG) { |line| line.keep }
-      queue.acquire(user_id)
-      @st.delete(queue_line); @st.update
-    else
-      queue.acquire(user_id)
-    end
-
     run
-  ensure
-    queue&.release(user_id) if user_id && !admin
   end
 
   def run

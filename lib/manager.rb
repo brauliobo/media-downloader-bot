@@ -41,16 +41,6 @@ https://web.facebook.com/groups/590968084832296/posts/920964005166034 audio
 https://soundcloud.com/br-ulio-bhavamitra/sets/didi-gunamrta caption number
 EOS
 
-  def self.fork name
-    pid = Kernel.fork do
-      DB.disconnect if defined? DB
-      Process.setproctitle name.to_s
-      yield
-    end
-    Process.detach pid
-    pid
-  end
-
   # Simple retry helper with Telegram-aware sleep.
   # Yields the current attempt index (0 for first call) to the block.
   # Customization via kwargs: :tries, :base_interval, :multiplier, :on, :max_interval,

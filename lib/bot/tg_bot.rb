@@ -30,8 +30,18 @@ module Bot
           bot.tg = tg_bot.api
           tg_bot.listen do |msg|
             next unless msg.is_a? Telegram::Bot::Types::Message
-            Manager.fork msg.text do
-              block.call SymMash.new msg.to_h
+            Thread.new do
+              sym_msg = SymMash.new msg.to_h
+              Bot::UserQueue.instance.with_user_slot(bot, sym_msg) do
+                pid = Kernel.fork do
+                  DB.disconnect if defined? DB
+                  Process.setproctitle sym_msg.text.to_s
+                  block.call sym_msg
+                end
+                Process.waitpid pid
+              end
+            rescue => e
+              STDERR.puts "tg dispatch error: #{e.full_message}"
             end
           end
         end
