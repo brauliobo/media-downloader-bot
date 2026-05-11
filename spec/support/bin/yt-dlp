@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""Stub yt-dlp used by integration specs.
+
+Reads ENV YTDLP_STUB_PLAN (JSON) to decide what to do:
+  --write-info-json + --skip-download -> emit info-NN.info.json files
+  -o input-N.<ext>s                   -> copy plan["items"][N]["fixture"] to dest, or exit non-zero
+"""
+import json, os, re, shutil, sys
+
+argv = sys.argv[1:]
+plan = json.loads(os.environ.get("YTDLP_STUB_PLAN", "{}"))
+
+def arg_after(flag):
+    return argv[argv.index(flag) + 1] if flag in argv else None
+
+out_dir = arg_after("--paths") or os.getcwd()
+os.makedirs(out_dir, exist_ok=True)
+tpl = arg_after("-o") or "output.%(ext)s"
+
+is_meta = "--write-info-json" in argv and "--skip-download" in argv
+
+if is_meta:
+    for i, item in enumerate(plan.get("playlist", [])):
+        idx = i + 1
+        info = {
+            "display_id":    item.get("display_id", f"id{idx}"),
+            "title":         item.get("title", f"Item {idx}"),
+            "webpage_url":   item.get("webpage_url", f"https://example.com/v{idx}"),
+            "_filename":     os.path.basename(item["fixture"]) if item.get("fixture") else f"item-{idx}.mp4",
+            "duration":      item.get("duration", 1),
+            "extractor_key": "Generic",
+        }
+        path = os.path.join(out_dir, f"info-{str(idx).rjust(2, '0')}.info.json")
+        with open(path, "w") as f:
+            json.dump(info, f)
+    sys.exit(0)
+
+m   = re.search(r"input-(\d+)\.", tpl)
+pos = int(m.group(1)) if m else 1
+result = plan.get("items", {}).get(str(pos), {})
+status = int(result.get("status", 0))
+
+if status != 0:
+    print(result.get("stderr", f"stub error for item {pos}"), file=sys.stderr)
+    sys.exit(status)
+
+src = result.get("fixture")
+if not src or not os.path.exists(src):
+    print(f"stub: missing fixture for item {pos}", file=sys.stderr)
+    sys.exit(1)
+
+ext  = os.path.splitext(src)[1].lstrip(".")
+dest = os.path.join(out_dir, tpl.replace("%(ext)s", ext))
+shutil.copy(src, dest)
+sys.exit(0)
