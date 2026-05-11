@@ -29,7 +29,11 @@ module Bot
       bot = self.new
       Thread.new{ td.connect }
       bot.listen do |msg|
-        Thread.new{ block.call msg }
+        Thread.new do
+          Bot::UserQueue.instance.with_user_slot(bot, msg) { block.call msg }
+        rescue => e
+          STDERR.puts "td dispatch error: #{e.full_message}"
+        end
       end
       bot
     end
