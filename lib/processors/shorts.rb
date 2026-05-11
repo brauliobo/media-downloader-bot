@@ -85,10 +85,7 @@ module Processors
       locopts.format = chosen || Zipper::Types.video.h264
 
       o, e, st = Zipper.zip_video(::File.expand_path(i.fn_in), ::File.expand_path(fn_out), opts: locopts, probe: i.probe, stl: @stl, info: i.info)
-      if st != 0
-        @stl&.error("convert failed: #{o}\n#{e}")
-        return nil
-      end
+      return STDERR.puts "[SHORTS] cut #{idx + 1} convert failed: #{e}" if st != 0
 
       SymMash.new(path: fn_out, fn_out: fn_out, caption: c[:title].to_s.strip.presence || i.info.title,
                   info: i.info, type: SymMash.new(name: :video), opts: locopts, mime: 'video/mp4')
