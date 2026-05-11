@@ -23,16 +23,18 @@ module Downloaders
     end
 
     def download_one(i, pos: 1)
-      fn = "input-#{pos}"
-      cmd = "#{base_cmd} -o #{Sh.escape("#{fn}.%(ext)s")} #{Sh.escape(i.url)}"
+      fn  = "input-#{pos}"
+      url = i.info&.webpage_url.presence || i.url
+      url = "https://#{url}" unless url =~ /\Ahttps?:\/\//i
+      cmd = "#{base_cmd} -o #{Sh.escape("#{fn}.%(ext)s")} #{Sh.escape(url)}"
       _, e, s = Sh.run cmd, chdir: dir
-      return st.error("download error #{e}") unless s == 0
+      raise "download error: #{e}" unless s == 0
 
       files = Dir["#{tmp}/#{fn}.*"].reject { |f| f.end_with?('.part') }.sort
       want_video = !(opts.onlysrt || opts.audio)
       i.fn_in = pick_downloaded_file(files, want_video: want_video)
-      
-      return st.error(want_video ? "can't find video stream" : "can't find file") unless i.fn_in && File.exist?(i.fn_in)
+
+      raise(want_video ? "can't find video stream" : "can't find file") unless i.fn_in && File.exist?(i.fn_in)
 
       # --download-sections already cut the file; timestamps start at 0.
       # Clear ss/to so the zipper doesn't double-cut or miscalculate duration.
@@ -52,17 +54,12 @@ module Downloaders
     end
 
     def pick_downloaded_file(files, want_video:)
-      files = Array(files).select { |f| f && File.exist?(f) }
-      return nil if files.empty?
-      return files.first unless want_video
-
-      files.each do |f|
+      files   = Array(files).select { |f| f && File.exist?(f) }
+      desired = want_video ? 'video' : 'audio'
+      files.find do |f|
         probe = Prober.for(f) rescue nil
-        next unless probe&.streams
-        return f if probe.streams.any? { |s| s.codec_type == 'video' }
+        probe&.streams&.any? { |s| s.codec_type == desired }
       end
-
-      nil
     end
 
     def base_cmd
@@ -144,7 +141,7 @@ module Downloaders
       err = check_duration!(info)
       return err if err 
 
-      SymMash.new(url: short_url, opts: opts, info: info)
+      SymMash.new(url: short_url, opts: opts.deep_dup, info: info)
     end
 
     def format_title(info, i, mult)
