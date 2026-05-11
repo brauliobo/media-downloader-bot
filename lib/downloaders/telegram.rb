@@ -11,7 +11,7 @@ module Downloaders
     def download
       rx = %r{https?://t\.me/(?:(?<slug>[A-Za-z0-9_]+)/(?<msg>\d+)|c/(?<cid>-?\d+)/(?<msg2>\d+))}
       m  = url.to_s.match(rx)
-      return st.error('Invalid t.me link') unless m
+      raise 'Invalid t.me link' unless m
 
       td = msg.bot.td
 
@@ -32,7 +32,7 @@ module Downloaders
       when TD::Types::MessageContent::Video
         [msg_data.content.video.video.id, msg_data.content.video.file_name]
       else
-        return st.error('Unsupported t.me message type')
+        raise 'Unsupported t.me message type'
       end
 
       td.download_file(file_id: file_id, priority: 1, synchronous: true)
