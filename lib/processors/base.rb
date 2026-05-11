@@ -1,5 +1,5 @@
 require_relative '../utils/duration'
-require 'rack/mime'
+require_relative '../utils/mime_types'
 require 'active_support/core_ext/module/delegation'
 require_relative '../output'
 require_relative '../utils/input_parser'
@@ -7,13 +7,6 @@ require_relative '../context'
 
 module Processors
   class Base
-    # missing mimes
-    Rack::Mime::MIME_TYPES['.opus'] = 'audio/ogg'
-    Rack::Mime::MIME_TYPES['.flac'] = 'audio/x-flac'
-    Rack::Mime::MIME_TYPES['.caf']  = 'audio/x-caf'
-    Rack::Mime::MIME_TYPES['.aac']  = 'audio/x-aac'
-    Rack::Mime::MIME_TYPES['.mkv']  = 'video/x-matroska'
-
     BLOCKED_DOMAINS = (ENV['BLOCKED_DOMAINS'] || '').split.map{ |u| URI.parse u }
 
     attr_reader :ctx
