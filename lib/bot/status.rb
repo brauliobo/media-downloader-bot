@@ -33,7 +33,8 @@ module Bot
 
       def error text, exception: nil
         @error = true
-        text = "#{text}: #{exception.class}: #{exception.message}\n#{exception.backtrace.first(15).join("\n")}" if exception
+        text = "#{text}: #{exception.class}: #{exception.message}" if exception
+        STDERR.puts "#{text}\n#{exception.backtrace.first(15).join("\n")}" if exception
         keep.update text
       end
     end
