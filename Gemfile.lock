@@ -96,7 +96,7 @@ GEM
     io-like (0.4.0)
     iso-639 (0.3.8)
       csv
-    json (2.18.1)
+    json (2.19.2)
     logger (1.7.0)
     mechanize (2.14.0)
       addressable (~> 2.8)
