@@ -15,6 +15,9 @@ vendor
 input
 converted
 
+# whisper models
+models
+
 /*epub
 /*pdf
 /*yml
