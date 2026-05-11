@@ -8,7 +8,7 @@ Wants=network-online.target
 #Requires=vpnspace-openvpn.service
 
 [Service]
-CPUQuota=900%
+CPUQuota=500%
 LimitNOFILE=1001001
 #DynamicUser=yes
 User=mdb
