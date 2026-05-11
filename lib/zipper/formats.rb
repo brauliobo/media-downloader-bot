@@ -135,10 +135,11 @@ class Zipper
       fmt = fmt.to_sym if fmt.is_a?(String)
       fmt = nil unless fmt.is_a?(Symbol)
 
+      kind = (type_hash[:name] || type_hash['name']).to_s
+
       # Accept common container/alias names and map them to internal codec keys.
       # Users often pass extensions (mp4/m4a) rather than codec identifiers.
       if fmt
-        kind = (type_hash[:name] || type_hash['name']).to_s
         if kind == 'video'
           fmt = :h264 if fmt.in?(%i[mp4 x264 h.264])
           fmt = :h265 if fmt.in?(%i[hevc x265 h.265])
@@ -151,13 +152,14 @@ class Zipper
 
       defk  = type_hash[:default]  || type_hash['default']
       ldefk = type_hash[:ldefault] || type_hash['ldefault']
-      fmt ||= (durat && durat >= 10.minutes) ? ldefk : defk
+      use_long_default = kind == 'video' && durat && durat >= 10.minutes && ldefk
+      fmt ||= use_long_default ? ldefk : defk
       fmt   = :aac if Zipper.size_mb_limit && fmt == :opus && durat && durat <= 122
       chosen = type_hash[fmt] || type_hash[fmt.to_s]
       return chosen if chosen
 
       # Unknown user-provided fmt: fall back to defaults instead of returning nil.
-      fmt = (durat && durat >= 10.minutes) ? ldefk : defk
+      fmt = use_long_default ? ldefk : defk
       type_hash[fmt] || type_hash[fmt.to_s]
     end
 
