@@ -155,7 +155,7 @@ class Zipper
     opts.abrate  = opts.abrate&.to_i
     # Use the instance variable to avoid referencing the (possibly nil) local parameter.
     @duration    = probe.format.duration.to_f / opts.speed
-    opts.cuda    = if opts.nocuda then false elsif opts.cuda then true else !!ENV['CUDA'] end
+    opts.cuda    = Formats.cuda?(opts)
 
     case opts.format
     when Types.video.h264 then opts.quality = if opts.cuda then 33 else 25 end
