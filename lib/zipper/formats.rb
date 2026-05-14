@@ -117,6 +117,11 @@ class Zipper
 
     module_function
 
+    def cuda?(opts = nil)
+      return false if opts&.nocuda
+      !!(opts&.cuda || ENV['CUDA'])
+    end
+
     def default_width(size_mb_limit)
       return 1920 if size_mb_limit.nil? || size_mb_limit > 500
       return 1080 if size_mb_limit > 50
@@ -152,7 +157,7 @@ class Zipper
 
       defk  = type_hash[:default]  || type_hash['default']
       ldefk = type_hash[:ldefault] || type_hash['ldefault']
-      use_long_default = kind == 'video' && durat && durat >= 10.minutes && ldefk
+      use_long_default = kind == 'video' && durat && durat >= 10.minutes && ldefk && cuda?(opts)
       fmt ||= use_long_default ? ldefk : defk
       fmt   = :aac if Zipper.size_mb_limit && fmt == :opus && durat && durat <= 122
       chosen = type_hash[fmt] || type_hash[fmt.to_s]

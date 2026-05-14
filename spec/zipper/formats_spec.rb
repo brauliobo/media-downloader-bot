@@ -2,10 +2,16 @@ require 'spec_helper'
 
 RSpec.describe Zipper::Formats do
   describe '.choose_format' do
-    it 'uses the long default for long videos' do
-      chosen = described_class.choose_format(Zipper::Types.video, SymMash.new, 700)
+    it 'uses the long default for long videos under CUDA' do
+      chosen = described_class.choose_format(Zipper::Types.video, SymMash.new(cuda: true), 700)
 
       expect(chosen).to eq(Zipper::Types.video.h265)
+    end
+
+    it 'falls back to the short default for long videos without CUDA' do
+      chosen = described_class.choose_format(Zipper::Types.video, SymMash.new, 700)
+
+      expect(chosen).to eq(Zipper::Types.video.h264)
     end
 
     it 'uses the short default for short videos' do
