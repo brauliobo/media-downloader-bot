@@ -26,7 +26,7 @@ module Processors
       cuts = begin
         ::Shorts.generate_cuts_from_srt(srt, language: lang)
       rescue => e
-        @stl&.update "claude failed: #{e.message}"; []
+        @stl&.update "codex failed: #{e.message}"; []
       end
 
       if cuts.blank?
