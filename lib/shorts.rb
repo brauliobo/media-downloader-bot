@@ -1,5 +1,5 @@
 require 'json'
-require_relative 'ai/claude_code'
+require_relative 'ai/codex'
 
 module Shorts
   module_function
@@ -19,7 +19,7 @@ module Shorts
       #{srt}
     PROMPT
 
-    arr = AI::ClaudeCode.json_prompt(prompt)
+    arr = AI::Codex.json_prompt(prompt)
     arr = [arr] if arr.is_a?(Hash)
     arr = [] unless arr.is_a?(Array)
     arr.filter_map do |h|
@@ -51,7 +51,7 @@ module Shorts
       #{snippet}
     PROMPT
 
-    data = AI::ClaudeCode.json_prompt(prompt)
+    data = AI::Codex.json_prompt(prompt)
     normalize_title(data.is_a?(Hash) ? data['title'] : Array(data).first)
   end
 
