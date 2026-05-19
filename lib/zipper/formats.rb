@@ -122,8 +122,17 @@ class Zipper
     module_function
 
     def cuda?(opts = nil)
+      cuda_encode?(opts) || cuda_decode?(opts)
+    end
+
+    def cuda_encode?(opts = nil)
       return false if opts&.nocuda
-      !!(opts&.cuda || ENV['CUDA'])
+      !!(opts&.cuda || opts&.cudaenc || ENV['CUDA'] || ENV['CUDAENC'])
+    end
+
+    def cuda_decode?(opts = nil)
+      return false if opts&.nocuda
+      !!(opts&.cuda || opts&.cudadec || ENV['CUDA'] || ENV['CUDADEC'])
     end
 
     def default_width(size_mb_limit)

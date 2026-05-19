@@ -64,7 +64,7 @@ RSpec.describe Processors::Folder do
         )
 
         expect { processor.run }.to output(
-          include('cuda format=h264 quality=32 acodec=aac abrate=32 vf=mpdecimate=hi=1024:lo=512:frac=0.40 preserve_resolution delete_originals'),
+          include('cudaenc format=h264 quality=32 acodec=aac abrate=32 vf=mpdecimate=hi=1024:lo=512:frac=0.40 preserve_resolution delete_originals'),
         ).to_stdout
       end
     end
