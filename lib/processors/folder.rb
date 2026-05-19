@@ -30,7 +30,7 @@ module Processors
       end
 
       Worker.skip_cleanup = true
-      entries.each { |entry| process_entry(entry) }
+      entries.peach(threads: jobs) { |entry| process_entry(entry) }
     end
 
     private
@@ -106,6 +106,10 @@ module Processors
 
     def delete_originals?
       opts.delete_originals || opts.delete_original || opts.rm_originals || opts.rm_original
+    end
+
+    def jobs
+      [opts.jobs.to_i, 1].max
     end
 
     def delete_original(entry, started_at)
