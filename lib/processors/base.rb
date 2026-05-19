@@ -40,6 +40,7 @@ module Processors
 
       @ctx.opts = SymMash.new(parsed.opts.merge(session: @ctx.session))
       self.class.expand_lang_opt @ctx.opts
+      self.class.apply_process_opts @ctx.opts
       @args = [] # Deprecated but kept for safety if child classes use it
     end
 
@@ -93,6 +94,7 @@ module Processors
       end
 
       expand_lang_opt opts if key == 'lang'
+      apply_process_opts opts if key == 'nice'
       opts
     end
 
@@ -100,6 +102,14 @@ module Processors
       return unless (lang = opts.delete(:lang))
       opts.slang ||= lang
       opts.alang ||= lang
+    end
+
+    def self.apply_process_opts(opts)
+      apply_nice opts[:nice] if opts&.key?(:nice)
+    end
+
+    def self.apply_nice(value)
+      Process.setpriority(Process::PRIO_PROCESS, 0, [[value.to_i, 19].min, -20].max)
     end
 
     protected
