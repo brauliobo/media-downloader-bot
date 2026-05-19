@@ -158,8 +158,8 @@ class Zipper
     opts.cuda    = Formats.cuda?(opts)
 
     case opts.format
-    when Types.video.h264 then opts.quality = if opts.cuda then 33 else 25 end
-    when Types.video.h265 then opts.quality = if opts.cuda then 33 else 25 end
+    when Types.video.h264 then opts.quality ||= if opts.cuda then 33 else 25 end
+    when Types.video.h265 then opts.quality ||= if opts.cuda then 33 else 25 end
     else opts.quality ||= opts.format.opts.quality
     end
   end
@@ -224,8 +224,12 @@ class Zipper
     maps_str     = maps.map { |m| "-map #{m}" }.join(' ')
 
     # Video encoder specific flags defined by format spec.
-    preset        = opts.cuda ? 'medium' : 'fast'
     spec         = opts.format
+    preset       = if opts.cuda
+      spec.preset_cuda || 'medium'
+    else
+      spec.preset_cpu || 'fast'
+    end
 
     vcodec       = opts.cuda ? (spec.codec_cuda || spec.codec_cpu) : spec.codec_cpu
     qflag        = opts.cuda ? (spec.qflag_cuda || spec.qflag_cpu) : spec.qflag_cpu

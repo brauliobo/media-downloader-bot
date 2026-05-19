@@ -53,5 +53,15 @@ RSpec.describe Zipper::Formats do
         Zipper.size_mb_limit = nil
       end
     end
+
+    it 'uses NVENC constant-quality flags for CUDA h264' do
+      expect(Zipper::Types.video.h264.qflag_cuda).to eq('-cq')
+      expect(Zipper::Types.video.h264.szopts_cuda).to include('-rc:v vbr')
+    end
+
+    it 'uses a higher-quality NVENC preset for CUDA h265' do
+      expect(Zipper::Types.video.h265.preset_cuda).to eq('p5')
+      expect(Zipper::Types.video.h265.extra_cuda).to include('-spatial_aq 1')
+    end
   end
 end

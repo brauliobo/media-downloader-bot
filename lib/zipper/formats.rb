@@ -47,11 +47,13 @@ class Zipper
           mime:   'video/mp4',
           opts:   {width: VID_WIDTH, quality: 25, abrate: 64, acodec: :aac, percent: VID_PERCENT},
           szopts_cpu:  '-maxrate:v %{maxrate} -bufsize %{bufsize}',
-          szopts_cuda: '',
+          szopts_cuda: '-rc:v vbr',
           codec_cpu:  'libx264',
           codec_cuda: 'h264_nvenc',
           qflag_cpu:  '-crf',
-          qflag_cuda: '-crf',
+          qflag_cuda: '-cq',
+          preset_cuda: 'p4',
+          extra_cuda: '-tune hq -spatial_aq 1 -temporal_aq 1 -b:v 0',
         },
 
         h265: {
@@ -64,6 +66,8 @@ class Zipper
           codec_cuda: 'hevc_nvenc',
           qflag_cpu:  '-crf',
           qflag_cuda: '-cq',
+          preset_cuda: 'p5',
+          extra_cuda: '-tune hq -multipass qres -spatial_aq 1 -temporal_aq 1 -rc-lookahead 32 -b:v 0',
         },
 
         av1: {
