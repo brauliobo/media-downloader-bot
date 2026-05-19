@@ -63,7 +63,58 @@ RSpec.describe Processors::Folder do
           bot: Bot::Mock.new,
         )
 
-        expect { processor.run }.to output(include('cuda format=h265 quality=32 acodec=aac abrate=32')).to_stdout
+        expect { processor.run }.to output(
+          include('cuda format=h264 quality=32 acodec=aac abrate=32 vf=mpdecimate=hi=1024:lo=512:frac=0.40 delete_originals'),
+        ).to_stdout
+      end
+    end
+
+    it 'does not delete the source when only another converted file was created' do
+      Dir.mktmpdir do |dir|
+        folder = File.join(dir, 'Camera')
+        converted = File.join(folder, 'converted')
+        FileUtils.mkdir_p converted
+        source = File.join(folder, 'clip.mp4')
+        other = File.join(converted, 'other.mp4')
+        File.write(source, '')
+
+        processor = described_class.new(
+          paths: [folder],
+          opts: SymMash.new(delete_originals: 1, metadata: {}),
+          option_args: %w[delete_originals],
+          bot: Bot::Mock.new,
+        )
+
+        allow_any_instance_of(Worker).to receive(:process) { File.write(other, 'converted') }
+        allow(Prober).to receive(:for).with(other).and_return(SymMash.new(format: SymMash.new(duration: 1)))
+
+        processor.run
+
+        expect(File.exist?(source)).to be true
+      end
+    end
+
+    it 'reports when original deletion fails' do
+      Dir.mktmpdir do |dir|
+        folder = File.join(dir, 'Camera')
+        converted = File.join(folder, 'converted')
+        FileUtils.mkdir_p converted
+        source = File.join(folder, 'clip.mp4')
+        output = File.join(converted, 'clip.mp4')
+        File.write(source, '')
+
+        processor = described_class.new(
+          paths: [folder],
+          opts: SymMash.new(delete_originals: 1, metadata: {}),
+          option_args: %w[delete_originals],
+          bot: Bot::Mock.new,
+        )
+
+        allow_any_instance_of(Worker).to receive(:process) { File.write(output, 'converted') }
+        allow(Prober).to receive(:for).with(output).and_return(SymMash.new(format: SymMash.new(duration: 1)))
+        allow(FileUtils).to receive(:rm).with(source).and_raise(Errno::EACCES, source)
+
+        expect { processor.run }.to output(include('delete original failed:')).to_stdout
       end
     end
   end

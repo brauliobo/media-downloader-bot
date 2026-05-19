@@ -109,17 +109,17 @@ module Processors
     end
 
     def delete_original(entry, started_at)
-      output = converted_outputs(entry.out_dir, started_at).max_by { |path| ::File.mtime(path) }
-      return unless output && valid_media_file?(output)
+      output = ::File.join(entry.out_dir, ::File.basename(entry.path))
+      return unless converted_after?(output, started_at) && valid_media_file?(output)
 
-      FileUtils.rm_f(entry.path)
+      FileUtils.rm(entry.path)
       puts "deleted original: #{entry.path}"
+    rescue Errno::EACCES => e
+      puts "delete original failed: #{entry.path}: #{e.message}"
     end
 
-    def converted_outputs(out_dir, started_at)
-      Dir.glob(::File.join(out_dir, '*')).select do |path|
-        ::File.file?(path) && ::File.mtime(path) >= started_at && ::File.size?(path)
-      end
+    def converted_after?(path, started_at)
+      ::File.file?(path) && ::File.mtime(path) >= started_at && ::File.size?(path)
     end
 
     def valid_media_file?(path)

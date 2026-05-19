@@ -7,10 +7,12 @@ RSpec.describe Presets::Camera do
     described_class.apply(opts)
 
     expect(opts.cuda).to eq(1)
-    expect(opts.format).to eq('h265')
+    expect(opts.format).to eq('h264')
     expect(opts.quality).to eq(24)
     expect(opts.acodec).to eq('aac')
     expect(opts.abrate).to eq('32')
+    expect(opts.vf).to eq('mpdecimate=hi=1024:lo=512:frac=0.40')
+    expect(opts.delete_originals).to eq(1)
   end
 
   it 'records generated option args for CLI delegation' do
@@ -19,6 +21,14 @@ RSpec.describe Presets::Camera do
 
     described_class.apply(opts, option_args: option_args)
 
-    expect(option_args).to include('cuda', 'format=h265', 'quality=32', 'acodec=aac', 'abrate=32')
+    expect(option_args).to include(
+      'cuda',
+      'format=h264',
+      'quality=32',
+      'acodec=aac',
+      'abrate=32',
+      'vf=mpdecimate=hi=1024:lo=512:frac=0.40',
+      'delete_originals',
+    )
   end
 end
