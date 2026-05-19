@@ -11,10 +11,12 @@ class Output
   def self.filename(info, dir:, ext:, pos: nil)
     base = info.title.to_s.dup
     base = format('%d %s', pos, base) if pos
-    base << " by #{info.uploader.strip}" if info.respond_to?(:uploader) && info.uploader.present?
+    base << " by #{info.uploader.strip}" if info.uploader.present?
     base = base.first(MAX_LEN)
     base.gsub!("\"", '')   # Telegram rejects quotes
     base.gsub!('/', ', ')      # Avoid path separators
-    File.join(dir, "#{base}.#{ext}")
+    suffix = ".#{ext}"
+    filename = base.downcase.end_with?(suffix.downcase) ? base : "#{base}#{suffix}"
+    File.join(dir, filename)
   end
 end

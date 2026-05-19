@@ -100,5 +100,20 @@ RSpec.describe Processors::Media do
       expect(stl.to_s).to include('convert failed')
       expect(stl.to_s).to include('last-err-line')
     end
+
+    it 'applies camera defaults before choosing the video format' do
+      i.opts = SymMash.new(camera: 1)
+      allow(Zipper).to receive(:choose_format).and_return(SymMash.new(ext: :mp4, mime: 'video/mp4'))
+      allow(Zipper).to receive(:zip_video).and_return(['', '', instance_double(Process::Status, success?: true)])
+      allow(Output).to receive(:filename).and_return(File.join(dir, 'out.mp4'))
+
+      processor.convert(i)
+
+      expect(i.opts.cuda).to eq(1)
+      expect(i.opts.format.mime).to eq('video/mp4')
+      expect(i.opts.quality).to eq('32')
+      expect(i.opts.acodec).to eq('aac')
+      expect(i.opts.abrate).to eq('32')
+    end
   end
 end

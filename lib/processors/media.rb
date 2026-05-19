@@ -2,6 +2,7 @@ require_relative 'file'
 require_relative '../utils/thumb'
 require_relative '../utils/mime_types'
 require_relative '../zipper'
+require_relative '../presets/camera'
 require 'timeout'
 
 module Processors
@@ -104,6 +105,8 @@ module Processors
       durat   /= speed if speed
       durat   -= Utils::Duration.new(i.opts.ss).to_i if i.opts.ss
 
+      Presets::Camera.apply(i.opts) if video_input?(i) && i.opts.camera
+
       chosen   = Zipper.choose_format i.type, i.opts, durat
       return i.stl.error 'Unsupported format' unless chosen
 
@@ -128,6 +131,9 @@ module Processors
       fn_out
     end
 
+    def video_input?(i)
+      i.type == Types.video || i.type&.name&.to_sym == :video
+    end
+
   end
 end
-

@@ -1,3 +1,5 @@
 require_relative '../lib/manager'
 require_relative '../lib/worker'
 require_relative '../lib/audiobook'
+require_relative '../lib/presets/camera'
+require_relative '../lib/processors/folder'

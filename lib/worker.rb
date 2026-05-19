@@ -108,15 +108,16 @@ class Worker
       up_queue = inputs.size.times.to_a
 
       inputs.each.with_index.api_peach do |i, pos|
+        output_pos = inputs.size > 1 ? pos + 1 : nil
         @st.add 'downloading', prefix: i.info.title do |stline|
           i.p = p = i.processor
           i.stl = p.stl = stline
 
-          p.download_one i, pos: pos+1 if p.respond_to? :download_one
+          p.download_one i, pos: output_pos if p.respond_to? :download_one
           next if stline.error?
 
           stline.update 'transcoding'
-          p.handle_input i, pos: pos+1
+          p.handle_input i, pos: output_pos
           next if stline.error?
 
           stline.update 'queued to upload' if ordered

@@ -11,6 +11,7 @@ ENV['PUPPETEER_HEADLESS'] ||= '0'
 Dir.chdir File.expand_path "#{File.realpath __dir__}/.." do
   require_relative '../lib/worker'
   require_relative '../lib/bot/base'
+  require_relative '../lib/processors/folder'
 end
 
 opts  = SymMash.new metadata: {}
@@ -28,19 +29,32 @@ Worker.service = bot
 
 converted_dir = File.join(Dir.pwd, 'converted')
 FileUtils.mkdir_p converted_dir
-Worker.workdir_path = converted_dir
 Worker.skip_cleanup = true
 
 raise "No files found" if ARGV.blank?
+
+if Processors::Folder.handles?(ARGV, opts)
+  Processors::Folder.new(
+    paths: ARGV,
+    opts: opts,
+    option_args: lopts,
+    bot: bot,
+  ).run
+  exit 0
+end
+
 path = if ARGV.size > 1 then ARGV else ARGV.first&.split "\n" end
-path.peach do |u|
+path.each do |u|
   fake_msg = Bot::MsgHelpers.fake_msg
   fake_msg.bot = bot
 
   # Handle local files
   if File.exist?(u)
+    Worker.workdir_path = File.join(File.dirname(File.expand_path(u)), 'converted')
+    FileUtils.mkdir_p Worker.workdir_path
     Processors::LocalFile.attach_to_message(fake_msg, u, opts: lopts)
   else
+    Worker.workdir_path = converted_dir
     # Handle URLs
     line = u =~ URI::regexp ? "#{u} #{lopts.join ' '}" : u
     fake_msg.text = line
@@ -49,4 +63,3 @@ path.peach do |u|
   worker = Worker.new fake_msg
   worker.process
 end
-
