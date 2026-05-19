@@ -1,7 +1,8 @@
 module Presets
   class Camera
     DEFAULTS = {
-      cuda: 1,
+      # mpdecimate is CPU-side; use NVENC but keep CPU decode to avoid GPU/CPU frame handoff stalls.
+      cudaenc: 1,
       format: 'h264',
       quality: 32,
       acodec: 'aac',

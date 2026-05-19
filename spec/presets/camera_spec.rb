@@ -6,7 +6,7 @@ RSpec.describe Presets::Camera do
 
     described_class.apply(opts)
 
-    expect(opts.cuda).to eq(1)
+    expect(opts.cudaenc).to eq(1)
     expect(opts.format).to eq('h264')
     expect(opts.quality).to eq(24)
     expect(opts.acodec).to eq('aac')
@@ -23,7 +23,7 @@ RSpec.describe Presets::Camera do
     described_class.apply(opts, option_args: option_args)
 
     expect(option_args).to include(
-      'cuda',
+      'cudaenc',
       'format=h264',
       'quality=32',
       'acodec=aac',

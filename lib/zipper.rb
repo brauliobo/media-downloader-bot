@@ -155,11 +155,13 @@ class Zipper
     opts.abrate  = opts.abrate&.to_i
     # Use the instance variable to avoid referencing the (possibly nil) local parameter.
     @duration    = probe.format.duration.to_f / opts.speed
-    opts.cuda    = Formats.cuda?(opts)
+    opts.cudaenc = Formats.cuda_encode?(opts)
+    opts.cudadec = Formats.cuda_decode?(opts)
+    opts.cuda    = opts.cudaenc || opts.cudadec
 
     case opts.format
-    when Types.video.h264 then opts.quality ||= if opts.cuda then 33 else 25 end
-    when Types.video.h265 then opts.quality ||= if opts.cuda then 33 else 25 end
+    when Types.video.h264 then opts.quality ||= if opts.cudaenc then 33 else 25 end
+    when Types.video.h265 then opts.quality ||= if opts.cudaenc then 33 else 25 end
     else opts.quality ||= opts.format.opts.quality
     end
   end
@@ -184,7 +186,7 @@ class Zipper
   def video_sz_template
     spec = opts.format
     if spec.respond_to?(:szopts_cpu) || spec.respond_to?(:szopts_cuda)
-      if opts.cuda then spec.szopts_cuda else spec.szopts_cpu end
+      if opts.cudaenc then spec.szopts_cuda else spec.szopts_cpu end
     else
       spec.szopts || ''
     end
@@ -200,7 +202,7 @@ class Zipper
     # add it early so it comes right after the scale* filter and before any
     # other dynamically-added filters, avoiding a dangling comma when no
     # other filters are present.
-    fgraph << 'format=yuv420p' if opts.cuda && !fgraph.include?('format=yuv420p')
+    fgraph << 'format=yuv420p' if opts.cudaenc && !fgraph.include?('format=yuv420p')
     check_width
     reduce_framerate
     limit_framerate
@@ -223,15 +225,15 @@ class Zipper
 
     # Video encoder specific flags defined by format spec.
     spec         = opts.format
-    preset       = if opts.cuda
+    preset       = if opts.cudaenc
       spec.preset_cuda || 'medium'
     else
       spec.preset_cpu || 'fast'
     end
 
-    vcodec       = opts.cuda ? (spec.codec_cuda || spec.codec_cpu) : spec.codec_cpu
-    qflag        = opts.cuda ? (spec.qflag_cuda || spec.qflag_cpu) : spec.qflag_cpu
-    extra        = opts.cuda ? (spec.extra_cuda || '')            : (spec.extra_cpu || '')
+    vcodec       = opts.cudaenc ? (spec.codec_cuda || spec.codec_cpu) : spec.codec_cpu
+    qflag        = opts.cudaenc ? (spec.qflag_cuda || spec.qflag_cpu) : spec.qflag_cpu
+    extra        = opts.cudaenc ? (spec.extra_cuda || '')            : (spec.extra_cpu || '')
 
     v_flags_parts = ["-c:v #{vcodec}"]
     v_flags_parts << "#{qflag} #{opts.quality}" if qflag.present? && opts.quality
@@ -262,12 +264,7 @@ class Zipper
   end
 
   def cuda_decode_opts
-    return '' unless opts.cuda
-    # mpdecimate is a CPU filter; CUDA decode forces GPU->CPU frame handoffs
-    # before NVENC and is much slower than CPU decode for the camera preset.
-    return '' if fgraph.any? { |filter| filter.to_s.include?('mpdecimate') }
-
-    '-hwaccel cuda'
+    opts.cudadec ? '-hwaccel cuda' : ''
   end
 
   def scale_filters

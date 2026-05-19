@@ -109,7 +109,7 @@ RSpec.describe Processors::Media do
 
       processor.convert(i)
 
-      expect(i.opts.cuda).to eq(1)
+      expect(i.opts.cudaenc).to eq(1)
       expect(i.opts.format.mime).to eq('video/mp4')
       expect(i.opts.quality).to eq('32')
       expect(i.opts.acodec).to eq('aac')
