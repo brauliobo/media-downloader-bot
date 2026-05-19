@@ -262,7 +262,12 @@ class Zipper
   end
 
   def cuda_decode_opts
-    opts.cuda ? '-hwaccel cuda' : ''
+    return '' unless opts.cuda
+    # mpdecimate is a CPU filter; CUDA decode forces GPU->CPU frame handoffs
+    # before NVENC and is much slower than CPU decode for the camera preset.
+    return '' if fgraph.any? { |filter| filter.to_s.include?('mpdecimate') }
+
+    '-hwaccel cuda'
   end
 
   def scale_filters

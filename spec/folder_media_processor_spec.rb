@@ -94,6 +94,28 @@ RSpec.describe Processors::Folder do
       end
     end
 
+    it 'uses jobs as folder processing concurrency' do
+      Dir.mktmpdir do |dir|
+        folder = File.join(dir, 'Camera')
+        FileUtils.mkdir_p folder
+        File.write(File.join(folder, 'a.mp4'), '')
+        File.write(File.join(folder, 'b.mp4'), '')
+
+        opts = SymMash.new(jobs: '2', metadata: {})
+        processor = described_class.new(
+          paths: [folder],
+          opts: opts,
+          option_args: %w[jobs=2],
+          bot: Bot::Mock.new,
+        )
+
+        allow_any_instance_of(Worker).to receive(:process)
+        expect_any_instance_of(Array).to receive(:peach).with(threads: 2).and_call_original
+
+        processor.run
+      end
+    end
+
     it 'reports when original deletion fails' do
       Dir.mktmpdir do |dir|
         folder = File.join(dir, 'Camera')
