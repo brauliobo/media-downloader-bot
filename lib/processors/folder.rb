@@ -112,10 +112,11 @@ module Processors
       output = ::File.join(entry.out_dir, ::File.basename(entry.path))
       return unless converted_after?(output, started_at) && valid_media_file?(output)
 
-      FileUtils.rm(entry.path)
-      puts "deleted original: #{entry.path}"
-    rescue Errno::EACCES => e
-      puts "delete original failed: #{entry.path}: #{e.message}"
+      if system('sudo', '-n', 'rm', '--', entry.path)
+        puts "deleted original: #{entry.path}"
+      else
+        puts "delete original failed: #{entry.path}"
+      end
     end
 
     def converted_after?(path, started_at)

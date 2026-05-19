@@ -112,7 +112,7 @@ RSpec.describe Processors::Folder do
 
         allow_any_instance_of(Worker).to receive(:process) { File.write(output, 'converted') }
         allow(Prober).to receive(:for).with(output).and_return(SymMash.new(format: SymMash.new(duration: 1)))
-        allow(FileUtils).to receive(:rm).with(source).and_raise(Errno::EACCES, source)
+        allow_any_instance_of(described_class).to receive(:system).with('sudo', '-n', 'rm', '--', source).and_return(false)
 
         expect { processor.run }.to output(include('delete original failed:')).to_stdout
       end
