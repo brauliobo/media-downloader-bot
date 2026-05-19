@@ -64,7 +64,7 @@ RSpec.describe Processors::Folder do
         )
 
         expect { processor.run }.to output(
-          include('cuda format=h264 quality=32 acodec=aac abrate=32 vf=mpdecimate=hi=1024:lo=512:frac=0.40 delete_originals'),
+          include('cuda format=h264 quality=32 acodec=aac abrate=32 vf=mpdecimate=hi=1024:lo=512:frac=0.40 preserve_resolution delete_originals'),
         ).to_stdout
       end
     end
@@ -110,7 +110,10 @@ RSpec.describe Processors::Folder do
           bot: Bot::Mock.new,
         )
 
-        allow_any_instance_of(Worker).to receive(:process) { File.write(output, 'converted') }
+        allow_any_instance_of(Worker).to receive(:process) do
+          File.write(output, 'converted')
+          FileUtils.touch(output, mtime: Time.now + 1)
+        end
         allow(Prober).to receive(:for).with(output).and_return(SymMash.new(format: SymMash.new(duration: 1)))
         allow_any_instance_of(described_class).to receive(:system).with('sudo', '-n', 'rm', '--', source).and_return(false)
 

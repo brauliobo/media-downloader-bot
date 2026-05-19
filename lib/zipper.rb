@@ -34,7 +34,7 @@ class Zipper
 
   # General templates with placeholder keys. Substitutions can be blank strings.
   VIDEO_CMD_TPL = (
-    "#{FFMPEG} -i %{infile} %{iopts} -filter_complex \"%{fgraph}\" " \
+    "#{FFMPEG} %{pre_iopts} -i %{infile} %{iopts} -filter_complex \"%{fgraph}\" " \
     "#{VFR_OPTS} %{maps} %{vflags} %{acodec} %{vpost} %{oopts} %{outfile}"
   ).freeze
 
@@ -218,9 +218,7 @@ class Zipper
     opts.abrate = (aenc.percent * opts.abrate).round if size_mb_limit
     acodec      = aenc.encode % {abrate: opts.abrate}
 
-    # Build filter graph with scaling first.
-    scale_expr   = (format_name == :vp9 ? VF_SCALE_M8 : VF_SCALE_M2) % {width: opts.width}
-    full_fgraph  = ([scale_expr] + fgraph).join(FG_SEP)
+    full_fgraph  = (scale_filters + fgraph).join(FG_SEP)
     maps_str     = maps.map { |m| "-map #{m}" }.join(' ')
 
     # Video encoder specific flags defined by format spec.
@@ -246,20 +244,40 @@ class Zipper
     video_post_opts = VIDEO_POST_OPTS % {metadata: metadata_args}
 
     cmd_params = {
-      infile:  Sh.escape(infile),
-      iopts:   iopts,
-      fgraph:  full_fgraph,
-      maps:    maps_str,
-      vflags:  v_flags,
-      acodec:  acodec,
-      vpost:   video_post_opts,
-      oopts:   oopts,
-      outfile: Sh.escape(outfile),
+      pre_iopts: cuda_decode_opts,
+      infile:    Sh.escape(infile),
+      iopts:     iopts,
+      fgraph:    full_fgraph,
+      maps:      maps_str,
+      vflags:    v_flags,
+      acodec:    acodec,
+      vpost:     video_post_opts,
+      oopts:     oopts,
+      outfile:   Sh.escape(outfile),
     }
 
     cmd = VIDEO_CMD_TPL % cmd_params
     cmd.squeeze!(" ")
     Sh.run cmd
+  end
+
+  def cuda_decode_opts
+    opts.cuda ? '-hwaccel cuda' : ''
+  end
+
+  def scale_filters
+    stream = probe.streams.find { |s| s.codec_type == 'video' }
+    return preserve_resolution_scale(stream) if opts.preserve_resolution
+
+    scale_expr = (format_name == :vp9 ? VF_SCALE_M8 : VF_SCALE_M2) % {width: opts.width}
+    [scale_expr]
+  end
+
+  def preserve_resolution_scale(stream)
+    mod = format_name == :vp9 ? 8 : 2
+    return [] if stream.width % mod == 0 && stream.height % mod == 0
+
+    ["scale=trunc(iw/#{mod})*#{mod}:trunc(ih/#{mod})*#{mod}"]
   end
 
   def zip_audio
@@ -398,6 +416,11 @@ class Zipper
     vstrea = probe.streams.find{ |s| s.codec_type == 'video' }
     # Ensure a sane default width
     opts.width ||= opts.format&.opts&.width || vstrea&.width || 720
+    if opts.preserve_resolution
+      opts.width = vstrea.width
+      return
+    end
+
     if opts.vf&.index 'transpose'
     elsif vstrea.width < vstrea.height # portrait image
       opts.width /= 2

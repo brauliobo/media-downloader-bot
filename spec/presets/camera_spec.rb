@@ -12,6 +12,7 @@ RSpec.describe Presets::Camera do
     expect(opts.acodec).to eq('aac')
     expect(opts.abrate).to eq('32')
     expect(opts.vf).to eq('mpdecimate=hi=1024:lo=512:frac=0.40')
+    expect(opts.preserve_resolution).to eq(1)
     expect(opts.delete_originals).to eq(1)
   end
 
@@ -28,6 +29,7 @@ RSpec.describe Presets::Camera do
       'acodec=aac',
       'abrate=32',
       'vf=mpdecimate=hi=1024:lo=512:frac=0.40',
+      'preserve_resolution',
       'delete_originals',
     )
   end

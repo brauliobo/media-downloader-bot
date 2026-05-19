@@ -7,6 +7,7 @@ module Presets
       acodec: 'aac',
       abrate: 32,
       vf: 'mpdecimate=hi=1024:lo=512:frac=0.40',
+      preserve_resolution: 1,
       delete_originals: 1,
     }.freeze
 
