@@ -2,10 +2,12 @@ module Presets
   class Camera
     DEFAULTS = {
       cuda: 1,
-      format: 'h265',
+      format: 'h264',
       quality: 32,
       acodec: 'aac',
       abrate: 32,
+      vf: 'mpdecimate=hi=1024:lo=512:frac=0.40',
+      delete_originals: 1,
     }.freeze
 
     def self.apply(opts, option_args: nil)
