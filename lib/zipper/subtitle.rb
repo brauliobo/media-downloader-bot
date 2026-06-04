@@ -97,7 +97,7 @@ class Zipper
     end
 
     def subtitles_requested?(opts)
-      opts.slang || opts.subs || opts.onlysrt || opts.sub_vtt
+      opts.slang || opts.subs || opts.gensubs || opts.onlysrt || opts.sub_vtt
     end
 
     def source_vtt(zipper, translate_to:)
