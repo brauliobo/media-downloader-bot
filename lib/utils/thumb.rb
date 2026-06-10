@@ -26,7 +26,7 @@ module Utils
         w, h = max_height * info.width / info.height, max_height
         "-resize #{w}x#{h}\^ -gravity Center -extent #{w}x#{h}"
       else
-        "-resize x#{max_height}"
+        "-resize #{max_height}x#{max_height}\\>"
       end
       Sh.run "convert #{Sh.escape(im_in)} #{opts} -define jpeg:extent=190kb #{Sh.escape(im_out)}"
 

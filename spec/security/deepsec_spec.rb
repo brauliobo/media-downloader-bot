@@ -1,6 +1,7 @@
 require 'spec_helper'
 require 'tmpdir'
 require_relative '../../lib/bot/tg_bot'
+require_relative '../support/spy_bot'
 
 RSpec.describe 'DeepSec regressions' do
   let(:probe) do
@@ -77,6 +78,19 @@ RSpec.describe 'DeepSec regressions' do
     expect(Utils::Thumb.process(info, base_filename: File.join(Dir.tmpdir, 'thumb-test'))).to end_with('-othumb.jpg')
   end
 
+  it 'keeps generated video thumbnails within Telegram dimensions' do
+    Dir.mktmpdir('thumb-size-') do |dir|
+      src = File.join(dir, 'source.jpg')
+      system('convert', '-size', '640x360', 'xc:red', src)
+
+      info = SymMash.new(thumbnail: src, width: 640, height: 360)
+      thumb = Utils::Thumb.process(info, base_filename: File.join(dir, 'thumb'), local: true)
+      width, height = `identify -format '%w %h' #{thumb.shellescape}`.split.map(&:to_i)
+
+      expect([width, height].max).to be <= 320
+    end
+  end
+
   it 'wraps paid video upload thumbnails as Telegram attachments' do
     bot = Bot::TgBot.new
     media = SymMash.new(type: :video, media: 'attach://file', thumbnail_path: __FILE__)
@@ -85,6 +99,38 @@ RSpec.describe 'DeepSec regressions' do
     expect(params[:thumbnail]).to be_a(Faraday::UploadIO)
     expect(params[:media].first[:thumbnail]).to eq('attach://thumbnail')
     expect(params[:media].first).not_to have_key(:thumbnail_path)
+  end
+
+  it 'passes video thumbnail paths from workers to upload params' do
+    Dir.mktmpdir('worker-thumb-') do |dir|
+      bot = Bot::Spy.new
+      old_service = Worker.service
+      old_debug = ENV['DEBUG']
+      Worker.service = bot
+      ENV.delete('DEBUG')
+      video = File.join(dir, 'video.mp4')
+      thumb = File.join(dir, 'thumb.jpg')
+      File.write(video, 'video')
+      File.write(thumb, 'thumb')
+
+      worker = Worker.new(SymMash.new(from: {id: 1}, chat: {id: 1}))
+      item = SymMash.new(
+        fn_out: video,
+        thumb:  thumb,
+        type:   Zipper::Types.video,
+        info:   SymMash.new(title: 'video', uploader: 'uploader'),
+        opts:   SymMash.new(format: SymMash.new(mime: 'video/mp4')),
+        oprobe: SymMash.new(format: SymMash.new(duration: 1), streams: [SymMash.new(codec_type: 'video', width: 320, height: 180)])
+      )
+      worker.instance_variable_set(:@opts, item.opts)
+
+      worker.upload(item)
+
+      expect(bot.uploads.last.params[:thumbnail_path]).to eq(thumb)
+    ensure
+      Worker.service = old_service
+      ENV['DEBUG'] = old_debug
+    end
   end
 
   it 'ignores genshorts paths outside the working directory' do
