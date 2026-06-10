@@ -14,10 +14,6 @@ class TTS
       true
     end
 
-    def self.supports_voice_reference?
-      true
-    end
-
     extend self
   end
 end

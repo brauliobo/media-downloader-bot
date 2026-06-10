@@ -20,4 +20,4 @@ THREADS=1 TTS=OmniVoice /home/braulio/.rvm/wrappers/ruby-3.4.4/ruby bin/zip \
   voice=male,young_adult,moderate_pitch,american_accent
 ```
 
-The `voice=` value is passed to OmniVoice as the one-time audiobook reference voice instruction. Use underscores for spaces inside attributes when calling from the shell, for example `young_adult`, `moderate_pitch`, or `american_accent`.
+The `voice=` value is passed to OmniVoice as the direct voice instruction on each TTS request. Use underscores for spaces inside attributes when calling from the shell, for example `young_adult`, `moderate_pitch`, or `american_accent`.
