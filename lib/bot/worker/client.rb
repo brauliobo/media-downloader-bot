@@ -55,11 +55,12 @@ module Bot
           payload = kwargs.dup
           payload[:msg] = payload[:msg].to_h if payload[:msg] && payload[:msg].respond_to?(:to_h)
           payload[:file_id_or_info] = payload[:file_id_or_info].is_a?(Hash) ? payload[:file_id_or_info] : payload[:file_id_or_info].to_s if payload[:file_id_or_info]
-          response = @http_client.post("/#{method}", payload)
+          response = @http_client.post("/#{method}", payload) do |req|
+            req.headers['Authorization'] = "Bearer #{ENV['BOT_HTTP_TOKEN']}" if ENV['BOT_HTTP_TOKEN'].present?
+          end
           block_given? ? yield(response.body) : response.body
         end
       end
     end
   end
 end
-

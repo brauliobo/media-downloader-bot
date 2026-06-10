@@ -1,3 +1,6 @@
+require 'tempfile'
+require_relative '../utils/safety'
+
 class Subtitler
   class VTT
     SKIP_TAGS = %w[NOTE STYLE REGION].freeze
@@ -127,9 +130,14 @@ class Subtitler
     end
 
     def self.to_vtt(body, ext)
-      File.write "sub.#{ext}", body
-      vtt, = Sh.run "#{Zipper::FFMPEG} -i sub.#{ext} -c:s webvtt -f webvtt -"
-      clean(vtt)
+      safe_ext = Utils::Safety.subtitle_ext(ext)
+      Tempfile.create(['sub', ".#{safe_ext}"]) do |file|
+        file.binmode
+        file.write(body)
+        file.flush
+        vtt, = Sh.run "#{Zipper::FFMPEG} -i #{Sh.escape(file.path)} -c:s webvtt -f webvtt -"
+        clean(vtt)
+      end
     end
 
     def self.extract_embedded(zipper, index)
@@ -247,5 +255,4 @@ class Subtitler
                          :merge_segments!, :mergeable?, :merge_segment!, :build_line
   end
 end
-
 

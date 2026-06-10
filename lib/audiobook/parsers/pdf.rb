@@ -32,7 +32,7 @@ module Audiobook
       end
 
       def self.extract_images(pdf_path, dir)
-        Sh.run "pdftoppm -png -r 300 #{Sh.escape(pdf_path)} #{File.join(dir, 'page')}"
+        Sh.run "pdftoppm -png -r 300 #{Sh.escape(pdf_path)} #{Sh.escape(File.join(dir, 'page'))}"
         Dir.glob("#{File.join(dir, 'page-*.png')}").sort_by { |f| File.basename(f, '.png').split('-').last.to_i }
       end
 
@@ -122,7 +122,7 @@ module Audiobook
         end
 
         if page_lines.empty?
-          cmd = "pdftotext -enc UTF-8 -layout -f #{page_num} -l #{page_num} '#{pdf_path}' - 2>/dev/null"
+          cmd = "pdftotext -enc UTF-8 -layout -f #{page_num} -l #{page_num} #{Sh.escape(pdf_path)} - 2>/dev/null"
           `#{cmd}`.to_s.split(/\r?\n+/).each { |l| add_line.call(l) }
         end
 
@@ -170,4 +170,4 @@ module Audiobook
       end
     end
   end
-end 
+end

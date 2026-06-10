@@ -53,12 +53,10 @@ module Audiobook
         return if images.empty?
         sorted = images.sort
         # Prefer img2pdf when available; fallback to ImageMagick convert
-        if system('which img2pdf >/dev/null 2>&1')
-          args = sorted.map { |p| "'#{p}'" }.join(' ')
-          system("img2pdf #{args} -o '#{out_pdf}'")
+        if system('which', 'img2pdf', out: File::NULL, err: File::NULL)
+          system('img2pdf', *sorted, '-o', out_pdf)
         else
-          args = sorted.map { |p| "'#{p}'" }.join(' ')
-          system("convert #{args} '#{out_pdf}'")
+          system('convert', *sorted, out_pdf)
         end
         out_pdf
       end
@@ -143,5 +141,4 @@ module Audiobook
     end
   end
 end
-
 

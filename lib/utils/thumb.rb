@@ -1,24 +1,25 @@
 require 'fileutils'
 require_relative 'sh'
 require_relative 'http'
+require_relative 'safety'
 
 module Utils
   class Thumb
 
     class_attribute :max_height, default: 320
 
-    RESIZE_CMD = "convert %{in} %{opts} -define jpeg:extent=190kb %{out}"
-
-    def self.process(info, base_filename:, on_error: nil)
+    def self.process(info, base_filename:, on_error: nil, local: false)
       return if (url = info.thumbnail).blank?
 
       im_in  = "#{base_filename}-ithumb.jpg"
       im_out = "#{base_filename}-othumb.jpg"
 
-      if File.exist?(url)
+      if local && File.exist?(url)
         FileUtils.cp url, im_in
-      else
+      elsif Safety.public_http_url?(url)
         ::File.write im_in, HTTP.get(url).body
+      else
+        return nil
       end
 
       opts = if portrait?(info)
@@ -27,7 +28,7 @@ module Utils
       else
         "-resize x#{max_height}"
       end
-      Sh.run RESIZE_CMD % {in: im_in, out: im_out, opts: opts}
+      Sh.run "convert #{Sh.escape(im_in)} #{opts} -define jpeg:extent=190kb #{Sh.escape(im_out)}"
 
       im_out
     rescue => e
@@ -41,4 +42,3 @@ module Utils
     end
   end
 end
-

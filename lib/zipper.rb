@@ -1,6 +1,7 @@
 require 'tempfile'
 require 'securerandom'
 require 'fileutils'
+require_relative 'utils/safety'
 require_relative 'subtitler/ass'
 require_relative 'zipper/formats'
 require_relative 'zipper/limits'
@@ -10,8 +11,6 @@ class Zipper
 
   class_attribute :size_mb_limit
   class_attribute :pause_cache
-
-  TIME_REGEX   = /(?:\d?\d:)(?:\d?\d:)\d\d/
 
   # Constants removed; quality defaults are set dynamically per instance.
   VFR_OPTS    = '-vsync vfr'
@@ -76,7 +75,7 @@ class Zipper
 
     Dir.mktmpdir do |dir|
       listfile = File.join(dir, 'concat.txt')
-      File.write listfile, inputs.map { |p| "file '#{p}'" }.join("\n")
+      File.write listfile, inputs.map { |p| Utils::Safety.concat_manifest_path(p) }.join("\n")
 
       cmd = "#{FFMPEG} -f concat -safe 0 -i #{Sh.escape(listfile)} -c copy #{Sh.escape(outfile)}"
 
@@ -145,7 +144,7 @@ class Zipper
     @opts.reverse_merge! dopts
 
     @fgraph = []
-    @fgraph << opts.vf if opts.vf.present?
+    @fgraph << Utils::Safety.safe_filter(opts.vf) if opts.vf.present?
 
     @maps = []
 
@@ -315,9 +314,7 @@ class Zipper
   end
 
   def subtitle_to_vtt body, ext
-    File.write "sub.#{ext}", body
-    vtt, _, _ = Sh.run "#{FFMPEG} -i sub.#{ext} -c:s webvtt -f webvtt -"
-    Zipper::Subtitle.sanitize_vtt vtt
+    Subtitler::VTT.to_vtt(body, ext)
   end
 
   def extract_vtt lang_or_index
@@ -467,8 +464,8 @@ class Zipper
   end
 
   def apply_cut
-    iopts << " -ss #{opts.ss}" if opts.ss&.match(TIME_REGEX)
-    oopts << " -to #{opts.to}" if opts.to&.match(TIME_REGEX)
+    iopts << " -ss #{opts.ss}" if Utils::Safety.safe_time?(opts.ss)
+    oopts << " -to #{opts.to}" if Utils::Safety.safe_time?(opts.to)
   end
 
 end

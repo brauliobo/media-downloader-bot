@@ -4,6 +4,7 @@ require 'roda'
 require 'limiter'
 require_relative 'base'
 require_relative 'rate_limiter'
+require_relative '../utils/safety'
 
 module Bot
   class TgBot < Base
@@ -35,7 +36,7 @@ module Bot
               Bot::UserQueue.instance.with_user_slot(bot, sym_msg) do
                 pid = Kernel.fork do
                   DB.disconnect if defined? DB
-                  Process.setproctitle sym_msg.text.to_s
+                  Process.setproctitle 'media-downloader-tgbot worker'
                   block.call sym_msg
                 end
                 Process.waitpid pid
@@ -115,14 +116,17 @@ module Bot
 
 
     def download_file(info, priority: 32, offset: 0, limit: 0, synchronous: true, dir: Dir.pwd)
-      tg_path   = tg.get_file(file_id: info.file_id).file_path or raise 'no file_path returned'
-      file_name = info.respond_to?(:file_name) && info.file_name.present? ? info.file_name : File.basename(tg_path)
-      local     = File.join dir, file_name
+      info    = SymMash.new(info) if info.is_a?(Hash)
+      file_id = info.respond_to?(:file_id) ? info.file_id : info.to_s
+      tg_path = tg.get_file(file_id: file_id).file_path or raise 'no file_path returned'
+      name    = info.respond_to?(:file_name) && info.file_name.present? ? info.file_name : File.basename(tg_path)
+      local   = Utils::Safety.contained_path(dir, name, fallback: File.basename(tg_path))
 
       base_url = "https://api.telegram.org/file/bot#{ENV['TG_BOT_TOKEN']}/"
-      File.write local, Mechanize.new.get(base_url + tg_path).body
+      agent    = Mechanize.new
+      agent.redirect_ok = false if agent.respond_to?(:redirect_ok=)
+      File.binwrite local, agent.get(base_url + tg_path).body
       local
     end
   end
 end
-
