@@ -14,6 +14,15 @@ class TTS
       true
     end
 
+    def self.supports_temperature?
+      true
+    end
+
+    def synthesize(text:, lang:, out_path:, **kwargs)
+      kwargs[:temperature] = kwargs.delete(:temp) if kwargs.key?(:temp) && !kwargs.key?(:temperature)
+      super(text: text, lang: lang, out_path: out_path, **{temperature: 0}.merge(kwargs))
+    end
+
     extend self
   end
 end

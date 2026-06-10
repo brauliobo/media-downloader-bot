@@ -9,8 +9,16 @@ RSpec.describe 'Audiobook TTS speed' do
       options = runner.send(:tts_options, dir)
 
       expect(options[:speed]).to eq(1.25)
+      expect(options[:temperature]).to eq(0)
       expect(options[:instruct]).to eq(Audiobook::Runner::DEFAULT_VOICE_INSTRUCT)
     end
+  end
+
+  it 'passes configured TTS temperature option' do
+    book = instance_double(Audiobook::Book, metadata: {}, pages: [])
+    runner = Audiobook::Runner.new(book, nil, SymMash.new(temp: '0.35'))
+
+    expect(runner.send(:tts_options, '/tmp')[:temperature]).to eq(0.35)
   end
 
   it 'normalizes configured voice option values' do

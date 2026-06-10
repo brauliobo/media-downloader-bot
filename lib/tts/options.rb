@@ -2,6 +2,7 @@ class TTS
   class Options
     DEFAULT_VOICE_INSTRUCT = 'female, middle-aged, moderate pitch, american accent'.freeze
     VOICE_KEYS             = %i[voice voice_instruct instruct].freeze
+    TEMP_KEYS              = %i[temp temperature].freeze
 
     def self.for(opts = nil, speaker_wav: nil)
       new(opts, speaker_wav: speaker_wav).to_h
@@ -15,6 +16,7 @@ class TTS
     def to_h
       {}.tap do |h|
         h[:speed]       = @opts.speed.to_f if speed_supported? && @opts&.speed
+        h[:temperature] = temperature if temperature_supported?
         h[:instruct]    = voice_instruct if voice_instruct.present?
         h[:speaker_wav] = @speaker_wav if @speaker_wav.present?
       end
@@ -24,6 +26,15 @@ class TTS
 
     def speed_supported?
       TTS::BACKEND.respond_to?(:supports_speech_speed?) && TTS::BACKEND.supports_speech_speed?
+    end
+
+    def temperature_supported?
+      TTS::BACKEND.respond_to?(:supports_temperature?) && TTS::BACKEND.supports_temperature?
+    end
+
+    def temperature
+      key = TEMP_KEYS.find { |option| @opts&.public_send(option).present? }
+      key ? @opts.public_send(key).to_f : 0
     end
 
     def voice_instruct

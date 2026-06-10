@@ -64,6 +64,7 @@ RSpec.describe Dubbing::Pipeline do
       lang: 'pt',
       out_path: kind_of(String),
       instruct: TTS::Options::DEFAULT_VOICE_INSTRUCT,
+      temperature: 0,
       speaker_wav: speaker
     ) { |out_path:, **_| File.write(out_path, 'raw') }
     expect(TTS).to receive(:synthesize).with(
@@ -71,6 +72,7 @@ RSpec.describe Dubbing::Pipeline do
       lang: 'pt',
       out_path: kind_of(String),
       instruct: TTS::Options::DEFAULT_VOICE_INSTRUCT,
+      temperature: 0,
       speaker_wav: speaker
     ) { |out_path:, **_| File.write(out_path, 'raw') }
 
