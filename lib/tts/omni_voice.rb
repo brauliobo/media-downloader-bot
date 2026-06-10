@@ -10,6 +10,14 @@ class TTS
       concurrency:   ENV['OMNIVOICE_CONCURRENCY']&.to_i || 1
     )
 
+    def self.supports_speech_speed?
+      true
+    end
+
+    def self.supports_voice_reference?
+      true
+    end
+
     extend self
   end
 end

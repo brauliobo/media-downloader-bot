@@ -1,3 +1,4 @@
+require 'retriable'
 require_relative 'speech'
 require_relative '../tts'
 require_relative '../text_helpers'
@@ -42,14 +43,14 @@ module Audiobook
 
     protected
 
-    def synthesize_audio(wav_path, lang)
+    def synthesize_audio(wav_path, lang, tts_options: {})
       spoken = text.sub(/\s*[\p{P}]+\z/u, '')
       if spoken.empty?
         super # generate silence
       else
         # Retry TTS and fail hard if output is missing
-        Manager.retriable(tries: 4, base_interval: 0.5, multiplier: 2.0) do |_attempt|
-          TTS.synthesize(text: spoken, lang: lang, out_path: wav_path)
+        Retriable.retriable(tries: 4, base_interval: 0.5, multiplier: 2.0) do
+          TTS.synthesize(text: spoken, lang: lang, out_path: wav_path, **tts_options)
           raise 'TTS produced no audio' unless File.exist?(wav_path) && File.size?(wav_path)
         end
       end

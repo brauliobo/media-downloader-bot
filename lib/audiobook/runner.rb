@@ -3,6 +3,9 @@ require_relative '../zipper'
 
 module Audiobook
   class Runner
+    DEFAULT_VOICE_INSTRUCT = 'female, middle-aged, moderate pitch, american accent'.freeze
+    VOICE_OPTION_KEYS      = %i[voice voice_instruct instruct].freeze
+
     def initialize(book, stl = nil, opts = nil)
       @book = book
       @lang = @book.metadata['language'] || 'en'
@@ -26,6 +29,7 @@ module Audiobook
 
         wavs = Array.new(pages.size)
         total_pages = pages.size
+        speech_options = tts_options(dir)
 
         pages.each.with_index.peach do |page, idx|
           wavs[idx] = page.to_wav(
@@ -33,7 +37,8 @@ module Audiobook
             lang: @lang, stl: @stl,
             para_context: { current: para_offsets[idx], total: total_paras },
             page_context: { current: idx + 1, total: total_pages },
-            book_metadata: @book.metadata
+            book_metadata: @book.metadata,
+            tts_options: speech_options
           )
         end
 
@@ -77,6 +82,7 @@ module Audiobook
 
     def encode_audio_file(input_wav, out_audio)
       zip_opts = SymMash.new(@opts || {})
+      zip_opts.speed = 1 if backend_supports?(:speech_speed) && zip_opts.speed
       # Pick format based on requested extension; default to opus
       requested_ext = File.extname(out_audio.to_s).downcase
       case requested_ext
@@ -93,6 +99,84 @@ module Audiobook
       Zipper.zip_audio(input_wav, target, opts: zip_opts)
       target
     end
+
+    def tts_options(dir)
+      options = speech_options
+      options.merge!(voice_reference_options(dir, options)) if backend_supports?(:voice_reference)
+      options
+    end
+
+    def speech_options
+      return {} unless backend_supports?(:speech_speed) && @opts&.speed
+
+      { speed: @opts.speed.to_f }
+    end
+
+    def backend_supports?(feature)
+      method = :"supports_#{feature}?"
+      TTS::BACKEND.respond_to?(method) && TTS::BACKEND.public_send(method)
+    end
+
+    def voice_reference_options(dir, options)
+      ref_text = voice_reference_text
+      return {} if ref_text.to_s.strip.empty?
+
+      ref_wav = File.join(dir, 'voice_reference.wav')
+      @stl&.update 'Creating audiobook voice reference'
+      TTS.synthesize(text: ref_text, lang: @lang, out_path: ref_wav, **options.merge(voice_instruct_options))
+      raise 'TTS produced no voice reference' unless File.exist?(ref_wav) && File.size?(ref_wav)
+
+      {
+        speaker_wav: ref_wav,
+        ref_text:    ref_text,
+      }
+    end
+
+    def voice_instruct_options
+      instruct = voice_instruct
+      return {} if instruct.to_s.strip.empty?
+
+      { instruct: instruct }
+    end
+
+    def voice_instruct
+      key = VOICE_OPTION_KEYS.find { |option| @opts&.public_send(option).present? }
+      normalize_voice_instruct(key ? @opts.public_send(key) : DEFAULT_VOICE_INSTRUCT)
+    end
+
+    def normalize_voice_instruct(value)
+      value.to_s
+        .tr('_', ' ')
+        .gsub(/-pitch\b/, ' pitch')
+        .gsub(/-accent\b/, ' accent')
+        .split(',')
+        .map(&:strip)
+        .reject(&:empty?)
+        .join(', ')
+    end
+
+    def voice_reference_text
+      sentences = @book.pages.flat_map(&:all_sentences).map(&:text)
+        .map { |text| text.to_s.strip }
+        .reject(&:empty?)
+
+      sentences.find { |text| text.length.between?(80, 220) } || compact_reference_text(sentences)
+    end
+
+    def compact_reference_text(sentences)
+      parts = []
+      length = 0
+
+      sentences.each do |sentence|
+        next if sentence.length < 10
+        break if length.positive? && length + sentence.length + 1 > 220
+
+        parts << sentence
+        length += sentence.length + 1
+        break if length >= 80
+      end
+
+      parts.join(' ')
+    end
   end
 end
-
