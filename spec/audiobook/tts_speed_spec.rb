@@ -21,6 +21,20 @@ RSpec.describe 'Audiobook TTS speed' do
     expect(runner.send(:tts_options, '/tmp')[:temperature]).to eq(0.35)
   end
 
+  it 'does not apply conversion speed when the TTS backend already supports speed' do
+    book = instance_double(Audiobook::Book, metadata: {}, pages: [])
+    runner = Audiobook::Runner.new(book, nil, SymMash.new(speed: '1.25'))
+    captured_opts = nil
+
+    allow(Zipper).to receive(:zip_audio) do |_input, _output, opts:, **_kwargs|
+      captured_opts = opts
+    end
+
+    runner.send(:encode_audio_file, '/tmp/in.wav', '/tmp/out.opus')
+
+    expect(captured_opts.speed).to be_nil
+  end
+
   it 'normalizes configured voice option values' do
     book = instance_double(Audiobook::Book, metadata: {}, pages: [])
     runner = Audiobook::Runner.new(

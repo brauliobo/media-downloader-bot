@@ -9,4 +9,8 @@ class TTS
   def self.synthesize(**args)
     BACKEND.synthesize(**args)
   end
+
+  def self.supports?(feature)
+    BACKEND.respond_to?(predicate = :"supports_#{feature}?") && BACKEND.public_send(predicate)
+  end
 end
