@@ -196,10 +196,10 @@ class Worker
     caption = msg_caption i
     return send_message msg, caption if opts.simulate
 
-    vstrea         = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
-    thumbnail_path = i.thumbnail_path || i.thumb
-    mime           = i.mime.presence || i.opts.format&.mime || 'application/octet-stream'
-    file_path      = i.fn_out
+    vstrea     = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
+    thumb_path = i.thumbnail_path || i.thumb
+    mime       = i.mime.presence || i.opts.format&.mime || 'application/octet-stream'
+    file_path  = i.fn_out
 
     # Common send logic for both cases
     paid  = (ENV['PAID'] || msg.from.id.in?([6884159818])) && !is_doc
@@ -211,10 +211,10 @@ class Worker
       title: info.title, performer: info.uploader, supports_streaming: true
     )
     media.merge!(
-      "#{typek}_path".to_sym => file_path,
-      "#{typek}_mime".to_sym => mime
+      "#{typek}_path".to_sym => file_path, "#{typek}_mime".to_sym => mime,
+      thumb_path:      thumb_path,
+      thumbnail_path: thumb_path
     )
-    media[:thumbnail_path] = thumbnail_path if thumbnail_path
     ret_msg = i.ret_msg = SymMash.new star_count: (20 if paid)
     if paid
       media[:media] = 'attach://file'
