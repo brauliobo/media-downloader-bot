@@ -115,5 +115,43 @@ RSpec.describe Processors::Media do
       expect(i.opts.acodec).to eq('aac')
       expect(i.opts.abrate).to eq('32')
     end
+
+    it 'dubs video inputs before the normal zipper conversion' do
+      i.opts = SymMash.new(dub: 1, slang: 'pt', alang: 'pt')
+      dubbed = File.join(dir, 'dubbed.mp4')
+      allow(Zipper).to receive(:choose_format).and_return(SymMash.new(ext: :mp4, mime: 'video/mp4'))
+      allow(Dubbing::Pipeline).to receive(:apply).and_return(dubbed)
+      allow(Zipper).to receive(:zip_video).and_return(['', '', instance_double(Process::Status, success?: true)])
+      allow(Output).to receive(:filename).and_return(File.join(dir, 'out.mp4'))
+
+      processor.convert(i)
+
+      expect(Dubbing::Pipeline).to have_received(:apply).with('/tmp/in.mp4', dir: dir, opts: i.opts, stl: stl, probe: nil)
+      expect(i.opts.slang).to be_nil
+      expect(i.opts.alang).to be_nil
+      expect(Zipper).to have_received(:zip_video).with(dubbed, File.join(dir, 'out.mp4'), opts: i.opts, probe: nil, stl: stl, info: i.info)
+    end
+
+    it 'keeps dub language options when subtitles were explicitly requested too' do
+      opts = SymMash.new(dub: 1, slang: 'pt', alang: 'pt', subs: 1)
+
+      processor.send(:consume_dub_language!, opts)
+
+      expect(opts.slang).to eq('pt')
+      expect(opts.alang).to eq('pt')
+    end
+
+    it 'does not dub audio inputs' do
+      i.type = SymMash.new(name: :audio)
+      i.opts = SymMash.new(dub: 1)
+      allow(Dubbing::Pipeline).to receive(:apply)
+      allow(Zipper).to receive(:choose_format).and_return(SymMash.new(ext: :mp3, mime: 'audio/mp3'))
+      allow(Zipper).to receive(:zip_audio).and_return(['', '', instance_double(Process::Status, success?: true)])
+      allow(Output).to receive(:filename).and_return(File.join(dir, 'out.mp3'))
+
+      processor.convert(i)
+
+      expect(Dubbing::Pipeline).not_to have_received(:apply)
+    end
   end
 end

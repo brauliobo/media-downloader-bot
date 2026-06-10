@@ -2,6 +2,7 @@ require_relative 'file'
 require_relative '../utils/thumb'
 require_relative '../utils/mime_types'
 require_relative '../zipper'
+require_relative '../dubbing'
 require_relative '../presets/camera'
 require 'timeout'
 
@@ -123,6 +124,10 @@ module Processors
 
       fn_out = ::File.expand_path(Output.filename(i.info, dir: dir, ext: i.format.ext, pos: pos))
       fn_in = ::File.expand_path(i.fn_in)
+      if dub_video?(i)
+        fn_in = dub_video(i, fn_in)
+        consume_dub_language!(i.opts)
+      end
 
       o, e, st = Zipper.send "zip_#{i.type.name}", fn_in, fn_out,
         opts: i.opts, probe: i.probe, stl: i.stl, info: i.info
@@ -133,6 +138,22 @@ module Processors
 
     def video_input?(i)
       i.type == Types.video || i.type&.name&.to_sym == :video
+    end
+
+    def dub_video?(i)
+      i.opts.dub && video_input?(i)
+    end
+
+    def dub_video(i, fn_in)
+      Dubbing::Pipeline.apply(fn_in, dir: dir, opts: i.opts, stl: i.stl, probe: i.probe)
+    end
+
+    def consume_dub_language!(opts)
+      return if opts.subs || opts.gensubs || opts.onlysrt || opts.sub_vtt
+
+      opts.delete(:lang)
+      opts.delete(:slang)
+      opts.delete(:alang)
     end
 
   end
