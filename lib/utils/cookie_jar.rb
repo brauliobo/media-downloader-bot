@@ -1,6 +1,7 @@
 require 'time'
 require 'json'
 require 'fileutils'
+require_relative 'safety'
 
 module Utils
   module CookieJar
@@ -36,8 +37,13 @@ module Utils
     end
 
     def self.write_line(f, domain, name, value, attrs)
+      domain = Safety.netscape_field(domain)
+      return unless Safety.hostname?(domain)
+
       domain = ".#{domain}" unless domain.start_with?('.')
-      path = attrs.fetch('path', '/')
+      path = Safety.netscape_field(attrs.fetch('path', '/'))
+      name = Safety.netscape_field(name)
+      value = Safety.netscape_field(value)
       secure = attrs['secure'] ? 'TRUE' : 'FALSE'
       exp = attrs['expires'] || attrs['expirationDate'] || 0
       exp = Time.parse(exp).to_i if exp.is_a?(String)
@@ -46,4 +52,3 @@ module Utils
     end
   end
 end
-

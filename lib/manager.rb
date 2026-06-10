@@ -141,7 +141,8 @@ EOS
     if ENV['BOT_HTTP']
       uri = URI.parse(ENV['BOT_HTTP'])
       port = uri.port || 8080
-      Bot::Worker::HTTPService.start(self, port)
+      host = uri.host.presence || ENV['BOT_HTTP_BIND'].presence || '127.0.0.1'
+      Bot::Worker::HTTPService.start(self, port, host: host)
     end
 
     Bot::Worker::DRbService.start(self, ENV['BOT_DRB']) if ENV['BOT_DRB']

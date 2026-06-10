@@ -1,4 +1,5 @@
 require_relative '../shorts'
+require_relative '../utils/safety'
 
 module Processors
   class Shorts < Base
@@ -16,7 +17,7 @@ module Processors
 
     def generate_and_upload_shorts(i)
       @stl&.update 'generating shorts plan'
-      srt = if i.opts.genshorts.is_a?(String) && ::File.exist?(i.opts.genshorts)
+      srt = if i.opts.genshorts.is_a?(String) && local_genshorts_path?(i.opts.genshorts)
         ::File.read(i.opts.genshorts)
       else
         ::File.read Zipper.generate_srt(i.fn_in, dir: dir, info: i.info, probe: i.probe, stl: @stl, opts: i.opts)
@@ -53,6 +54,10 @@ module Processors
     end
 
     private
+
+    def local_genshorts_path?(path)
+      Utils::Safety.real_file_inside?(path, dir)
+    end
 
     def build_vtt_source(srt)
       return nil unless srt.include?('-->')

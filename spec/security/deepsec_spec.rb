@@ -1,0 +1,82 @@
+require 'spec_helper'
+require 'tmpdir'
+require_relative '../../lib/bot/tg_bot'
+
+RSpec.describe 'DeepSec regressions' do
+  let(:probe) do
+    SymMash.new(
+      format:  SymMash.new(duration: 60),
+      streams: [SymMash.new(codec_type: 'video', width: 640, height: 360)],
+    )
+  end
+
+  it 'downloads Telegram files under the requested directory with a safe basename' do
+    Dir.mktmpdir('tg-download-') do |dir|
+      bot = Bot::TgBot.new
+      bot.tg = double(get_file: SymMash.new(file_path: 'documents/original.txt'))
+
+      page = double(body: 'safe body')
+      agent = double(get: page)
+      allow(agent).to receive(:redirect_ok=)
+      allow(Mechanize).to receive(:new).and_return(agent)
+
+      info = SymMash.new(file_id: 'abc', file_name: '../../owned.txt')
+      path = bot.download_file(info, dir: dir)
+
+      expect(path).to eq(File.join(dir, 'owned.txt'))
+      expect(File.read(path)).to eq('safe body')
+      expect(File.exist?(File.expand_path('../owned.txt', dir))).to be(false)
+    end
+  end
+
+  it 'rejects unsafe ffmpeg filter fragments from options' do
+    opts = SymMash.new(
+      vf:       'scale=1";touch$IFS/tmp/pwn;"',
+      format:   Zipper::Types.video.h264,
+      acodec:   'aac',
+      metadata: {},
+    )
+
+    expect {
+      Zipper.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts)
+    }.to raise_error(ArgumentError, /unsafe video filter/)
+  end
+
+  it 'rejects unsafe subtitle extensions before writing temp input' do
+    expect {
+      Subtitler::VTT.to_vtt('1', '../evil')
+    }.to raise_error(ArgumentError, /unsupported subtitle extension/)
+  end
+
+  it 'sanitizes Netscape cookie delimiters' do
+    Dir.mktmpdir('cookies-') do |dir|
+      cookies = {'example.com' => "sid=abc\n.example.org\tTRUE\t/\tFALSE\t0\tx\ty"}
+      session = double(cookies: cookies)
+      allow(session).to receive(:reload).and_return(session)
+      path = Utils::CookieJar.write(session, dir)
+      lines = File.read(path).lines
+
+      expect(lines.size).to eq(2)
+      expect(lines.last).not_to include("\n.example.org")
+      expect(lines.last.split("\t").size).to eq(7)
+    end
+  end
+
+  it 'does not treat thumbnail metadata as an arbitrary local path' do
+    info = SymMash.new(thumbnail: __FILE__, width: 100, height: 100)
+
+    expect(Utils::Thumb.process(info, base_filename: File.join(Dir.tmpdir, 'thumb-test'))).to be_nil
+  end
+
+  it 'ignores genshorts paths outside the working directory' do
+    Dir.mktmpdir('shorts-') do |dir|
+      processor = Processors::Shorts.new(dir: dir)
+
+      expect(processor.send(:local_genshorts_path?, __FILE__)).to be(false)
+    end
+  end
+
+  it 'falls back for unsafe tesseract language codes' do
+    expect(Ocr::Tesseract.map_to_tesseract_lang(';ls')).to eq('eng')
+  end
+end
