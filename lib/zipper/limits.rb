@@ -7,8 +7,9 @@ class Zipper
   # all sizing logic in a single place.  Pure functions only – no IO.
   module Limits
     # Direct copies from Zipper constants so other code keeps working.
-    VID_WIDTH_REDUC = SymMash.new width: 80, minutes: 8
-    AUD_BRATE_REDUC = SymMash.new brate:  8, minutes: 8
+    VID_WIDTH_REDUC        = SymMash.new width: 80, minutes: 8
+    AUD_BRATE_REDUC        = SymMash.new brate:  8, minutes: 8
+    MAX_VIDEO_MAXRATE_KBIT = 50_000
 
     module_function
 
@@ -77,6 +78,7 @@ class Zipper
 
       maxrate  = (8 * (zipper.opts.percent * vidsize * 1000) / zipper.duration).to_i
       maxrate  = zipper.opts.vbrate if zipper.opts.vbrate && maxrate > zipper.opts.vbrate
+      maxrate  = MAX_VIDEO_MAXRATE_KBIT if maxrate > MAX_VIDEO_MAXRATE_KBIT
       maxrate  = "#{maxrate}k"
 
       zipper.video_sz_template % {maxrate: maxrate, bufsize: bufsize}
