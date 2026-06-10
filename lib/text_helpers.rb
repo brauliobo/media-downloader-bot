@@ -15,10 +15,39 @@ module TextHelpers
 
   # Join an array of line strings from a PDF into one paragraph string using sane defaults
   def self.join_pdf_lines(lines)
-    raw = Array(lines).join("\n")
-    raw = raw.gsub(/-\s*\n\s*/u, '')
-    raw = raw.gsub(/\s*\n\s*/u, ' ')
-    normalize_text(raw)
+    merged = Array(lines).map { |line| normalize_text(line) }.reject(&:empty?).reduce(nil) do |text, line|
+      next line unless text
+
+      if text.end_with?('-')
+        "#{text.chomp('-')}#{line}"
+      else
+        overlap = overlapping_word_count(text, line)
+        words = line.split(/\s+/).drop(overlap)
+        [text, words.join(' ')].reject(&:empty?).join(' ')
+      end
+    end
+
+    normalize_text(merged)
+  end
+
+  def self.overlapping_word_count(left, right)
+    left_words = overlap_words(left)
+    right_words = overlap_words(right)
+    max = [left_words.size, right_words.size, 8].min
+
+    max.downto(2) do |count|
+      return count if left_words.last(count) == right_words.first(count)
+    end
+
+    return 1 if left_words.last && left_words.last == right_words.first && left_words.last.length >= 6
+
+    0
+  end
+
+  def self.overlap_words(text)
+    text.to_s.split(/\s+/)
+      .map { |word| word.downcase.gsub(/\A[^\p{L}\p{N}]+|[^\p{L}\p{N}]+\z/u, '') }
+      .reject(&:empty?)
   end
 
   def self.starts_with_ref_markers?(text)
@@ -132,5 +161,4 @@ module TextHelpers
   end
 
 end
-
 
