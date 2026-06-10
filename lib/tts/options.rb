@@ -1,0 +1,45 @@
+class TTS
+  class Options
+    DEFAULT_VOICE_INSTRUCT = 'female, middle-aged, moderate pitch, american accent'.freeze
+    VOICE_KEYS             = %i[voice voice_instruct instruct].freeze
+
+    def self.for(opts = nil, speaker_wav: nil)
+      new(opts, speaker_wav: speaker_wav).to_h
+    end
+
+    def initialize(opts = nil, speaker_wav: nil)
+      @opts        = opts || SymMash.new
+      @speaker_wav = speaker_wav
+    end
+
+    def to_h
+      {}.tap do |h|
+        h[:speed]       = @opts.speed.to_f if speed_supported? && @opts&.speed
+        h[:instruct]    = voice_instruct if voice_instruct.present?
+        h[:speaker_wav] = @speaker_wav if @speaker_wav.present?
+      end
+    end
+
+    private
+
+    def speed_supported?
+      TTS::BACKEND.respond_to?(:supports_speech_speed?) && TTS::BACKEND.supports_speech_speed?
+    end
+
+    def voice_instruct
+      key = VOICE_KEYS.find { |option| @opts&.public_send(option).present? }
+      normalize(key ? @opts.public_send(key) : DEFAULT_VOICE_INSTRUCT)
+    end
+
+    def normalize(value)
+      value.to_s
+        .tr('_', ' ')
+        .gsub(/-pitch\b/, ' pitch')
+        .gsub(/-accent\b/, ' accent')
+        .split(',')
+        .map(&:strip)
+        .reject(&:empty?)
+        .join(', ')
+    end
+  end
+end
