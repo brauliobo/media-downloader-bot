@@ -10,7 +10,7 @@ module Audiobook
 
     attr_reader :sentences
     attr_accessor :para_idx, :para_total, :page_num, :item_idx, :item_total, :lang, :stl, :dir,
-                  :idx, :page_idx, :page_total, :is_ocr
+                  :idx, :page_idx, :page_total, :is_ocr, :tts_options
 
     def initialize(sentences = [])
       @sentences = sentences
@@ -27,6 +27,8 @@ module Audiobook
     # Generate combined wav for this paragraph
     def to_wav
       return nil if sentences.empty?
+
+      speech_options = tts_options || {}
       
       wavs = sentences.each_with_index.flat_map do |sent, sidx|
         status_parts = []
@@ -48,13 +50,13 @@ module Audiobook
         
         stl&.update status_line
         pause_file = sent.pause_file(dir)
-        main_wav = sent.to_wav(dir, "#{idx}_#{sidx}", lang: lang || 'en')
+        main_wav = sent.to_wav(dir, "#{idx}_#{sidx}", lang: lang || 'en', tts_options: speech_options)
         ref_wavs = (sent.references || []).each_with_index.flat_map do |ref, ridx|
           stl&.update "Processing reference #{ref.id} for sentence #{sidx+1}/#{sentences.size}"
           ref_pause = (ridx == 0 ? Zipper.get_pause_file(0.15, dir) : nil)
           ref.sentences.each_with_index.flat_map do |rs, j|
             rs_pause = rs.pause_file(dir)
-            wav_path = rs.to_wav(dir, "#{idx}_#{sidx}_r#{ridx}_#{j}", lang: lang || 'en')
+            wav_path = rs.to_wav(dir, "#{idx}_#{sidx}_r#{ridx}_#{j}", lang: lang || 'en', tts_options: speech_options)
             [j == 0 ? ref_pause : nil, rs_pause, wav_path].compact
           end
         end

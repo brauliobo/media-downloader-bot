@@ -23,7 +23,7 @@ module Audiobook
     end
 
     # Generate combined wav for all items on this page
-    def to_wav(dir, idx, lang: 'en', stl: nil, para_context: nil, page_context: nil, book_metadata: {})
+    def to_wav(dir, idx, lang: 'en', stl: nil, para_context: nil, page_context: nil, book_metadata: {}, tts_options: {})
       return nil if items.empty?
 
       # Count paragraphs for context
@@ -57,6 +57,7 @@ module Audiobook
           item.dir = dir
           item.idx = "#{idx}_#{iidx}"
           item.is_ocr = is_ocr_book || item.is_a?(Audiobook::Image)
+          item.tts_options = tts_options
         end
       end
 
@@ -70,7 +71,7 @@ module Audiobook
           status_line << " (OCR)" if is_ocr_book
           stl&.update status_line
           heading_pause = item.pause_file(dir) if item.respond_to?(:pause_file)
-          wav = item.to_wav(dir, "#{idx}_#{iidx}", lang: lang, stl: stl)
+          wav = item.to_wav(dir, "#{idx}_#{iidx}", lang: lang, stl: stl, tts_options: tts_options)
           [heading_pause, wav].compact
         end
       end.compact

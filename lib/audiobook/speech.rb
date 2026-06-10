@@ -25,11 +25,11 @@ module Audiobook
     # idx: index label for file naming (string or integer)
     # lang: tts language
     # stl: status line object (optional, for compatibility)
-    def to_wav(dir, idx, lang: 'en', stl: nil)
+    def to_wav(dir, idx, lang: 'en', stl: nil, tts_options: {})
       wav_path = File.join(dir, "#{idx}.wav")
       return wav_path if File.exist?(wav_path)
 
-      synthesize_audio(wav_path, lang)
+      synthesize_audio(wav_path, lang, tts_options: tts_options)
       wav_path
     end
 
@@ -39,7 +39,7 @@ module Audiobook
 
     protected
 
-    def synthesize_audio(_wav_path, _lang)
+    def synthesize_audio(_wav_path, _lang, tts_options: {})
       # Default: generate silence (0.5 s)
       cmd = "#{Zipper::FFMPEG} -f lavfi -i anullsrc=channel_layout=mono:sample_rate=22050 -t 0.5 #{Sh.escape(_wav_path)}"
       system(cmd)
