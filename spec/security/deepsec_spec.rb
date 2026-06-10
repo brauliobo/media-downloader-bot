@@ -103,13 +103,15 @@ RSpec.describe 'DeepSec regressions' do
 
   it 'wraps regular video thumbnails with legacy and current Telegram fields' do
     bot = Bot::TgBot.new
-    params = bot.wrap_upload_params(type: :video, video_path: __FILE__, video_mime: 'video/mp4', thumb_path: __FILE__, thumbnail_path: __FILE__)
+    params = bot.wrap_upload_params(type: :video, video_path: __FILE__, video_mime: 'video/mp4', thumb_path: __FILE__)
 
     expect(params[:thumb]).to be_a(Faraday::UploadIO)
     expect(params[:thumbnail]).to be_a(Faraday::UploadIO)
+    expect(params).not_to have_key(:thumb_path)
+    expect(params).not_to have_key(:thumbnail_path)
   end
 
-  it 'passes video thumbnail paths from workers to upload params' do
+  it 'passes one canonical video thumbnail path from workers' do
     Dir.mktmpdir('worker-thumb-') do |dir|
       bot = Bot::Spy.new
       old_service = Worker.service
@@ -135,7 +137,7 @@ RSpec.describe 'DeepSec regressions' do
       worker.upload(item)
 
       expect(bot.uploads.last.params[:thumb_path]).to eq(thumb)
-      expect(bot.uploads.last.params[:thumbnail_path]).to eq(thumb)
+      expect(bot.uploads.last.params).not_to have_key(:thumbnail_path)
     ensure
       Worker.service = old_service
       ENV['DEBUG'] = old_debug

@@ -212,8 +212,7 @@ class Worker
     )
     media.merge!(
       "#{typek}_path".to_sym => file_path, "#{typek}_mime".to_sym => mime,
-      thumb_path:      thumb_path,
-      thumbnail_path: thumb_path
+      thumb_path: thumb_path
     )
     ret_msg = i.ret_msg = SymMash.new star_count: (20 if paid)
     if paid
