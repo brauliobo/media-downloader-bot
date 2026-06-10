@@ -1,10 +1,10 @@
 require 'tmpdir'
 require_relative '../zipper'
+require_relative '../tts/options'
 
 module Audiobook
   class Runner
-    DEFAULT_VOICE_INSTRUCT = 'female, middle-aged, moderate pitch, american accent'.freeze
-    VOICE_OPTION_KEYS      = %i[voice voice_instruct instruct].freeze
+    DEFAULT_VOICE_INSTRUCT = TTS::Options::DEFAULT_VOICE_INSTRUCT
 
     def initialize(book, stl = nil, opts = nil)
       @book = book
@@ -101,43 +101,11 @@ module Audiobook
     end
 
     def tts_options(dir)
-      options = speech_options
-      options.merge!(voice_instruct_options)
-      options
-    end
-
-    def speech_options
-      return {} unless backend_supports?(:speech_speed) && @opts&.speed
-
-      { speed: @opts.speed.to_f }
-    end
-
-    def backend_supports?(feature)
-      method = :"supports_#{feature}?"
-      TTS::BACKEND.respond_to?(method) && TTS::BACKEND.public_send(method)
-    end
-
-    def voice_instruct_options
-      instruct = voice_instruct
-      return {} if instruct.to_s.strip.empty?
-
-      { instruct: instruct }
+      TTS::Options.for(@opts)
     end
 
     def voice_instruct
-      key = VOICE_OPTION_KEYS.find { |option| @opts&.public_send(option).present? }
-      normalize_voice_instruct(key ? @opts.public_send(key) : DEFAULT_VOICE_INSTRUCT)
-    end
-
-    def normalize_voice_instruct(value)
-      value.to_s
-        .tr('_', ' ')
-        .gsub(/-pitch\b/, ' pitch')
-        .gsub(/-accent\b/, ' accent')
-        .split(',')
-        .map(&:strip)
-        .reject(&:empty?)
-        .join(', ')
+      TTS::Options.for(@opts)[:instruct].to_s
     end
   end
 end
