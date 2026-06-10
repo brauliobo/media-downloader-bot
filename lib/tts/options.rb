@@ -1,3 +1,5 @@
+require_relative '../tts'
+
 class TTS
   class Options
     DEFAULT_VOICE_INSTRUCT = 'female, middle-aged, moderate pitch, american accent'.freeze
@@ -25,11 +27,11 @@ class TTS
     private
 
     def speed_supported?
-      TTS::BACKEND.respond_to?(:supports_speech_speed?) && TTS::BACKEND.supports_speech_speed?
+      TTS.supports?(:speech_speed)
     end
 
     def temperature_supported?
-      TTS::BACKEND.respond_to?(:supports_temperature?) && TTS::BACKEND.supports_temperature?
+      TTS.supports?(:temperature)
     end
 
     def temperature
