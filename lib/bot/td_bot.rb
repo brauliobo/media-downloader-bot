@@ -106,7 +106,7 @@ module Bot
       if p[:type] == :paid_media && (media = p.delete(:media)&.first)
         p[:file] = p.delete(:file_path)
         p[media[:type]] = media[:media_path] if media[:type]
-        p[:thumb] = media[:thumb_path] || media[:thumb]
+        p[:thumb] = media.values_at(:thumbnail_path, :thumb_path, :thumbnail, :thumb).compact.first
         p.merge!(media.slice(:duration, :width, :height, :title, :performer, :supports_streaming).compact)
       else
         %i[audio video document].each { |k| p[k] = p.delete(:"#{k}_path") if p[:"#{k}_path"] }
@@ -203,4 +203,3 @@ module Bot
     end
   end
 end
-

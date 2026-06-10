@@ -68,6 +68,25 @@ RSpec.describe 'DeepSec regressions' do
     expect(Utils::Thumb.process(info, base_filename: File.join(Dir.tmpdir, 'thumb-test'))).to be_nil
   end
 
+  it 'uses remote thumbnail entries when the primary thumbnail is absent' do
+    info = SymMash.new(thumbnails: [{url: 'https://img.example/small.jpg'}, {url: 'https://img.example/large.jpg'}])
+    allow(Utils::Safety).to receive(:public_http_url?).with('https://img.example/large.jpg').and_return(true)
+    allow(Utils::HTTP).to receive(:get).with('https://img.example/large.jpg').and_return(double(body: 'jpeg'))
+    allow(Sh).to receive(:run)
+
+    expect(Utils::Thumb.process(info, base_filename: File.join(Dir.tmpdir, 'thumb-test'))).to end_with('-othumb.jpg')
+  end
+
+  it 'wraps paid video upload thumbnails as Telegram attachments' do
+    bot = Bot::TgBot.new
+    media = SymMash.new(type: :video, media: 'attach://file', thumbnail_path: __FILE__)
+    params = bot.wrap_upload_params(type: :paid_media, file_path: __FILE__, file_mime: 'video/mp4', media: [media])
+
+    expect(params[:thumbnail]).to be_a(Faraday::UploadIO)
+    expect(params[:media].first[:thumbnail]).to eq('attach://thumbnail')
+    expect(params[:media].first).not_to have_key(:thumbnail_path)
+  end
+
   it 'ignores genshorts paths outside the working directory' do
     Dir.mktmpdir('shorts-') do |dir|
       processor = Processors::Shorts.new(dir: dir)
