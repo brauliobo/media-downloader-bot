@@ -52,6 +52,28 @@ RSpec.describe 'Page paragraph cross-page merge' do
     expect(esch_sent).not_to be_nil
     expect(Array(esch_sent.references).map(&:id)).to include('2', '3')
   end
-end
 
+  it 'does not repeat overlapping words when a sentence continues across pages' do
+    lines = [
+      Audiobook::Line.new(
+        'The seeker crossed the threshold with a phrase that would',
+        font_size:   12,
+        page_number: 1,
+        x_position:  40
+      ),
+      Audiobook::Line.new(
+        'phrase that would open the hidden door.',
+        font_size:   12,
+        page_number: 2,
+        x_position:  40
+      ),
+    ]
+
+    item = Audiobook::Paragraph.discover_from_lines(lines).first[:item]
+
+    expect(paragraph_text(item)).to eq(
+      'The seeker crossed the threshold with a phrase that would open the hidden door.'
+    )
+  end
+end
 
