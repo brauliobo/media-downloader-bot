@@ -21,7 +21,9 @@ module Bot
       end
       
       def self.start(service, port, host: default_host)
+        host      = bind_host(host)
         app_class = create(service)
+
         Thread.new do
           require 'puma'
           server = Puma::Server.new(app_class.freeze.app)
@@ -39,6 +41,12 @@ module Bot
 
       def self.default_host
         ENV.fetch('BOT_HTTP_BIND', '').empty? ? '127.0.0.1' : ENV['BOT_HTTP_BIND']
+      end
+
+      def self.bind_host(host)
+        host = host.to_s.strip
+        host = default_host if host.empty?
+        host.casecmp('localhost').zero? ? '127.0.0.1' : host
       end
 
       def request_params(r)
