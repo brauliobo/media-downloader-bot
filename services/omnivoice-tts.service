@@ -14,9 +14,8 @@ ExecStart=/srv/OmniVoice/venv/bin/python /srv/OmniVoice/http_server.py
 Environment=PORT=10440
 Environment=TTS_MODEL_ID=/srv/OmniVoice/model
 Environment=OMNIVOICE_DEVICE=cuda:0
-Environment=OMNIVOICE_SPEED=0.92
+Environment=OMNIVOICE_SPEED=1.0
 Environment=OMNIVOICE_NUM_STEP=32
-Environment="OMNIVOICE_INSTRUCT=female, middle-aged, low pitch"
 Environment=HF_HOME=/var/cache/omnivoice-tts/huggingface
 Environment=TRANSFORMERS_CACHE=/var/cache/omnivoice-tts/huggingface/transformers
 Environment=TORCH_HOME=/var/cache/omnivoice-tts/torch
