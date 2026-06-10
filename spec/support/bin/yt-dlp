@@ -20,7 +20,11 @@ tpl = arg_after("-o") or "output.%(ext)s"
 is_meta = "--write-info-json" in argv and "--skip-download" in argv
 
 if is_meta:
-    for i, item in enumerate(plan.get("playlist", [])):
+    playlist = plan.get("playlist", [])
+    if "--no-playlist" in argv:
+        playlist = playlist[:1]
+
+    for i, item in enumerate(playlist):
         idx = i + 1
         info = {
             "display_id":    item.get("display_id", f"id{idx}"),

@@ -65,6 +65,10 @@ module Downloaders
       end
     end
 
+    def admin?
+      msg && Bot::MsgHelpers.from_admin?(msg)
+    end
+
     def base_cmd
       @base_cmd ||= begin
         cmd = [BASE_CMD]
@@ -93,20 +97,7 @@ module Downloaders
 
         cmd << "-f #{Sh.escape(format_selector)}"
 
-        # Playlist/Limit logic
-        ml = opts.audio ? nil : 10
-        
-        if opts.after
-          opts.limit ||= ml
-        end
-
-        if ml && opts.limit && opts.limit.to_i > ml && !Bot::MsgHelpers.from_admin?(msg)
-          opts.limit = ml
-        end
-
-        if opts.limit.to_i.positive?
-          cmd << "--playlist-end #{opts.limit.to_i}"
-        end
+        apply_playlist_options(cmd)
 
         cmd << '-x' if opts.audio || opts.onlysrt
         
@@ -114,6 +105,13 @@ module Downloaders
         
         cmd.join(' ')
       end
+    end
+
+    def apply_playlist_options(cmd)
+      return cmd << '--no-playlist' unless admin?
+
+      opts.limit ||= (opts.audio ? nil : 10) if opts.after
+      cmd << "--playlist-end #{opts.limit.to_i}" if opts.limit.to_i.positive?
     end
 
     def process_infos
@@ -162,7 +160,7 @@ module Downloaders
         info.duration = durs.compact.max&.to_i
       end
       
-      return unless Zipper.size_mb_limit && !opts.onlysrt && !Bot::MsgHelpers.from_admin?(msg)
+      return unless Zipper.size_mb_limit && !opts.onlysrt && !admin?
       
       max_min = (35.0 / 50 * Zipper.size_mb_limit)
       if info.video_ext != 'none' && info.duration.to_i >= max_min.minutes
