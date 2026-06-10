@@ -99,12 +99,13 @@ module Bot
         km = :"#{k}_mime"
         p[k] = build_upload_io(p.delete(kp), p.delete(km)) if p[kp]
       end
-      p[:thumbnail] = build_upload_io(path, 'image/jpeg') if (path = pop_thumbnail_path(p))
+      p[:thumb] = build_upload_io(p.delete(:thumb_path), 'image/jpeg') if p[:thumb_path]
+      p[:thumbnail] = build_upload_io(p.delete(:thumbnail_path), 'image/jpeg') if p[:thumbnail_path]
       p
     end
 
     def pop_thumbnail_path(params)
-      params.delete(:thumbnail_path) || params.delete(:thumb_path)
+      params.delete(:thumbnail_path) || params.delete(:thumb_path) || params.delete(:thumbnail) || params.delete(:thumb)
     end
 
     def build_upload_io(path, mime=nil)
