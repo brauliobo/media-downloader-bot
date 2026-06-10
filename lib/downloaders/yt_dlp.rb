@@ -13,8 +13,11 @@ module Downloaders
     REMOTE   = ENV['YT_DLP_REMOTE_COMPONENTS']
 
     def download
-      cmd = "#{base_cmd} --write-info-json --no-clean-infojson --skip-download -o #{Sh.escape("info-%(playlist_index)s.%(ext)s")} #{Sh.escape(url)}"
-      cmd << " --match-filter #{Sh.escape('live_status != is_upcoming')}" if url.match?(/youtu\.?be/)
+      source_url = url.to_s
+      return st.error('No URL found') if source_url.blank?
+
+      cmd = "#{base_cmd} --write-info-json --no-clean-infojson --skip-download -o #{Sh.escape("info-%(playlist_index)s.%(ext)s")} #{Sh.escape(source_url)}"
+      cmd << " --match-filter #{Sh.escape('live_status != is_upcoming')}" if source_url.match?(/youtu\.?be/)
       
       _, e, s = Sh.run cmd, chdir: dir
       return st.error("Metadata errors:\n<pre>#{Bot::MsgHelpers.he e}</pre>", parse_mode: 'HTML') unless s == 0
