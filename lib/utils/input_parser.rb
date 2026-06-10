@@ -9,10 +9,10 @@ module Utils
       args = line.to_s.split(/[[:space:]]+/)
       url = nil
       
-      if args.first&.match?(URI::DEFAULT_PARSER.make_regexp)
-         url_str = args.shift
-         # Basic validation that it looks like a URL
-         url = Addressable::URI.parse(url_str) rescue nil
+      if (url_index = args.index { |arg| arg.match?(URI::DEFAULT_PARSER.make_regexp) })
+        url_str = args[url_index]
+        args    = args[(url_index + 1)..] || []
+        url     = Addressable::URI.parse(url_str) rescue nil
       end
 
       opts = args.each_with_object({}) do |a, h|
