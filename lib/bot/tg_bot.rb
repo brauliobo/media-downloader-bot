@@ -89,15 +89,22 @@ module Bot
       p = p.dup
       if p[:type].to_s == 'paid_media' && p[:file_path]
         p[:file] = build_upload_io(p.delete(:file_path), p.delete(:file_mime))
+        if (media = Array(p[:media]).first) && (path = pop_thumbnail_path(media))
+          media[:thumbnail] = 'attach://thumbnail'
+          p[:thumbnail] = build_upload_io(path, 'image/jpeg')
+        end
       end
       %i[audio video document].each do |k|
         kp = :"#{k}_path"
         km = :"#{k}_mime"
         p[k] = build_upload_io(p.delete(kp), p.delete(km)) if p[kp]
       end
-      p[:thumb] = build_upload_io(p.delete(:thumb_path), 'image/jpeg') if p[:thumb_path]
-      p[:thumbnail] = build_upload_io(p.delete(:thumbnail_path), 'image/jpeg') if p[:thumbnail_path]
+      p[:thumbnail] = build_upload_io(path, 'image/jpeg') if (path = pop_thumbnail_path(p))
       p
+    end
+
+    def pop_thumbnail_path(params)
+      params.delete(:thumbnail_path) || params.delete(:thumb_path)
     end
 
     def build_upload_io(path, mime=nil)

@@ -9,7 +9,7 @@ module Utils
     class_attribute :max_height, default: 320
 
     def self.process(info, base_filename:, on_error: nil, local: false)
-      return if (url = info.thumbnail).blank?
+      return if (url = source_url(info)).blank?
 
       im_in  = "#{base_filename}-ithumb.jpg"
       im_out = "#{base_filename}-othumb.jpg"
@@ -36,8 +36,15 @@ module Utils
       nil
     end
 
+    def self.source_url(info)
+      info.thumbnail.presence || Array(info.thumbnails).reverse_each.filter_map do |thumb|
+        if thumb.respond_to?(:url) then thumb.url
+        elsif thumb.respond_to?(:[]) then thumb[:url] || thumb['url'] end
+      end.first
+    end
+
     def self.portrait?(info)
-      return false unless info.width
+      return false unless info.width && info.height.to_i.positive?
       info.width < info.height
     end
   end
