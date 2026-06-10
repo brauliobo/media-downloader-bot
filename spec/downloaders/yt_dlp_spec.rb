@@ -4,10 +4,59 @@ RSpec.describe Downloaders::YtDlp do
   let(:dir)  { Dir.mktmpdir('ytdlp-spec-') }
   let(:tmp)  { Dir.mktmpdir('ytdlp-tmp-', dir) }
   let(:opts) { SymMash.new }
-  let(:ctx)  { Context.new(dir: dir, tmp: tmp, url: 'https://example.com/v', opts: opts) }
+  let(:msg)  { SymMash.new(from: {id: 10}) }
+  let(:ctx)  { Context.new(dir: dir, tmp: tmp, url: 'https://example.com/v', opts: opts, msg: msg) }
   let(:downloader) { described_class.new(ctx) }
 
   after { FileUtils.remove_entry(dir) if Dir.exist?(dir) }
+
+  describe '#download' do
+    it 'disables playlist downloads for non-admin users' do
+      captured = nil
+      allow(Bot::MsgHelpers).to receive(:from_admin?).with(msg).and_return(false)
+      allow(Sh).to receive(:run) { |cmd, **_| captured = cmd; ['', '', 0] }
+
+      downloader.download
+
+      expect(captured).to include('--no-playlist')
+      expect(captured).not_to include('--playlist-end')
+    end
+
+    it 'keeps playlist limits available for admins' do
+      opts.limit = 3
+      captured   = nil
+      allow(Bot::MsgHelpers).to receive(:from_admin?).with(msg).and_return(true)
+      allow(Sh).to receive(:run) { |cmd, **_| captured = cmd; ['', '', 0] }
+
+      downloader.download
+
+      expect(captured).to include('--playlist-end 3')
+      expect(captured).not_to include('--no-playlist')
+    end
+
+    it 'reports a missing url instead of crashing' do
+      status = Class.new do
+        attr_reader :errors
+
+        def initialize
+          @errors = []
+        end
+
+        def error(text, **_)
+          errors << text
+        end
+      end.new
+
+      ctx.url = nil
+      ctx.st  = status
+      allow(Sh).to receive(:run)
+
+      downloader.download
+
+      expect(status.errors).to eq(['No URL found'])
+      expect(Sh).not_to have_received(:run)
+    end
+  end
 
   describe '#download_one' do
     let(:i) { SymMash.new(url: 'https://example.com/v', opts: opts) }

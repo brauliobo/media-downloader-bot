@@ -36,6 +36,7 @@ RSpec.describe 'Worker playlist with mixed failures (integration)' do
     )
 
     msg = IntegrationHelper.build_msg(text: 'https://example.com/playlist?list=PL_TEST')
+    allow(Bot::MsgHelpers).to receive(:from_admin?) { |arg = nil| arg.equal?(msg) }
     Worker.new(msg).run
 
     uploads = bot.sent.select { |s| s.params[:type] || s.params[:video_path] || s.params[:audio_path] || s.params[:document_path] }
@@ -48,5 +49,29 @@ RSpec.describe 'Worker playlist with mixed failures (integration)' do
 
     edits = bot.edited.map { |e| e.text.to_s }.join("\n")
     expect(edits).to match(/Broken.*download error/m)
+  end
+
+  it 'downloads only the current playlist item for non-admin users' do
+    IntegrationHelper.stub_yt_dlp_plan(
+      'playlist' => [
+        {'display_id' => 'v1', 'title' => 'First',  'webpage_url' => 'https://example.com/v1', 'fixture' => fixtures[:mp4]},
+        {'display_id' => 'v2', 'title' => 'Second', 'webpage_url' => 'https://example.com/v2', 'fixture' => fixtures[:mp4]},
+      ],
+      'items' => {
+        '1' => {'fixture' => fixtures[:mp4], 'status' => 0},
+        '2' => {'fixture' => fixtures[:mp4], 'status' => 0},
+      },
+    )
+
+    msg = IntegrationHelper.build_msg(text: 'https://example.com/playlist?list=PL_TEST')
+    allow(Bot::MsgHelpers).to receive(:from_admin?).and_return(false)
+    Worker.new(msg).run
+
+    uploads = bot.sent.select { |s| s.params[:type] || s.params[:video_path] || s.params[:audio_path] || s.params[:document_path] }
+    titles  = uploads.flat_map { |u| [u.params[:title], u.params[:caption]] }.compact.join(' ')
+
+    expect(uploads.size).to eq(1), "expected 1 upload, got #{uploads.size}\nsent=#{bot.sent.map(&:to_h)}"
+    expect(titles).to include('First')
+    expect(titles).not_to include('Second')
   end
 end
