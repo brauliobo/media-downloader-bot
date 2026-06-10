@@ -102,7 +102,7 @@ module Audiobook
 
     def tts_options(dir)
       options = speech_options
-      options.merge!(voice_reference_options(dir, options)) if backend_supports?(:voice_reference)
+      options.merge!(voice_instruct_options)
       options
     end
 
@@ -115,21 +115,6 @@ module Audiobook
     def backend_supports?(feature)
       method = :"supports_#{feature}?"
       TTS::BACKEND.respond_to?(method) && TTS::BACKEND.public_send(method)
-    end
-
-    def voice_reference_options(dir, options)
-      ref_text = voice_reference_text
-      return {} if ref_text.to_s.strip.empty?
-
-      ref_wav = File.join(dir, 'voice_reference.wav')
-      @stl&.update 'Creating audiobook voice reference'
-      TTS.synthesize(text: ref_text, lang: @lang, out_path: ref_wav, **options.merge(voice_instruct_options))
-      raise 'TTS produced no voice reference' unless File.exist?(ref_wav) && File.size?(ref_wav)
-
-      {
-        speaker_wav: ref_wav,
-        ref_text:    ref_text,
-      }
     end
 
     def voice_instruct_options
@@ -153,30 +138,6 @@ module Audiobook
         .map(&:strip)
         .reject(&:empty?)
         .join(', ')
-    end
-
-    def voice_reference_text
-      sentences = @book.pages.flat_map(&:all_sentences).map(&:text)
-        .map { |text| text.to_s.strip }
-        .reject(&:empty?)
-
-      sentences.find { |text| text.length.between?(80, 220) } || compact_reference_text(sentences)
-    end
-
-    def compact_reference_text(sentences)
-      parts = []
-      length = 0
-
-      sentences.each do |sentence|
-        next if sentence.length < 10
-        break if length.positive? && length + sentence.length + 1 > 220
-
-        parts << sentence
-        length += sentence.length + 1
-        break if length >= 80
-      end
-
-      parts.join(' ')
     end
   end
 end
