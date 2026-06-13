@@ -47,6 +47,13 @@ RSpec.describe 'Audiobook TTS speed' do
     expect(captured_opts.speed).to be_nil
   end
 
+  it 'delegates backend feature checks to TTS' do
+    book = instance_double(Audiobook::Book, metadata: {}, pages: [])
+    runner = Audiobook::Runner.new(book)
+
+    expect(runner.send(:backend_supports?, :speech_speed)).to eq(true)
+  end
+
   it 'normalizes configured voice option values' do
     book = instance_double(Audiobook::Book, metadata: {}, pages: [])
     runner = Audiobook::Runner.new(
