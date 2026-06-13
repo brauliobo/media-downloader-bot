@@ -16,6 +16,7 @@ Environment=TTS_MODEL_ID=/srv/OmniVoice/model
 Environment=OMNIVOICE_DEVICE=cuda:0
 Environment=OMNIVOICE_SPEED=1.0
 Environment=OMNIVOICE_NUM_STEP=32
+Environment=TMPDIR=/run/omnivoice-tts
 Environment=HF_HOME=/var/cache/omnivoice-tts/huggingface
 Environment=TRANSFORMERS_CACHE=/var/cache/omnivoice-tts/huggingface/transformers
 Environment=TORCH_HOME=/var/cache/omnivoice-tts/torch
