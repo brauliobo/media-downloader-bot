@@ -5,6 +5,7 @@ require_relative '../tts/options'
 module Audiobook
   class Runner
     DEFAULT_VOICE_INSTRUCT = TTS::Options::DEFAULT_VOICE_INSTRUCT
+    VOICE_REFERENCE_TEXT   = 'This is the narrator voice reference for the audiobook.'.freeze
 
     def initialize(book, stl = nil, opts = nil)
       @book = book
@@ -101,7 +102,24 @@ module Audiobook
     end
 
     def tts_options(dir)
-      TTS::Options.for(@opts)
+      options = TTS::Options.for(@opts)
+      return options unless stable_voice_reference?
+
+      ref_path = File.join(dir, 'audiobook_voice_reference.wav')
+      unless File.exist?(ref_path) && File.size?(ref_path)
+        TTS.synthesize(
+          text:     VOICE_REFERENCE_TEXT,
+          lang:     @lang,
+          out_path: ref_path,
+          **options
+        )
+      end
+
+      options.merge(speaker_wav: ref_path, ref_text: VOICE_REFERENCE_TEXT)
+    end
+
+    def stable_voice_reference?
+      TTS::BACKEND == TTS::OmniVoice
     end
 
     def voice_instruct

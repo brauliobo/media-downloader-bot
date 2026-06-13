@@ -6,11 +6,17 @@ RSpec.describe 'Audiobook TTS speed' do
     runner = Audiobook::Runner.new(book, nil, SymMash.new(speed: '1.25'))
 
     Dir.mktmpdir do |dir|
+      allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
+        File.write(out_path, 'wav')
+      end
+
       options = runner.send(:tts_options, dir)
 
       expect(options[:speed]).to eq(1.25)
       expect(options[:temperature]).to eq(0)
       expect(options[:instruct]).to eq(Audiobook::Runner::DEFAULT_VOICE_INSTRUCT)
+      expect(options[:speaker_wav]).to end_with('audiobook_voice_reference.wav')
+      expect(options[:ref_text]).to eq(Audiobook::Runner::VOICE_REFERENCE_TEXT)
     end
   end
 
@@ -18,7 +24,13 @@ RSpec.describe 'Audiobook TTS speed' do
     book = instance_double(Audiobook::Book, metadata: {}, pages: [])
     runner = Audiobook::Runner.new(book, nil, SymMash.new(temp: '0.35'))
 
-    expect(runner.send(:tts_options, '/tmp')[:temperature]).to eq(0.35)
+    allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
+      File.write(out_path, 'wav')
+    end
+
+    Dir.mktmpdir do |dir|
+      expect(runner.send(:tts_options, dir)[:temperature]).to eq(0.35)
+    end
   end
 
   it 'does not apply conversion speed when the TTS backend already supports speed' do
