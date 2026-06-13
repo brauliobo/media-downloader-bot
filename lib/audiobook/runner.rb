@@ -122,6 +122,10 @@ module Audiobook
       TTS::BACKEND == TTS::OmniVoice
     end
 
+    def backend_supports?(feature)
+      TTS.supports?(feature)
+    end
+
     def voice_instruct
       TTS::Options.for(@opts)[:instruct].to_s
     end
