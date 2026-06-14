@@ -103,7 +103,7 @@ module Audiobook
     end
 
     def tts_options(dir)
-      options = TTS::Options.for(@opts)
+      options = TTS::Options.for(@opts, lang: @lang)
       return options unless stable_voice_reference?
 
       ref_path = File.join(dir, 'audiobook_voice_reference.wav')
@@ -139,7 +139,7 @@ module Audiobook
     end
 
     def voice_instruct
-      TTS::Options.for(@opts)[:instruct].to_s
+      TTS::Options.for(@opts, lang: @lang)[:instruct].to_s
     end
   end
 end
