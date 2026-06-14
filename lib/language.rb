@@ -4,21 +4,23 @@ require_relative 'ai/open_code'
 require_relative 'ai/json_schema'
 
 module Language
-  PROMPT_TEMPLATE = "Detect the main language of the text. Return the ISO 639-1 two-letter language code. Do not return `en` unless the text is actually English.".freeze
+  PROMPT_TEMPLATE = "Detect the predominant language of this text chunk by the majority of the text content. Return the ISO 639-1 two-letter language code. Do not return `en` unless this chunk is actually English.".freeze
   REF_PROMPT      = "Write one short neutral audiobook narrator reference sentence in the requested language. Return only valid JSON.".freeze
   REF_FALLBACK    = 'This is the narrator voice reference for the audiobook.'.freeze
   SCHEMA          = AI::JSONSchema.object(lang: { type: 'string', pattern: '^[a-z]{2}$' }).freeze
   REF_SCHEMA      = AI::JSONSchema.object(text: { type: 'string', minLength: 1 }).freeze
   AI_BACKEND      = AI::OpenCode
+  CHUNK_SIZE      = 2_000
+  MAX_CHUNKS      = 8
 
   def self.detect(paragraphs)
     return 'en' unless paragraphs.any?
-    sample_text = paragraphs.map{ |p| p[:text] }.join("\n")[0, 1000]
 
-    lang = ask(PROMPT_TEMPLATE, SCHEMA, "Text:\n#{sample_text}")['lang'].downcase.strip
-    lang.match?(/^[a-z]{2}$/) ? lang : 'en'
-  rescue Timeout::Error, StandardError
-    'en'
+    votes = language_chunks(paragraphs).each_with_object(Hash.new(0)) do |chunk, acc|
+      lang = detect_chunk(chunk)
+      acc[lang] += chunk.length if lang
+    end
+    votes.max_by { |_lang, weight| weight }&.first || 'en'
   end
 
   def self.voice_reference_text(lang)
@@ -32,6 +34,19 @@ module Language
 
   def self.ask(task, schema, input)
     AI::JSONSchema.ask(backend: AI_BACKEND, task: task, schema: schema, input: input)
+  end
+
+  def self.detect_chunk(chunk)
+    lang = ask(PROMPT_TEMPLATE, SCHEMA, "Text:\n#{chunk}")['lang'].downcase.strip
+    lang if lang.match?(/^[a-z]{2}$/)
+  rescue Timeout::Error, StandardError
+    nil
+  end
+
+  def self.language_chunks(paragraphs)
+    text = paragraphs.map { |p| p[:text].to_s.strip }.reject(&:empty?).join("\n")
+    chunks = text.scan(/.{1,#{CHUNK_SIZE}}/m).first(MAX_CHUNKS)
+    chunks.reject { |chunk| chunk.strip.empty? }
   end
 
 end
