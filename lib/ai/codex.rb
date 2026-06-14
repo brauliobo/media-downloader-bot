@@ -1,6 +1,7 @@
 require 'json'
 require 'open3'
 require 'tempfile'
+require_relative 'json_schema'
 
 module AI
   class Codex
@@ -28,10 +29,9 @@ module AI
       end
     end
 
-    def self.json_prompt(text, model: MODEL)
+    def self.json_prompt(text, schema:, model: MODEL)
       raw = prompt(text, model: model)
-      raw = raw.gsub(/```json\s*/i, '').gsub(/```\s*/, '')
-      JSON.parse(raw)
+      AI::JSONSchema.parse(raw, schema: schema)
     end
   end
 end

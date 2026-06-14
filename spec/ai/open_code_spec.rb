@@ -3,11 +3,7 @@ require_relative '../../lib/ai/open_code'
 
 RSpec.describe AI::OpenCode do
   let(:schema) do
-    {
-      type:       'object',
-      properties: { text: { type: 'string' } },
-      required:   ['text'],
-    }
+    AI::JSONSchema.object(text: { type: 'string' })
   end
 
   it 'validates JSON output against the provided schema' do

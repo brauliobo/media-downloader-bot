@@ -1,25 +1,35 @@
 require 'json'
 require_relative 'ai/codex'
+require_relative 'ai/json_schema'
 
 module Shorts
   module_function
 
+  CUT_SCHEMA = {
+    type:  'array',
+    items: AI::JSONSchema.object(
+      start: { type: 'string', pattern: '^\\d{2}:\\d{2}:\\d{2}$' },
+      end:   { type: 'string', pattern: '^\\d{2}:\\d{2}:\\d{2}$' },
+      title: { type: 'string' }
+    ),
+  }.freeze
+  TITLE_SCHEMA = AI::JSONSchema.object(title: { type: 'string', minLength: 1 }).freeze
+
   def generate_cuts_from_srt(srt, language: nil)
-    prompt = <<~PROMPT
+    task = <<~PROMPT
       From the SRT transcript below, propose 4-10 short video cuts.
 
       Rules:
       - Choose the most engaging moments; keep each cut ~30-75 seconds; no overlaps
       - Cut on sentence boundaries when possible
       - Times must be HH:MM:SS (no milliseconds). Use only the transcript timing
-      - Return ONLY a valid JSON array: [{"start":"00:00:00","end":"00:00:59","title":"compelling title"}]
       #{language ? "- Titles in: #{language}" : '- Titles in the subtitle language'}
-
-      Transcript (SRT):
-      #{srt}
     PROMPT
 
-    arr = AI::Codex.json_prompt(prompt)
+    arr = ask_json(task, CUT_SCHEMA, <<~INPUT)
+      Transcript (SRT):
+      #{srt}
+    INPUT
     arr = [arr] if arr.is_a?(Hash)
     arr = [] unless arr.is_a?(Array)
     arr.filter_map do |h|
@@ -38,21 +48,24 @@ module Shorts
     snippet = vtt_to_text(vtt).to_s.strip
     lang_instruction = language.to_s.strip.present? ? "Generate the title in: #{language}." : 'Generate the title in the subtitle language.'
 
-    prompt = <<~PROMPT
+    task = <<~PROMPT
       Given this subtitle excerpt of a short video, produce ONE concise, compelling title.
 
       Rules:
       - #{lang_instruction}
       - 4-10 words; no hashtags/emojis; no quotes/brackets
       - Use ONLY the excerpt content; do not invent names or facts
-      - Return ONLY JSON: {"title":"..."}
-
-      Excerpt:
-      #{snippet}
     PROMPT
 
-    data = AI::Codex.json_prompt(prompt)
-    normalize_title(data.is_a?(Hash) ? data['title'] : Array(data).first)
+    data = ask_json(task, TITLE_SCHEMA, <<~INPUT)
+      Excerpt:
+      #{snippet}
+    INPUT
+    normalize_title(data['title'])
+  end
+
+  def ask_json(task, schema, input)
+    AI::JSONSchema.ask(backend: AI::Codex, task: task, schema: schema, input: input)
   end
 
   def normalize_title(t)
