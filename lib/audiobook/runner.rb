@@ -1,16 +1,17 @@
 require 'tmpdir'
 require_relative '../zipper'
 require_relative '../tts/options'
+require_relative '../language'
 
 module Audiobook
   class Runner
     DEFAULT_VOICE_INSTRUCT = TTS::Options::DEFAULT_VOICE_INSTRUCT
-    VOICE_REFERENCE_TEXT   = 'This is the narrator voice reference for the audiobook.'.freeze
+    VOICE_REFERENCE_TEXT   = Language::REF_FALLBACK
 
     def initialize(book, stl = nil, opts = nil)
       @book = book
-      @lang = @book.metadata['language'] || 'en'
-      @stl = stl
+      @lang = book_language
+      @stl  = stl
       @opts = opts
     end
 
@@ -108,14 +109,25 @@ module Audiobook
       ref_path = File.join(dir, 'audiobook_voice_reference.wav')
       unless File.exist?(ref_path) && File.size?(ref_path)
         TTS.synthesize(
-          text:     VOICE_REFERENCE_TEXT,
+          text:     voice_reference_text,
           lang:     @lang,
           out_path: ref_path,
           **options
         )
       end
 
-      options.merge(speaker_wav: ref_path, ref_text: VOICE_REFERENCE_TEXT)
+      options.merge(speaker_wav: ref_path, ref_text: voice_reference_text)
+    end
+
+    def book_language
+      metadata = @book.metadata || {}
+      language = metadata['language'] || metadata[:language]
+      language ||= metadata.language if metadata.respond_to?(:language)
+      (language || 'en').to_s
+    end
+
+    def voice_reference_text
+      @voice_reference_text ||= Language.voice_reference_text(@lang)
     end
 
     def stable_voice_reference?

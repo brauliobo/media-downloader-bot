@@ -6,6 +6,7 @@ RSpec.describe 'Audiobook TTS speed' do
     runner = Audiobook::Runner.new(book, nil, SymMash.new(speed: '1.25'))
 
     Dir.mktmpdir do |dir|
+      allow(Language).to receive(:voice_reference_text).with('en').and_return(Audiobook::Runner::VOICE_REFERENCE_TEXT)
       allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
         File.write(out_path, 'wav')
       end
@@ -20,6 +21,41 @@ RSpec.describe 'Audiobook TTS speed' do
     end
   end
 
+  it 'uses Portuguese reference text and accent for Portuguese audiobooks' do
+    book = instance_double(Audiobook::Book, metadata: { 'language' => 'pt' }, pages: [])
+    runner = Audiobook::Runner.new(book, nil, SymMash.new)
+
+    Dir.mktmpdir do |dir|
+      captured = nil
+      allow(Language).to receive(:voice_reference_text).with('pt').and_return('Esta frase fixa a voz narradora do audiolivro.')
+      allow(TTS).to receive(:synthesize) do |**kwargs|
+        captured = kwargs
+        File.write(kwargs[:out_path], 'wav')
+      end
+
+      options = runner.send(:tts_options, dir)
+
+      expect(captured[:text]).to eq('Esta frase fixa a voz narradora do audiolivro.')
+      expect(captured[:lang]).to eq('pt')
+      expect(captured[:instruct]).to eq('female, middle-aged, moderate pitch, american accent')
+      expect(options[:ref_text]).to eq('Esta frase fixa a voz narradora do audiolivro.')
+    end
+  end
+
+  it 'uses language-specific voice reference text for English audiobooks too' do
+    book = instance_double(Audiobook::Book, metadata: { language: 'en' }, pages: [])
+    runner = Audiobook::Runner.new(book, nil, SymMash.new)
+
+    Dir.mktmpdir do |dir|
+      allow(Language).to receive(:voice_reference_text).with('en').and_return('This sentence anchors the narrator voice.')
+      allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
+        File.write(out_path, 'wav')
+      end
+
+      expect(runner.send(:tts_options, dir)[:ref_text]).to eq('This sentence anchors the narrator voice.')
+    end
+  end
+
   it 'passes configured TTS temperature option' do
     book = instance_double(Audiobook::Book, metadata: {}, pages: [])
     runner = Audiobook::Runner.new(book, nil, SymMash.new(temp: '0.35'))
@@ -29,6 +65,8 @@ RSpec.describe 'Audiobook TTS speed' do
     end
 
     Dir.mktmpdir do |dir|
+      allow(Language).to receive(:voice_reference_text).with('en').and_return(Audiobook::Runner::VOICE_REFERENCE_TEXT)
+
       expect(runner.send(:tts_options, dir)[:temperature]).to eq(0.35)
     end
   end
