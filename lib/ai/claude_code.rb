@@ -1,5 +1,6 @@
 require 'json'
 require 'open3'
+require_relative 'json_schema'
 
 module AI
   class ClaudeCode
@@ -11,11 +12,9 @@ module AI
       out.strip
     end
 
-    def self.json_prompt(text, model: MODEL)
+    def self.json_prompt(text, schema:, model: MODEL)
       raw = prompt(text, model: model)
-      # strip markdown fences if present
-      raw = raw.gsub(/```json\s*/i, '').gsub(/```\s*/, '')
-      JSON.parse(raw)
+      AI::JSONSchema.parse(raw, schema: schema)
     end
   end
 end

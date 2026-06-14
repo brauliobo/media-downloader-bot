@@ -25,8 +25,9 @@ RSpec.describe AI::Codex do
   describe '.json_prompt' do
     it 'parses json wrapped in markdown fences' do
       allow(described_class).to receive(:prompt).and_return("```json\n{\"title\":\"Hello\"}\n```")
+      schema = AI::JSONSchema.object(title: { type: 'string' })
 
-      expect(described_class.json_prompt('prompt')).to eq('title' => 'Hello')
+      expect(described_class.json_prompt('prompt', schema: schema)).to eq('title' => 'Hello')
     end
   end
 end
