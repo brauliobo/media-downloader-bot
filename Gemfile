@@ -11,6 +11,7 @@ end
 gem 'activesupport'
 gem 'dotenv'
 gem 'hashie'
+gem 'json_schemer'
 gem 'chronic'
 gem 'chronic_duration'
 gem 'retriable'
@@ -50,4 +51,3 @@ group :development do
   gem 'pry'
   gem 'rspec'
 end
-
