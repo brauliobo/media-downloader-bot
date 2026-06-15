@@ -63,7 +63,6 @@ RSpec.describe Dubbing::Pipeline do
       text: 'Olá.',
       lang: 'pt',
       out_path: kind_of(String),
-      instruct: TTS::Options::DEFAULT_VOICE_INSTRUCT,
       temperature: 0,
       speaker_wav: speaker
     ) { |out_path:, **_| File.write(out_path, 'raw') }
@@ -71,7 +70,6 @@ RSpec.describe Dubbing::Pipeline do
       text: 'Tchau.',
       lang: 'pt',
       out_path: kind_of(String),
-      instruct: TTS::Options::DEFAULT_VOICE_INSTRUCT,
       temperature: 0,
       speaker_wav: speaker
     ) { |out_path:, **_| File.write(out_path, 'raw') }

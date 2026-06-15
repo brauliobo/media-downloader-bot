@@ -2,7 +2,6 @@ require_relative '../tts'
 
 class TTS
   class Options
-    DEFAULT_VOICE_INSTRUCT = 'female, middle-aged, moderate pitch'.freeze
     VOICE_KEYS             = %i[voice voice_instruct instruct].freeze
     TEMP_KEYS              = %i[temp temperature].freeze
 
@@ -41,7 +40,7 @@ class TTS
 
     def voice_instruct
       key = VOICE_KEYS.find { |option| @opts&.public_send(option).present? }
-      normalize(key ? @opts.public_send(key) : DEFAULT_VOICE_INSTRUCT)
+      normalize(@opts.public_send(key)) if key
     end
 
     def normalize(value)

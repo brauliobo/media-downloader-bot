@@ -5,8 +5,7 @@ require_relative '../language'
 
 module Audiobook
   class Runner
-    DEFAULT_VOICE_INSTRUCT = TTS::Options::DEFAULT_VOICE_INSTRUCT
-    VOICE_REFERENCE_TEXT   = Language::REF_FALLBACK
+    VOICE_REFERENCE_TEXT = Language::REF_FALLBACK
 
     def initialize(book, stl = nil, opts = nil)
       @book = book
