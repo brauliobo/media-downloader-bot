@@ -162,7 +162,7 @@ class Worker
 
   def init_status
     return if @st
-    @st = Bot::Status.new do |text, *args, **params|
+    @st = Bot::Status.new(on_empty: -> { delete_status_message }) do |text, *args, **params|
       raw = text
       text = Bot::MsgHelpers.me(text) unless params[:parse_mode]
       begin
@@ -174,6 +174,10 @@ class Worker
       end
     end
     msg.resp ||= send_message msg, Bot::MsgHelpers.me('Downloading metadata...')
+  end
+
+  def delete_status_message
+    delete_message(msg, msg.resp.message_id, wait: 0) if msg.resp&.message_id
   end
 
   def upload_one i
