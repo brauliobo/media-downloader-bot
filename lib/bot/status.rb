@@ -39,8 +39,9 @@ module Bot
       end
     end
 
-    def initialize &block
-      @block = block
+    def initialize(on_empty: nil, &block)
+      @block    = block
+      @on_empty = on_empty
     end
 
     def add line, prefix: nil, &block
@@ -67,7 +68,8 @@ module Bot
     end
 
     def update *args, **params
-      return if blank?
+      return @on_empty&.call if blank?
+
       send_update formatted, *args, **params
       nil
     end
