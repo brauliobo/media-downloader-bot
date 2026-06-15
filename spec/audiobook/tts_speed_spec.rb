@@ -15,13 +15,13 @@ RSpec.describe 'Audiobook TTS speed' do
 
       expect(options[:speed]).to eq(1.25)
       expect(options[:temperature]).to eq(0)
-      expect(options[:instruct]).to eq('female, middle-aged, moderate pitch, english accent')
+      expect(options[:instruct]).to eq('female, middle-aged, moderate pitch')
       expect(options[:speaker_wav]).to end_with('audiobook_voice_reference.wav')
       expect(options[:ref_text]).to eq(Audiobook::Runner::VOICE_REFERENCE_TEXT)
     end
   end
 
-  it 'uses language-specific reference text and accent for non-English audiobooks' do
+  it 'uses language-specific reference text for non-English audiobooks' do
     book = instance_double(Audiobook::Book, metadata: { 'language' => 'pt' }, pages: [])
     runner = Audiobook::Runner.new(book, nil, SymMash.new)
 
@@ -37,16 +37,9 @@ RSpec.describe 'Audiobook TTS speed' do
 
       expect(captured[:text]).to eq('Esta frase fixa a voz narradora do audiolivro.')
       expect(captured[:lang]).to eq('pt')
-      expect(captured[:instruct]).to eq('female, middle-aged, moderate pitch, portuguese accent')
+      expect(captured[:instruct]).to eq('female, middle-aged, moderate pitch')
       expect(options[:ref_text]).to eq('Esta frase fixa a voz narradora do audiolivro.')
     end
-  end
-
-  it 'derives default accent instructions from any supported ISO language code' do
-    book = instance_double(Audiobook::Book, metadata: { 'language' => 'fr' }, pages: [])
-    runner = Audiobook::Runner.new(book, nil, SymMash.new)
-
-    expect(runner.send(:voice_instruct)).to eq('female, middle-aged, moderate pitch, french accent')
   end
 
   it 'keeps explicitly configured voice instructions for Portuguese audiobooks' do

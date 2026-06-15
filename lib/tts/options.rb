@@ -1,20 +1,18 @@
-require 'iso-639'
 require_relative '../tts'
 
 class TTS
   class Options
-    DEFAULT_VOICE_INSTRUCT = 'female, middle-aged, moderate pitch, english accent'.freeze
+    DEFAULT_VOICE_INSTRUCT = 'female, middle-aged, moderate pitch'.freeze
     VOICE_KEYS             = %i[voice voice_instruct instruct].freeze
     TEMP_KEYS              = %i[temp temperature].freeze
 
-    def self.for(opts = nil, speaker_wav: nil, lang: 'en')
+    def self.for(opts = nil, speaker_wav: nil, lang: nil)
       new(opts, speaker_wav: speaker_wav, lang: lang).to_h
     end
 
-    def initialize(opts = nil, speaker_wav: nil, lang: 'en')
+    def initialize(opts = nil, speaker_wav: nil, lang: nil)
       @opts        = opts || SymMash.new
       @speaker_wav = speaker_wav
-      @lang        = lang.to_s.downcase
     end
 
     def to_h
@@ -43,19 +41,7 @@ class TTS
 
     def voice_instruct
       key = VOICE_KEYS.find { |option| @opts&.public_send(option).present? }
-      normalize(key ? @opts.public_send(key) : default_voice_instruct)
-    end
-
-    def default_voice_instruct
-      "female, middle-aged, moderate pitch, #{language_name} accent"
-    end
-
-    def language_name
-      return 'english' if @lang.empty?
-
-      entry = ISO_639.find_by_code(@lang)
-      name = entry&.english_name || @lang
-      name.to_s.downcase
+      normalize(key ? @opts.public_send(key) : DEFAULT_VOICE_INSTRUCT)
     end
 
     def normalize(value)
