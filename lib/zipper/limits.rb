@@ -81,7 +81,22 @@ class Zipper
       maxrate  = MAX_VIDEO_MAXRATE_KBIT if maxrate > MAX_VIDEO_MAXRATE_KBIT
       maxrate  = "#{maxrate}k"
 
-      zipper.video_sz_template % {maxrate: maxrate, bufsize: bufsize}
+      video_size_opts(zipper, maxrate: maxrate, bufsize: bufsize)
+    end
+
+    def video_size_opts(zipper, maxrate:, bufsize:)
+      case zipper.format_name
+      when :h264, :h265
+        opts = []
+        opts << '-rc:v vbr' if zipper.opts.cudaenc
+        opts << "-maxrate:v #{maxrate}"
+        opts << "-bufsize #{bufsize}"
+        opts.join(' ')
+      when :vp9
+        "-rc vbr -b:v #{maxrate}"
+      else
+        ''
+      end
     end
   end
 end

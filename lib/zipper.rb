@@ -181,16 +181,6 @@ class Zipper
     end
   end
 
-  # szopts template depending on codec and CUDA availability.
-  def video_sz_template
-    spec = opts.format
-    if spec.respond_to?(:szopts_cpu) || spec.respond_to?(:szopts_cuda)
-      if opts.cudaenc then spec.szopts_cuda else spec.szopts_cpu end
-    else
-      spec.szopts || ''
-    end
-  end
-
   def video?; @type == :video; end
   def audio?; @type == :audio; end
 
@@ -211,7 +201,7 @@ class Zipper
     Zipper::Subtitle.apply(self)
     apply_speed
     apply_cut
-    szopts = apply_video_size_limits
+    size_opts = apply_video_size_limits
 
     aenc        = AUDIO_ENC[opts.acodec&.to_sym] || AUDIO_ENC.opus
     # Ensure abrate is set for video audio track (kbps)
@@ -238,7 +228,7 @@ class Zipper
     v_flags_parts << "#{qflag} #{opts.quality}" if qflag.present? && opts.quality
     v_flags_parts << "-preset #{preset}"
     v_flags_parts << extra if extra.present?
-    v_flags_parts << szopts if szopts.present?
+    v_flags_parts << size_opts if size_opts.present?
 
     v_flags = v_flags_parts.join(' ')
 
