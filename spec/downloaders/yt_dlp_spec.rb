@@ -92,6 +92,15 @@ RSpec.describe Downloaders::YtDlp do
       expect { downloader.download_one(i) }.to raise_error(/can't find/)
     end
 
+    it 'reports probe failures instead of a missing stream' do
+      file = File.join(tmp, 'input-1.mp4')
+      File.write(file, '')
+      allow(Sh).to receive(:run).and_return(['', '', 0])
+      allow(Prober).to receive(:for).and_raise('ffprobe failed: missing lib')
+
+      expect { downloader.download_one(i) }.to raise_error(/probe failed.*missing lib/)
+    end
+
     it 'prepends https when the input url lacks a protocol' do
       i.url = 'youtu.be/abc'
       captured = nil

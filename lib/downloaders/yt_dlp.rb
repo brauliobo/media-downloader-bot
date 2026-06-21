@@ -59,10 +59,21 @@ module Downloaders
     def pick_downloaded_file(files, want_video:)
       files   = Array(files).select { |f| f && File.exist?(f) }
       desired = want_video ? 'video' : 'audio'
-      files.find do |f|
-        probe = Prober.for(f) rescue nil
+      errors  = []
+      probed  = false
+
+      found = files.find do |f|
+        probe = Prober.for(f)
+        probed = true
         probe&.streams&.any? { |s| s.codec_type == desired }
+      rescue StandardError => e
+        errors << "#{File.basename(f)}: #{e.message}"
+        false
       end
+
+      raise Sh::Error.new('probe failed', errors.join(', ')) if errors.present? && !probed
+
+      found
     end
 
     def admin?
