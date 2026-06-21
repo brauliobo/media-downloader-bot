@@ -127,7 +127,11 @@ class Worker
           upload i
 
         rescue => e
-          stline.error "Processing error", exception: e
+          if e.respond_to?(:user_message)
+            stline.error e.user_message
+          else
+            stline.error "Processing error", exception: e
+          end
           report_error(msg, e)
         ensure
           up_queue.delete pos
