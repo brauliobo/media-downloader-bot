@@ -2,11 +2,11 @@ require 'spec_helper'
 require_relative '../lib/language'
 
 RSpec.describe Language do
-  it 'detects language through OpenCode JSON schema prompt' do
+  it 'detects language through Ollama JSON schema prompt' do
     text = 'Elaboracao e implementação de políticas públicas para a sociedade, com ações e decisões.'
 
     allow(AI::JSONSchema).to receive(:ask) do |backend:, task:, schema:, input:|
-      expect(backend).to eq(AI::OpenCode)
+      expect(backend).to eq(AI::Ollama)
       expect(task).to eq(described_class::PROMPT_TEMPLATE)
       expect(schema).to eq(described_class::SCHEMA)
       expect(input).to include('políticas públicas')
@@ -68,9 +68,9 @@ RSpec.describe Language do
     end.to raise_error(RuntimeError, 'temporary failure')
   end
 
-  it 'asks OpenCode for English voice reference text with a JSON schema' do
+  it 'asks Ollama for English voice reference text with a JSON schema' do
     allow(AI::JSONSchema).to receive(:ask) do |backend:, task:, schema:, input:|
-      expect(backend).to eq(AI::OpenCode)
+      expect(backend).to eq(AI::Ollama)
       expect(task).to eq(described_class::REF_PROMPT)
       expect(schema).to eq(described_class::REF_SCHEMA)
       expect(input).to include('Language code: en')
@@ -80,9 +80,9 @@ RSpec.describe Language do
     expect(described_class.voice_reference_text('en')).to eq('This sentence anchors the audiobook narrator voice.')
   end
 
-  it 'asks OpenCode for non-English voice reference text with a JSON schema' do
+  it 'asks Ollama for non-English voice reference text with a JSON schema' do
     allow(AI::JSONSchema).to receive(:ask) do |backend:, task:, schema:, input:|
-      expect(backend).to eq(AI::OpenCode)
+      expect(backend).to eq(AI::Ollama)
       expect(task).to eq(described_class::REF_PROMPT)
       expect(schema).to eq(described_class::REF_SCHEMA)
       expect(input).to include('Language code: pt')
