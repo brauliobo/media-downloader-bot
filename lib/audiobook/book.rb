@@ -276,8 +276,8 @@ module Audiobook
       @metadata.language = lang
       @stl&.update "Detected language: #{lang}"
     rescue => e
-      @metadata.language ||= 'en'
-      @stl&.update "Language detection failed, defaulting to en"
+      @stl&.error 'Language detection failed', exception: e
+      raise
     end
 
     def extract_first_5_pages_text
