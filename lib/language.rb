@@ -1,6 +1,6 @@
 require 'json'
 require 'timeout'
-require_relative 'ai/open_code'
+require_relative 'ai/ollama'
 require_relative 'ai/json_schema'
 
 module Language
@@ -9,7 +9,7 @@ module Language
   REF_FALLBACK    = 'This is the narrator voice reference for the audiobook.'.freeze
   SCHEMA          = AI::JSONSchema.object(lang: { type: 'string', pattern: '^[a-z]{2}$' }).freeze
   REF_SCHEMA      = AI::JSONSchema.object(text: { type: 'string', minLength: 1 }).freeze
-  AI_BACKEND      = AI::OpenCode
+  AI_BACKEND      = AI::Ollama
   CHUNK_SIZE      = 2_000
   MAX_CHUNKS      = 8
 

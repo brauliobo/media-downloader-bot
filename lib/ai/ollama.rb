@@ -3,8 +3,13 @@ module AI
     API   = ENV['OLLAMA_HOST']
     MODEL = ENV['OLLAMA_OCR_MODEL']
 
-    def self.chat(messages, format: nil)
+    def self.prompt(text, model: ENV['OLLAMA_LANGUAGE_MODEL'] || MODEL)
+      chat([{ role: :user, content: text }], model: model)
+    end
+
+    def self.chat(messages, format: nil, model: MODEL)
       payload = { model: MODEL, stream: false, options: {temperature: 0.0}, messages: messages }
+      payload[:model] = model if model
       payload[:format] = format if format
       res = Utils::HTTP.post "#{API}/api/chat", payload.to_json
       raise "Ollama API HTTP error: #{res.code}" unless res.code.to_i == 200
@@ -20,4 +25,3 @@ module AI
     end
   end
 end
-
