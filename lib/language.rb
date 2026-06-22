@@ -14,13 +14,13 @@ module Language
   MAX_CHUNKS      = 8
 
   def self.detect(paragraphs)
-    return 'en' unless paragraphs.any?
+    raise ArgumentError, 'no text available for language detection' unless paragraphs.any?
 
     votes = language_chunks(paragraphs).each_with_object(Hash.new(0)) do |chunk, acc|
       lang = detect_chunk(chunk)
       acc[lang] += chunk.length if lang
     end
-    votes.max_by { |_lang, weight| weight }&.first || 'en'
+    votes.max_by { |_lang, weight| weight }&.first || raise('language detection returned no valid result')
   end
 
   def self.voice_reference_text(lang)
@@ -39,8 +39,6 @@ module Language
   def self.detect_chunk(chunk)
     lang = ask(PROMPT_TEMPLATE, SCHEMA, "Text:\n#{chunk}")['lang'].downcase.strip
     lang if lang.match?(/^[a-z]{2}$/)
-  rescue Timeout::Error, StandardError
-    nil
   end
 
   def self.language_chunks(paragraphs)

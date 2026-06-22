@@ -16,10 +16,10 @@ RSpec.describe Language do
     expect(described_class.detect([SymMash.new(text: text)])).to eq('pt')
   end
 
-  it 'falls back to English when language detection fails' do
+  it 'raises when language detection fails' do
     allow(AI::JSONSchema).to receive(:ask).and_raise('offline')
 
-    expect(described_class.detect([SymMash.new(text: '???')])).to eq('en')
+    expect { described_class.detect([SymMash.new(text: '???')]) }.to raise_error(RuntimeError, 'offline')
   end
 
   it 'uses the majority language across sampled text chunks' do
@@ -52,7 +52,7 @@ RSpec.describe Language do
     expect(inputs.size).to be > 1
   end
 
-  it 'ignores failed chunks instead of falling back immediately to English' do
+  it 'raises on failed chunks instead of falling back to English' do
     stub_const('Language::CHUNK_SIZE', 20)
     calls = 0
 
@@ -63,7 +63,9 @@ RSpec.describe Language do
       { 'lang' => 'pt' }
     end
 
-    expect(described_class.detect([SymMash.new(text: 'English intro. ' + ('Texto portugues. ' * 8))])).to eq('pt')
+    expect do
+      described_class.detect([SymMash.new(text: 'English intro. ' + ('Texto portugues. ' * 8))])
+    end.to raise_error(RuntimeError, 'temporary failure')
   end
 
   it 'asks OpenCode for English voice reference text with a JSON schema' do
