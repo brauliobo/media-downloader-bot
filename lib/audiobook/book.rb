@@ -43,6 +43,24 @@ module Audiobook
       end
     end
 
+    def self.detect_language(input_path, opts: nil, stl: nil)
+      data = case File.extname(input_path).downcase
+      when '.yml', '.yaml' then SymMash.new(YAML.load_file(input_path) || {})
+      when '.json'         then parse_json(input_path, opts: opts)
+      when '.pdf'          then parse_pdf(input_path, stl: stl, opts: opts)
+      when '.epub'         then parse_epub(input_path, stl: stl, opts: opts)
+      else                      parse_fallback_ocr(input_path, stl: stl, opts: opts)
+      end
+
+      obj = allocate
+      obj.instance_variable_set(:@data, data)
+      obj.instance_variable_set(:@metadata, data.metadata || SymMash.new)
+      obj.instance_variable_set(:@opts, opts || SymMash.new)
+      obj.instance_variable_set(:@stl, stl)
+      obj.send(:detect_language_from_first_pages)
+      obj.metadata.language || 'en'
+    end
+
     def self.url_kindle?(input_path)
       s = input_path.to_s
       return false unless s.start_with?('http')
@@ -184,7 +202,7 @@ module Audiobook
       # Detect language from first 5 pages of content
       detect_language_from_first_pages
       @lang = @metadata.language || 'en'
-      
+
       # Handle new line-based format or legacy paragraph format
       if @data.content&.lines
         @pages = pages_from_lines(@data.content.lines, @data.content.images || [])
@@ -253,7 +271,7 @@ module Audiobook
       @stl&.update 'Detecting language from content'
       sample_paras = extract_first_5_pages_text
       return if sample_paras.empty?
-      
+
       lang = Language.detect(sample_paras)
       @metadata.language = lang
       @stl&.update "Detected language: #{lang}"

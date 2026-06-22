@@ -34,6 +34,16 @@ Worker.skip_cleanup = true
 
 raise "No files found" if ARGV.blank?
 
+if opts.langdetect
+  path = ARGV.size > 1 ? ARGV : ARGV.first&.split("\n")
+  path.each do |u|
+    raise "Input not found: #{u}" unless File.exist?(u)
+
+    puts "#{u}: #{Audiobook::Book.detect_language(u, opts: opts)}"
+  end
+  exit 0
+end
+
 if Processors::Folder.handles?(ARGV, opts)
   Processors::Folder.new(
     paths: ARGV,
