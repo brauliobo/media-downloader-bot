@@ -28,6 +28,12 @@ class Zipper
 
   AUDIO_ENC = Zipper::Formats::AUDIO_ENC
 
+  VOICE_QUALITY_FILTER = (
+    'highpass=f=80,lowpass=f=9000,afftdn=nf=-25,' \
+    'acompressor=threshold=-18dB:ratio=2.5:attack=20:release=250,' \
+    'dynaudnorm=f=150:g=15,loudnorm=I=-16:TP=-1.5:LRA=11'
+  ).freeze
+
   THREADS = ENV['THREADS']&.to_i || 16
   FFMPEG  = "ffmpeg -y -threads #{THREADS} -loglevel error"
 
@@ -143,7 +149,8 @@ class Zipper
     @dopts.width = Formats.default_width(Zipper.size_mb_limit) if @dopts.width && !@opts.custom_width
     @opts.reverse_merge! dopts
 
-    @fgraph = []
+    @fgraph        = []
+    @audio_filters = []
     @fgraph << Utils::Safety.safe_filter(opts.vf) if opts.vf.present?
 
     @maps = []
@@ -277,6 +284,7 @@ class Zipper
     apply_audio_rate
     apply_audio_channels
 
+    apply_voice_quality
     apply_speed
     apply_audio_size_limit
     apply_cut
@@ -286,6 +294,7 @@ class Zipper
     acodec      = acodec_tmpl % {abrate: opts.bitrate}
 
     audio_post_opts = AUDIO_POST_OPTS % {metadata: metadata_args}
+    oopts << " -af #{audio_filters.join(',')}" if audio_filters.present?
 
     # Do not force channels; let encoder decide (previously caused artifacts)
 
@@ -364,6 +373,12 @@ class Zipper
 
   protected
 
+  attr_reader :audio_filters
+
+  def append_audio_filter(filter)
+    audio_filters << filter
+  end
+
   def reduce_framerate
     return unless opts.nompdecimate
     fgraph << 'mpdecimate'
@@ -398,7 +413,15 @@ class Zipper
 
     fgraph << "setpts=PTS/#{opts.speed}" if video?
     #iopts  << " -t #{duration}" # attached subtitle mess with the length of the video
-    oopts  << " -af atempo=#{opts.speed}"
+    if audio?
+      append_audio_filter "atempo=#{opts.speed}"
+    else
+      oopts << " -af atempo=#{opts.speed}"
+    end
+  end
+
+  def apply_voice_quality
+    append_audio_filter VOICE_QUALITY_FILTER if opts.voice_quality
   end
 
   def check_width
