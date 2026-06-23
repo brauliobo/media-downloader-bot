@@ -52,9 +52,17 @@ module Bot
       admin   = Bot::MsgHelpers.from_admin?(msg)
       queued_msg = (bot.send_message(msg, Bot::MsgHelpers.me(QUEUED_MSG)) if !admin && queued?(user_id))
       with_slot(user_id, admin: admin) do
-        bot.delete_message(msg, queued_msg.message_id) if queued_msg
+        delete_queued_notice(bot, msg, queued_msg)
         yield
       end
+    end
+
+    private
+
+    def delete_queued_notice(bot, msg, queued_msg)
+      bot.delete_message(msg, queued_msg.message_id) if queued_msg
+    rescue StandardError
+      nil
     end
   end
 end
