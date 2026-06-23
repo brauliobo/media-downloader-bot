@@ -93,5 +93,23 @@ RSpec.describe Bot::UserQueue do
       expect { queue.with_user_slot(bot, msg_for(non_admin_id)) { raise 'boom' } }.to raise_error('boom')
       expect(queue.queued?(non_admin_id)).to be false
     end
+
+    it 'still runs a queued job when deleting the queued notice fails' do
+      queue = described_class.instance
+      queue.acquire(non_admin_id)
+
+      allow(bot).to receive(:send_message).and_return(SymMash.new(message_id: 99))
+      allow(bot).to receive(:delete_message).and_raise('delete failed')
+
+      ran = false
+      t = Thread.new { queue.with_user_slot(bot, msg_for(non_admin_id)) { ran = true } }
+      sleep 0.1
+
+      queue.release(non_admin_id)
+      t.join
+
+      expect(ran).to be true
+      expect(queue.queued?(non_admin_id)).to be false
+    end
   end
 end
