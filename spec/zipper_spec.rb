@@ -132,6 +132,24 @@ RSpec.describe Zipper do
     expect(Sh).not_to have_received(:run).with(include('scale='))
   end
 
+  it 'applies voice quality filters only to audio encodes' do
+    probe = SymMash.new(
+      format: SymMash.new(duration: 60),
+      streams: [SymMash.new(codec_type: 'audio')],
+    )
+    opts = SymMash.new(
+      voice_quality: 1,
+      format:        Zipper::Types.audio.mp3,
+      metadata:      {},
+    )
+
+    allow(Sh).to receive(:run)
+
+    described_class.new('/tmp/in.webm', '/tmp/out.mp3', probe: probe, opts: opts).zip_audio
+
+    expect(Sh).to have_received(:run).with(include('-af highpass=f=80,lowpass=f=9000,afftdn=nf=-25'))
+  end
+
   it 'transcribes subtitles when gensubs is the only subtitle option' do
     dir = Dir.mktmpdir('zipper-gensubs-')
     probe = SymMash.new(
