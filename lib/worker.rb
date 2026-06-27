@@ -194,10 +194,7 @@ class Worker
     durat  = oprobe&.format&.duration&.to_i
     opts   = i.opts
 
-    if info.language and opts.slang
-      info.title       = Translator.translate info.title,       from: info.language, to: opts.slang
-      info.description = Translator.translate info.description, from: info.language, to: opts.slang if opts.description
-    end
+    translate_caption_info(info, opts)
 
     info.title = msg_limit(info.title, percent: 90) if info.title
 
@@ -246,6 +243,20 @@ class Worker
     text << "\n\n_#{Bot::MsgHelpers.me(i.info.description.strip)}_" if opts.description and i.info.description.strip.presence
     text << "\n\n#{Bot::MsgHelpers.me(i.url)}" if i.url
     text
+  end
+
+  def translate_caption_text(text, from:, to:)
+    urls = text.to_s[%r{(?:\s+https?://\S+)+\s*\z}]
+    body = urls ? text.to_s.delete_suffix(urls).strip : text.to_s
+    [Translator.translate(body, from: from, to: to), urls.to_s.strip.presence].compact.join(' ')
+  end
+
+  def translate_caption_info(info, opts)
+    return unless opts.slang
+
+    [:title, (:description if opts.description)].compact.each do |field|
+      info[field] = translate_caption_text(info[field], from: info.language, to: opts.slang) if info[field].present?
+    end
   end
 
 end
