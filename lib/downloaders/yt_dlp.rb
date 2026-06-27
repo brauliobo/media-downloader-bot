@@ -159,6 +159,9 @@ module Downloaders
     def format_title(info, i, mult)
       t = info.track || info.title
       t = info.description || t if info.webpage_url.include?('instagram.com')
+      if info.description && info.webpage_url.to_s.match?(%r{(?:^|://)(?:[^/]+\.)?(?:x|twitter)\.com/.+/status/}) && t.to_s.strip.end_with?('...')
+        t = info.description
+      end
       t = format('%02d %s', i + 1, t) if mult && opts.number
       t
     end

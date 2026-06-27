@@ -126,5 +126,20 @@ RSpec.describe Downloaders::YtDlp do
       expect { downloader.download_one(i) }.to raise_error(/download error/)
       expect(captured).to match(%r{https://www\\?\.youtube\\?\.com/watch})
     end
+
+    it 'uses full x.com descriptions when titles are ellipsized' do
+      info = SymMash.new(
+        webpage_url: 'https://x.com/i/status/2070518837150167314',
+        display_id:  '2070518837150167314',
+        _filename:   'status.mp4',
+        duration:    10,
+        title:       'Cloooud - As always, the Russian invaders are stealing anything that is lying ar...',
+        description: 'As always, the Russian invaders are stealing anything that is lying around.'
+      )
+
+      input = downloader.send(:build_input, info, 0, false)
+
+      expect(input.info.title).to eq('As always, the Russian invaders are stealing anything that is lying around.')
+    end
   end
 end
