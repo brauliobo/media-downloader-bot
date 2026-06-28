@@ -2,6 +2,7 @@
 
 Dir.chdir File.expand_path "#{File.realpath __dir__}/.." do
   require_relative '../lib/manager'
+  require_relative '../lib/tts'
 end
 
 # Usage:
