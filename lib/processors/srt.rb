@@ -12,7 +12,7 @@ module Processors
 
     def self.can_handle?(ctx)
       return false unless srt_file?(ctx.msg)
-      line = ctx.line || ctx.msg&.text
+      line = Utils::InputParser.input_text(ctx)
       line.to_s.match?(/\blang=\w+/)
     end
 

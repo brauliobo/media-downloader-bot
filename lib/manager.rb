@@ -11,6 +11,7 @@ require_relative 'bot/base'
 require_relative 'bot/commands/cookie'
 require_relative 'bot/worker/drb_service'
 require_relative 'bot/worker/http_service'
+require_relative 'utils/input_parser'
 
 require_relative 'worker' if ENV['WITH_WORKER']
 require_relative 'bot/tg_bot' if ENV['TG_BOT']
@@ -109,7 +110,7 @@ EOS
     return send_help msg if msg.text&.starts_with? '/help'
     raise 'user blocked' if msg.from.id.in? BLOCKED_USERS
 
-    cmd_text = msg.text.presence || msg.caption.presence
+    cmd_text = Utils::InputParser.message_text(msg).presence
     return Commands::Cookie.new(bot, msg).process if cmd_text&.starts_with?('/cookies') || (msg.document&.file_name&.downcase == 'cookies.txt')
 
     enqueue_message msg

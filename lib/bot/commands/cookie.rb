@@ -28,7 +28,7 @@ class Manager
         domains_count = cookies_by_domain.keys.size
         bot.send_message msg, Bot::MsgHelpers.me("Saved #{domains_count} cookie(s) from Netscape file")
       rescue => e
-        bot.report_error msg, e, context: msg.text
+        bot.report_error msg, e, context: Utils::InputParser.message_text(msg)
       end
 
       def extract_cookie_content
@@ -37,7 +37,7 @@ class Manager
           return File.read(local_path) if local_path && File.exist?(local_path)
         end
 
-        text = (msg.text.presence || msg.caption.presence)&.to_s&.strip
+        text = Utils::InputParser.message_text(msg).strip
         if text.present?
           content = text.split(/[[:space:]]+/, 2)[1]
           return content if content.present?
@@ -84,5 +84,4 @@ class Manager
     end
   end
 end
-
 

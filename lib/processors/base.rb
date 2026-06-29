@@ -30,7 +30,7 @@ module Processors
     end
 
     def parse_input
-      line = ctx.line || ctx.msg&.text
+      line = Utils::InputParser.input_text(ctx)
       return if line.blank?
       
       parsed = Utils::InputParser.parse(line)

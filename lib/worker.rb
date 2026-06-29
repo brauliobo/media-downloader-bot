@@ -89,7 +89,7 @@ class Worker
 
       ctx = Context.new(dir: work_dir, msg: msg, st: @st, session: @session)
       
-      lines = msg.text.to_s.split("\n").reject(&:blank?)
+      lines = Utils::InputParser.message_lines(msg)
       procs = process_lines(lines, ctx)
       
       procs.each do |p|
