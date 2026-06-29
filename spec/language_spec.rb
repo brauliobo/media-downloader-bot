@@ -91,4 +91,22 @@ RSpec.describe Language do
 
     expect(described_class.voice_reference_text('pt')).to eq('Esta frase fixa a voz narradora do audiolivro.')
   end
+
+  it 'asks Ollama for author gender and returns female when detected' do
+    allow(AI::JSONSchema).to receive(:ask) do |backend:, task:, schema:, input:|
+      expect(backend).to eq(AI::Ollama)
+      expect(task).to eq(described_class::AUTHOR_PROMPT)
+      expect(schema).to eq(described_class::AUTHOR_SCHEMA)
+      expect(input).to include('Mary Shelley')
+      { 'author' => 'Mary Shelley', 'gender' => 'female' }
+    end
+
+    expect(described_class.author_gender('Author: Mary Shelley')).to eq('female')
+  end
+
+  it 'defaults author gender to male when detection fails' do
+    allow(AI::JSONSchema).to receive(:ask).and_raise('offline')
+
+    expect(described_class.author_gender('Unknown author')).to eq('male')
+  end
 end

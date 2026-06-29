@@ -1,9 +1,11 @@
 module AI
   class Ollama
-    API   = ENV['OLLAMA_HOST']
-    MODEL = ENV['OLLAMA_OCR_MODEL']
+    API           = ENV['OLLAMA_HOST']
+    DEFAULT_MODEL = ENV['OLLAMA_MODEL'] || 'gemma4:e2b'
+    MODEL         = ENV['OLLAMA_OCR_MODEL'] || DEFAULT_MODEL
+    PROMPT_MODEL  = ENV['OLLAMA_LANGUAGE_MODEL'] || DEFAULT_MODEL
 
-    def self.prompt(text, model: ENV['OLLAMA_LANGUAGE_MODEL'] || MODEL)
+    def self.prompt(text, model: PROMPT_MODEL)
       chat([{ role: :user, content: text }], model: model)
     end
 
