@@ -12,10 +12,6 @@ class TTS
       segment:          false
     )
 
-    def self.supports_speech_speed?
-      true
-    end
-
     def self.supports_temperature?
       true
     end

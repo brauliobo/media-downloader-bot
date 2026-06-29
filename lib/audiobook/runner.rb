@@ -84,7 +84,6 @@ module Audiobook
 
     def encode_audio_file(input_wav, out_audio)
       zip_opts = SymMash.new(@opts || {})
-      zip_opts.delete(:speed) if TTS.supports?(:speech_speed)
       # Pick format based on requested extension; default to opus
       requested_ext = File.extname(out_audio.to_s).downcase
       case requested_ext
