@@ -34,6 +34,28 @@ RSpec.describe Downloaders::YtDlp do
       expect(captured).not_to include('--no-playlist')
     end
 
+    it 'enables generic extractor browser impersonation' do
+      captured = nil
+      allow(Sh).to receive(:run) { |cmd, **_| captured = cmd; ['', '', 0] }
+
+      downloader.download
+
+      expect(captured).to include('--extractor-args generic:impersonate')
+    end
+
+    it 'resolves rumble urls through oembed' do
+      ctx.url = 'https://rumble.com/v7c086u-modern-education-is-working-exactly-as-planned-sf736.html?e9s=src_v1'
+      captured = nil
+      body = {html: '<iframe src="https://rumble.com/embed/v79tk6m/" />'}.to_json
+      allow(Utils::HTTP).to receive(:get).and_return(SymMash.new(body: body))
+      allow(Sh).to receive(:run) { |cmd, **_| captured = cmd; ['', '', 0] }
+
+      downloader.download
+
+      expect(captured).to include('https://rumble.com/embed/v79tk6m/')
+      expect(captured).not_to include('v7c086u-modern-education')
+    end
+
     it 'reports a missing url instead of crashing' do
       status = Class.new do
         attr_reader :errors
