@@ -30,7 +30,7 @@ module Audiobook
     end
 
     def spoken_text
-      text.sub(/\s*[\p{P}]+\z/u, '')
+      text
     end
 
     def add_reference(ref)

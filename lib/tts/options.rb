@@ -19,7 +19,6 @@ class TTS
 
     def to_h
       {}.tap do |h|
-        h[:speed]          = @opts.speed.to_f if speed_supported? && @opts&.speed
         h[:temperature]    = temperature if temperature_supported?
         h[:tts_batch_size] = batch_size if batch_size
         h[:instruct]       = voice_instruct if voice_instruct.present?
@@ -28,10 +27,6 @@ class TTS
     end
 
     private
-
-    def speed_supported?
-      TTS.supports?(:speech_speed)
-    end
 
     def temperature_supported?
       TTS.supports?(:temperature)

@@ -1,7 +1,7 @@
 require 'spec_helper'
 
 RSpec.describe 'Audiobook TTS speed' do
-  it 'builds speech options with speed and default detected voice instruction' do
+  it 'builds speech options without speed and with default detected voice instruction' do
     book = instance_double(Audiobook::Book, metadata: {}, pages: [])
     runner = Audiobook::Runner.new(book, nil, SymMash.new(speed: '1.25'))
 
@@ -14,7 +14,7 @@ RSpec.describe 'Audiobook TTS speed' do
 
       options = runner.send(:tts_options, dir)
 
-      expect(options[:speed]).to eq(1.25)
+      expect(options).not_to have_key(:speed)
       expect(options[:temperature]).to eq(0)
       expect(options[:instruct]).to eq('female, middle-aged, moderate pitch')
       expect(options[:speaker_wav]).to end_with('audiobook_voice_reference.wav')
@@ -168,7 +168,7 @@ RSpec.describe 'Audiobook TTS speed' do
     end
   end
 
-  it 'does not apply conversion speed when the TTS backend already supports speed' do
+  it 'applies conversion speed through zipper' do
     book = instance_double(Audiobook::Book, metadata: {}, pages: [])
     runner = Audiobook::Runner.new(book, nil, SymMash.new(speed: '1.25'))
     captured_opts = nil
@@ -179,14 +179,14 @@ RSpec.describe 'Audiobook TTS speed' do
 
     runner.send(:encode_audio_file, '/tmp/in.wav', '/tmp/out.opus')
 
-    expect(captured_opts.speed).to be_nil
+    expect(captured_opts.speed).to eq('1.25')
   end
 
-  it 'delegates backend feature checks to TTS' do
+  it 'does not advertise TTS speech speed for audiobooks' do
     book = instance_double(Audiobook::Book, metadata: {}, pages: [])
     runner = Audiobook::Runner.new(book)
 
-    expect(runner.send(:backend_supports?, :speech_speed)).to eq(true)
+    expect(runner.send(:backend_supports?, :speech_speed)).to eq(false)
   end
 
   it 'normalizes configured voice option values' do
@@ -208,7 +208,7 @@ RSpec.describe 'Audiobook TTS speed' do
     expect(runner.send(:voice_instruct)).to eq('male, moderate pitch')
   end
 
-  it 'passes TTS speed and voice instruction to spoken page items' do
+  it 'passes voice instruction but not speed to spoken page items' do
     page = Audiobook::Page.new(1, [
       Audiobook::Paragraph.new([
         Audiobook::Sentence.new('Hello world.')
@@ -223,10 +223,9 @@ RSpec.describe 'Audiobook TTS speed' do
       end
 
       expect(TTS).to receive(:synthesize).with(
-        text:     'Hello world',
+        text:     'Hello world.',
         lang:     'en',
         out_path: kind_of(String),
-        speed:    1.25,
         instruct: 'female, middle-aged, moderate pitch, american accent'
       ) do |out_path:, **_kwargs|
         File.write(out_path, 'wav')
@@ -236,7 +235,6 @@ RSpec.describe 'Audiobook TTS speed' do
         dir, '0001',
         lang: 'en',
         tts_options: {
-          speed:    1.25,
           instruct: 'female, middle-aged, moderate pitch, american accent',
         }
       )
@@ -261,11 +259,11 @@ RSpec.describe 'Audiobook TTS speed' do
 
       expect(TTS).to receive(:synthesize_batch) do |items:, **kwargs|
         expect(kwargs[:tts_batch_size]).to eq(100)
-        expect(kwargs[:speed]).to eq(1.25)
+        expect(kwargs).not_to have_key(:speed)
         expect(items.map { |item| item[:text] }).to eq([
-          'Chapter One',
-          'Hello world',
-          'Second sentence',
+          'Chapter One.',
+          'Hello world.',
+          'Second sentence!',
         ])
         items.each { |item| File.write(item[:out_path], 'wav') }
       end
@@ -273,7 +271,7 @@ RSpec.describe 'Audiobook TTS speed' do
       page.to_wav(
         dir, '0001',
         lang: 'en',
-        tts_options: { speed: 1.25, tts_batch_size: 100 }
+        tts_options: { tts_batch_size: 100 }
       )
     end
   end
