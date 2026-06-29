@@ -12,14 +12,16 @@ class TTS
     included do
       mattr_accessor :base_url
       mattr_accessor :segment_chars
+      mattr_accessor :segment
       mattr_accessor :synth_path
       mattr_accessor :semaphore
     end
 
     class_methods do
-      def configure_backend(base_url:, segment_chars: 500, concurrency: 1, synth_path: '/synthesize')
+      def configure_backend(base_url:, segment_chars: 500, concurrency: 1, synth_path: '/synthesize', segment: true)
         self.base_url    = base_url
         self.segment_chars = segment_chars
+        self.segment     = segment
         self.synth_path  = synth_path
         self.semaphore   = Concurrent::Semaphore.new(concurrency)
       end
@@ -37,7 +39,7 @@ class TTS
     def http_synthesize(text:, lang:, out_path:, speaker_wav: nil, **kwargs)
       agent, url = Utils::HTTP.client, "#{self.base_url}#{self.synth_path}"
       clean_text = text.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
-      segments = segment_text(clean_text, self.segment_chars)
+      segments = self.segment ? segment_text(clean_text, self.segment_chars) : [clean_text]
 
       Dir.mktmpdir do |dir|
         wavs = []

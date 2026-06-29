@@ -64,4 +64,25 @@ RSpec.describe TTS::OmniVoice do
       expect(captured_form).not_to have_key('temp')
     end
   end
+
+  it 'sends long text as one request because OmniVoice chunks internally' do
+    Dir.mktmpdir('omnivoice-spec-') do |dir|
+      out_path = File.join(dir, 'out.wav')
+      agent = double
+      response = double(code: '200', body: 'wav')
+      captured_forms = []
+      text = (['This is a sentence.'] * 60).join(' ')
+
+      allow(Utils::HTTP).to receive(:client).and_return(agent)
+      allow(agent).to receive(:post) do |_url, form|
+        captured_forms << form
+        response
+      end
+
+      described_class.synthesize(text: text, lang: 'en', out_path: out_path)
+
+      expect(captured_forms.size).to eq(1)
+      expect(captured_forms.first['text']).to eq(text)
+    end
+  end
 end
