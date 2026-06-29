@@ -1,4 +1,5 @@
 require 'tmpdir'
+require_relative 'audio_files'
 require_relative '../zipper'
 require_relative '../tts/options'
 require_relative '../language'
@@ -78,10 +79,7 @@ module Audiobook
 
     def create_silent_wav(dir)
       silent_wav = File.join(dir, 'silent.wav')
-      cmd = "#{Zipper::FFMPEG} -f lavfi -i anullsrc=channel_layout=mono:sample_rate=#{TTS.output_sample_rate} -t 1 '#{silent_wav}'"
-      system(cmd)
-      raise 'Failed to create silent audio file' unless File.exist?(silent_wav)
-      silent_wav
+      AudioFiles.silence(silent_wav, 1)
     end
 
     def encode_audio_file(input_wav, out_audio)
