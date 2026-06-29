@@ -60,7 +60,12 @@ module Bot
       any?{ |l| l.kept }
     end
 
+    def error?
+      @error
+    end
+
     def error text, *args, exception: nil, **params
+      @error = true
       text = "#{text}\n#{exception.class}: #{exception.message}" if exception
       text = "#{text}\n#{exception.backtrace.join("\n")}" if exception&.backtrace
       send_update text, *args, **params

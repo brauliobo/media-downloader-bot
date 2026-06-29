@@ -96,7 +96,7 @@ class Worker
         inputs.concat Array.wrap p.process
       end
 
-      return if inputs.first.blank? and @st&.any?{ |l| l.error? }
+      return if inputs.first.blank? and @st&.error?
       return @st&.error('No inputs generated') if inputs.first.blank?
 
       inputs.uniq!{ |i| i.info.display_id }
