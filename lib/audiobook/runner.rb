@@ -78,7 +78,7 @@ module Audiobook
 
     def create_silent_wav(dir)
       silent_wav = File.join(dir, 'silent.wav')
-      cmd = "#{Zipper::FFMPEG} -f lavfi -i anullsrc=channel_layout=mono:sample_rate=22050 -t 1 '#{silent_wav}'"
+      cmd = "#{Zipper::FFMPEG} -f lavfi -i anullsrc=channel_layout=mono:sample_rate=#{TTS.output_sample_rate} -t 1 '#{silent_wav}'"
       system(cmd)
       raise 'Failed to create silent audio file' unless File.exist?(silent_wav)
       silent_wav
@@ -161,7 +161,7 @@ module Audiobook
     def detected_voice_instruct
       return if voice_instruct.present?
 
-      "#{author_gender}, middle-aged, high pitch"
+      "#{author_gender}, middle-aged, moderate pitch"
     end
 
     def author_gender

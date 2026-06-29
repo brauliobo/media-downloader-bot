@@ -22,7 +22,7 @@ module Audiobook
     end
 
     def pause_file(dir)
-      Zipper.get_pause_file(PAUSE, dir)
+      Zipper.get_pause_file(PAUSE, dir, sample_rate: TTS.output_sample_rate)
     end
   end
 end

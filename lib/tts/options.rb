@@ -72,6 +72,7 @@ class TTS
         .tr('_', ' ')
         .gsub(/-pitch\b/, ' pitch')
         .gsub(/-accent\b/, ' accent')
+        .gsub(/\bmedium pitch\b/, 'moderate pitch')
         .split(',')
         .map(&:strip)
         .reject(&:empty?)

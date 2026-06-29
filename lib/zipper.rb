@@ -79,11 +79,16 @@ class Zipper
   def self.concat_audio inputs, outfile, stl: nil
     return FileUtils.cp inputs.first, outfile if inputs.size == 1
 
+    signatures = inputs.map { |input| audio_signature(input) }
     Dir.mktmpdir do |dir|
       listfile = File.join(dir, 'concat.txt')
       File.write listfile, inputs.map { |p| Utils::Safety.concat_manifest_path(p) }.join("\n")
 
-      cmd = "#{FFMPEG} -f concat -safe 0 -i #{Sh.escape(listfile)} -c copy #{Sh.escape(outfile)}"
+      cmd = if concat_copy_safe?(signatures)
+        "#{FFMPEG} -f concat -safe 0 -i #{Sh.escape(listfile)} -c copy #{Sh.escape(outfile)}"
+      else
+        concat_filter_cmd(inputs, outfile, signatures)
+      end
 
       _, _, status = Sh.run cmd
       raise 'FFmpeg concat failed' unless status.success?
@@ -94,13 +99,14 @@ class Zipper
 
   self.pause_cache = {}
 
-  def self.get_pause_file seconds, dir
+  def self.get_pause_file seconds, dir, sample_rate: nil
     return nil if seconds.to_f <= 0
     key = seconds.to_f.round(3)
-    cache_key = "#{dir}:#{key}"
-    pause_cache[cache_key] ||= File.join(dir, "pause_#{key.to_s.gsub('.', '_')}.wav").then do |pause_file|
+    sample_rate = (sample_rate || 22_050).to_i
+    cache_key = "#{dir}:#{key}:#{sample_rate}"
+    pause_cache[cache_key] ||= File.join(dir, "pause_#{key.to_s.gsub('.', '_')}_#{sample_rate}.wav").then do |pause_file|
       unless File.exist?(pause_file)
-        cmd = "#{FFMPEG} -f lavfi -i anullsrc=channel_layout=mono:sample_rate=22050 -t #{key} #{Sh.escape(pause_file)}"
+        cmd = "#{FFMPEG} -f lavfi -i anullsrc=channel_layout=mono:sample_rate=#{sample_rate} -t #{key} #{Sh.escape(pause_file)}"
         Sh.run cmd
         raise 'Failed to create pause file' unless File.exist?(pause_file)
       end
@@ -372,6 +378,33 @@ class Zipper
   end
 
   protected
+
+  def self.concat_copy_safe?(signatures)
+    signatures.none?(&:empty?) && signatures.uniq.one?
+  end
+
+  def self.audio_signature(input)
+    stream = Prober.for(input).streams.find { |s| s.codec_type == 'audio' }
+    return {} unless stream
+
+    {
+      codec_name:      stream.codec_name.to_s,
+      sample_rate:     stream.sample_rate.to_i,
+      channels:        stream.channels.to_i,
+      bits_per_sample: stream.bits_per_sample.to_i,
+      sample_fmt:      stream.sample_fmt.to_s,
+    }
+  end
+
+  def self.concat_filter_cmd(inputs, outfile, signatures)
+    input_args = inputs.map { |input| "-i #{Sh.escape(input)}" }.join(' ')
+    labels = inputs.each_index.map { |idx| "[#{idx}:a]" }.join
+    sample_rate = signatures.map { |signature| signature[:sample_rate].to_i }.max
+    filter = "#{labels}concat=n=#{inputs.size}:v=0:a=1"
+    filter << ",aresample=#{sample_rate}" if sample_rate.positive?
+    filter << '[a]'
+    "#{FFMPEG} #{input_args} -filter_complex \"#{filter}\" -map \"[a]\" -c:a pcm_s16le #{Sh.escape(outfile)}"
+  end
 
   attr_reader :audio_filters
 

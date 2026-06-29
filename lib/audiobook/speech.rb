@@ -34,14 +34,14 @@ module Audiobook
     end
 
     def pause_file(dir)
-      Zipper.get_pause_file(pause, dir) if pause > 0
+      Zipper.get_pause_file(pause, dir, sample_rate: TTS.output_sample_rate) if pause > 0
     end
 
     protected
 
     def synthesize_audio(_wav_path, _lang, tts_options: {})
       # Default: generate silence (0.5 s)
-      cmd = "#{Zipper::FFMPEG} -f lavfi -i anullsrc=channel_layout=mono:sample_rate=22050 -t 0.5 #{Sh.escape(_wav_path)}"
+      cmd = "#{Zipper::FFMPEG} -f lavfi -i anullsrc=channel_layout=mono:sample_rate=#{TTS.output_sample_rate} -t 0.5 #{Sh.escape(_wav_path)}"
       system(cmd)
     end
 
