@@ -10,9 +10,15 @@ module Processors
   class Router < Base
 
     def self.for_message(ctx, lines)
-      url_lines = lines.select { |l| l.to_s.split(/[[:space:]]+/).any? { |token| Utils::InputParser.url_like?(token) } }
+      url_lines = lines.select { |line| url_line?(line) }
       
       if url_lines.any?
+        if url_lines.one?
+          c = ctx.dup
+          c.line = lines[lines.index(url_lines.first)..].join(' ')
+          return [Url.new(c)]
+        end
+
         return url_lines.map do |l|
           c = ctx.dup
           c.line = l
@@ -34,6 +40,10 @@ module Processors
       return [Audio.new(c)] if c.msg.audio.present?
 
       nil
+    end
+
+    def self.url_line?(line)
+      line.to_s.split(/[[:space:]]+/).any? { |token| Utils::InputParser.url_like?(token) }
     end
 
   end
