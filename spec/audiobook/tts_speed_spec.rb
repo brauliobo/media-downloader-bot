@@ -1,12 +1,13 @@
 require 'spec_helper'
 
 RSpec.describe 'Audiobook TTS speed' do
-  it 'builds speech options with speed and no default voice instruction' do
+  it 'builds speech options with speed and default detected voice instruction' do
     book = instance_double(Audiobook::Book, metadata: {}, pages: [])
     runner = Audiobook::Runner.new(book, nil, SymMash.new(speed: '1.25'))
 
     Dir.mktmpdir do |dir|
       allow(Language).to receive(:voice_reference_text).with('en').and_return(Audiobook::Runner::VOICE_REFERENCE_TEXT)
+      allow(Language).to receive(:author_gender).and_return('female')
       allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
         File.write(out_path, 'wav')
       end
@@ -15,7 +16,7 @@ RSpec.describe 'Audiobook TTS speed' do
 
       expect(options[:speed]).to eq(1.25)
       expect(options[:temperature]).to eq(0)
-      expect(options).not_to have_key(:instruct)
+      expect(options[:instruct]).to eq('female, middle-aged, high pitch')
       expect(options[:speaker_wav]).to end_with('audiobook_voice_reference.wav')
       expect(options[:ref_text]).to eq(Audiobook::Runner::VOICE_REFERENCE_TEXT)
     end
@@ -28,6 +29,7 @@ RSpec.describe 'Audiobook TTS speed' do
     Dir.mktmpdir do |dir|
       captured = nil
       allow(Language).to receive(:voice_reference_text).with('pt').and_return('Esta frase fixa a voz narradora do audiolivro.')
+      allow(Language).to receive(:author_gender).and_return('male')
       allow(TTS).to receive(:synthesize) do |**kwargs|
         captured = kwargs
         File.write(kwargs[:out_path], 'wav')
@@ -37,7 +39,7 @@ RSpec.describe 'Audiobook TTS speed' do
 
       expect(captured[:text]).to eq('Esta frase fixa a voz narradora do audiolivro.')
       expect(captured[:lang]).to eq('pt')
-      expect(captured).not_to have_key(:instruct)
+      expect(captured[:instruct]).to eq('male, middle-aged, high pitch')
       expect(options[:ref_text]).to eq('Esta frase fixa a voz narradora do audiolivro.')
     end
   end
@@ -55,6 +57,7 @@ RSpec.describe 'Audiobook TTS speed' do
 
     Dir.mktmpdir do |dir|
       allow(Language).to receive(:voice_reference_text).with('en').and_return('This sentence anchors the narrator voice.')
+      allow(Language).to receive(:author_gender).and_return('male')
       allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
         File.write(out_path, 'wav')
       end
@@ -73,8 +76,47 @@ RSpec.describe 'Audiobook TTS speed' do
 
     Dir.mktmpdir do |dir|
       allow(Language).to receive(:voice_reference_text).with('en').and_return(Audiobook::Runner::VOICE_REFERENCE_TEXT)
+      allow(Language).to receive(:author_gender).and_return('male')
 
       expect(runner.send(:tts_options, dir)[:temperature]).to eq(0.35)
+    end
+  end
+
+  it 'detects author gender from the first pages and omits accent' do
+    page = Audiobook::Page.new(1, [
+      Audiobook::Heading.new('Frankenstein'),
+      Audiobook::Paragraph.new([Audiobook::Sentence.new('By Mary Shelley.')])
+    ])
+    book = instance_double(Audiobook::Book, metadata: { 'title' => 'Frankenstein' }, pages: [page])
+    runner = Audiobook::Runner.new(book, nil, SymMash.new)
+
+    allow(Language).to receive(:voice_reference_text).with('en').and_return(Audiobook::Runner::VOICE_REFERENCE_TEXT)
+    allow(Language).to receive(:author_gender) do |input|
+      expect(input).to include('Frankenstein')
+      expect(input).to include('Mary Shelley')
+      'female'
+    end
+    allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
+      File.write(out_path, 'wav')
+    end
+
+    Dir.mktmpdir do |dir|
+      expect(runner.send(:tts_options, dir)[:instruct]).to eq('female, middle-aged, high pitch')
+    end
+  end
+
+  it 'keeps explicit voice instructions instead of detected gender defaults' do
+    book = instance_double(Audiobook::Book, metadata: {}, pages: [])
+    runner = Audiobook::Runner.new(book, nil, SymMash.new(voice: 'male,high_pitch'))
+
+    allow(Language).to receive(:voice_reference_text).with('en').and_return(Audiobook::Runner::VOICE_REFERENCE_TEXT)
+    allow(Language).to receive(:author_gender).and_raise('should not detect')
+    allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
+      File.write(out_path, 'wav')
+    end
+
+    Dir.mktmpdir do |dir|
+      expect(runner.send(:tts_options, dir)[:instruct]).to eq('male, high pitch')
     end
   end
 

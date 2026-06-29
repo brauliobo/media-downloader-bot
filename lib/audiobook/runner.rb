@@ -6,6 +6,7 @@ require_relative '../language'
 module Audiobook
   class Runner
     VOICE_REFERENCE_TEXT = Language::REF_FALLBACK
+    AUTHOR_SAMPLE_PAGES  = 3
 
     def initialize(book, stl = nil, opts = nil)
       @book = book
@@ -103,6 +104,7 @@ module Audiobook
 
     def tts_options(dir)
       options = TTS::Options.for(@opts, lang: @lang)
+      options[:instruct] ||= detected_voice_instruct if stable_voice_reference?
       return options unless stable_voice_reference?
 
       ref_path = File.join(dir, 'audiobook_voice_reference.wav')
@@ -127,6 +129,23 @@ module Audiobook
 
     def voice_reference_text
       @voice_reference_text ||= Language.voice_reference_text(@lang)
+    end
+
+    def detected_voice_instruct
+      return if voice_instruct.present?
+
+      "#{author_gender}, middle-aged, high pitch"
+    end
+
+    def author_gender
+      @author_gender ||= Language.author_gender(author_gender_input)
+    end
+
+    def author_gender_input
+      metadata = @book.metadata || {}
+      sample = @book.pages.first(AUTHOR_SAMPLE_PAGES).flat_map(&:all_sentences)
+        .map(&:text).join("\n")
+      ["Metadata:\n#{metadata.to_h}", "First pages:\n#{sample}"].join("\n\n")
     end
 
     def stable_voice_reference?
