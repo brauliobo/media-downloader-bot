@@ -152,4 +152,28 @@ EOS
     ENV['BOT_HTTP'] || ENV['BOT_DRB']
   end
 
+  def find_chats(...)
+    bot.find_chats(...)
+  end
+
+  def chat_messages(...)
+    bot.chat_messages(...)
+  end
+
+  def chat_message(...)
+    bot.chat_message(...)
+  end
+
+  def edit_generated_message(...)
+    bot.edit_generated_message(...)
+  end
+
+  def upload_generated_media(...)
+    bot.upload_generated_media(...)
+  end
+
+  def download_file(...)
+    bot.download_file(...)
+  end
+
 end

@@ -4,7 +4,5 @@ ENV['TD_BOT'] = '1'
 require_relative '../lib/manager'
 
 $bot = Manager.new
-$bot.start_td_bot
+$bot.start
 Bot::TDBot.__binding__.pry if ENV['PRY']
-
-sleep 1 while true

@@ -5,6 +5,7 @@ require 'limiter'
 require 'retriable'
 require_relative 'base'
 require_relative 'rate_limiter'
+require_relative '../td_bot/post_editor'
 
 module Bot
   class TDBot < Base
@@ -166,6 +167,30 @@ module Bot
           end
         end || false
       end
+    end
+
+    def edit_generated_message(chat_id:, message_id:, text: nil, type: nil, parse_mode: 'MarkdownV2', **params)
+      post_editor.edit_generated_message(chat_id: chat_id, message_id: message_id, text: text, type: type, parse_mode: parse_mode, **params)
+    end
+
+    def upload_generated_media(chat_id:, text: nil, type:, parse_mode: 'MarkdownV2', **params)
+      post_editor.upload_generated_media(chat_id: chat_id, text: text, type: type, parse_mode: parse_mode, **params)
+    end
+
+    def find_chats(query, limit: 20, public: false)
+      post_editor.find_chats(query, limit: limit, public: public)
+    end
+
+    def chat_messages(chat_id:, limit: 20, query: nil, filter: nil, from_message_id: 0)
+      post_editor.chat_messages(chat_id: chat_id, limit: limit, query: query, filter: filter, from_message_id: from_message_id)
+    end
+
+    def chat_message(chat_id:, message_id:)
+      post_editor.chat_message(chat_id: chat_id, message_id: message_id)
+    end
+
+    def post_editor
+      @post_editor ||= ::TDBot::PostEditor.new(self)
     end
 
     def delete_message(msg, id, wait: nil)
