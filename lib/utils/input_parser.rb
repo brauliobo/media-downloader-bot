@@ -7,7 +7,7 @@ module Utils
     URL_TOKEN_REGEXP = %r{\A(?:https?://)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:[/?#][^\s]*)?\z}i
 
     def self.parse(line)
-      args = line.to_s.split(/[[:space:]]+/)
+      args = tokens(line)
       url = nil
       
       if (url_index = args.index { |arg| url_like?(arg) })
@@ -27,6 +27,24 @@ module Utils
 
     def self.url_like?(token)
       token.to_s.match?(URI::DEFAULT_PARSER.make_regexp) || token.to_s.match?(URL_TOKEN_REGEXP)
+    end
+
+    def self.url_inputs(lines)
+      lines = Array(lines).map(&:to_s)
+      url_indexes = lines.each_index.select { |index| line_has_url?(lines[index]) }
+      return [] if url_indexes.empty?
+
+      return [lines[url_indexes.first..].join(' ')] if url_indexes.one?
+
+      url_indexes.map { |index| lines[index] }
+    end
+
+    def self.line_has_url?(line)
+      tokens(line).any? { |token| url_like?(token) }
+    end
+
+    def self.tokens(text)
+      text.to_s.split(/[[:space:]]+/)
     end
   end
 end

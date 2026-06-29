@@ -21,4 +21,16 @@ RSpec.describe Utils::InputParser do
     expect(parsed.url.to_s).to eq('https://x.com/i/status/2070518837150167314')
     expect(parsed.opts).to eq('audio' => 1)
   end
+
+  it 'builds one url input with trailing option lines' do
+    inputs = described_class.url_inputs(['Cloooud |🇺🇦', 'x.com/i/status/2070518837150167314', 'audio'])
+
+    expect(inputs).to eq(['x.com/i/status/2070518837150167314 audio'])
+  end
+
+  it 'builds separate inputs for multiple url lines' do
+    inputs = described_class.url_inputs(['https://example.com/a audio', 'https://example.com/b video'])
+
+    expect(inputs).to eq(['https://example.com/a audio', 'https://example.com/b video'])
+  end
 end
