@@ -10,7 +10,7 @@ module Processors
   class Router < Base
 
     def self.for_message(ctx, lines)
-      url_lines = lines.select { |l| l =~ URI::DEFAULT_PARSER.make_regexp }
+      url_lines = lines.select { |l| l.to_s.split(/[[:space:]]+/).any? { |token| Utils::InputParser.url_like?(token) } }
       
       if url_lines.any?
         return url_lines.map do |l|
