@@ -33,4 +33,29 @@ RSpec.describe Utils::InputParser do
 
     expect(inputs).to eq(['https://example.com/a audio', 'https://example.com/b video'])
   end
+
+  it 'applies first-line options to each url input' do
+    inputs = described_class.url_inputs(['audio speed=1.2', 'https://example.com/a', 'https://example.com/b speed=1.5'])
+
+    expect(inputs).to eq(['https://example.com/a audio speed=1.2', 'https://example.com/b audio speed=1.2 speed=1.5'])
+  end
+
+  it 'groups following option lines with each url input' do
+    inputs = described_class.url_inputs(['audio', 'https://example.com/a', 'speed=1.2', 'https://example.com/b', 'speed=1.5'])
+
+    expect(inputs).to eq(['https://example.com/a audio speed=1.2', 'https://example.com/b audio speed=1.5'])
+  end
+
+  it 'does not treat a title line as base options' do
+    inputs = described_class.url_inputs(['Cloooud |🇺🇦', 'https://example.com/a', 'audio'])
+
+    expect(inputs).to eq(['https://example.com/a audio'])
+  end
+
+  it 'uses captions as message input when text is empty' do
+    msg = SymMash.new(text: '', caption: "audio\nspeed=1.2")
+
+    expect(described_class.message_text(msg)).to eq("audio\nspeed=1.2")
+    expect(described_class.message_lines(msg)).to eq(['audio', 'speed=1.2'])
+  end
 end
