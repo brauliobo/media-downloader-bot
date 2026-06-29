@@ -150,6 +150,58 @@ RSpec.describe Zipper do
     expect(Sh).to have_received(:run).with(include('-af highpass=f=80,lowpass=f=9000,afftdn=nf=-25'))
   end
 
+  it 'creates pause wavs at the requested sample rate' do
+    Dir.mktmpdir('pause-spec-') do |dir|
+      allow(Sh).to receive(:run) do
+        File.write(File.join(dir, 'pause_0_1_24000.wav'), 'wav')
+        ['', '', double(success?: true)]
+      end
+
+      path = described_class.get_pause_file(0.1, dir, sample_rate: 24_000)
+
+      expect(path).to end_with('pause_0_1_24000.wav')
+      expect(Sh).to have_received(:run).with(include('sample_rate=24000'))
+    end
+  end
+
+  it 'stream-copies audio concat when input streams match' do
+    stream = SymMash.new(
+      codec_type:      'audio',
+      codec_name:      'pcm_s16le',
+      sample_rate:     24_000,
+      channels:        1,
+      bits_per_sample: 16,
+      sample_fmt:      's16',
+    )
+    allow(Prober).to receive(:for).and_return(SymMash.new(streams: [stream]))
+    allow(Sh).to receive(:run).and_return(['', '', double(success?: true)])
+
+    described_class.concat_audio(['/tmp/one.wav', '/tmp/two.wav'], '/tmp/out.wav')
+
+    expect(Sh).to have_received(:run).with(include('-f concat', '-c copy'))
+  end
+
+  it 're-encodes audio concat when input streams differ' do
+    allow(Prober).to receive(:for) do |path|
+      rate = path.include?('pause') ? 22_050 : 24_000
+      SymMash.new(streams: [SymMash.new(
+        codec_type:      'audio',
+        codec_name:      'pcm_s16le',
+        sample_rate:     rate,
+        channels:        1,
+        bits_per_sample: 16,
+        sample_fmt:      's16',
+      )])
+    end
+    allow(Sh).to receive(:run).and_return(['', '', double(success?: true)])
+
+    described_class.concat_audio(['/tmp/pause.wav', '/tmp/speech.wav'], '/tmp/out.wav')
+
+    expect(Sh).to have_received(:run).with(
+      include('-filter_complex "[0:a][1:a]concat=n=2:v=0:a=1,aresample=24000[a]"')
+    )
+  end
+
   it 'transcribes subtitles when gensubs is the only subtitle option' do
     dir = Dir.mktmpdir('zipper-gensubs-')
     probe = SymMash.new(

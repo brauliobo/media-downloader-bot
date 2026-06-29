@@ -16,7 +16,7 @@ RSpec.describe 'Audiobook TTS speed' do
 
       expect(options[:speed]).to eq(1.25)
       expect(options[:temperature]).to eq(0)
-      expect(options[:instruct]).to eq('female, middle-aged, high pitch')
+      expect(options[:instruct]).to eq('female, middle-aged, moderate pitch')
       expect(options[:speaker_wav]).to end_with('audiobook_voice_reference.wav')
       expect(options[:ref_text]).to eq(Audiobook::Runner::VOICE_REFERENCE_TEXT)
     end
@@ -39,7 +39,7 @@ RSpec.describe 'Audiobook TTS speed' do
 
       expect(captured[:text]).to eq('Esta frase fixa a voz narradora do audiolivro.')
       expect(captured[:lang]).to eq('pt')
-      expect(captured[:instruct]).to eq('male, middle-aged, high pitch')
+      expect(captured[:instruct]).to eq('male, middle-aged, moderate pitch')
       expect(options[:ref_text]).to eq('Esta frase fixa a voz narradora do audiolivro.')
     end
   end
@@ -149,7 +149,7 @@ RSpec.describe 'Audiobook TTS speed' do
     end
 
     Dir.mktmpdir do |dir|
-      expect(runner.send(:tts_options, dir)[:instruct]).to eq('female, middle-aged, high pitch')
+      expect(runner.send(:tts_options, dir)[:instruct]).to eq('female, middle-aged, moderate pitch')
     end
   end
 
@@ -199,6 +199,13 @@ RSpec.describe 'Audiobook TTS speed' do
     expect(runner.send(:voice_instruct)).to eq(
       'male, young adult, moderate pitch, american accent'
     )
+  end
+
+  it 'maps medium pitch to OmniVoice moderate pitch' do
+    book = instance_double(Audiobook::Book, metadata: {}, pages: [])
+    runner = Audiobook::Runner.new(book, nil, SymMash.new(voice: 'male,medium_pitch'))
+
+    expect(runner.send(:voice_instruct)).to eq('male, moderate pitch')
   end
 
   it 'passes TTS speed and voice instruction to spoken page items' do

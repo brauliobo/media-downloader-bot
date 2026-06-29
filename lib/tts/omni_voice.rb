@@ -24,6 +24,10 @@ class TTS
       batch_synth_path.present?
     end
 
+    def self.output_sample_rate
+      TTS.env_sample_rate('OMNIVOICE_SAMPLE_RATE') || 24_000
+    end
+
     def synthesize(text:, lang:, out_path:, **kwargs)
       normalize_options!(kwargs)
       super(text: text, lang: lang, out_path: out_path, **kwargs)

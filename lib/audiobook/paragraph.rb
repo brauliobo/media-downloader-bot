@@ -53,7 +53,7 @@ module Audiobook
         main_wav = sent.to_wav(dir, "#{idx}_#{sidx}", lang: lang || 'en', tts_options: speech_options)
         ref_wavs = (sent.references || []).each_with_index.flat_map do |ref, ridx|
           stl&.update "Processing reference #{ref.id} for sentence #{sidx+1}/#{sentences.size}"
-          ref_pause = (ridx == 0 ? Zipper.get_pause_file(0.15, dir) : nil)
+          ref_pause = (ridx == 0 ? Zipper.get_pause_file(0.15, dir, sample_rate: TTS.output_sample_rate) : nil)
           ref.sentences.each_with_index.flat_map do |rs, j|
             rs_pause = rs.pause_file(dir)
             wav_path = rs.to_wav(dir, "#{idx}_#{sidx}_r#{ridx}_#{j}", lang: lang || 'en', tts_options: speech_options)
