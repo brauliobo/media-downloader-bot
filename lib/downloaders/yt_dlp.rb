@@ -1,7 +1,9 @@
 require_relative 'base'
 require_relative '../utils/cookie_jar'
+require_relative '../utils/http'
 require_relative '../prober'
 require 'fileutils'
+require 'uri'
 
 module Downloaders
   class YtDlp < Base
@@ -15,6 +17,7 @@ module Downloaders
     def download
       source_url = url.to_s
       return st.error('No URL found') if source_url.blank?
+      source_url = normalize_url(source_url)
 
       cmd = "#{base_cmd} --write-info-json --no-clean-infojson --skip-download -o #{Sh.escape("info-%(playlist_index)s.%(ext)s")} #{Sh.escape(source_url)}"
       cmd << " --match-filter #{Sh.escape('live_status != is_upcoming')}" if source_url.match?(/youtu\.?be/)
@@ -29,6 +32,7 @@ module Downloaders
       fn  = "input-#{pos}"
       url = i.info&.webpage_url.presence || i.url
       url = "https://#{url}" unless url =~ /\Ahttps?:\/\//i
+      url = normalize_url(url)
       cmd = "#{base_cmd} -o #{Sh.escape("#{fn}.%(ext)s")} #{Sh.escape(url)}"
       _, e, s = Sh.run cmd, chdir: dir
       raise "download error: #{e}" unless s == 0
@@ -86,6 +90,7 @@ module Downloaders
         cmd << "--remote-components #{Sh.escape(REMOTE)}" unless REMOTE.to_s.strip.empty?
         cmd << "--paths #{tmp}"
         cmd << '-s' if opts.simulate
+        cmd << "--extractor-args #{Sh.escape('generic:impersonate')}"
 
         if opts.alang && url.match?(/youtu\.?be/)
           cmd << "--extractor-args #{Sh.escape("youtube:lang=#{opts.alang}")}"
@@ -116,6 +121,19 @@ module Downloaders
         
         cmd.join(' ')
       end
+    end
+
+    def normalize_url(source_url)
+      uri = URI(source_url)
+      host = uri.host.to_s.downcase
+      return source_url unless host == 'rumble.com' || host.end_with?('.rumble.com')
+      return source_url if uri.path.match?(%r{\A/embed/}i)
+
+      clean_url = uri.dup.tap { |u| u.query = u.fragment = nil }.to_s
+      body      = Utils::HTTP.get("https://rumble.com/api/Media/oembed.json?#{URI.encode_www_form(url: clean_url)}").body
+      JSON.parse(body)['html'].to_s[%r{https://rumble\.com/embed/[^"']+}] || source_url
+    rescue StandardError
+      source_url
     end
 
     def apply_playlist_options(cmd)
