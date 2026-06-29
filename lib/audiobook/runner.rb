@@ -32,6 +32,8 @@ module Audiobook
         wavs = Array.new(pages.size)
         total_pages = pages.size
         speech_options = tts_options(dir)
+        prepare_pages(pages, dir, para_offsets, total_paras, total_pages, speech_options)
+        batch_synthesize_pages(pages, dir, speech_options)
 
         pages.each.with_index.peach do |page, idx|
           wavs[idx] = page.to_wav(
@@ -118,6 +120,31 @@ module Audiobook
       end
 
       options.merge(speaker_wav: ref_path, ref_text: voice_reference_text)
+    end
+
+    def prepare_pages(pages, dir, para_offsets, total_paras, total_pages, speech_options)
+      pages.each.with_index do |page, idx|
+        page.prepare_speech_items(
+          dir, format('%04d', idx + 1),
+          lang: @lang,
+          stl: @stl,
+          para_context: { current: para_offsets[idx], total: total_paras },
+          page_context: { current: idx + 1, total: total_pages },
+          book_metadata: @book.metadata,
+          tts_options: speech_options
+        )
+      end
+    end
+
+    def batch_synthesize_pages(pages, dir, speech_options)
+      return unless speech_options[:tts_batch_size].to_i > 1
+
+      jobs = pages.each_with_index.flat_map do |page, idx|
+        page.speech_jobs(dir, format('%04d', idx + 1), @lang)
+      end
+      return if jobs.empty?
+
+      TTS.synthesize_batch(items: jobs, **speech_options)
     end
 
     def book_language

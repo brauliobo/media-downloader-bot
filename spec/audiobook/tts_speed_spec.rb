@@ -82,6 +82,54 @@ RSpec.describe 'Audiobook TTS speed' do
     end
   end
 
+  it 'keeps audiobook batching disabled by default' do
+    book = instance_double(Audiobook::Book, metadata: {}, pages: [])
+    runner = Audiobook::Runner.new(book, nil, SymMash.new(batch_size: '100'))
+
+    allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
+      File.write(out_path, 'wav')
+    end
+
+    Dir.mktmpdir do |dir|
+      allow(Language).to receive(:voice_reference_text).with('en').and_return(Audiobook::Runner::VOICE_REFERENCE_TEXT)
+      allow(Language).to receive(:author_gender).and_return('male')
+
+      expect(runner.send(:tts_options, dir)).not_to have_key(:tts_batch_size)
+    end
+  end
+
+  it 'accepts batch_size as an alias when batching is enabled' do
+    book = instance_double(Audiobook::Book, metadata: {}, pages: [])
+    runner = Audiobook::Runner.new(book, nil, SymMash.new(batch: 'true', batch_size: '100'))
+
+    allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
+      File.write(out_path, 'wav')
+    end
+
+    Dir.mktmpdir do |dir|
+      allow(Language).to receive(:voice_reference_text).with('en').and_return(Audiobook::Runner::VOICE_REFERENCE_TEXT)
+      allow(Language).to receive(:author_gender).and_return('male')
+
+      expect(runner.send(:tts_options, dir)[:tts_batch_size]).to eq(100)
+    end
+  end
+
+  it 'uses batch size 100 by default when batching is enabled' do
+    book = instance_double(Audiobook::Book, metadata: {}, pages: [])
+    runner = Audiobook::Runner.new(book, nil, SymMash.new(tts_batch: 'true'))
+
+    allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
+      File.write(out_path, 'wav')
+    end
+
+    Dir.mktmpdir do |dir|
+      allow(Language).to receive(:voice_reference_text).with('en').and_return(Audiobook::Runner::VOICE_REFERENCE_TEXT)
+      allow(Language).to receive(:author_gender).and_return('male')
+
+      expect(runner.send(:tts_options, dir)[:tts_batch_size]).to eq(100)
+    end
+  end
+
   it 'detects author gender from the first pages and omits accent' do
     page = Audiobook::Page.new(1, [
       Audiobook::Heading.new('Frankenstein'),
@@ -184,6 +232,41 @@ RSpec.describe 'Audiobook TTS speed' do
           speed:    1.25,
           instruct: 'female, middle-aged, moderate pitch, american accent',
         }
+      )
+    end
+  end
+
+  it 'pre-synthesizes page sentences in a generic TTS batch' do
+    page = Audiobook::Page.new(1, [
+      Audiobook::Heading.new('Chapter One.'),
+      Audiobook::Paragraph.new([
+        Audiobook::Sentence.new('Hello world.'),
+        Audiobook::Sentence.new('Second sentence!')
+      ])
+    ])
+
+    Dir.mktmpdir do |dir|
+      allow(Zipper).to receive(:get_pause_file).and_return(nil)
+      allow(Zipper).to receive(:concat_audio) do |_inputs, outfile, **_kwargs|
+        File.write(outfile, 'combined')
+        outfile
+      end
+
+      expect(TTS).to receive(:synthesize_batch) do |items:, **kwargs|
+        expect(kwargs[:tts_batch_size]).to eq(100)
+        expect(kwargs[:speed]).to eq(1.25)
+        expect(items.map { |item| item[:text] }).to eq([
+          'Chapter One',
+          'Hello world',
+          'Second sentence',
+        ])
+        items.each { |item| File.write(item[:out_path], 'wav') }
+      end
+
+      page.to_wav(
+        dir, '0001',
+        lang: 'en',
+        tts_options: { speed: 1.25, tts_batch_size: 100 }
       )
     end
   end

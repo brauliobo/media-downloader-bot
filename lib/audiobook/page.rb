@@ -26,40 +26,20 @@ module Audiobook
     def to_wav(dir, idx, lang: 'en', stl: nil, para_context: nil, page_context: nil, book_metadata: {}, tts_options: {})
       return nil if items.empty?
 
-      # Count paragraphs for context
-      para_count = items.count { |i| i.is_a?(Audiobook::Paragraph) }
-      base_para = para_context ? para_context[:current] : 0
-      total_paras = para_context ? para_context[:total] : para_count
+      context = prepare_speech_items(
+        dir, idx,
+        lang: lang,
+        stl: stl,
+        para_context: para_context,
+        page_context: page_context,
+        book_metadata: book_metadata,
+        tts_options: tts_options
+      )
+      page_idx = context[:page_idx]
+      page_total = context[:page_total]
+      is_ocr_book = context[:is_ocr_book]
 
-      # Page context for status messages
-      page_idx = page_context ? page_context[:current] : number
-      page_total = page_context ? page_context[:total] : number
-      is_ocr_book = !!book_metadata['fully_ocr']
-
-      # Pre-calculate and set paragraph attributes
-      para_counter = base_para
-      items.each_with_index do |item, iidx|
-        # Common attributes for all items that respond to them
-        if item.respond_to?(:page_idx=)
-          item.page_idx = page_idx
-          item.page_total = page_total
-        end
-
-        if item.is_a?(Audiobook::Paragraph)
-          para_counter += 1
-          item.para_idx = para_counter
-          item.para_total = total_paras
-          item.page_num = number
-          item.item_idx = iidx + 1
-          item.item_total = items.size
-          item.lang = lang
-          item.stl = stl
-          item.dir = dir
-          item.idx = "#{idx}_#{iidx}"
-          item.is_ocr = is_ocr_book || item.is_a?(Audiobook::Image)
-          item.tts_options = tts_options
-        end
-      end
+      batch_synthesize_items(dir, idx, lang, tts_options) if tts_options[:tts_batch_size].to_i > 1
 
       wavs = items.each_with_index.flat_map do |item, iidx|
         if item.is_a?(Audiobook::Paragraph)
@@ -81,6 +61,78 @@ module Audiobook
       combined = File.join(dir, "page_#{idx}.wav")
       Zipper.concat_audio(wavs, combined)
       combined
+    end
+
+    def prepare_speech_items(dir, idx, lang: 'en', stl: nil, para_context: nil, page_context: nil, book_metadata: {}, tts_options: {})
+      para_count = items.count { |i| i.is_a?(Audiobook::Paragraph) }
+      base_para = para_context ? para_context[:current] : 0
+      total_paras = para_context ? para_context[:total] : para_count
+      page_idx = page_context ? page_context[:current] : number
+      page_total = page_context ? page_context[:total] : number
+      is_ocr_book = !!book_metadata['fully_ocr']
+      para_counter = base_para
+
+      items.each_with_index do |item, iidx|
+        if item.respond_to?(:page_idx=)
+          item.page_idx = page_idx
+          item.page_total = page_total
+        end
+
+        if item.is_a?(Audiobook::Paragraph)
+          para_counter += 1
+          item.para_idx = para_counter
+          item.para_total = total_paras
+          item.page_num = number
+          item.item_idx = iidx + 1
+          item.item_total = items.size
+          item.lang = lang
+          item.stl = stl
+          item.dir = dir
+          item.idx = "#{idx}_#{iidx}"
+          item.is_ocr = is_ocr_book || item.is_a?(Audiobook::Image)
+          item.tts_options = tts_options
+        end
+      end
+
+      { page_idx: page_idx, page_total: page_total, is_ocr_book: is_ocr_book }
+    end
+
+    def batch_synthesize_items(dir, idx, lang, tts_options)
+      jobs = speech_jobs(dir, idx, lang)
+      return if jobs.empty?
+
+      TTS.synthesize_batch(items: jobs, **tts_options)
+    end
+
+    def speech_jobs(dir, idx, lang)
+      items.each_with_index.flat_map do |item, iidx|
+        if item.is_a?(Audiobook::Paragraph)
+          paragraph_jobs(item, lang)
+        elsif item.respond_to?(:spoken_text)
+          sentence_job(item, File.join(dir, "#{idx}_#{iidx}.wav"), lang)
+        end
+      end.compact
+    end
+
+    def paragraph_jobs(paragraph, lang)
+      paragraph.sentences.each_with_index.flat_map do |sent, sidx|
+        main = sentence_job(sent, File.join(paragraph.dir, "#{paragraph.idx}_#{sidx}.wav"), lang)
+        refs = sent.references.each_with_index.flat_map do |ref, ridx|
+          ref.sentences.each_with_index.map do |rs, j|
+            sentence_job(rs, File.join(paragraph.dir, "#{paragraph.idx}_#{sidx}_r#{ridx}_#{j}.wav"), lang)
+          end
+        end
+        [main, *refs]
+      end
+    end
+
+    def sentence_job(sentence, out_path, lang)
+      return if File.exist?(out_path)
+
+      spoken = sentence.spoken_text
+      return if spoken.empty?
+
+      { text: spoken, lang: lang, out_path: out_path }
     end
 
     # Extract all sentences from all items for translation

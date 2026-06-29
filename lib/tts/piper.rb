@@ -25,5 +25,6 @@ class TTS
       out_path
     end
 
+    extend self
   end
 end

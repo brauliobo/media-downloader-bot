@@ -29,6 +29,10 @@ module Audiobook
       @references ||= []
     end
 
+    def spoken_text
+      text.sub(/\s*[\p{P}]+\z/u, '')
+    end
+
     def add_reference(ref)
       return unless ref
       existing = references.find { |r| r.id == ref.id }
@@ -44,7 +48,7 @@ module Audiobook
     protected
 
     def synthesize_audio(wav_path, lang, tts_options: {})
-      spoken = text.sub(/\s*[\p{P}]+\z/u, '')
+      spoken = spoken_text
       if spoken.empty?
         super # generate silence
       else
