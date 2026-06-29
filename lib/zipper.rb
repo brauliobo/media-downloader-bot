@@ -99,6 +99,13 @@ class Zipper
 
   self.pause_cache = {}
 
+  def self.silence_file(path, seconds, sample_rate: 22_050)
+    cmd = "#{FFMPEG} -f lavfi -i anullsrc=channel_layout=mono:sample_rate=#{sample_rate.to_i} -t #{seconds} #{Sh.escape(path)}"
+    _, err, status = Sh.run cmd
+    Sh.assert_success!('Failed to create silent audio file', err, status: status, output: path)
+    path
+  end
+
   def self.get_pause_file seconds, dir, sample_rate: nil
     return nil if seconds.to_f <= 0
     key = seconds.to_f.round(3)
@@ -106,9 +113,7 @@ class Zipper
     cache_key = "#{dir}:#{key}:#{sample_rate}"
     pause_cache[cache_key] ||= File.join(dir, "pause_#{key.to_s.gsub('.', '_')}_#{sample_rate}.wav").then do |pause_file|
       unless File.exist?(pause_file)
-        cmd = "#{FFMPEG} -f lavfi -i anullsrc=channel_layout=mono:sample_rate=#{sample_rate} -t #{key} #{Sh.escape(pause_file)}"
-        Sh.run cmd
-        raise 'Failed to create pause file' unless File.exist?(pause_file)
+        silence_file(pause_file, key, sample_rate: sample_rate)
       end
       pause_file
     end
