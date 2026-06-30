@@ -33,6 +33,7 @@ class Zipper
     'acompressor=threshold=-18dB:ratio=2.5:attack=20:release=250,' \
     'dynaudnorm=f=150:g=15,loudnorm=I=-16:TP=-1.5:LRA=11'
   ).freeze
+  SPEECH_CLEANUP_FILTER = 'highpass=f=80'.freeze
 
   THREADS = ENV['THREADS']&.to_i || 16
   FFMPEG  = "ffmpeg -y -threads #{THREADS} -loglevel error"
@@ -308,6 +309,7 @@ class Zipper
     apply_audio_rate
     apply_audio_channels
 
+    apply_speech_cleanup
     apply_voice_quality
     apply_speed
     apply_audio_size_limit
@@ -473,6 +475,10 @@ class Zipper
 
   def apply_voice_quality
     append_audio_filter VOICE_QUALITY_FILTER if opts.voice_quality
+  end
+
+  def apply_speech_cleanup
+    append_audio_filter SPEECH_CLEANUP_FILTER if opts.speech_cleanup
   end
 
   def check_width

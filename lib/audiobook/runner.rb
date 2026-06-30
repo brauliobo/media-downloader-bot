@@ -96,6 +96,7 @@ module Audiobook
         zip_opts.format = Zipper::Types.audio.opus
       end
       zip_opts.bitrate ||= 32
+      zip_opts.speech_cleanup = true
       target = out_audio.to_s
       zip_opts.skip_metamark = true
       Zipper.zip_audio(input_wav, target, opts: zip_opts)

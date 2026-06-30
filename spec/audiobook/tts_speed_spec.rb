@@ -181,6 +181,7 @@ RSpec.describe 'Audiobook TTS speed' do
     runner.send(:encode_audio_file, '/tmp/in.wav', '/tmp/out.opus')
 
     expect(captured_opts.speed).to be_nil
+    expect(captured_opts.speech_cleanup).to eq(true)
   end
 
   it 'does not advertise TTS speech speed for audiobooks' do
