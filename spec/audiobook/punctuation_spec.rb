@@ -66,6 +66,25 @@ RSpec.describe 'Audiobook punctuation-only text' do
     end
   end
 
+  it 'filters DC-like plateau glitches during final audiobook encoding' do
+    Dir.mktmpdir('audiobook-plateau-cleanup-') do |dir|
+      input = File.join(dir, 'plateau.wav')
+      output = File.join(dir, 'plateau.opus')
+      plateau_wav(input)
+
+      opts = SymMash.new(
+        format:         Zipper::Types.audio.opus,
+        bitrate:        32,
+        metadata:       {},
+        skip_metamark:  true,
+        speech_cleanup: true,
+      )
+      Zipper.zip_audio(input, output, opts: opts)
+
+      expect(loud_plateau_blocks(output)).to eq(0)
+    end
+  end
+
   def sine_wav(path)
     cmd = "#{Zipper::FFMPEG} -f lavfi -i sine=frequency=440:sample_rate=24000:duration=0.1 " \
           "-c:a pcm_s16le #{Sh.escape(path)}"
