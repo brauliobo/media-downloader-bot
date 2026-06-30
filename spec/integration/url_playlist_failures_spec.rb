@@ -64,7 +64,6 @@ RSpec.describe 'Worker playlist with mixed failures (integration)' do
     )
 
     msg = IntegrationHelper.build_msg(text: 'https://example.com/playlist?list=PL_TEST')
-    allow(Bot::MsgHelpers).to receive(:from_admin?).and_return(false)
     Worker.new(msg).run
 
     uploads = bot.sent.select { |s| s.params[:type] || s.params[:video_path] || s.params[:audio_path] || s.params[:document_path] }
@@ -73,5 +72,22 @@ RSpec.describe 'Worker playlist with mixed failures (integration)' do
     expect(uploads.size).to eq(1), "expected 1 upload, got #{uploads.size}\nsent=#{bot.sent.map(&:to_h)}"
     expect(titles).to include('First')
     expect(titles).not_to include('Second')
+  end
+
+  it 'deletes the status message after a successful upload' do
+    IntegrationHelper.stub_yt_dlp_plan(
+      'playlist' => [
+        {'display_id' => 'v1', 'title' => 'First', 'webpage_url' => 'https://example.com/v1', 'fixture' => fixtures[:mp4]},
+      ],
+      'items' => {
+        '1' => {'fixture' => fixtures[:mp4], 'status' => 0},
+      },
+    )
+
+    msg = IntegrationHelper.build_msg(text: 'https://example.com/playlist?list=PL_TEST')
+
+    Worker.new(msg).run
+
+    expect(bot.deleted.map(&:id)).to include(100)
   end
 end

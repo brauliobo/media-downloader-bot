@@ -72,7 +72,7 @@ class Worker
   def cleanup_workdir(dir)
     return unless dir && Dir.exist?(dir)
     # Detached subprocess survives parent fork exit; delay lets uploaders release file handles
-    pid = Process.spawn('sh', '-c', "sleep 30 && rm -rf #{dir.shellescape}")
+    pid = Process.spawn('sh', '-c', "sleep 30 && rm -rf #{dir.shellescape}", out: File::NULL, err: File::NULL)
     Process.detach pid
   end
 
