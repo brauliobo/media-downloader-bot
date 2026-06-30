@@ -57,9 +57,7 @@ module Audiobook
       end
 
       def create_sentences(normalized)
-        TextHelpers.split_sentences(normalized)
-          .map { |s| Sentence.new(s) }
-          .reject { |s| s.text.empty? }
+        Sentence.build_all(TextHelpers.split_sentences(normalized))
       end
 
       def create_item(first_line, sentences)

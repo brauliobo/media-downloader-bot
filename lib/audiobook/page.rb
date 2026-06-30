@@ -101,7 +101,9 @@ module Audiobook
       jobs = speech_jobs(dir, idx, lang)
       return if jobs.empty?
 
-      TTS.synthesize_batch(items: jobs, **tts_options)
+      speed, options = AudioFiles.split_speed_options(tts_options)
+      TTS.synthesize_batch(items: jobs, **options)
+      AudioFiles.speed_all(jobs.map { |job| job[:out_path] }, speed)
     end
 
     def speech_jobs(dir, idx, lang)

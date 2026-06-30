@@ -15,6 +15,7 @@ module Audiobook
       return self if new_sentences.nil?
       Array(new_sentences).flatten.each do |s|
         next unless s
+        next if s.respond_to?(:speakable?) && !s.speakable?
         next if sentences.any? { |existing| existing.equal?(s) }
         sentences << s
       end
@@ -33,5 +34,4 @@ module Audiobook
     end
   end
 end
-
 

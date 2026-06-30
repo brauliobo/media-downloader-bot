@@ -132,6 +132,19 @@ class Zipper
     wav_path
   end
 
+  def self.speed_audio_file! wav_path, speed
+    speed = speed.to_f
+    return wav_path unless speed.positive? && speed != 1
+
+    dir = File.dirname(wav_path)
+    out = File.join(dir, "speed_#{SecureRandom.hex(4)}.wav")
+    cmd = "#{FFMPEG} -i #{Sh.escape(wav_path)} -af atempo=#{speed} -c:a pcm_s16le #{Sh.escape(out)}"
+    _, err, status = Sh.run cmd
+    Sh.assert_success!('Failed to apply audio speed', err, status: status, output: out)
+    FileUtils.mv out, wav_path, force: true
+    wav_path
+  end
+
   def self.choose_format(*args)
     Zipper::Formats.choose_format(*args)
   end
