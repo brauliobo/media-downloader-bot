@@ -78,11 +78,7 @@ module Bot
       resp  = SymMash.new tg.send(ep, **payload, **wrap_upload_params(params)).to_h
       resp.text = _text
 
-      delete = delete_both if delete_both
-      delete_message msg, resp.message_id, wait: delete if delete
-      delete_message msg, msg.message_id, wait: delete_both if delete_both
-
-      resp
+      finalize_sent_message(msg, resp, delete: delete, delete_both: delete_both)
     end
 
     def wrap_upload_params(p)
@@ -116,12 +112,8 @@ module Bot
       Faraday::UploadIO.new(path, mime)
     end
 
-    def delete_message(msg, id, wait: 30.seconds)
-      Thread.new do
-        sleep wait if wait
-      ensure
-        tg.delete_message chat_id: msg.chat.id, message_id: id
-      end
+    def perform_delete_message(msg, id)
+      tg.delete_message chat_id: msg.chat.id, message_id: id
     end
 
 

@@ -145,7 +145,7 @@ module Bot
           dlog "[TD_SEND] type=#{type} chat=#{msg.chat.id} text=#{preview}"
           result = { message_id: (Time.now.to_f * 1000).to_i, text: text }
         end
-        SymMash.new(result)
+        finalize_sent_message(msg, SymMash.new(result), delete: delete, delete_both: delete_both)
       end
       ret || SymMash.new(message_id: 0, text: text)
     end
@@ -193,9 +193,9 @@ module Bot
       @post_editor ||= ::TDBot::PostEditor.new(self)
     end
 
-    def delete_message(msg, id, wait: nil)
+    def perform_delete_message(msg, id)
       result = message_sender.delete_message_public(msg.chat.id, id)
-      dlog "[TD_DELETE] wait=#{wait} result=#{result ? 'success' : 'failed'}"
+      dlog "[TD_DELETE] result=#{result ? 'success' : 'failed'}"
       result
     end
 

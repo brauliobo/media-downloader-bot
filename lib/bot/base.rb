@@ -4,9 +4,11 @@ module Bot
   class Base
     include MsgHelpers
 
+    DEFAULT_DELETE_WAIT = 30
+
     def send_message(msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **params)
       puts text
-      SymMash.new(result: {message_id: 1}, text: text)
+      finalize_sent_message(msg, SymMash.new(result: {message_id: 1}, message_id: 1, text: text), delete: delete, delete_both: delete_both)
     end
 
     def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', **params)
@@ -14,6 +16,13 @@ module Bot
     end
 
     def delete_message(msg, id, wait: nil)
+      wait = delete_wait_seconds(wait)
+      return perform_delete_message(msg, id) unless wait&.positive?
+
+      Thread.new do
+        sleep wait
+        perform_delete_message(msg, id)
+      end
     end
 
     def download_file(file_id_or_info, priority: 32, offset: 0, limit: 0, synchronous: true, dir: nil)
@@ -23,9 +32,35 @@ module Bot
     def report_error(msg, e, context: nil)
       STDERR.puts "error: #{e.class}: #{e.message}"
     end
+
+    private
+
+    def finalize_sent_message(msg, response, delete: nil, delete_both: nil)
+      delete = delete_both if delete_both
+      delete_message(msg, response.message_id, wait: delete) if delete && response&.message_id
+
+      original_id = incoming_message_id(msg)
+      delete_message(msg, original_id, wait: delete_both) if delete_both && original_id
+
+      response
+    end
+
+    def incoming_message_id(msg)
+      return msg.message_id if msg.respond_to?(:message_id)
+      return msg.id if msg.respond_to?(:id)
+    end
+
+    def delete_wait_seconds(wait)
+      return nil if wait.nil? || wait == false
+      return DEFAULT_DELETE_WAIT if wait == true
+
+      wait.to_f
+    end
+
+    def perform_delete_message(_msg, _id)
+    end
   end
 
   class Mock < Base
   end
 end
-
