@@ -121,12 +121,7 @@ module Bot
       params = normalize_params(params) unless t.in?(%w[message text])
       ret = td_with_rate_limit('send_message') do
         throttle! msg.chat.id, :high
-        reply_to = nil
-        if msg.respond_to?(:id)
-          reply_to = msg.id
-        elsif msg.respond_to?(:message_id)
-          reply_to = msg.message_id
-        end
+        reply_to = incoming_message_id(msg, :id, :message_id)
         dlog "[TD_SEND_MESSAGE] reply_to=#{reply_to} msg.class=#{msg.class}"
         result = nil
         if t.in? %w[message text]

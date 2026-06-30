@@ -74,7 +74,7 @@ module Bot
       ep = "send_#{type}"
       payload = tg_text_payload(msg, text, parse_mode)
       payload.delete(:text) if type.to_s != 'message'
-      payload[:reply_to_message_id] = msg.message_id
+      payload[:reply_to_message_id] = incoming_message_id(msg)
       resp  = SymMash.new tg.send(ep, **payload, **wrap_upload_params(params)).to_h
       resp.text = _text
 
