@@ -36,8 +36,7 @@ module Bot
     private
 
     def finalize_sent_message(msg, response, delete: nil, delete_both: nil)
-      delete = delete_both if delete_both
-      delete_message(msg, response.message_id, wait: delete) if delete && response&.message_id
+      delete_message(msg, response.message_id, wait: delete_both || delete) if (delete || delete_both) && response&.message_id
 
       original_id = incoming_message_id(msg)
       delete_message(msg, original_id, wait: delete_both) if delete_both && original_id
@@ -45,9 +44,10 @@ module Bot
       response
     end
 
-    def incoming_message_id(msg)
-      return msg.message_id if msg.respond_to?(:message_id)
-      return msg.id if msg.respond_to?(:id)
+    def incoming_message_id(msg, *keys)
+      keys = %i[message_id id] if keys.empty?
+      key  = keys.find { |k| msg.respond_to?(k) }
+      msg.public_send(key) if key
     end
 
     def delete_wait_seconds(wait)
