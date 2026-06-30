@@ -14,7 +14,7 @@ module Audiobook
                   :idx, :page_idx, :page_total, :is_ocr, :tts_options
 
     def initialize(sentences = [])
-      @sentences = sentences
+      @sentences = sentences.select { |sentence| !sentence.respond_to?(:speakable?) || sentence.speakable? }
     end
 
     def empty?
@@ -32,6 +32,8 @@ module Audiobook
       speech_options = tts_options || {}
       
       wavs = sentences.each_with_index.flat_map do |sent, sidx|
+        next [] unless sent.speakable?
+
         status_parts = []
         
         page_str = "page "
@@ -65,6 +67,8 @@ module Audiobook
       end
       
       combined = File.join(dir, "para_#{idx}.wav")
+      return nil if wavs.empty?
+
       Zipper.concat_audio(wavs, combined)
       combined
     end
@@ -82,7 +86,7 @@ module Audiobook
         next if normalized.empty?
         
         sentences = normalized.gsub(/([.!?…]\"?)\s+(?=\p{Lu})/u, "\\1\n").split(/\n+/)
-          .map { |s| Sentence.new(s) }.reject { |s| s.text.empty? }
+          .then { |parts| Sentence.build_all(parts) }
         
         Factory.heading_like?(sentences.first&.text) && sentences.size == 1 ? Heading.new(sentences.first.text) : new(sentences)
       end.compact.reject { |item| item.is_a?(Paragraph) && item.empty? }

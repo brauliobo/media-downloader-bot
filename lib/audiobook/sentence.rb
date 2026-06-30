@@ -8,6 +8,7 @@ module Audiobook
   class Sentence < Speech
 
     PAUSE = 0.10
+    PUNCTUATION_ONLY = /\A[\p{P}\p{S}\s]+\z/u
 
     attr_reader :text
     attr_writer :references
@@ -30,7 +31,17 @@ module Audiobook
     end
 
     def spoken_text
-      text
+      speakable? ? text : ''
+    end
+
+    def speakable?
+      self.class.speakable_text?(text)
+    end
+
+    def to_wav(dir, idx, lang: 'en', stl: nil, tts_options: {})
+      return nil unless speakable?
+
+      super
     end
 
     def add_reference(ref)
@@ -54,8 +65,10 @@ module Audiobook
       else
         # Retry TTS and fail hard if output is missing
         Retriable.retriable(tries: 4, base_interval: 0.5, multiplier: 2.0) do
-          TTS.synthesize(text: spoken, lang: lang, out_path: wav_path, **tts_options)
+          speed, options = AudioFiles.split_speed_options(tts_options)
+          TTS.synthesize(text: spoken, lang: lang, out_path: wav_path, **options)
           raise 'TTS produced no audio' unless File.exist?(wav_path) && File.size?(wav_path)
+          AudioFiles.speed!(wav_path, speed)
         end
       end
     end
@@ -68,6 +81,24 @@ module Audiobook
 
     def self.ends_with_punctuation?(text)
       TextHelpers.ends_with_punctuation?(text)
+    end
+
+    def self.speakable_text?(text)
+      normalized = text.to_s.strip
+      normalized.present? && !normalized.match?(PUNCTUATION_ONLY)
+    end
+
+    def self.build(text)
+      new(text_value(text)).then { |sentence| sentence if sentence.speakable? }
+    end
+
+    def self.build_all(texts)
+      Array(texts).filter_map { |text| build(text) }
+    end
+
+    def self.text_value(value)
+      value = SymMash.new(value) if value.is_a?(Hash)
+      value.respond_to?(:text) ? value.text : value
     end
   end
 end

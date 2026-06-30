@@ -144,36 +144,33 @@ module Audiobook
       item = SymMash.new(item) unless item.is_a?(SymMash)
       # Item is a hash with single key indicating type
       if item.heading
-        Heading.new(item.heading.text)
+        Heading.new(item.heading.text) if Sentence.speakable_text?(item.heading.text)
       elsif item.reference
         ref_info = item.reference
-        sentences = (ref_info.sentences || []).map do |s|
-          s = SymMash.new(s) unless s.is_a?(SymMash)
-          sent = Sentence.new(s.text)
-          sent
-        end
+        sentences = Sentence.build_all(ref_info.sentences)
         Reference.new(ref_info.id, sentences)
       elsif item.image
         img = Image.allocate
         img.instance_variable_set(:@path, item.image.path || '')
-        sentences = (item.image.sentences || []).map { |s| Sentence.new((s.is_a?(Hash) ? SymMash.new(s) : s).text) }
+        sentences = Sentence.build_all(item.image.sentences)
         img.instance_variable_set(:@sentences, sentences)
         img
       elsif item.paragraph
         sentences = (item.paragraph.sentences || []).map do |s|
           s = SymMash.new(s) unless s.is_a?(SymMash)
-          sent = Sentence.new(s.text)
+          sent = Sentence.build(s.text)
+          next unless sent
           if s.references
             sent.references = s.references.map do |r|
               ref_info = r.reference || r
               ref_info = SymMash.new(ref_info) unless ref_info.is_a?(SymMash)
-              ref_sents = (ref_info.sentences || []).map { |rs| Sentence.new((rs.is_a?(Hash) ? SymMash.new(rs) : rs).text) }
+              ref_sents = Sentence.build_all(ref_info.sentences)
               Reference.new(ref_info.id, ref_sents)
             end
           end
           sent
-        end
-        Paragraph.new(sentences)
+        end.compact
+        Paragraph.new(sentences) unless sentences.empty?
       else
         # Legacy format fallback with 'type' field
         type = item.type
@@ -183,12 +180,12 @@ module Audiobook
         when 'Image'
           img = Image.allocate
           img.instance_variable_set(:@path, item.path || '')
-          sentences = (item.sentences || []).map { |s| Sentence.new((s.is_a?(Hash) ? SymMash.new(s) : s).text) }
+          sentences = Sentence.build_all(item.sentences)
           img.instance_variable_set(:@sentences, sentences)
           img
         else
-          sentences = (item.sentences || []).map { |s| Sentence.new((s.is_a?(Hash) ? SymMash.new(s) : s).text) }
-          Paragraph.new(sentences)
+          sentences = Sentence.build_all(item.sentences)
+          Paragraph.new(sentences) unless sentences.empty?
         end
       end
     end

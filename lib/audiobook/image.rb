@@ -84,7 +84,7 @@ module Audiobook
 
       normalized = TextHelpers.normalize_text(text)
       parts = normalized.gsub(/([.!?…]\"?)\s+(?=\p{Lu})/u, "\\1\n").split(/\n+/)
-      @sentences = parts.map { |s| Sentence.new(s) }.reject { |s| s.text.empty? }
+      @sentences = Sentence.build_all(parts)
     ensure
       FileUtils.rm_f(tmp_png) if tmp_png
       Dir["#{base}*"].each { |f| FileUtils.rm_f(f) } if base

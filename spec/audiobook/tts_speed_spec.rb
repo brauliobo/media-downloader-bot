@@ -15,6 +15,7 @@ RSpec.describe 'Audiobook TTS speed' do
       options = runner.send(:tts_options, dir)
 
       expect(options).not_to have_key(:speed)
+      expect(options[:audio_speed]).to eq(1.25)
       expect(options[:temperature]).to eq(0)
       expect(options[:instruct]).to eq('female, middle-aged, moderate pitch')
       expect(options[:speaker_wav]).to end_with('audiobook_voice_reference.wav')
@@ -168,7 +169,7 @@ RSpec.describe 'Audiobook TTS speed' do
     end
   end
 
-  it 'applies conversion speed through zipper' do
+  it 'does not reapply conversion speed to the final audiobook encode' do
     book = instance_double(Audiobook::Book, metadata: {}, pages: [])
     runner = Audiobook::Runner.new(book, nil, SymMash.new(speed: '1.25'))
     captured_opts = nil
@@ -179,7 +180,7 @@ RSpec.describe 'Audiobook TTS speed' do
 
     runner.send(:encode_audio_file, '/tmp/in.wav', '/tmp/out.opus')
 
-    expect(captured_opts.speed).to eq('1.25')
+    expect(captured_opts.speed).to be_nil
   end
 
   it 'does not advertise TTS speech speed for audiobooks' do
@@ -230,11 +231,13 @@ RSpec.describe 'Audiobook TTS speed' do
       ) do |out_path:, **_kwargs|
         File.write(out_path, 'wav')
       end
+      expect(Audiobook::AudioFiles).to receive(:speed!).with(kind_of(String), 1.25)
 
       page.to_wav(
         dir, '0001',
         lang: 'en',
         tts_options: {
+          audio_speed: 1.25,
           instruct: 'female, middle-aged, moderate pitch, american accent',
         }
       )
@@ -257,9 +260,15 @@ RSpec.describe 'Audiobook TTS speed' do
         outfile
       end
 
+      expect(Audiobook::AudioFiles).to receive(:speed_all) do |paths, speed|
+        expect(paths).to all(end_with('.wav'))
+        expect(speed).to eq(1.25)
+      end
+
       expect(TTS).to receive(:synthesize_batch) do |items:, **kwargs|
         expect(kwargs[:tts_batch_size]).to eq(100)
         expect(kwargs).not_to have_key(:speed)
+        expect(kwargs).not_to have_key(:audio_speed)
         expect(items.map { |item| item[:text] }).to eq([
           'Chapter One.',
           'Hello world.',
@@ -271,7 +280,7 @@ RSpec.describe 'Audiobook TTS speed' do
       page.to_wav(
         dir, '0001',
         lang: 'en',
-        tts_options: { tts_batch_size: 100 }
+        tts_options: { audio_speed: 1.25, tts_batch_size: 100 }
       )
     end
   end

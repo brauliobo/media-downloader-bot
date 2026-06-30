@@ -84,6 +84,7 @@ module Audiobook
 
     def encode_audio_file(input_wav, out_audio)
       zip_opts = SymMash.new(@opts || {})
+      zip_opts.delete(:speed)
       # Pick format based on requested extension; default to opus
       requested_ext = File.extname(out_audio.to_s).downcase
       case requested_ext
@@ -103,16 +104,18 @@ module Audiobook
 
     def tts_options(dir)
       options = TTS::Options.for(@opts, lang: @lang)
+      options[:audio_speed] = audio_speed if audio_speed
       options[:instruct] ||= detected_voice_instruct if stable_voice_reference?
       return options unless stable_voice_reference?
 
       ref_path = File.join(dir, 'audiobook_voice_reference.wav')
+      reference_options = options.except(:audio_speed)
       unless File.exist?(ref_path) && File.size?(ref_path)
         TTS.synthesize(
           text:     voice_reference_text,
           lang:     @lang,
           out_path: ref_path,
-          **options
+          **reference_options
         )
       end
 
@@ -141,7 +144,17 @@ module Audiobook
       end
       return if jobs.empty?
 
-      TTS.synthesize_batch(items: jobs, **speech_options)
+      speed, options = AudioFiles.split_speed_options(speech_options)
+      TTS.synthesize_batch(items: jobs, **options)
+      AudioFiles.speed_all(jobs.map { |job| job[:out_path] }, speed)
+    end
+
+    def audio_speed
+      speed = @opts&.speed
+      return unless speed
+
+      speed = speed.to_f
+      speed if speed.positive? && speed != 1
     end
 
     def book_language
