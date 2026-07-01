@@ -202,6 +202,20 @@ RSpec.describe Zipper do
     )
   end
 
+  it 'uses rubberband for speech speed files' do
+    allow(FileUtils).to receive(:mv)
+    allow(File).to receive(:exist?).and_call_original
+    allow(File).to receive(:exist?).with(match(%r{/tmp/speed_.*\.wav\z})).and_return(true)
+    allow(Sh).to receive(:run).and_return(['', '', double(success?: true)])
+
+    described_class.speed_audio_file!('/tmp/speech.wav', 1.2)
+
+    expect(Sh).to have_received(:run).with(
+      match(/rubberband\\=tempo\\=1\.2.*formant\\=preserved/)
+    )
+    expect(Sh).not_to have_received(:run).with(include('atempo=1.2'))
+  end
+
   it 'transcribes subtitles when gensubs is the only subtitle option' do
     dir = Dir.mktmpdir('zipper-gensubs-')
     probe = SymMash.new(

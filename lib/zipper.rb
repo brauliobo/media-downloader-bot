@@ -139,11 +139,15 @@ class Zipper
 
     dir = File.dirname(wav_path)
     out = File.join(dir, "speed_#{SecureRandom.hex(4)}.wav")
-    cmd = "#{FFMPEG} -i #{Sh.escape(wav_path)} -af atempo=#{speed} -c:a pcm_s16le #{Sh.escape(out)}"
+    cmd = "#{FFMPEG} -i #{Sh.escape(wav_path)} -af #{Sh.escape(speech_speed_filter(speed))} -c:a pcm_s16le #{Sh.escape(out)}"
     _, err, status = Sh.run cmd
     Sh.assert_success!('Failed to apply audio speed', err, status: status, output: out)
     FileUtils.mv out, wav_path, force: true
     wav_path
+  end
+
+  def self.speech_speed_filter(speed)
+    "rubberband=tempo=#{speed}:pitch=1:transients=smooth:detector=soft:phase=laminar:window=long:formant=preserved"
   end
 
   def self.choose_format(*args)
