@@ -233,11 +233,24 @@ class Worker
     send_message msg, caption, **ret_msg
   end
 
-  def msg_caption i
+  def msg_caption(i, max: nil)
     return '' if opts.nocaption
+
+    return build_msg_caption(i) unless max
+
+    title = i.info.title.to_s
+    loop do
+      text = build_msg_caption(i, title: title)
+      return text if text.size <= max || title.empty?
+
+      title = title.first([title.size - (text.size - max) - 1, 0].max)
+    end
+  end
+
+  def build_msg_caption(i, title: nil)
     text = ''
     if opts.caption or i.type == Zipper::Types.video
-      text  = "_#{Bot::MsgHelpers.me(i.info.title)}_"
+      text  = "_#{Bot::MsgHelpers.me(title || i.info.title)}_"
       text << "\n#{Bot::MsgHelpers.me(i.info.uploader)}" if i.info.uploader
     end
     text << "\n\n_#{Bot::MsgHelpers.me(i.info.description.strip)}_" if opts.description and i.info.description.strip.presence

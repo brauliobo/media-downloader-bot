@@ -24,21 +24,21 @@ RSpec.describe UploadCoordinator do
   it 'flushes queued media as one album' do
     uploads = [item('1.jpg', 'image/jpeg'), item('2.jpg', 'image/jpeg')]
     allow(worker).to receive(:send).with(:translate_caption_info, uploads.first.info, opts)
-    allow(worker).to receive(:send).with(:msg_caption, anything).and_return('caption')
+    allow(worker).to receive(:send).with(:msg_caption, anything, max: 1024).and_return('_caption_')
     allow(worker).to receive(:send_album)
 
     coordinator = described_class.new(worker)
     uploads.each_with_index { |upload, i| coordinator.upload_or_queue(upload, i) }
     coordinator.flush
 
-    expect(worker).to have_received(:send_album).with(msg, 'caption', uploads: uploads, parse_mode: 'MarkdownV2')
+    expect(worker).to have_received(:send_album).with(msg, '_caption_', uploads: uploads, parse_mode: 'MarkdownV2')
   end
 
   it 'limits album captions for media groups' do
     uploads = [item('1.jpg', 'image/jpeg'), item('2.jpg', 'image/jpeg')]
     long = 'a' * 2_000
     allow(worker).to receive(:send).with(:translate_caption_info, uploads.first.info, opts)
-    allow(worker).to receive(:send).with(:msg_caption, anything).and_return(long)
+    allow(worker).to receive(:send).with(:msg_caption, anything, max: 1024).and_return(long.first(1024))
     allow(worker).to receive(:send_album)
 
     coordinator = described_class.new(worker)
