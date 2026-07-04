@@ -47,6 +47,49 @@ else
       expect(bot).to have_received(:send_message).with(msg, text, parse_mode: 'MarkdownV2')
     end
 
+    it 'removes Bot API punctuation escapes before sending TDLib album captions' do
+      caption = '_Novembro de 2025\. \-19 – 20 mg\/day  Ivermectin\/I\? \"ok\"_'
+
+      expect(bot.album_caption_text(SymMash.new(chat: {id: 123}), caption, 'MarkdownV2')).to eq(
+        '_Novembro de 2025. -19 – 20 mg/day  Ivermectin/I? "ok"_'
+      )
+    end
+
+    it 'keeps escaped formatting markers in TDLib album captions' do
+      caption = '_A \_literal\_ marker and \*stars\*_'
+
+      expect(bot.album_caption_text(SymMash.new(chat: {id: 123}), caption, 'MarkdownV2')).to eq(caption)
+    end
+
+    it 'closes truncated italic TDLib album captions' do
+      caption = "_#{'a' * described_class::MEDIA_CAPTION_LIMIT}_"
+      allow(bot).to receive(:send_message)
+
+      truncated = bot.album_caption_text(SymMash.new(chat: {id: 123}), caption, 'MarkdownV2')
+
+      expect(truncated.size).to eq(described_class::MEDIA_CAPTION_LIMIT)
+      expect(truncated).to end_with('_')
+      expect(truncated.scan(/(?<!\\)_/).size).to be_even
+    end
+
+    it 'preserves trailing links when truncating TDLib album captions' do
+      url     = 'https:\/\/x\.com\/i\/status\/2073169414275350804'
+      caption = "_#{'a' * described_class::MEDIA_CAPTION_LIMIT}_\n\n#{url}"
+      msg     = SymMash.new(chat: {id: 123})
+      allow(bot).to receive(:send_message)
+
+      truncated = bot.album_caption_text(msg, caption, 'MarkdownV2')
+
+      expect(truncated.size).to be <= described_class::MEDIA_CAPTION_LIMIT
+      expect(truncated).to end_with('https://x.com/i/status/2073169414275350804')
+      expect(truncated.scan(/(?<!\\)_/).size).to be_even
+      expect(bot).to have_received(:send_message).with(
+        msg,
+        "_#{'a' * described_class::MEDIA_CAPTION_LIMIT}_\n\nhttps://x.com/i/status/2073169414275350804",
+        parse_mode: 'MarkdownV2'
+      )
+    end
+
     it 'delegates long album sending with a truncated media caption' do
       path = File.join(dir, 'photo.jpg')
       File.write(path, '')
