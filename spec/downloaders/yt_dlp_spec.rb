@@ -119,6 +119,23 @@ RSpec.describe Downloaders::YtDlp do
       expect(i.fn_in).to eq(file)
     end
 
+    it 'clears per-input cuts after yt-dlp downloads a section' do
+      file = File.join(tmp, 'input-1.mp4')
+      File.write(file, '')
+      opts.ss = '14:57'
+      opts.to = '20:00'
+      i.opts = opts.deep_dup
+      allow(Sh).to receive(:run).and_return(['', '', 0])
+      allow(Prober).to receive(:for).and_return(SymMash.new(streams: [SymMash.new(codec_type: 'video')]))
+
+      downloader.download_one(i)
+
+      expect(opts.ss).to be_nil
+      expect(opts.to).to be_nil
+      expect(i.opts.ss).to be_nil
+      expect(i.opts.to).to be_nil
+    end
+
     it 'rejects audio download when no audio stream present' do
       file = File.join(tmp, 'input-1.jpg')
       File.write(file, '')
