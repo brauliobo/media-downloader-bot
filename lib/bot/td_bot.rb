@@ -13,6 +13,7 @@ module Bot
     include RateLimiter
 
     self.max_caption = 4096
+    MEDIA_CAPTION_LIMIT = 1024
 
     class_attribute :td
     class_attribute :message_handler, :message_sender, :file_manager
@@ -148,25 +149,19 @@ module Bot
     def send_album(msg, text, uploads:, parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **_params)
       sent  = []
       first = true
+      text  = album_caption_text(msg, text, parse_mode)
 
       uploads.each_slice(10) do |batch|
         batch_caption = first ? text : nil
-        contents = batch.map.with_index { |up, i| album_content(up, i.zero? ? batch_caption : nil, parse_mode) }
         first = false
         result = td_with_rate_limit('send_album') do
-          td.send_message_album(
-            chat_id:                msg.chat.id,
-            message_thread_id:      0,
-            reply_to:               nil,
-            options:                nil,
-            input_message_contents: contents
-          ).value!(1_800)
+          message_sender.send_media_album(msg.chat.id, batch, caption: batch_caption, parse_mode: parse_mode, timeout: 1_800)
         end
         unless result
           sent.concat send_album_items(msg, batch, batch_caption, parse_mode)
           next
         end
-        sent.concat Array(result&.messages || result)
+        sent.concat(result.respond_to?(:messages) ? result.messages : Array(result))
       rescue TD::Error => e
         raise unless e.message.to_s.include?('InputFile is not specified')
 
@@ -177,6 +172,13 @@ module Bot
       sent
     end
 
+    def album_caption_text(msg, text, parse_mode)
+      return text if text.to_s.size <= MEDIA_CAPTION_LIMIT
+
+      send_message(msg, text, parse_mode: parse_mode)
+      ''
+    end
+
     def send_album_items(msg, batch, text, parse_mode)
       batch.map.with_index do |up, i|
         caption = i.zero? ? text.to_s : ''
@@ -184,27 +186,12 @@ module Bot
           if up.mime.to_s.start_with?('video/')
             message_sender.send_video(msg.chat.id, caption, video: up.fn_out, reply_to: nil)
           elsif up.mime.to_s.start_with?('image/')
-            send_album_photo_item(msg, caption, up, parse_mode)
+            message_sender.send_photo(msg.chat.id, caption, photo: up.fn_out, parse_mode: parse_mode, reply_to: nil, timeout: 1_800)
           else
             message_sender.send_document(msg.chat.id, caption, document: up.fn_out, reply_to: nil)
           end
         end
       end
-    end
-
-    def send_album_photo_item(msg, caption_text, up, parse_mode)
-      caption = td_payload(message_sender.send(:parse_markdown_text, caption_text.to_s, parse_mode))
-      path    = message_sender.file_manager.copy_to_safe_location(up.fn_out.to_s)
-      content = photo_content(path, caption)
-
-      td.send_message(
-        chat_id:               msg.chat.id,
-        message_thread_id:     0,
-        reply_to:              nil,
-        options:               nil,
-        reply_markup:          nil,
-        input_message_content: content
-      ).value!(1_800)
     end
 
     def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', force: false, **params)
@@ -223,55 +210,6 @@ module Bot
             true
           end
         end || false
-      end
-    end
-
-    def album_content(up, caption_text, parse_mode)
-      caption = td_payload(message_sender.send(:parse_markdown_text, caption_text.to_s, parse_mode))
-      source  = up.fn_out.to_s
-      raise ArgumentError, "album file does not exist: #{source}" unless File.exist?(source)
-
-      path = message_sender.file_manager.copy_to_safe_location(source)
-      td_payload(up.mime.to_s.start_with?('video/') ? video_content(path, caption) : photo_content(path, caption))
-    end
-
-    def photo_content(path, caption)
-      media_content('inputMessagePhoto', 'photo', {'@type' => 'inputPhoto', 'photo' => input_file(path)}, caption)
-    end
-
-    def video_content(path, caption)
-      media_content('inputMessageVideo', 'video', input_file(path), caption, 'duration' => 0, 'supports_streaming' => true)
-    end
-
-    def media_content(type, media_key, media, caption, extra = {})
-      {
-        '@type'                    => type,
-        media_key                  => media,
-        'thumbnail'                => nil,
-        'added_sticker_file_ids'   => [],
-        'width'                    => 0,
-        'height'                   => 0,
-        'caption'                  => caption,
-        'show_caption_above_media' => false,
-        'self_destruct_type'       => nil,
-        'has_spoiler'              => false,
-      }.merge(extra)
-    end
-
-    def input_file(path)
-      {'@type' => 'inputFileLocal', 'path' => path}
-    end
-
-    def td_payload(value)
-      case value
-      when TD::Types::Base
-        td_payload(value.to_h)
-      when Hash
-        value.each_with_object({}) { |(key, val), obj| obj[key.to_s] = td_payload(val) unless val.nil? }
-      when Array
-        value.map { |item| td_payload(item) }
-      else
-        value
       end
     end
 

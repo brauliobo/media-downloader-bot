@@ -21,21 +21,30 @@ else
 
     after { FileUtils.remove_entry(dir) if Dir.exist?(dir) }
 
-    it 'builds compact TDLib photo album content with a local input file' do
+    it 'delegates album sending to tdlib-ruby message sender' do
       path = File.join(dir, 'photo.jpg')
       File.write(path, '')
 
-      file_manager   = double(copy_to_safe_location: path)
-      message_sender = double(file_manager: file_manager)
-      allow(message_sender).to receive(:parse_markdown_text).and_return('@type' => 'formattedText', 'text' => 'caption', 'entities' => [])
+      msg            = SymMash.new(chat: {id: 123})
+      upload         = SymMash.new(fn_out: path, mime: 'image/jpeg')
+      message        = double(id: 456)
+      message_sender = double(send_media_album: [message])
       allow(bot).to receive(:message_sender).and_return(message_sender)
+      allow(bot).to receive(:finalize_sent_message)
 
-      content = bot.send(:album_content, SymMash.new(fn_out: path, mime: 'image/jpeg'), 'caption', 'MarkdownV2')
+      expect(bot.send_album(msg, 'caption', uploads: [upload])).to eq([message])
+      expect(message_sender).to have_received(:send_media_album).with(
+        123, [upload], caption: 'caption', parse_mode: 'MarkdownV2', timeout: 1_800
+      )
+    end
 
-      expect(content).to include('@type' => 'inputMessagePhoto')
-      expect(content['photo']).to eq('@type' => 'inputPhoto', 'photo' => { '@type' => 'inputFileLocal', 'path' => path })
-      expect(content).not_to have_key('thumbnail')
-      expect(content).not_to have_key('self_destruct_type')
+    it 'sends long album captions as a separate text message' do
+      text = 'a' * (described_class::MEDIA_CAPTION_LIMIT + 1)
+      msg  = SymMash.new(chat: {id: 123})
+      allow(bot).to receive(:send_message)
+
+      expect(bot.album_caption_text(msg, text, 'MarkdownV2')).to eq('')
+      expect(bot).to have_received(:send_message).with(msg, text, parse_mode: 'MarkdownV2')
     end
 
     it 'wraps TD message objects without passing them to SymMash' do
