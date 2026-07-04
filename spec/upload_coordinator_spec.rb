@@ -2,7 +2,7 @@ require 'spec_helper'
 
 RSpec.describe UploadCoordinator do
   let(:dir)    { Dir.mktmpdir('upload-coordinator-') }
-  let(:worker) { instance_double(Worker, opts: opts, msg: msg) }
+  let(:worker) { instance_double(Worker, opts: opts, msg: msg, caption_limit: 1024) }
   let(:opts)   { SymMash.new(album: 1) }
   let(:msg)    { SymMash.new(chat: {id: 1}) }
 
@@ -48,6 +48,20 @@ RSpec.describe UploadCoordinator do
     expect(worker).to have_received(:send_album).with(msg, long.first(1024), uploads: uploads, parse_mode: 'MarkdownV2')
   end
 
+  it 'uses the worker caption limit for albums' do
+    uploads = [item('1.jpg', 'image/jpeg'), item('2.jpg', 'image/jpeg')]
+    allow(worker).to receive(:caption_limit).and_return(4096)
+    allow(worker).to receive(:send).with(:translate_caption_info, uploads.first.info, opts)
+    allow(worker).to receive(:send).with(:msg_caption, anything, max: 4096).and_return('td caption')
+    allow(worker).to receive(:send_album)
+
+    coordinator = described_class.new(worker)
+    uploads.each_with_index { |upload, i| coordinator.upload_or_queue(upload, i) }
+    coordinator.flush
+
+    expect(worker).to have_received(:send_album).with(msg, 'td caption', uploads: uploads, parse_mode: 'MarkdownV2')
+  end
+
   it 'uploads a single queued item normally' do
     upload = item('1.jpg', 'image/jpeg')
     allow(worker).to receive(:send).with(:upload_one, upload)
@@ -75,5 +89,28 @@ RSpec.describe UploadCoordinator do
 
     expect(parsed.album).to be_nil
     expect(parsed.metadata.album).to eq('Name')
+  end
+
+  it 'translates album captions through the shared worker caption path' do
+    real_worker = Worker.new(SymMash.new(from: {id: 1}, chat: {id: 1}))
+    uploads     = [item('1.jpg', 'image/jpeg'), item('2.jpg', 'image/jpeg')]
+    input       = SymMash.new(
+      opts:    opts.merge(caption: 1, slang: 'pt'),
+      info:    SymMash.new(title: 'English caption', language: 'en', description: ''),
+      url:     'https://x.com/i/status/2073169414275350804',
+      uploads: uploads
+    )
+
+    allow(Translator).to receive(:translate).with('English caption', from: 'en', to: 'pt').and_return('Legenda em portugues')
+    allow(real_worker).to receive(:send_album)
+
+    described_class.new(real_worker).upload(input)
+
+    expect(real_worker).to have_received(:send_album).with(
+      real_worker.msg,
+      '_Legenda em portugues_' + "\n\n" + 'https:\/\/x\.com\/i\/status\/2073169414275350804',
+      uploads: uploads,
+      parse_mode: 'MarkdownV2'
+    )
   end
 end

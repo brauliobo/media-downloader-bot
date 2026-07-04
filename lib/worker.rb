@@ -152,6 +152,10 @@ class Worker
     UploadCoordinator.new(self).upload(i)
   end
 
+  def caption_limit
+    service.respond_to?(:max_caption) ? service.max_caption : 1024
+  end
+
   private
 
   def process_lines(lines, ctx)
@@ -198,7 +202,7 @@ class Worker
 
     info.title = msg_limit(info.title, percent: 90) if info.title
 
-    caption = msg_caption i
+    caption = msg_caption i, max: caption_limit
     return send_message msg, caption if opts.simulate
 
     vstrea     = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
@@ -234,34 +238,78 @@ class Worker
   end
 
   def msg_caption(i, max: nil)
-    return '' if opts.nocaption
+    caption_opts = i.opts || opts || SymMash.new
+    return '' if caption_opts.nocaption
 
     return build_msg_caption(i) unless max
 
     title = i.info.title.to_s
-    loop do
-      text = build_msg_caption(i, title: title)
-      return text if text.size <= max || title.empty?
+    best  = nil
+    low   = 0
+    high  = title.size
 
-      title = title.first([title.size - (text.size - max) - 1, 0].max)
+    while low <= high
+      mid  = (low + high) / 2
+      text = build_msg_caption(i, title: title.first(mid))
+      if text.size <= max
+        best = text
+        low  = mid + 1
+      else
+        high = mid - 1
+      end
     end
+
+    best || build_msg_caption(i, title: '')
   end
 
   def build_msg_caption(i, title: nil)
+    caption_opts = i.opts || opts || SymMash.new
     text = ''
-    if opts.caption or i.type == Zipper::Types.video
-      text  = "_#{Bot::MsgHelpers.me(title || i.info.title)}_"
-      text << "\n#{Bot::MsgHelpers.me(i.info.uploader)}" if i.info.uploader
+    if caption_opts.caption or i.type == Zipper::Types.video
+      title_text = (title || i.info.title).to_s
+      text  = markdown_italic(title_text) if title_text.present?
+      text << "\n" if text.present? && i.info.uploader
+      text << Bot::MsgHelpers.me(i.info.uploader) if i.info.uploader
     end
-    text << "\n\n_#{Bot::MsgHelpers.me(i.info.description.strip)}_" if opts.description and i.info.description.strip.presence
-    text << "\n\n#{Bot::MsgHelpers.me(i.url)}" if i.url
+    if caption_opts.description and i.info.description.strip.presence
+      text << "\n\n" if text.present?
+      text << markdown_italic(i.info.description.strip)
+    end
+    if i.url
+      text << "\n\n" if text.present?
+      text << Bot::MsgHelpers.me(i.url)
+    end
     text
+  end
+
+  def markdown_italic(text)
+    text.to_s.split(/(\n+)/).map do |part|
+      part.match?(/\A\n+\z/) || part.empty? ? part : "_#{Bot::MsgHelpers.me(part)}_"
+    end.join
   end
 
   def translate_caption_text(text, from:, to:)
     urls = text.to_s[%r{(?:\s+https?://\S+)+\s*\z}]
     body = urls ? text.to_s.delete_suffix(urls).strip : text.to_s
-    [Translator.translate(body, from: from, to: to), urls.to_s.strip.presence].compact.join(' ')
+    [translate_caption_body(body, from: from, to: to), urls.to_s.strip.presence].compact.join(' ')
+  end
+
+  def translate_caption_body(body, from:, to:)
+    parts = body.to_s.split(/(\n{2,})/)
+    parts.map do |part|
+      if part.blank? || part.match?(/\A\n+\z/)
+        part
+      else
+        translate_caption_segment(part, from: from, to: to)
+      end
+    end.join
+  end
+
+  def translate_caption_segment(text, from:, to:)
+    chunks = text.to_s.split(/(?<=[.!?])\s+/)
+    return Translator.translate(text, from: from, to: to) if chunks.one?
+
+    Array(Translator.translate(chunks, from: from, to: to)).join(' ')
   end
 
   def translate_caption_info(info, opts)
