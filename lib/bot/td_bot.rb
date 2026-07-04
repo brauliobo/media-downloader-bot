@@ -176,7 +176,7 @@ module Bot
       return text if text.to_s.size <= MEDIA_CAPTION_LIMIT
 
       send_message(msg, text, parse_mode: parse_mode)
-      ''
+      text.to_s.first(MEDIA_CAPTION_LIMIT)
     end
 
     def send_album_items(msg, batch, text, parse_mode)
