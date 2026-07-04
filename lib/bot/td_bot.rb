@@ -150,7 +150,8 @@ module Bot
       first = true
 
       uploads.each_slice(10) do |batch|
-        contents = batch.map.with_index { |up, i| album_content(up, i.zero? && first ? text : nil, parse_mode) }
+        batch_caption = first ? text : nil
+        contents = batch.map.with_index { |up, i| album_content(up, i.zero? ? batch_caption : nil, parse_mode) }
         first = false
         result = td_with_rate_limit('send_album') do
           td.send_message_album(
@@ -161,11 +162,49 @@ module Bot
             input_message_contents: contents
           ).value!(1_800)
         end
+        unless result
+          sent.concat send_album_items(msg, batch, batch_caption, parse_mode)
+          next
+        end
         sent.concat Array(result&.messages || result)
+      rescue TD::Error => e
+        raise unless e.message.to_s.include?('InputFile is not specified')
+
+        sent.concat send_album_items(msg, batch, batch_caption, parse_mode)
       end
 
-      finalize_sent_message(msg, SymMash.new(sent.first || {id: 0}), delete: delete, delete_both: delete_both)
+      finalize_sent_message(msg, td_message_response(sent.first), delete: delete, delete_both: delete_both)
       sent
+    end
+
+    def send_album_items(msg, batch, text, parse_mode)
+      batch.map.with_index do |up, i|
+        caption = i.zero? ? text.to_s : ''
+        td_with_rate_limit('send_album_item') do
+          if up.mime.to_s.start_with?('video/')
+            message_sender.send_video(msg.chat.id, caption, video: up.fn_out, reply_to: nil)
+          elsif up.mime.to_s.start_with?('image/')
+            send_album_photo_item(msg, caption, up, parse_mode)
+          else
+            message_sender.send_document(msg.chat.id, caption, document: up.fn_out, reply_to: nil)
+          end
+        end
+      end
+    end
+
+    def send_album_photo_item(msg, caption_text, up, parse_mode)
+      caption = td_payload(message_sender.send(:parse_markdown_text, caption_text.to_s, parse_mode))
+      path    = message_sender.file_manager.copy_to_safe_location(up.fn_out.to_s)
+      content = photo_content(path, caption)
+
+      td.send_message(
+        chat_id:               msg.chat.id,
+        message_thread_id:     0,
+        reply_to:              nil,
+        options:               nil,
+        reply_markup:          nil,
+        input_message_content: content
+      ).value!(1_800)
     end
 
     def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', force: false, **params)
@@ -189,46 +228,38 @@ module Bot
 
     def album_content(up, caption_text, parse_mode)
       caption = td_payload(message_sender.send(:parse_markdown_text, caption_text.to_s, parse_mode))
-      path    = message_sender.file_manager.copy_to_safe_location(up.fn_out.to_s)
-      input   = { '@type' => 'inputFileLocal', 'path' => path }
+      source  = up.fn_out.to_s
+      raise ArgumentError, "album file does not exist: #{source}" unless File.exist?(source)
 
-      if up.mime.to_s.start_with?('video/')
-        {
-          '@type'                    => 'inputMessageVideo',
-          'video'                    => {
-            '@type'                  => 'inputVideo',
-            'video'                  => input,
-            'thumbnail'              => nil,
-            'cover'                  => nil,
-            'start_timestamp'        => 0,
-            'added_sticker_file_ids' => [],
-            'duration'               => 0,
-            'width'                  => 0,
-            'height'                 => 0,
-            'supports_streaming'     => true
-          },
-          'caption'                  => caption,
-          'show_caption_above_media' => false,
-          'self_destruct_type'       => nil,
-          'has_spoiler'              => false
-        }
-      else
-        {
-          '@type'                    => 'inputMessagePhoto',
-          'photo'                    => {
-            '@type'                  => 'inputPhoto',
-            'photo'                  => input,
-            'thumbnail'              => nil,
-            'added_sticker_file_ids' => [],
-            'width'                  => 0,
-            'height'                 => 0
-          },
-          'caption'                  => caption,
-          'show_caption_above_media' => false,
-          'self_destruct_type'       => nil,
-          'has_spoiler'              => false
-        }
-      end
+      path = message_sender.file_manager.copy_to_safe_location(source)
+      td_payload(up.mime.to_s.start_with?('video/') ? video_content(path, caption) : photo_content(path, caption))
+    end
+
+    def photo_content(path, caption)
+      media_content('inputMessagePhoto', 'photo', {'@type' => 'inputPhoto', 'photo' => input_file(path)}, caption)
+    end
+
+    def video_content(path, caption)
+      media_content('inputMessageVideo', 'video', input_file(path), caption, 'duration' => 0, 'supports_streaming' => true)
+    end
+
+    def media_content(type, media_key, media, caption, extra = {})
+      {
+        '@type'                    => type,
+        media_key                  => media,
+        'thumbnail'                => nil,
+        'added_sticker_file_ids'   => [],
+        'width'                    => 0,
+        'height'                   => 0,
+        'caption'                  => caption,
+        'show_caption_above_media' => false,
+        'self_destruct_type'       => nil,
+        'has_spoiler'              => false,
+      }.merge(extra)
+    end
+
+    def input_file(path)
+      {'@type' => 'inputFileLocal', 'path' => path}
     end
 
     def td_payload(value)
@@ -242,6 +273,13 @@ module Bot
       else
         value
       end
+    end
+
+    def td_message_response(message)
+      id = message[:message_id] || message[:id] if message.is_a?(Hash)
+      id ||= message.message_id if message.respond_to?(:message_id)
+      id ||= message.id if message.respond_to?(:id)
+      SymMash.new(message_id: id || 0, id: id)
     end
 
     def edit_generated_message(chat_id:, message_id:, text: nil, type: nil, parse_mode: 'MarkdownV2', **params)
