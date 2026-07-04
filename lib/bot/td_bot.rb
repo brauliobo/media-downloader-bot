@@ -145,6 +145,29 @@ module Bot
       ret || SymMash.new(message_id: 0, text: text)
     end
 
+    def send_album(msg, text, uploads:, parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **_params)
+      sent  = []
+      first = true
+
+      uploads.each_slice(10) do |batch|
+        contents = batch.map.with_index { |up, i| album_content(up, i.zero? && first ? text : nil, parse_mode) }
+        first = false
+        result = td_with_rate_limit('send_album') do
+          td.send_message_album(
+            chat_id:                msg.chat.id,
+            message_thread_id:      0,
+            reply_to:               nil,
+            options:                nil,
+            input_message_contents: contents
+          ).value!(1_800)
+        end
+        sent.concat Array(result&.messages || result)
+      end
+
+      finalize_sent_message(msg, SymMash.new(sent.first || {id: 0}), delete: delete, delete_both: delete_both)
+      sent
+    end
+
     def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', force: false, **params)
       if force
         td_with_rate_limit('edit_message') do
@@ -161,6 +184,62 @@ module Bot
             true
           end
         end || false
+      end
+    end
+
+    def album_content(up, caption_text, parse_mode)
+      caption = td_payload(message_sender.send(:parse_markdown_text, caption_text.to_s, parse_mode))
+      input   = { '@type' => 'inputFileLocal', 'path' => up.fn_out.to_s }
+
+      if up.mime.to_s.start_with?('video/')
+        {
+          '@type'                    => 'inputMessageVideo',
+          'video'                    => {
+            '@type'                  => 'inputVideo',
+            'video'                  => input,
+            'thumbnail'              => nil,
+            'cover'                  => nil,
+            'start_timestamp'        => 0,
+            'added_sticker_file_ids' => [],
+            'duration'               => 0,
+            'width'                  => 0,
+            'height'                 => 0,
+            'supports_streaming'     => true
+          },
+          'caption'                  => caption,
+          'show_caption_above_media' => false,
+          'self_destruct_type'       => nil,
+          'has_spoiler'              => false
+        }
+      else
+        {
+          '@type'                    => 'inputMessagePhoto',
+          'photo'                    => {
+            '@type'                  => 'inputPhoto',
+            'photo'                  => input,
+            'thumbnail'              => nil,
+            'added_sticker_file_ids' => [],
+            'width'                  => 0,
+            'height'                 => 0
+          },
+          'caption'                  => caption,
+          'show_caption_above_media' => false,
+          'self_destruct_type'       => nil,
+          'has_spoiler'              => false
+        }
+      end
+    end
+
+    def td_payload(value)
+      case value
+      when TD::Types::Base
+        td_payload(value.to_h)
+      when Hash
+        value.each_with_object({}) { |(key, val), obj| obj[key.to_s] = td_payload(val) unless val.nil? }
+      when Array
+        value.map { |item| td_payload(item) }
+      else
+        value
       end
     end
 

@@ -86,7 +86,9 @@ module Processors
       meta_key = meta_prefix ? key.split('.', 2).last : key
 
       common_meta = %w[title artist album performer genre date comment track]
-      if meta_prefix || common_meta.include?(meta_key)
+      if key == 'album' && v == 1
+        opts[:album] = 1
+      elsif meta_prefix || common_meta.include?(meta_key)
         opts[:metadata] ||= SymMash.new
         opts[:metadata][meta_key.to_sym] = v
       else

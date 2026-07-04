@@ -11,6 +11,7 @@ require_relative 'zipper'
 require_relative 'translator'
 require_relative 'tagger'
 require_relative 'downloaders'
+require_relative 'upload_coordinator'
 
 require_relative 'processors/base'
 require_relative 'processors/router'
@@ -48,7 +49,7 @@ class Worker
     load_session
   end
 
-  delegate :send_message, :edit_message, :delete_message, :download_file, :report_error, :msg_limit, to: :service
+  delegate :send_message, :send_album, :edit_message, :delete_message, :download_file, :report_error, :msg_limit, to: :service
 
   def load_session
     return unless defined? Models::Session
@@ -106,6 +107,7 @@ class Worker
 
       ordered  = opts[:sort] || opts[:number] || opts[:ordered] || opts[:reverse]
       up_queue = inputs.size.times.to_a
+      uploader = UploadCoordinator.new(self)
 
       inputs.each.with_index.api_peach do |i, pos|
         output_pos = inputs.size > 1 ? pos + 1 : nil
@@ -124,7 +126,7 @@ class Worker
           sleep 0.1 while up_queue.first != pos if ordered
           t = i.type&.name || i.type
           stline.update "uploading #{t}"
-          upload i
+          uploader.upload_or_queue i, pos
 
         rescue => e
           if e.respond_to?(:user_message)
@@ -138,6 +140,8 @@ class Worker
         end
       end
 
+      uploader.flush
+
       inputs.map(&:processor).uniq.each(&:cleanup)
       return if inputs.blank? or @st.keep?
     end
@@ -145,11 +149,7 @@ class Worker
   end
 
   def upload i
-    if i.uploads.present?
-      i.uploads.each { |up| upload_one up }
-    else
-      upload_one i
-    end
+    UploadCoordinator.new(self).upload(i)
   end
 
   private
