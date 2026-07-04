@@ -116,6 +116,15 @@ module Bot
           result.to_h
         end
 
+        r.post 'send_album' do
+          params, msg = message_params(r)
+          uploads = Array(params.delete(:uploads)).map { |up| SymMash.new(up) }
+          uploads.each { |up| require_allowed_path!(up.fn_out) }
+          text = params.delete(:text)
+          result = service.bot.send_album(msg, text, uploads: uploads, **params)
+          {messages: Array(result).map { |message| message.respond_to?(:to_h) ? message.to_h : message }}
+        end
+
         r.post 'edit_message' do
           params, msg = message_params(r)
           id = params.delete(:id)

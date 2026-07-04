@@ -27,6 +27,10 @@ module Bot
         end
       end
 
+      def send_album(msg, text, uploads:, parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **params)
+        call(:send_album, msg: msg, text: text, uploads: uploads, parse_mode: parse_mode, delete: delete, delete_both: delete_both, **params)
+      end
+
       def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', **params)
         call(:edit_message, msg: msg, id: id, text: text, type: type, parse_mode: parse_mode, **params)
       end
@@ -54,6 +58,7 @@ module Bot
         else
           payload = kwargs.dup
           payload[:msg] = payload[:msg].to_h if payload[:msg] && payload[:msg].respond_to?(:to_h)
+          payload[:uploads] = Array(payload[:uploads]).map { |up| up.respond_to?(:to_h) ? up.to_h : up } if payload[:uploads]
           payload[:file_id_or_info] = payload[:file_id_or_info].is_a?(Hash) ? payload[:file_id_or_info] : payload[:file_id_or_info].to_s if payload[:file_id_or_info]
           response = @http_client.post("/#{method}", payload) do |req|
             req.headers['Authorization'] = "Bearer #{ENV['BOT_HTTP_TOKEN']}" if ENV['BOT_HTTP_TOKEN'].present?
