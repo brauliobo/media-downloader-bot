@@ -99,6 +99,8 @@ module Bot
 
       finalize_sent_message(msg, sent.first || SymMash.new(message_id: 0), delete: delete, delete_both: delete_both)
       sent
+    rescue => e
+      raise RuntimeError, telegram_response_error_message(e)
     end
 
     def wrap_upload_params(p)
@@ -148,6 +150,11 @@ module Bot
       return 'video' if up.mime.to_s.start_with?('video/')
 
       up.type&.name.to_s.presence || 'document'
+    end
+
+    def telegram_response_error_message(error)
+      body = error.respond_to?(:response) && error.response.respond_to?(:body) ? error.response.body : nil
+      body.present? ? "#{error.class}: #{error.message}: #{body}" : "#{error.class}: #{error.message}"
     end
 
     def perform_delete_message(msg, id)
