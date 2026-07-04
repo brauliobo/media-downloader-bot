@@ -16,6 +16,8 @@ module Downloaders
 
     def download
       before = downloaded_files
+      info   = gallery_info
+      gopts  = gallery_opts
       _, e, s = Sh.run command, chdir: tmp
       return st.error("gallery-dl error: #{e.lines.last(3).join.strip}") unless success?(s)
 
@@ -24,9 +26,9 @@ module Downloaders
 
       SymMash.new(
         url:     url,
-        opts:    opts.deep_dup,
-        info:    SymMash.new(title: File.basename(url.to_s), display_id: url.to_s),
-        uploads: files.map.with_index { |file, i| upload(file, i + 1) }
+        opts:    gopts,
+        info:    info,
+        uploads: files.map.with_index { |file, i| upload(file, i + 1, info, gopts) }
       )
     end
 
@@ -50,6 +52,31 @@ module Downloaders
       status.respond_to?(:success?) ? status.success? : status == 0
     end
 
+    def gallery_info
+      meta = metadata
+      user = meta.user || meta.author || SymMash.new
+      SymMash.new(
+        title:       meta.content.presence || meta.title.presence || File.basename(url.to_s),
+        description: meta.description.presence,
+        uploader:    user.nick.presence || user.name.presence,
+        display_id:  (meta.tweet_id || meta.id || url).to_s,
+        language:    meta.lang
+      )
+    end
+
+    def gallery_opts
+      opts.deep_dup.tap { |o| o.caption ||= 1 }
+    end
+
+    def metadata
+      out, = Sh.run [gallery_dl, '-j', url.to_s], chdir: tmp
+      rows = JSON.parse(out)
+      row  = rows.find { |item| item.is_a?(Array) && item.first == 2 } || rows.find { |item| item.is_a?(Array) && item.first == 3 }
+      SymMash.new(row&.last || {})
+    rescue StandardError
+      SymMash.new
+    end
+
     def cookie_path
       @cookie_path ||= Utils::CookieJar.write(session, tmp)
     rescue StandardError => e
@@ -61,15 +88,15 @@ module Downloaders
       Dir[File.join(tmp, '**', '*')].select { |f| File.file?(f) }.sort
     end
 
-    def upload(file, pos)
+    def upload(file, pos, info, gopts)
       title = File.basename(file, File.extname(file))
       SymMash.new(
         fn_out: file,
         type:   SymMash.new(name: :document),
         mime:   Rack::Mime.mime_type(File.extname(file)) || 'application/octet-stream',
-        opts:   opts.deep_dup,
+        opts:   gopts.deep_dup,
         url:    url,
-        info:   SymMash.new(title: title, display_id: "#{url}-#{pos}")
+        info:   info.merge(title: info.title.presence || title, display_id: "#{info.display_id}-#{pos}")
       )
     end
   end
