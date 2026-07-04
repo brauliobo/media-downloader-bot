@@ -41,7 +41,7 @@ class UploadCoordinator
   end
 
   def album_caption(input)
-    worker.send(:msg_caption, input).to_s.first(ALBUM_CAPTION_LIMIT)
+    worker.send(:msg_caption, input, max: ALBUM_CAPTION_LIMIT)
   end
 
   def album_uploads?(uploads)

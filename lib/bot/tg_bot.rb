@@ -135,7 +135,10 @@ module Bot
     def album_media(batch, caption, parse_mode)
       batch.map.with_index do |up, i|
         media = { type: album_media_type(up), media: "attach://file#{i}" }
-        media.merge!(caption: parse_text(caption, parse_mode: parse_mode), parse_mode: parse_mode) if i.zero? && caption.present?
+        if i.zero? && caption.present?
+          media[:caption] = parse_text(caption, parse_mode: parse_mode)
+          media[:parse_mode] = parse_mode
+        end
         media
       end.to_json
     end
