@@ -32,4 +32,5 @@ end
 require_relative 'downloaders/base'
 require_relative 'downloaders/kindle'
 require_relative 'downloaders/telegram'
+require_relative 'downloaders/gallery_dl'
 require_relative 'downloaders/yt_dlp'

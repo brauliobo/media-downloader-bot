@@ -11,6 +11,14 @@ module Bot
       finalize_sent_message(msg, SymMash.new(result: {message_id: 1}, message_id: 1, text: text), delete: delete, delete_both: delete_both)
     end
 
+    def send_album(msg, text, uploads:, parse_mode: 'MarkdownV2', **_params)
+      puts text
+      uploads.map do |up|
+        type = up.type&.name || :document
+        send_message(msg, '', type: type, parse_mode: parse_mode, "#{type}_path".to_sym => up.fn_out, "#{type}_mime".to_sym => up.mime)
+      end
+    end
+
     def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', **params)
       puts text if text
     end

@@ -81,6 +81,26 @@ module Bot
       finalize_sent_message(msg, resp, delete: delete, delete_both: delete_both)
     end
 
+    def send_album(msg, text, uploads:, parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **_params)
+      sent  = []
+      first = true
+
+      uploads.each_slice(10) do |batch|
+        throttle! msg.chat.id, :high
+        payload = {
+          chat_id:             msg.chat.id,
+          reply_to_message_id: incoming_message_id(msg),
+          media:               album_media(batch, first ? text : nil, parse_mode)
+        }
+        batch.each_with_index { |up, i| payload["file#{i}".to_sym] = build_upload_io(up.fn_out, up.mime) }
+        first = false
+        sent.concat Array(tg.send(:send_media_group, **payload).map { |m| SymMash.new(m.to_h) })
+      end
+
+      finalize_sent_message(msg, sent.first || SymMash.new(message_id: 0), delete: delete, delete_both: delete_both)
+      sent
+    end
+
     def wrap_upload_params(p)
       p = p.dup
       if p[:type].to_s == 'paid_media' && p[:file_path]
@@ -110,6 +130,21 @@ module Bot
       return unless path
       mime ||= Rack::Mime.mime_type(File.extname(path)) || 'application/octet-stream'
       Faraday::UploadIO.new(path, mime)
+    end
+
+    def album_media(batch, caption, parse_mode)
+      batch.map.with_index do |up, i|
+        media = { type: album_media_type(up), media: "attach://file#{i}" }
+        media.merge!(caption: parse_text(caption, parse_mode: parse_mode), parse_mode: parse_mode) if i.zero? && caption.present?
+        media
+      end.to_json
+    end
+
+    def album_media_type(up)
+      return 'photo' if up.mime.to_s.start_with?('image/')
+      return 'video' if up.mime.to_s.start_with?('video/')
+
+      up.type&.name.to_s.presence || 'document'
     end
 
     def perform_delete_message(msg, id)
