@@ -47,6 +47,8 @@ module Downloaders
       # Clear ss/to so the zipper doesn't double-cut or miscalculate duration.
       opts.ss = nil if opts.ss
       opts.to = nil if opts.to
+      i.opts.ss = nil if i.opts.ss
+      i.opts.to = nil if i.opts.to
       true
     end
 
