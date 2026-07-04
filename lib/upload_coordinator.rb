@@ -1,6 +1,4 @@
 class UploadCoordinator
-  ALBUM_CAPTION_LIMIT = 1024
-
   def initialize(worker)
     @worker = worker
     @album_queue = []
@@ -37,11 +35,8 @@ class UploadCoordinator
 
   def upload_album(input)
     worker.send(:translate_caption_info, input.info, input.opts)
-    worker.send_album worker.msg, album_caption(input), uploads: input.uploads, parse_mode: 'MarkdownV2'
-  end
-
-  def album_caption(input)
-    worker.send(:msg_caption, input, max: ALBUM_CAPTION_LIMIT)
+    caption = worker.send(:msg_caption, input, max: worker.caption_limit)
+    worker.send_album worker.msg, caption, uploads: input.uploads, parse_mode: 'MarkdownV2'
   end
 
   def album_uploads?(uploads)

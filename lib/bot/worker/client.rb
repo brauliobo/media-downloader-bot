@@ -1,10 +1,15 @@
 require 'drb/drb'
 require 'faraday'
+require 'fileutils'
 require 'json'
+require 'tmpdir'
+require_relative '../msg_helpers'
 
 module Bot
   module Worker
     class Client
+      include MsgHelpers
+
       def initialize(uri)
         @uri = uri
         if uri.start_with?('druby://')
@@ -28,7 +33,10 @@ module Bot
       end
 
       def send_album(msg, text, uploads:, parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **params)
-        call(:send_album, msg: msg, text: text, uploads: uploads, parse_mode: parse_mode, delete: delete, delete_both: delete_both, **params)
+        safe_uploads, cleanup_paths = safe_album_uploads(uploads)
+        call(:send_album, msg: msg, text: text, uploads: safe_uploads, parse_mode: parse_mode, delete: delete, delete_both: delete_both, **params)
+      ensure
+        Array(cleanup_paths).each { |path| FileUtils.rm_rf(path) }
       end
 
       def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', **params)
@@ -49,22 +57,78 @@ module Bot
         call(:report_error, msg: msg, e: e.to_s, error_class: e.class.name, context: context)
       end
 
+      def max_caption
+        @max_caption ||= call(:max_caption) { |r| r.is_a?(Hash) ? r[:max_caption] || r['max_caption'] : r }
+      rescue
+        self.class.max_caption
+      end
+
       private
 
       def call(method, **kwargs)
+        kwargs = normalize_kwargs(kwargs)
+
         if @mode == :drb
           result = @drb.public_send(method, **kwargs)
           block_given? ? yield(result) : result
         else
           payload = kwargs.dup
           payload[:msg] = payload[:msg].to_h if payload[:msg] && payload[:msg].respond_to?(:to_h)
-          payload[:uploads] = Array(payload[:uploads]).map { |up| up.respond_to?(:to_h) ? up.to_h : up } if payload[:uploads]
           payload[:file_id_or_info] = payload[:file_id_or_info].is_a?(Hash) ? payload[:file_id_or_info] : payload[:file_id_or_info].to_s if payload[:file_id_or_info]
           response = @http_client.post("/#{method}", payload) do |req|
             req.headers['Authorization'] = "Bearer #{ENV['BOT_HTTP_TOKEN']}" if ENV['BOT_HTTP_TOKEN'].present?
           end
           block_given? ? yield(response.body) : response.body
         end
+      end
+
+      def normalize_kwargs(kwargs)
+        kwargs = kwargs.dup
+        kwargs[:uploads] = Array(kwargs[:uploads]).map { |up| upload_payload(up) } if kwargs[:uploads]
+        kwargs
+      end
+
+      def upload_payload(upload)
+        type = upload_value(upload, :type)
+        type_name = upload_value(type, :name) if type
+
+        {
+          fn_out: upload_value(upload, :fn_out).to_s,
+          mime:   upload_value(upload, :mime).to_s,
+          type:   (type_name ? {name: type_name} : nil),
+        }.compact
+      end
+
+      def upload_value(object, key)
+        return object[key] || object[key.to_s] if object.is_a?(Hash)
+        return object.public_send(key) if object.respond_to?(key)
+
+        nil
+      end
+
+      def safe_album_uploads(uploads)
+        FileUtils.mkdir_p(album_proxy_root)
+        safe_dir      = Dir.mktmpdir('mdb-album-proxy-', album_proxy_root)
+        cleanup_paths = [safe_dir]
+        safe_uploads  = Array(uploads).map do |upload|
+          payload = upload_payload(upload)
+          source  = payload[:fn_out]
+          next payload unless source && File.exist?(source)
+
+          safe_path = safe_album_path(source, safe_dir)
+          FileUtils.cp(source, safe_path)
+          payload.merge(fn_out: safe_path)
+        end
+
+        [safe_uploads, cleanup_paths]
+      end
+
+      def safe_album_path(source, dir)
+        File.join(dir, "#{Process.pid}-#{Time.now.to_f.to_s.tr('.', '')}-#{File.basename(source)}")
+      end
+
+      def album_proxy_root
+        File.expand_path(File.join(Dir.pwd, 'tmp', 'album-proxy'))
       end
     end
   end

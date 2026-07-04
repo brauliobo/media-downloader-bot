@@ -75,7 +75,9 @@ module Bot
       end
 
       def allowed_roots
-        ENV.fetch('BOT_ALLOWED_PATH_ROOTS', Dir.tmpdir).split(':').map { |root| File.expand_path(root) }
+        roots = ENV.fetch('BOT_ALLOWED_PATH_ROOTS', Dir.tmpdir).split(':')
+        roots << File.join(Dir.pwd, 'tmp')
+        roots.map { |root| File.expand_path(root) }.uniq
       end
 
       def require_allowed_path!(path)
@@ -108,6 +110,10 @@ module Bot
           {size: service.queue_size}
         end
 
+        r.post 'max_caption' do
+          {max_caption: service.max_caption}
+        end
+
         r.post 'send_message' do
           params, msg = message_params(r)
           require_allowed_paths!(params, UPLOAD_PATH_KEYS)
@@ -122,7 +128,7 @@ module Bot
           uploads.each { |up| require_allowed_path!(up.fn_out) }
           text = params.delete(:text)
           result = service.bot.send_album(msg, text, uploads: uploads, **params)
-          {messages: Array(result).map { |message| message.respond_to?(:to_h) ? message.to_h : message }}
+          {messages: Array(result).map { |message| message_result(message) }}
         end
 
         r.post 'edit_message' do
@@ -154,6 +160,16 @@ module Bot
           service.bot.report_error(msg, e, context: params.delete(:context))
           {success: true}
         end
+      end
+
+      def message_result(message)
+        return message unless message.respond_to?(:id) || message.respond_to?(:message_id)
+
+        {
+          message_id:     message.respond_to?(:message_id) ? message.message_id : nil,
+          id:             message.respond_to?(:id) ? message.id : nil,
+          media_group_id: message.respond_to?(:media_group_id) ? message.media_group_id : nil,
+        }.compact
       end
     end
   end

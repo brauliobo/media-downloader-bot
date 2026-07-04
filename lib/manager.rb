@@ -153,6 +153,10 @@ EOS
     ENV['BOT_HTTP'] || ENV['BOT_DRB']
   end
 
+  def max_caption
+    bot.max_caption
+  end
+
   def find_chats(...)
     bot.find_chats(...)
   end
@@ -178,7 +182,10 @@ EOS
   end
 
   def send_album(msg:, text:, uploads:, **params)
-    Array(bot.send_album(msg, text, uploads: uploads, **params)).map { |result| drb_result(result) }
+    uploads = Array(uploads).map { |upload| upload.is_a?(Hash) ? SymMash.new(upload) : upload }
+    Array(bot.send_album(msg, text, uploads: uploads, **params)).map { |result| drb_message_result(result) }
+  rescue => e
+    raise RuntimeError, drb_error_message(e)
   end
 
   def edit_message(msg:, id:, **params)
@@ -205,6 +212,20 @@ EOS
 
   def drb_result(result)
     result.respond_to?(:to_h) ? result.to_h : result
+  end
+
+  def drb_message_result(result)
+    {
+      message_id:     result.respond_to?(:message_id) ? result.message_id : nil,
+      id:             result.respond_to?(:id) ? result.id : nil,
+      media_group_id: result.respond_to?(:media_group_id) ? result.media_group_id : nil,
+    }.compact
+  end
+
+  def drb_error_message(error)
+    message = "#{error.class}: #{error.message}"
+    body    = error.respond_to?(:response) && error.response.respond_to?(:body) ? error.response.body : nil
+    body.present? ? "#{message}: #{body}" : message
   end
 
 end
