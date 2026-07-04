@@ -173,10 +173,31 @@ module Bot
     end
 
     def album_caption_text(msg, text, parse_mode)
-      return text if text.to_s.size <= MEDIA_CAPTION_LIMIT
+      text = td_markdown_caption(text)
+      return text if text.size <= MEDIA_CAPTION_LIMIT
 
       send_message(msg, text, parse_mode: parse_mode)
-      text.to_s.first(MEDIA_CAPTION_LIMIT)
+      truncate_album_caption(text, MEDIA_CAPTION_LIMIT)
+    end
+
+    def td_markdown_caption(text)
+      MsgHelpers::MARKDOWN_NON_FORMAT.reduce(text.to_s) { |caption, char| caption.gsub("\\#{char}", char) }
+    end
+
+    def truncate_album_caption(text, limit)
+      suffix = text.to_s[/(?:\n\nhttps?:\/\/\S+)+\z/]
+      return truncate_markdown_caption(text, limit) unless suffix && suffix.size < limit
+
+      body = text.to_s.delete_suffix(suffix).rstrip
+      [truncate_markdown_caption(body, limit - suffix.size), suffix].join
+    end
+
+    def truncate_markdown_caption(text, limit)
+      caption = text.to_s.first(limit)
+      caption = caption[0...-1] if caption.end_with?('\\')
+      return caption unless caption.scan(/(?<!\\)_/).size.odd?
+
+      caption.size < limit ? "#{caption}_" : "#{caption[0...-1]}_"
     end
 
     def send_album_items(msg, batch, text, parse_mode)
