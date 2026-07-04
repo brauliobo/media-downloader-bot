@@ -173,8 +173,38 @@ EOS
     bot.upload_generated_media(...)
   end
 
+  def send_message(msg:, text:, **params)
+    drb_result bot.send_message(msg, text, **params)
+  end
+
+  def send_album(msg:, text:, uploads:, **params)
+    Array(bot.send_album(msg, text, uploads: uploads, **params)).map { |result| drb_result(result) }
+  end
+
+  def edit_message(msg:, id:, **params)
+    drb_result bot.edit_message(msg, id, **params)
+  end
+
+  def delete_message(msg:, id:, **params)
+    bot.delete_message(msg, id, **params)
+    true
+  end
+
+  def report_error(msg:, e:, error_class: nil, context: nil)
+    error = StandardError.new(e)
+    error.define_singleton_method(:class) { OpenStruct.new(name: error_class) } if error_class
+    bot.report_error(msg, error, context: context)
+    true
+  end
+
   def download_file(...)
     bot.download_file(...)
+  end
+
+  private
+
+  def drb_result(result)
+    result.respond_to?(:to_h) ? result.to_h : result
   end
 
 end
