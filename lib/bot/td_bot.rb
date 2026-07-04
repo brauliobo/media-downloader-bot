@@ -189,7 +189,8 @@ module Bot
 
     def album_content(up, caption_text, parse_mode)
       caption = td_payload(message_sender.send(:parse_markdown_text, caption_text.to_s, parse_mode))
-      input   = { '@type' => 'inputFileLocal', 'path' => up.fn_out.to_s }
+      path    = message_sender.file_manager.copy_to_safe_location(up.fn_out.to_s)
+      input   = { '@type' => 'inputFileLocal', 'path' => path }
 
       if up.mime.to_s.start_with?('video/')
         {

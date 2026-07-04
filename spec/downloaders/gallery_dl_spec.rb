@@ -21,7 +21,8 @@ RSpec.describe Downloaders::GalleryDl do
 
   describe '#download' do
     it 'returns document uploads for downloaded files' do
-      allow(Sh).to receive(:run) do |_cmd, **_|
+      allow(Sh).to receive(:run).and_return([[[2, {content: 'tweet text', user: {nick: 'alice'}, tweet_id: 1}]].to_json, '', 0])
+      allow(Sh).to receive(:run).with(array_including('--no-part'), any_args) do |_cmd, **_|
         FileUtils.mkdir_p(File.join(tmp, 'twitter'))
         File.write(File.join(tmp, 'twitter', 'photo.jpg'), '')
         ['', '', 0]
@@ -29,6 +30,9 @@ RSpec.describe Downloaders::GalleryDl do
 
       input = described_class.new(ctx).download
 
+      expect(input.info.title).to eq('tweet text')
+      expect(input.info.uploader).to eq('alice')
+      expect(input.opts.caption).to eq(1)
       expect(input.uploads.size).to eq(1)
       expect(input.uploads.first.type.name).to eq(:document)
       expect(input.uploads.first.mime).to eq('image/jpeg')
