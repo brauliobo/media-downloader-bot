@@ -38,13 +38,34 @@ else
       )
     end
 
-    it 'sends long album captions as a separate text message' do
+    it 'sends full long album captions as text and keeps a truncated media caption' do
       text = 'a' * (described_class::MEDIA_CAPTION_LIMIT + 1)
       msg  = SymMash.new(chat: {id: 123})
       allow(bot).to receive(:send_message)
 
-      expect(bot.album_caption_text(msg, text, 'MarkdownV2')).to eq('')
+      expect(bot.album_caption_text(msg, text, 'MarkdownV2')).to eq(text.first(described_class::MEDIA_CAPTION_LIMIT))
       expect(bot).to have_received(:send_message).with(msg, text, parse_mode: 'MarkdownV2')
+    end
+
+    it 'delegates long album sending with a truncated media caption' do
+      path = File.join(dir, 'photo.jpg')
+      File.write(path, '')
+
+      msg            = SymMash.new(chat: {id: 123})
+      text           = 'a' * (described_class::MEDIA_CAPTION_LIMIT + 1)
+      upload         = SymMash.new(fn_out: path, mime: 'image/jpeg')
+      message        = double(id: 456)
+      message_sender = double(send_media_album: [message])
+      allow(bot).to receive(:message_sender).and_return(message_sender)
+      allow(bot).to receive(:send_message)
+      allow(bot).to receive(:finalize_sent_message)
+
+      bot.send_album(msg, text, uploads: [upload])
+
+      expect(bot).to have_received(:send_message).with(msg, text, parse_mode: 'MarkdownV2')
+      expect(message_sender).to have_received(:send_media_album).with(
+        123, [upload], caption: text.first(described_class::MEDIA_CAPTION_LIMIT), parse_mode: 'MarkdownV2', timeout: 1_800
+      )
     end
 
     it 'wraps TD message objects without passing them to SymMash' do
