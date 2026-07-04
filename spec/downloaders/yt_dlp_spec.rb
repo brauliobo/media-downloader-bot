@@ -34,6 +34,21 @@ RSpec.describe Downloaders::YtDlp do
       expect(captured).not_to include('--no-playlist')
     end
 
+    it 'forces single video downloads when cutting a playlist watch url' do
+      ctx.url = 'https://www.youtube.com/watch?v=ceWwMJN5Ou0&list=TLPQMDMwNzIwMjbHKJx1-gwUng&index=13'
+      opts.ss = '14:57'
+      opts.to = '20:00'
+      captured = nil
+      allow(Bot::MsgHelpers).to receive(:from_admin?).with(msg).and_return(true)
+      allow(Sh).to receive(:run) { |cmd, **_| captured = cmd; ['', '', 0] }
+
+      downloader.download
+
+      expect(captured).to include('--download-sections \*14:57-20:00')
+      expect(captured).to include('--no-playlist')
+      expect(captured).not_to include('--playlist-end')
+    end
+
     it 'enables generic extractor browser impersonation' do
       captured = nil
       allow(Sh).to receive(:run) { |cmd, **_| captured = cmd; ['', '', 0] }

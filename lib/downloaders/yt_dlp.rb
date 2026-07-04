@@ -137,6 +137,7 @@ module Downloaders
     end
 
     def apply_playlist_options(cmd)
+      return cmd << '--no-playlist' if opts.ss || opts.to
       return cmd << '--no-playlist' unless admin?
 
       opts.limit ||= (opts.audio ? nil : 10) if opts.after
