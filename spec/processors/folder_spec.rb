@@ -146,6 +146,113 @@ RSpec.describe Processors::Folder do
       end
     end
 
+    it 'replaces originals in place when replace mode is enabled' do
+      Dir.mktmpdir do |dir|
+        folder = File.join(dir, 'Camera')
+        FileUtils.mkdir_p folder
+        source = File.join(folder, 'clip.mp4')
+        File.write(source, 'original')
+
+        processor = described_class.new(
+          paths: [folder],
+          opts: SymMash.new(replace: 1, metadata: {}),
+          option_args: %w[replace],
+          bot: Bot::Mock.new,
+        )
+
+        allow(Processors::LocalFile).to receive(:attach_to_message) do |_msg, input_path, opts:|
+          expect(input_path).to eq(source)
+          expect(opts).to include('replace')
+        end
+        allow_any_instance_of(Worker).to receive(:process) do
+          output = File.join(folder, '.mediazip-replace', 'clip.mp4')
+          File.write(output, 'converted')
+          FileUtils.touch(output, mtime: Time.now + 1)
+        end
+        allow(Prober).to receive(:for).with(File.join(folder, '.mediazip-replace', 'clip.mp4')).and_return(
+          SymMash.new(format: SymMash.new(duration: 1))
+        )
+
+        processor.run
+
+        expect(File.read(source)).to eq('converted')
+        expect(File.exist?(File.join(folder, 'converted'))).to be false
+      end
+    end
+
+    it 'does not delete originals after in-place replacement' do
+      Dir.mktmpdir do |dir|
+        source = File.join(dir, 'clip.mp4')
+        File.write(source, 'original')
+
+        processor = described_class.new(
+          paths: [dir],
+          opts: SymMash.new(replace: 1, delete_originals: 1, metadata: {}),
+          option_args: %w[replace delete_originals],
+          bot: Bot::Mock.new,
+        )
+
+        allow_any_instance_of(Worker).to receive(:process) do
+          output = File.join(dir, '.mediazip-replace', 'clip.mp4')
+          File.write(output, 'converted')
+          FileUtils.touch(output, mtime: Time.now + 1)
+        end
+        allow(Prober).to receive(:for).and_return(SymMash.new(format: SymMash.new(duration: 1)))
+        allow(processor).to receive(:system)
+
+        processor.run
+
+        expect(File.read(source)).to eq('converted')
+        expect(processor).not_to have_received(:system)
+      end
+    end
+
+    it 'filters folder entries by age options' do
+      Dir.mktmpdir do |dir|
+        recent = File.join(dir, "#{Date.today.strftime('%Y%m%d')}_000000.mp4")
+        old = File.join(dir, '20250901_000000.mp4')
+        File.write(recent, '')
+        File.write(old, '')
+
+        processor = described_class.new(
+          paths: [dir],
+          opts: SymMash.new(review: 1, min_age: 91, metadata: {}),
+          option_args: %w[review min_age=91],
+          bot: Bot::Mock.new,
+        )
+
+        output = StringIO.new
+        original_stdout = $stdout
+        begin
+          $stdout = output
+          processor.run
+        ensure
+          $stdout = original_stdout
+        end
+
+        expect(output.string).to include(old)
+        expect(output.string).not_to include(recent)
+      end
+    end
+
+    it 'reviews replace mode as in-place output' do
+      Dir.mktmpdir do |dir|
+        video = File.join(dir, 'clip.mp4')
+        File.write(video, '')
+
+        processor = described_class.new(
+          paths: [dir],
+          opts: SymMash.new(replace: 1, review: 1, metadata: {}),
+          option_args: %w[replace review],
+          bot: Bot::Mock.new,
+        )
+
+        expect { processor.run }.to output(
+          include('output: replace originals in place', "#{video} -> #{File.join(dir, '.mediazip-replace')}"),
+        ).to_stdout
+      end
+    end
+
     it 'reports when original deletion fails' do
       Dir.mktmpdir do |dir|
         folder = File.join(dir, 'Camera')

@@ -48,7 +48,7 @@ module Processors
         if ::File.directory?(path)
           expand_directory(path)
         elsif media_file?(path)
-          entry(path, output_dir_for(path))
+          entry(path)
         end
       end.compact
     end
@@ -61,29 +61,37 @@ module Processors
         end
         next unless media_file?(candidate)
 
-        entry(candidate, output_dir_for(candidate))
+        entry(candidate)
       end
     end
 
-    def entry(path, out_dir)
-      SymMash.new(path: path, out_dir: out_dir)
+    def entry(path)
+      SymMash.new(path: path, out_dir: output_dir_for(path))
     end
 
     def output_dir_for(path)
+      return replace_dir_for(path) if replace?
+
       ::File.join(::File.dirname(path), 'converted')
+    end
+
+    def replace_dir_for(path)
+      ::File.join(::File.dirname(path), '.mediazip-replace')
     end
 
     def media_file?(path)
       ext = ::File.extname(path).downcase
-      MEDIA_EXTENSIONS.include?(ext) ||
+      return false unless MEDIA_EXTENSIONS.include?(ext) ||
         Rack::Mime.mime_type(ext).then { |mime| mime&.start_with?('video/', 'audio/') }
+
+      within_age?(path)
     end
 
     def review(entries)
       lines = [
         'folder media processing review',
         "inputs: #{entries.size} media file(s)",
-        'output: converted/ beside each input file',
+        "output: #{replace? ? 'replace originals in place' : 'converted/ beside each input file'}",
         "options: #{option_args.join(' ')}",
       ]
       lines.concat(entries.first(20).map { |entry| "#{entry.path} -> #{entry.out_dir}" })
@@ -101,7 +109,10 @@ module Processors
       Processors::LocalFile.attach_to_message(fake_msg, entry.path, opts: entry_option_args(entry))
 
       Worker.new(fake_msg).process
-      delete_original(entry, started_at) if delete_originals?
+      finish_entry(entry, started_at)
+      delete_original(entry, started_at) if delete_originals? && !replace?
+    ensure
+      FileUtils.rm_rf(entry&.out_dir) if replace?
     end
 
     def entry_option_args(entry)
@@ -111,7 +122,23 @@ module Processors
     end
 
     def delete_originals?
-      opts.delete_originals || opts.delete_original || opts.rm_originals || opts.rm_original
+      enabled?(:delete_originals, :delete_original, :rm_originals, :rm_original)
+    end
+
+    def replace?
+      enabled?(:replace, :replace_originals, :in_place)
+    end
+
+    def enabled?(*keys)
+      keys.any? { |key| opts[key] }
+    end
+
+    def within_age?(path)
+      age = Presets::Camera.age_days(path)
+      min = opts.min_age&.to_i || opts.older_than&.to_i
+      max = opts.max_age&.to_i || opts.newer_than&.to_i
+
+      (!min || age >= min) && (!max || age <= max)
     end
 
     def jobs
@@ -119,14 +146,29 @@ module Processors
     end
 
     def delete_original(entry, started_at)
-      output = ::File.join(entry.out_dir, ::File.basename(entry.path))
-      return unless converted_after?(output, started_at) && valid_media_file?(output)
+      return unless valid_output?(entry.path, entry.out_dir, started_at)
 
       if system('sudo', '-n', 'rm', '--', entry.path)
         puts "deleted original: #{entry.path}"
       else
         puts "delete original failed: #{entry.path}"
       end
+    end
+
+    def finish_entry(entry, started_at)
+      return unless replace? && valid_output?(entry.path, entry.out_dir, started_at)
+
+      FileUtils.mv(output_path(entry.path, entry.out_dir), entry.path, force: true)
+      puts "replaced original: #{entry.path}"
+    end
+
+    def valid_output?(input_path, out_dir, started_at)
+      converted_after?(output_path(input_path, out_dir), started_at) &&
+        valid_media_file?(output_path(input_path, out_dir))
+    end
+
+    def output_path(input_path, out_dir)
+      ::File.join(out_dir, ::File.basename(input_path))
     end
 
     def converted_after?(path, started_at)
