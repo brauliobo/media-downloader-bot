@@ -113,7 +113,6 @@ RSpec.describe Processors::Media do
       expect(i.opts.format.mime).to eq('video/mp4')
       expect(i.opts.quality).to eq('32')
       expect(i.opts.acodec).to eq('aac')
-      expect(i.opts.abrate).to eq('32')
     end
 
     it 'dubs video inputs before the normal zipper conversion' do

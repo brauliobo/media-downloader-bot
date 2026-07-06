@@ -10,8 +10,6 @@ RSpec.describe Presets::Camera do
     expect(opts.format).to eq('h264')
     expect(opts.quality).to eq(24)
     expect(opts.acodec).to eq('aac')
-    expect(opts.abrate).to eq('32')
-    expect(opts.vf).to eq('mpdecimate=hi=1024:lo=512:frac=0.40')
     expect(opts.preserve_resolution).to eq(1)
     expect(opts.delete_originals).to eq(1)
   end
@@ -27,10 +25,25 @@ RSpec.describe Presets::Camera do
       'format=h264',
       'quality=32',
       'acodec=aac',
-      'abrate=32',
-      'vf=mpdecimate=hi=1024:lo=512:frac=0.40',
       'preserve_resolution',
       'delete_originals',
     )
+  end
+
+  it 'applies progressive camera tiers from file age' do
+    recent_path = "/mnt/big_data/Camera/cam-#{Date.today.strftime('%Y%m%d')}_000000.mp4"
+    old_path = '/mnt/big_data/Camera/cam-20250901_000000.mp4'
+
+    recent = SymMash.new(camera: 1)
+    old = SymMash.new(camera: 1)
+
+    described_class.apply(recent, path: recent_path)
+    described_class.apply(old, path: old_path)
+
+    expect(recent.vf).to eq('mpdecimate=hi=1024:lo=512:frac=0.40')
+    expect(recent.abrate).to eq('32')
+    expect(old.keyframes).to eq(1)
+    expect(old.mpdecimate).to eq('hi=6144:lo=3072:frac=0.80')
+    expect(old.noaudio).to eq(1)
   end
 end

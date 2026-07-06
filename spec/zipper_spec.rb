@@ -132,6 +132,60 @@ RSpec.describe Zipper do
     expect(Sh).not_to have_received(:run).with(include('scale='))
   end
 
+  it 'omits audio for noaudio video encodes' do
+    probe = SymMash.new(
+      format: SymMash.new(duration: 60),
+      streams: [SymMash.new(codec_type: 'video', width: 1920, height: 1080)],
+    )
+    opts = SymMash.new(
+      noaudio: 1,
+      format: Zipper::Types.video.h264,
+      metadata: {},
+    )
+
+    allow(Sh).to receive(:run)
+
+    described_class.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
+
+    expect(Sh).to have_received(:run).with(include(' -an '))
+  end
+
+  it 'decodes only keyframes when keyframes is enabled' do
+    probe = SymMash.new(
+      format: SymMash.new(duration: 60),
+      streams: [SymMash.new(codec_type: 'video', width: 1920, height: 1080)],
+    )
+    opts = SymMash.new(
+      keyframes: 1,
+      format: Zipper::Types.video.h264,
+      metadata: {},
+    )
+
+    allow(Sh).to receive(:run)
+
+    described_class.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
+
+    expect(Sh).to have_received(:run).with(include('-skip_frame nokey -i /tmp/in.mp4'))
+  end
+
+  it 'accepts mpdecimate filter parameters as a regular option' do
+    probe = SymMash.new(
+      format: SymMash.new(duration: 60),
+      streams: [SymMash.new(codec_type: 'video', width: 1920, height: 1080)],
+    )
+    opts = SymMash.new(
+      mpdecimate: 'hi=6144:lo=3072:frac=0.80',
+      format: Zipper::Types.video.h264,
+      metadata: {},
+    )
+
+    allow(Sh).to receive(:run)
+
+    described_class.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
+
+    expect(Sh).to have_received(:run).with(include('mpdecimate=hi=6144:lo=3072:frac=0.80'))
+  end
+
   it 'applies voice quality filters only to audio encodes' do
     probe = SymMash.new(
       format: SymMash.new(duration: 60),
