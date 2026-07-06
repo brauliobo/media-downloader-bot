@@ -4,7 +4,6 @@ require 'fileutils'
 
 STDOUT.sync = true
 Process.setpriority(Process::PRIO_PROCESS, 0, 19)
-ENV['PRINT_CMD'] = '1'
 ENV['SKIP_META'] = '1'
 ENV['DB'] = '1' if ENV['SESSION_UID']
 ENV['PUPPETEER_HEADLESS'] ||= '0'
