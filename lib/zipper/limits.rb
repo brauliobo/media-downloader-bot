@@ -53,6 +53,7 @@ class Zipper
       return if zipper.opts.onlysrt
       return unless Zipper.size_mb_limit
       return if zipper.opts.custom_width
+      return unless zipper.duration.finite? && zipper.duration.positive?
 
       minutes  = (zipper.duration / 60).ceil
       vthld    = vid_duration_thld(Zipper.size_mb_limit)
