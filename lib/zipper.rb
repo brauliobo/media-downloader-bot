@@ -239,11 +239,7 @@ class Zipper
     apply_cut
     size_opts = apply_video_size_limits
 
-    aenc        = AUDIO_ENC[opts.acodec&.to_sym] || AUDIO_ENC.opus
-    # Ensure abrate is set for video audio track (kbps)
-    opts.abrate ||= opts.format&.opts&.abrate || 64
-    opts.abrate = (aenc.percent * opts.abrate).round if size_mb_limit
-    acodec      = aenc.encode % {abrate: opts.abrate}
+    acodec = video_audio_codec
 
     full_fgraph  = (scale_filters + fgraph).join(FG_SEP)
     maps_str     = maps.map { |m| "-map #{m}" }.join(' ')
@@ -271,7 +267,7 @@ class Zipper
     video_post_opts = VIDEO_POST_OPTS % {metadata: metadata_args}
 
     cmd_params = {
-      pre_iopts: cuda_decode_opts,
+      pre_iopts: video_input_opts,
       infile:    Sh.escape(infile),
       iopts:     iopts,
       fgraph:    full_fgraph,
@@ -288,8 +284,20 @@ class Zipper
     Sh.run cmd
   end
 
-  def cuda_decode_opts
-    opts.cudadec ? '-hwaccel cuda' : ''
+  def video_input_opts
+    [
+      (opts.cudadec ? '-hwaccel cuda' : nil),
+      (opts.keyframes ? '-skip_frame nokey' : nil),
+    ].compact.join(' ')
+  end
+
+  def video_audio_codec
+    return '-an' if opts.noaudio || opts.no_audio
+
+    aenc = AUDIO_ENC[opts.acodec&.to_sym] || AUDIO_ENC.opus
+    opts.abrate ||= opts.format&.opts&.abrate || 64
+    opts.abrate = (aenc.percent * opts.abrate).round if size_mb_limit
+    aenc.encode % {abrate: opts.abrate}
   end
 
   def scale_filters
@@ -437,8 +445,13 @@ class Zipper
   end
 
   def reduce_framerate
+    fgraph << mpdecimate_filter if opts.mpdecimate
     return unless opts.nompdecimate
     fgraph << 'mpdecimate'
+  end
+
+  def mpdecimate_filter
+    opts.mpdecimate == 1 ? 'mpdecimate' : "mpdecimate=#{Utils::Safety.safe_filter(opts.mpdecimate)}"
   end
 
   def limit_framerate

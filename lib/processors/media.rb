@@ -106,7 +106,7 @@ module Processors
       durat   /= speed if speed
       durat   -= Utils::Duration.new(i.opts.ss).to_i if i.opts.ss
 
-      Presets::Camera.apply(i.opts) if video_input?(i) && i.opts.camera
+      Presets::Camera.apply(i.opts, path: i.fn_in) if video_input?(i) && i.opts.camera
 
       chosen   = Zipper.choose_format i.type, i.opts, durat
       return i.stl.error 'Unsupported format' unless chosen

@@ -64,8 +64,38 @@ RSpec.describe Processors::Folder do
         )
 
         expect { processor.run }.to output(
-          include('cudaenc format=h264 quality=32 acodec=aac abrate=32 vf=mpdecimate=hi=1024:lo=512:frac=0.40 preserve_resolution delete_originals'),
+          include('cudaenc format=h264 quality=32 acodec=aac preserve_resolution delete_originals'),
         ).to_stdout
+      end
+    end
+
+    it 'adds camera age tier options per file' do
+      Dir.mktmpdir do |dir|
+        folder = File.join(dir, 'Camera')
+        FileUtils.mkdir_p folder
+        recent = File.join(folder, "#{Date.today.strftime('%Y%m%d')}_000000.mp4")
+        old = File.join(folder, '20250901_000000.mp4')
+        File.write(recent, '')
+        File.write(old, '')
+
+        opts = SymMash.new(camera: 1, metadata: {})
+        processor = described_class.new(
+          paths: [folder],
+          opts: opts,
+          option_args: %w[camera],
+          bot: Bot::Mock.new,
+        )
+
+        attached = []
+        allow(Processors::LocalFile).to receive(:attach_to_message) { |_msg, path, opts:| attached << [path, opts] }
+        allow_any_instance_of(Worker).to receive(:process)
+
+        processor.run
+
+        recent_opts = attached.assoc(recent).last
+        old_opts = attached.assoc(old).last
+        expect(recent_opts).to include('vf=mpdecimate=hi=1024:lo=512:frac=0.40', 'abrate=32')
+        expect(old_opts).to include('keyframes', 'mpdecimate=hi=6144:lo=3072:frac=0.80', 'noaudio')
       end
     end
 

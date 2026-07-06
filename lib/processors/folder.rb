@@ -98,10 +98,16 @@ module Processors
 
       fake_msg = Bot::MsgHelpers.fake_msg
       fake_msg.bot = bot
-      Processors::LocalFile.attach_to_message(fake_msg, entry.path, opts: option_args)
+      Processors::LocalFile.attach_to_message(fake_msg, entry.path, opts: entry_option_args(entry))
 
       Worker.new(fake_msg).process
       delete_original(entry, started_at) if delete_originals?
+    end
+
+    def entry_option_args(entry)
+      return option_args unless opts.camera || opts.efficient
+
+      option_args + Presets::Camera.tier_args(entry.path, opts)
     end
 
     def delete_originals?
