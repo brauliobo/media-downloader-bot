@@ -68,6 +68,31 @@ RSpec.describe Zipper do
     end
   end
 
+  it 'skips computed video size caps for non-finite durations' do
+    begin
+      Zipper.size_mb_limit = 2_000
+      probe = SymMash.new(
+        format:  SymMash.new(duration: Float::INFINITY),
+        streams: [SymMash.new(codec_type: 'video', width: 1280, height: 720)],
+      )
+      opts = SymMash.new(
+        cuda:     1,
+        format:   Zipper::Types.video.h264,
+        acodec:   'aac',
+        metadata: {},
+      )
+
+      allow(Sh).to receive(:run)
+
+      described_class.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
+
+      expect(Sh).to have_received(:run).with(include('-c:v h264_nvenc'))
+      expect(Sh).not_to have_received(:run).with(include('-maxrate:v'))
+    ensure
+      Zipper.size_mb_limit = nil
+    end
+  end
+
   it 'uses CUDA decode without NVENC when cudadec is enabled alone' do
     probe = SymMash.new(
       format: SymMash.new(duration: 60),

@@ -1,8 +1,21 @@
 require 'spec_helper'
+require_relative '../support/integration_helper'
 require 'tmpdir'
 require 'fileutils'
 
 RSpec.describe Processors::Folder do
+  let(:media_fixture) { IntegrationHelper.ensure_fixtures[:mp4] }
+
+  def write_media(path)
+    FileUtils.mkdir_p(File.dirname(path))
+    FileUtils.cp(media_fixture, path)
+  end
+
+  def write_replacement_media(path)
+    write_media(path)
+    File.open(path, 'ab') { |file| file.write('replacement-marker') }
+  end
+
   describe '.handles?' do
     it 'handles directory inputs without requiring a camera option' do
       Dir.mktmpdir do |dir|
@@ -22,7 +35,7 @@ RSpec.describe Processors::Folder do
         FileUtils.mkdir_p File.join(folder, 'nested')
         video = File.join(folder, 'nested', 'clip.MP4')
         text = File.join(folder, 'notes.txt')
-        File.write(video, '')
+        write_media(video)
         File.write(text, '')
 
         opts = SymMash.new(review: 1, metadata: {})
@@ -47,11 +60,39 @@ RSpec.describe Processors::Folder do
       end
     end
 
+    it 'skips empty media files' do
+      Dir.mktmpdir do |dir|
+        empty = File.join(dir, 'empty.mp4')
+        full = File.join(dir, 'full.mp4')
+        File.write(empty, '')
+        write_media(full)
+
+        processor = described_class.new(
+          paths: [dir],
+          opts: SymMash.new(review: 1, metadata: {}),
+          option_args: %w[review],
+          bot: Bot::Mock.new,
+        )
+
+        output = StringIO.new
+        original_stdout = $stdout
+        begin
+          $stdout = output
+          processor.run
+        ensure
+          $stdout = original_stdout
+        end
+
+        expect(output.string).to include('inputs: 1 media file(s)', full)
+        expect(output.string).not_to include(empty)
+      end
+    end
+
     it 'applies camera preset when camera mode is requested' do
       Dir.mktmpdir do |dir|
         folder = File.join(dir, 'Camera')
         FileUtils.mkdir_p folder
-        File.write(File.join(folder, 'clip.mp4'), '')
+        write_media(File.join(folder, 'clip.mp4'))
 
         opts = SymMash.new(camera: 1, review: 1, metadata: {})
         option_args = %w[camera review]
@@ -75,8 +116,8 @@ RSpec.describe Processors::Folder do
         FileUtils.mkdir_p folder
         recent = File.join(folder, "#{Date.today.strftime('%Y%m%d')}_000000.mp4")
         old = File.join(folder, '20250901_000000.mp4')
-        File.write(recent, '')
-        File.write(old, '')
+        write_media(recent)
+        write_media(old)
 
         opts = SymMash.new(camera: 1, metadata: {})
         processor = described_class.new(
@@ -106,7 +147,7 @@ RSpec.describe Processors::Folder do
         FileUtils.mkdir_p converted
         source = File.join(folder, 'clip.mp4')
         other = File.join(converted, 'other.mp4')
-        File.write(source, '')
+        write_media(source)
 
         processor = described_class.new(
           paths: [folder],
@@ -115,7 +156,7 @@ RSpec.describe Processors::Folder do
           bot: Bot::Mock.new,
         )
 
-        allow_any_instance_of(Worker).to receive(:process) { File.write(other, 'converted') }
+        allow_any_instance_of(Worker).to receive(:process) { write_media(other) }
         allow(Prober).to receive(:for).with(other).and_return(SymMash.new(format: SymMash.new(duration: 1)))
 
         processor.run
@@ -128,8 +169,8 @@ RSpec.describe Processors::Folder do
       Dir.mktmpdir do |dir|
         folder = File.join(dir, 'Camera')
         FileUtils.mkdir_p folder
-        File.write(File.join(folder, 'a.mp4'), '')
-        File.write(File.join(folder, 'b.mp4'), '')
+        write_media(File.join(folder, 'a.mp4'))
+        write_media(File.join(folder, 'b.mp4'))
 
         opts = SymMash.new(jobs: '2', metadata: {})
         processor = described_class.new(
@@ -151,7 +192,7 @@ RSpec.describe Processors::Folder do
         folder = File.join(dir, 'Camera')
         FileUtils.mkdir_p folder
         source = File.join(folder, 'clip.mp4')
-        File.write(source, 'original')
+        write_media(source)
 
         processor = described_class.new(
           paths: [folder],
@@ -166,7 +207,7 @@ RSpec.describe Processors::Folder do
         end
         allow_any_instance_of(Worker).to receive(:process) do
           output = File.join(folder, '.mediazip-replace', 'clip.mp4')
-          File.write(output, 'converted')
+          write_replacement_media(output)
           FileUtils.touch(output, mtime: Time.now + 1)
         end
         allow(Prober).to receive(:for).with(File.join(folder, '.mediazip-replace', 'clip.mp4')).and_return(
@@ -175,7 +216,7 @@ RSpec.describe Processors::Folder do
 
         processor.run
 
-        expect(File.read(source)).to eq('converted')
+        expect(File.binread(source)).to include('replacement-marker')
         expect(File.exist?(File.join(folder, 'converted'))).to be false
       end
     end
@@ -183,7 +224,7 @@ RSpec.describe Processors::Folder do
     it 'does not delete originals after in-place replacement' do
       Dir.mktmpdir do |dir|
         source = File.join(dir, 'clip.mp4')
-        File.write(source, 'original')
+        write_media(source)
 
         processor = described_class.new(
           paths: [dir],
@@ -194,7 +235,7 @@ RSpec.describe Processors::Folder do
 
         allow_any_instance_of(Worker).to receive(:process) do
           output = File.join(dir, '.mediazip-replace', 'clip.mp4')
-          File.write(output, 'converted')
+          write_replacement_media(output)
           FileUtils.touch(output, mtime: Time.now + 1)
         end
         allow(Prober).to receive(:for).and_return(SymMash.new(format: SymMash.new(duration: 1)))
@@ -202,7 +243,7 @@ RSpec.describe Processors::Folder do
 
         processor.run
 
-        expect(File.read(source)).to eq('converted')
+        expect(File.binread(source)).to include('replacement-marker')
         expect(processor).not_to have_received(:system)
       end
     end
@@ -211,8 +252,8 @@ RSpec.describe Processors::Folder do
       Dir.mktmpdir do |dir|
         recent = File.join(dir, "#{Date.today.strftime('%Y%m%d')}_000000.mp4")
         old = File.join(dir, '20250901_000000.mp4')
-        File.write(recent, '')
-        File.write(old, '')
+        write_media(recent)
+        write_media(old)
 
         processor = described_class.new(
           paths: [dir],
@@ -238,7 +279,7 @@ RSpec.describe Processors::Folder do
     it 'reviews replace mode as in-place output' do
       Dir.mktmpdir do |dir|
         video = File.join(dir, 'clip.mp4')
-        File.write(video, '')
+        write_media(video)
 
         processor = described_class.new(
           paths: [dir],
@@ -260,7 +301,7 @@ RSpec.describe Processors::Folder do
         FileUtils.mkdir_p converted
         source = File.join(folder, 'clip.mp4')
         output = File.join(converted, 'clip.mp4')
-        File.write(source, '')
+        write_media(source)
 
         processor = described_class.new(
           paths: [folder],
@@ -270,7 +311,7 @@ RSpec.describe Processors::Folder do
         )
 
         allow_any_instance_of(Worker).to receive(:process) do
-          File.write(output, 'converted')
+          write_media(output)
           FileUtils.touch(output, mtime: Time.now + 1)
         end
         allow(Prober).to receive(:for).with(output).and_return(SymMash.new(format: SymMash.new(duration: 1)))

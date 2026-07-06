@@ -80,6 +80,8 @@ module Processors
     end
 
     def media_file?(path)
+      return false unless ::File.size?(path)
+
       ext = ::File.extname(path).downcase
       return false unless MEDIA_EXTENSIONS.include?(ext) ||
         Rack::Mime.mime_type(ext).then { |mime| mime&.start_with?('video/', 'audio/') }
