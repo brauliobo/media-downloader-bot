@@ -42,18 +42,20 @@ module Audiobook
     base = base_from_source(source)
     audio_out = File.join(dir, "#{base}.opus")
     result = generate(source, audio_out, stl: stl, opts: opts)
+    yaml_upload = SymMash.new(
+      fn_out: result.yaml,
+      type: SymMash.new(name: :document),
+      info: SymMash.new(title: base, uploader: ''),
+      mime: 'application/x-yaml',
+      opts: SymMash.new(format: SymMash.new(mime: 'application/x-yaml'))
+    )
+    return [yaml_upload] if opts.onlyyml
 
     book = Audiobook::Book.from_input(source, opts: opts, stl: stl)
     thumbnail_path = book.thumb(dir: dir, base: base)
 
     uploads = [
-      SymMash.new(
-        fn_out: result.yaml,
-        type: SymMash.new(name: :document),
-        info: SymMash.new(title: base, uploader: ''),
-        mime: 'application/x-yaml',
-        opts: SymMash.new(format: SymMash.new(mime: 'application/x-yaml'))
-      ),
+      yaml_upload,
       SymMash.new(
         fn_out: result.audio,
         type: SymMash.new(name: :audio),
