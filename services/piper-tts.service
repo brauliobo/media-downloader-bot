@@ -1,0 +1,23 @@
+[Unit]
+Description=Piper standard TTS HTTP adapter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=mdb
+Nice=19
+
+WorkingDirectory=/srv/piper
+
+Environment=HOST=127.0.0.1
+Environment=PORT=10222
+Environment=PIPER_PORT_PT=10220
+Environment=PIPER_PORT_EN=10221
+
+ExecStart=/srv/piper/src/python_run/venv/bin/python3 /srv/piper/http_server.py
+
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

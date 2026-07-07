@@ -9,10 +9,16 @@ Nice=19
 
 WorkingDirectory=/srv/coqui-ai-TTS
 
+Environment=HOST=127.0.0.1
+Environment=PORT=10230
+Environment=COQUI_TOS_AGREED=1
+Environment=TTS_MODEL_ID=tts_models/multilingual/multi-dataset/xtts_v2
+
 ExecStart=/srv/coqui-ai-TTS/venv/bin/python3 /srv/coqui-ai-TTS/http_server.py
 
 #Environment=CUDA_VISIBLE_DEVICES=1
 
+Restart=on-failure
 RestartSec=30
 
 [Install]

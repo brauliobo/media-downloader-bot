@@ -1,0 +1,22 @@
+[Unit]
+Description=Fish Speech standard TTS HTTP adapter
+After=network-online.target fish-speech-upstream.service
+Wants=network-online.target fish-speech-upstream.service
+
+[Service]
+User=mdb
+Nice=19
+
+WorkingDirectory=/srv/fish-speech
+
+Environment=HOST=127.0.0.1
+Environment=PORT=10242
+Environment=FISH_SPEECH_UPSTREAM=http://127.0.0.1:10241
+
+ExecStart=/srv/fish-speech/.venv/bin/python /srv/fish-speech/http_server.py
+
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

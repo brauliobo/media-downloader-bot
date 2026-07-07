@@ -5,7 +5,7 @@ class TTS
     include HTTPBackend
 
     configure_backend(
-      base_url: "http://127.0.0.1:#{ENV['PORT']&.to_i || 10230}",
+      base_url: "http://127.0.0.1:#{ENV['COQUI_TTS_PORT']&.to_i || ENV['PORT']&.to_i || 10230}",
       segment_chars: 500,
       concurrency: ENV['COQUITTS_CONCURRENCY']&.to_i || 10*2
     )

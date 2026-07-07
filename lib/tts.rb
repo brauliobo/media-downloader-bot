@@ -1,10 +1,13 @@
 require_relative 'tts/piper'
+require_relative 'tts/chatterbox'
 require_relative 'tts/coqui_tts'
+require_relative 'tts/f5_tts'
+require_relative 'tts/fish_speech'
 require_relative 'tts/outetts'
 require_relative 'tts/omni_voice'
 
 class TTS
-  BACKEND = const_get(ENV['TTS'] || 'OmniVoice')
+  BACKEND = const_get(ENV['TTS'] || 'Chatterbox')
   INTERNAL_OPTIONS = %i[tts_batch_size].freeze
   DEFAULT_SAMPLE_RATE = 22_050
 
