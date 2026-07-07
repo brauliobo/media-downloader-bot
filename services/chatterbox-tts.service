@@ -4,10 +4,10 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-User=mdb
+User=braulio
 Nice=19
 
-WorkingDirectory=/srv/chatterbox
+WorkingDirectory=/home/braulio/Projects/chatterbox
 
 Environment=HOST=127.0.0.1
 Environment=PORT=10250
@@ -18,7 +18,7 @@ Environment=CHATTERBOX_PT_BR_REPO=ResembleAI/Chatterbox-Multilingual-pt-br
 Environment=CHATTERBOX_GENERIC_REPO=ResembleAI/chatterbox
 Environment=CHATTERBOX_PRELOAD=1
 
-ExecStart=/srv/chatterbox/venv/bin/python /srv/chatterbox/http_server.py
+ExecStart=/home/braulio/Projects/chatterbox/.venv/bin/python /home/braulio/Projects/chatterbox/http_server.py
 
 Restart=on-failure
 RestartSec=30
