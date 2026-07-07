@@ -1,0 +1,27 @@
+[Unit]
+Description=F5-TTS standard HTTP server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=mdb
+Nice=19
+
+WorkingDirectory=/srv/F5-TTS
+
+Environment=HOST=127.0.0.1
+Environment=PORT=10240
+Environment=CUDA_VISIBLE_DEVICES=1
+Environment=F5TTS_DEVICE=cuda
+Environment=F5TTS_MODEL=F5TTS_Base
+Environment=F5TTS_CKPT_FILE=hf://firstpixel/F5-TTS-pt-br/pt-br/model_last.safetensors
+Environment=F5TTS_REF_AUDIO=/srv/media-downloader-bot/tmp/tts-eval-assets/f5-ref-ptbr.wav
+Environment="F5TTS_REF_TEXT=Esta é uma voz de referência em português brasileiro para avaliação de síntese neural."
+
+ExecStart=/srv/F5-TTS/.venv/bin/python /srv/F5-TTS/http_server.py
+
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

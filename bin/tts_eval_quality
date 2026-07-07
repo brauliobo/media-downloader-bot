@@ -1,0 +1,825 @@
+#!/usr/bin/env python3
+
+"""Evaluate TTS engines with one shared pt-BR text and whisper.cpp.
+
+The script can run engines one at a time. It never runs systemd commands;
+HTTP engines are used only if already reachable unless a non-systemd command
+is explicitly configured through TTS_EVAL_*_START_CMD / STOP_CMD.
+
+Default engines:
+  - omnivoice: HTTP form service at 127.0.0.1:10440
+  - chatterbox: local Resemble Chatterbox checkout under ~/Projects/chatterbox
+  - piper: HTTP JSON service at $PIPER_PORT_PT or 10220
+  - coqui: HTTP form service at 127.0.0.1:10230
+  - fish: generic command engine via $TTS_EVAL_FISH_CMD
+  - f5tts/fs-tts: generic command engine via $TTS_EVAL_F5TTS_CMD
+
+Command engines receive these placeholders:
+  {text_file} {out_path} {lang} {text}
+
+Example:
+  TTS_EVAL_FISH_CMD='fish-speech ... --text-file {text_file} --output {out_path}' \
+    bin/tts_eval_quality --engines fish --manage-services
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import difflib
+import json
+import math
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+import unicodedata
+import wave
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+try:
+    import requests
+except ImportError as exc:  # pragma: no cover - runtime dependency check
+    raise SystemExit("Missing Python dependency: requests") from exc
+
+
+DEFAULT_TEXT = """Na manhã de segunda-feira, a equipe de produto revisou o fluxo de dublagem para vídeos longos em português do Brasil. O teste precisava manter nomes técnicos como API, CUDA, Whisper e servidor HTTP sem inventar palavras novas.
+
+Depois da reunião, o programa recebeu três blocos de texto, gerou áudio em partes e enviou o arquivo final para transcrição automática. A avaliação contou quantas palavras voltaram iguais ao texto original e qual foi a confiança média do reconhecimento.
+
+No cenário real, a fila de trabalho pode processar aulas, entrevistas e narrações de livros. Por isso, a voz precisa soar natural, respeitar a pontuação, pronunciar termos em inglês com clareza e não cortar frases no meio."""
+
+TECH_TERMS = ["api", "cuda", "whisper", "http"]
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def env(name: str, default: str | None = None) -> str | None:
+    value = os.environ.get(name)
+    return value if value not in (None, "") else default
+
+
+def env_file_value(name: str) -> str | None:
+    env_path = ROOT / ".env"
+    if not env_path.exists():
+        return None
+    for line in env_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if key.strip() == name:
+            return value.strip().strip("'\"")
+    return None
+
+
+def default_tts_engine_name() -> str | None:
+    value = env("TTS") or env_file_value("TTS")
+    if not value:
+        return None
+    return ALIASES.get(value.strip().lower(), value.strip().lower())
+
+
+def shell_env_name(engine: str, suffix: str) -> str:
+    return f"TTS_EVAL_{engine.upper().replace('-', '_')}_{suffix}"
+
+
+def log(message: str) -> None:
+    print(message, flush=True)
+
+
+def run_shell(command: str, *, cwd: Path | None = None, timeout: int | None = None) -> None:
+    log(f"$ {command}")
+    subprocess.run(command, shell=True, cwd=cwd, check=True, timeout=timeout)
+
+
+def systemd_command(command: str | None) -> bool:
+    return bool(command and re.search(r"(^|[;&|\s])systemctl(\s|$)", command))
+
+
+def wait_http(url: str, *, timeout: float = 120.0) -> None:
+    deadline = time.monotonic() + timeout
+    last_error = None
+    while time.monotonic() < deadline:
+        try:
+            response = requests.get(url, timeout=5)
+            if response.status_code < 500:
+                return
+            last_error = f"HTTP {response.status_code}"
+        except Exception as exc:  # noqa: BLE001 - shown to operator
+            last_error = repr(exc)
+        time.sleep(2)
+    raise RuntimeError(f"Timed out waiting for {url}: {last_error}")
+
+
+def http_available(url: str, *, timeout: float = 5.0) -> bool:
+    try:
+        wait_http(url, timeout=timeout)
+        return True
+    except Exception:
+        return False
+
+
+def split_paragraphs(text: str) -> list[str]:
+    return [part.strip() for part in re.split(r"\n\s*\n", text.strip()) if part.strip()]
+
+
+def normalize_word(word: str) -> str:
+    word = unicodedata.normalize("NFKD", word.lower())
+    word = "".join(ch for ch in word if not unicodedata.combining(ch))
+    return re.sub(r"[^a-z0-9]+", "", word)
+
+
+def words_from_text(text: str) -> list[str]:
+    raw = re.findall(r"[\wÀ-ÿ]+", text, flags=re.UNICODE)
+    return [word for word in (normalize_word(item) for item in raw) if word]
+
+
+def concat_wavs(paths: list[Path], out_path: Path, *, silence_s: float = 0.35) -> float:
+    if not paths:
+        raise RuntimeError("No WAV files to concatenate")
+
+    params = None
+    frames: list[bytes] = []
+    total_frames = 0
+
+    for path in paths:
+        with wave.open(str(path), "rb") as wav:
+            current = wav.getparams()
+            if params is None:
+                params = current
+            elif current[:3] != params[:3] or current.framerate != params.framerate:
+                raise RuntimeError(f"WAV format mismatch for {path}: {current} != {params}")
+
+            data = wav.readframes(wav.getnframes())
+            frames.append(data)
+            total_frames += wav.getnframes()
+
+        silence_frames = int(params.framerate * silence_s)
+        silence_bytes = b"\x00" * silence_frames * params.nchannels * params.sampwidth
+        frames.append(silence_bytes)
+        total_frames += silence_frames
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(out_path), "wb") as out:
+        out.setparams(params)
+        out.writeframes(b"".join(frames))
+
+    return total_frames / params.framerate
+
+
+def write_bytes(path: Path, content: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+
+
+def whisper_transcribe(wav_path: Path, whisper_url: str, *, lang: str) -> dict[str, Any]:
+    with wav_path.open("rb") as file:
+        response = requests.post(
+            whisper_url.rstrip("/") + "/inference",
+            files={"file": (wav_path.name, file, "audio/wav")},
+            data={
+                "temperature": "0.0",
+                "response_format": "verbose_json",
+                "language": lang,
+                "token_timestamps": "true",
+                "no_language_probabilities": "false",
+            },
+            timeout=900,
+        )
+    if response.status_code != 200:
+        raise RuntimeError(f"Whisper failed for {wav_path}: {response.status_code} {response.text[:500]}")
+    return response.json()
+
+
+def merged_whisper_words(data: dict[str, Any]) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+
+    for segment in data.get("segments", []):
+        for token in segment.get("words", []) or []:
+            raw = token.get("word", "") or ""
+            if not raw:
+                continue
+
+            starts_new = current is None or raw[:1].isspace()
+            if starts_new:
+                if current:
+                    merged.append(current)
+                current = {
+                    "display": raw.strip(),
+                    "probs": [float(token.get("probability", 0.0))],
+                    "start": token.get("start"),
+                    "end": token.get("end"),
+                }
+            else:
+                current["display"] += raw.strip()
+                current["probs"].append(float(token.get("probability", 0.0)))
+                current["end"] = token.get("end", current.get("end"))
+
+    if current:
+        merged.append(current)
+
+    words: list[dict[str, Any]] = []
+    for item in merged:
+        norm = normalize_word(item["display"])
+        if not norm:
+            continue
+        probs = item["probs"] or [0.0]
+        item["norm"] = norm
+        item["confidence"] = sum(probs) / len(probs)
+        words.append(item)
+    return words
+
+
+def count_replace_ops(expected_count: int, recognized_count: int) -> tuple[int, int, int]:
+    substitutions = min(expected_count, recognized_count)
+    deletions = max(0, expected_count - recognized_count)
+    insertions = max(0, recognized_count - expected_count)
+    return substitutions, deletions, insertions
+
+
+def score_transcription(source_text: str, data: dict[str, Any]) -> dict[str, Any]:
+    expected = words_from_text(source_text)
+    recognized_items = merged_whisper_words(data)
+    recognized = [item["norm"] for item in recognized_items]
+    matcher = difflib.SequenceMatcher(None, expected, recognized, autojunk=False)
+
+    matched_confidences: list[float] = []
+    mismatch_confidences: list[float] = []
+    deviations: list[dict[str, Any]] = []
+    substitutions = deletions = insertions = 0
+
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            for j in range(j1, j2):
+                matched_confidences.append(recognized_items[j]["confidence"])
+            continue
+
+        exp_span = expected[i1:i2]
+        rec_span = recognized[j1:j2]
+        sub, dele, ins = count_replace_ops(len(exp_span), len(rec_span))
+        substitutions += sub
+        deletions += dele
+        insertions += ins
+        mismatch_confidences.extend(item["confidence"] for item in recognized_items[j1:j2])
+        deviations.append(
+            {
+                "type": tag,
+                "expected_index": i1,
+                "recognized_index": j1,
+                "expected": " ".join(exp_span),
+                "recognized": " ".join(rec_span),
+                "recognized_confidence_mean": (
+                    sum(item["confidence"] for item in recognized_items[j1:j2]) / max(1, j2 - j1)
+                    if j2 > j1
+                    else None
+                ),
+            }
+        )
+
+    segment_probs: list[float] = []
+    for segment in data.get("segments", []) or []:
+        avg = segment.get("avg_logprob")
+        if isinstance(avg, (int, float)) and math.isfinite(avg):
+            segment_probs.append(math.exp(avg))
+
+    expected_term_counts = {term: expected.count(term) for term in TECH_TERMS}
+    recognized_term_counts = {term: recognized.count(term) for term in TECH_TERMS}
+    term_results = {
+        term: {
+            "expected": expected_term_counts[term],
+            "recognized": recognized_term_counts[term],
+            "matched": min(expected_term_counts[term], recognized_term_counts[term]),
+        }
+        for term in TECH_TERMS
+    }
+
+    total_errors = substitutions + deletions + insertions
+    matched_words = len(matched_confidences)
+    all_confidences = [item["confidence"] for item in recognized_items]
+
+    return {
+        "expected_words": len(expected),
+        "recognized_words": len(recognized),
+        "matching_words": matched_words,
+        "match_rate": matched_words / len(expected) if expected else 0.0,
+        "word_error_rate": total_errors / len(expected) if expected else 0.0,
+        "substitutions": substitutions,
+        "deletions": deletions,
+        "insertions": insertions,
+        "matched_word_confidence_mean": mean(matched_confidences),
+        "mismatched_word_confidence_mean": mean(mismatch_confidences),
+        "all_recognized_word_confidence_mean": mean(all_confidences),
+        "segment_confidence_from_avg_logprob_mean": mean(segment_probs),
+        "detected_language": data.get("detected_language") or data.get("language"),
+        "detected_language_probability": data.get("detected_language_probability"),
+        "term_results": term_results,
+        "deviations": deviations,
+        "transcription": data.get("text", ""),
+    }
+
+
+def mean(values: list[float]) -> float | None:
+    return sum(values) / len(values) if values else None
+
+
+@dataclass
+class Engine:
+    name: str
+    kind: str
+    health_url: str | None = None
+    synth_url: str | None = None
+    start_cmd: str | None = None
+    stop_cmd: str | None = None
+    spawn_cmd: str | None = None
+    form: dict[str, str] = field(default_factory=dict)
+    headers: dict[str, str] = field(default_factory=dict)
+    command_env: str | None = None
+    project_dir: Path | None = None
+    python_path: Path | None = None
+
+    def resolved_start_cmd(self) -> str | None:
+        return env(shell_env_name(self.name, "START_CMD"), self.start_cmd)
+
+    def resolved_stop_cmd(self) -> str | None:
+        return env(shell_env_name(self.name, "STOP_CMD"), self.stop_cmd)
+
+    def synthesize(self, paragraph: str, out_path: Path, *, lang: str) -> None:
+        if self.kind == "http_form":
+            self.synthesize_http_form(paragraph, out_path, lang=lang)
+        elif self.kind == "http_json":
+            self.synthesize_http_json(paragraph, out_path)
+        elif self.kind == "http_text":
+            self.synthesize_http_text(paragraph, out_path)
+        elif self.kind == "fish_http":
+            self.synthesize_fish_http(paragraph, out_path)
+        elif self.kind == "chatterbox":
+            self.synthesize_chatterbox(paragraph, out_path, lang=lang)
+        elif self.kind == "command":
+            self.synthesize_command(paragraph, out_path, lang=lang)
+        else:
+            raise RuntimeError(f"Unsupported engine kind: {self.kind}")
+
+    def synthesize_http_form(self, paragraph: str, out_path: Path, *, lang: str) -> None:
+        assert self.synth_url
+        data = {"text": paragraph, "language": lang, **self.form}
+        response = requests.post(self.synth_url, data=data, headers=self.headers, timeout=900)
+        if response.status_code != 200:
+            raise RuntimeError(f"{self.name} synthesis failed: {response.status_code} {response.text[:500]}")
+        write_bytes(out_path, response.content)
+
+    def synthesize_http_json(self, paragraph: str, out_path: Path) -> None:
+        assert self.synth_url
+        response = requests.post(self.synth_url, json={"text": paragraph}, headers=self.headers, timeout=900)
+        if response.status_code != 200:
+            raise RuntimeError(f"{self.name} synthesis failed: {response.status_code} {response.text[:500]}")
+        write_bytes(out_path, response.content)
+
+    def synthesize_http_text(self, paragraph: str, out_path: Path) -> None:
+        assert self.synth_url
+        response = requests.post(
+            self.synth_url,
+            data=paragraph.encode("utf-8"),
+            headers={"Content-Type": "text/plain; charset=utf-8", **self.headers},
+            timeout=900,
+        )
+        if response.status_code != 200:
+            raise RuntimeError(f"{self.name} synthesis failed: {response.status_code} {response.text[:500]}")
+        write_bytes(out_path, response.content)
+
+    def synthesize_fish_http(self, paragraph: str, out_path: Path) -> None:
+        assert self.synth_url
+        response = requests.post(
+            self.synth_url,
+            json={
+                "text": paragraph,
+                "format": "wav",
+                "references": [],
+                "reference_id": None,
+                "streaming": False,
+                "chunk_length": int(env("TTS_EVAL_FISH_CHUNK_LENGTH", "300")),
+                "normalize": True,
+            },
+            timeout=900,
+        )
+        if response.status_code != 200:
+            raise RuntimeError(f"{self.name} synthesis failed: {response.status_code} {response.text[:500]}")
+        write_bytes(out_path, response.content)
+
+    def synthesize_chatterbox(self, paragraph: str, out_path: Path, *, lang: str) -> None:
+        project_dir = self.project_dir or Path.home() / "Projects/chatterbox"
+        python_path = self.python_path or project_dir / ".venv/bin/python"
+        if not python_path.exists():
+            raise RuntimeError(f"Chatterbox Python not found: {python_path}")
+
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".txt", delete=False) as file:
+            file.write(paragraph)
+            text_file = Path(file.name)
+
+        code = r'''
+from pathlib import Path
+import os
+import sys
+import soundfile as sf
+from chatterbox.mtl_tts import ChatterboxMultilingualTTS
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+out = Path(sys.argv[2])
+lang = sys.argv[3]
+device = os.environ.get("TTS_EVAL_CHATTERBOX_DEVICE", "cuda")
+t3_model = os.environ.get("TTS_EVAL_CHATTERBOX_T3_MODEL", "v3")
+cfg_weight = float(os.environ.get("TTS_EVAL_CHATTERBOX_CFG_WEIGHT", "0.3"))
+temperature = float(os.environ.get("TTS_EVAL_CHATTERBOX_TEMPERATURE", "0.7"))
+repetition_penalty = float(os.environ.get("TTS_EVAL_CHATTERBOX_REPETITION_PENALTY", "1.2"))
+
+model = ChatterboxMultilingualTTS.from_pretrained(device=device, t3_model=t3_model)
+wav = model.generate(text, language_id=lang, cfg_weight=cfg_weight, temperature=temperature, repetition_penalty=repetition_penalty)
+audio = wav.squeeze(0).detach().cpu().numpy()
+out.parent.mkdir(parents=True, exist_ok=True)
+sf.write(str(out), audio, model.sr, subtype="PCM_16")
+'''
+        try:
+            child_env = os.environ.copy()
+            child_env.setdefault("CUDA_VISIBLE_DEVICES", env("TTS_EVAL_CHATTERBOX_CUDA_VISIBLE_DEVICES", "1") or "1")
+            subprocess.run(
+                [str(python_path), "-c", code, str(text_file), str(out_path), lang],
+                cwd=project_dir,
+                env=child_env,
+                check=True,
+                timeout=900,
+            )
+        finally:
+            text_file.unlink(missing_ok=True)
+
+    def synthesize_command(self, paragraph: str, out_path: Path, *, lang: str) -> None:
+        command = env(self.command_env or shell_env_name(self.name, "CMD"))
+        if not command:
+            raise RuntimeError(
+                f"No command configured for {self.name}. Set {self.command_env or shell_env_name(self.name, 'CMD')}."
+            )
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".txt", delete=False) as file:
+            file.write(paragraph)
+            text_file = Path(file.name)
+        try:
+            rendered = command.format(
+                text=paragraph.replace("'", "'\\''"),
+                text_file=str(text_file),
+                out_path=str(out_path),
+                lang=lang,
+            )
+            run_shell(rendered, timeout=900)
+        finally:
+            text_file.unlink(missing_ok=True)
+
+
+def default_engines() -> dict[str, Engine]:
+    piper_port = env("PIPER_PORT_PT", "10220")
+    return {
+        "omnivoice": Engine(
+            name="omnivoice",
+            kind="http_form",
+            health_url=env("TTS_EVAL_OMNIVOICE_HEALTH_URL", "http://127.0.0.1:10440/health"),
+            synth_url=env("TTS_EVAL_OMNIVOICE_SYNTH_URL", "http://127.0.0.1:10440/synthesize"),
+            start_cmd=env("TTS_EVAL_OMNIVOICE_START_CMD"),
+            stop_cmd=env("TTS_EVAL_OMNIVOICE_STOP_CMD"),
+            form={
+                "num_step": env("TTS_EVAL_OMNIVOICE_NUM_STEP", "32"),
+                "speed": env("TTS_EVAL_OMNIVOICE_SPEED", "1.0"),
+                "position_temperature": env("TTS_EVAL_OMNIVOICE_POSITION_TEMPERATURE", "0"),
+                "class_temperature": env("TTS_EVAL_OMNIVOICE_CLASS_TEMPERATURE", "0"),
+            },
+        ),
+        "chatterbox": Engine(
+            name="chatterbox",
+            kind="chatterbox",
+            project_dir=Path(env("TTS_EVAL_CHATTERBOX_DIR", str(Path.home() / "Projects/chatterbox"))),
+        ),
+        "piper": Engine(
+            name="piper",
+            kind="http_text",
+            health_url=env("TTS_EVAL_PIPER_HEALTH_URL"),
+            synth_url=env("TTS_EVAL_PIPER_SYNTH_URL", f"http://127.0.0.1:{piper_port}/"),
+            start_cmd=env("TTS_EVAL_PIPER_START_CMD"),
+            stop_cmd=env("TTS_EVAL_PIPER_STOP_CMD"),
+            spawn_cmd=env(
+                "TTS_EVAL_PIPER_SPAWN_CMD",
+                "cd /home/braulio/Projects/piper/src/python_run && "
+                "PYTHONDONTWRITEBYTECODE=1 CUDA_VISIBLE_DEVICES=${TTS_EVAL_PIPER_CUDA_VISIBLE_DEVICES:-1} "
+                "/home/braulio/Projects/piper/src/python_run/venv/bin/python3 -m piper.http_server "
+                f"--host 127.0.0.1 --port {piper_port} "
+                "--model /home/braulio/Projects/piper/src/python_run/pt_BR-faber-medium.onnx --cuda",
+            ),
+        ),
+        "coqui": Engine(
+            name="coqui",
+            kind="http_form",
+            health_url=env("TTS_EVAL_COQUI_HEALTH_URL", "http://127.0.0.1:10230/speakers"),
+            synth_url=env("TTS_EVAL_COQUI_SYNTH_URL", "http://127.0.0.1:10230/synthesize"),
+            start_cmd=env("TTS_EVAL_COQUI_START_CMD"),
+            stop_cmd=env("TTS_EVAL_COQUI_STOP_CMD"),
+            spawn_cmd=env(
+                "TTS_EVAL_COQUI_SPAWN_CMD",
+                "cd /home/braulio/Projects/coqui-ai-TTS && "
+                "PORT=10230 HOST=127.0.0.1 PYTHONUNBUFFERED=1 DEBUG=0 COQUI_TOS_AGREED=1 "
+                "CUDA_VISIBLE_DEVICES=${TTS_EVAL_COQUI_CUDA_VISIBLE_DEVICES:-1} "
+                "TTS_MODEL_ID=tts_models/multilingual/multi-dataset/xtts_v2 "
+                "TTS_TORCH_THREADS=1 TTS_CPU_WORKERS=0 TTS_WORKER_BACKLOG=64 "
+                "/home/braulio/Projects/coqui-ai-TTS/venv/bin/python -c "
+                "'import os; from http_server import app, DEBUG_MODE; "
+                "app.run(host=os.environ.get(\"HOST\", \"127.0.0.1\"), port=int(os.environ[\"PORT\"]), "
+                "debug=DEBUG_MODE, use_reloader=False, threaded=True)'",
+            ),
+            form={"speaker": env("TTS_EVAL_COQUI_SPEAKER", "31")},
+        ),
+        "fish": Engine(
+            name="fish",
+            kind="fish_http",
+            health_url=env("TTS_EVAL_FISH_HEALTH_URL", "http://127.0.0.1:10241/v1/health"),
+            synth_url=env("TTS_EVAL_FISH_SYNTH_URL", "http://127.0.0.1:10241/v1/tts"),
+            command_env="TTS_EVAL_FISH_CMD",
+            start_cmd=env("TTS_EVAL_FISH_START_CMD"),
+            stop_cmd=env("TTS_EVAL_FISH_STOP_CMD"),
+            spawn_cmd=env(
+                "TTS_EVAL_FISH_SPAWN_CMD",
+                "cd /home/braulio/Projects/fish-speech && "
+                "CUDA_VISIBLE_DEVICES=${TTS_EVAL_FISH_CUDA_VISIBLE_DEVICES:-1} "
+                "uv run python tools/api_server.py "
+                "--llama-checkpoint-path checkpoints/s2-pro "
+                "--decoder-checkpoint-path checkpoints/s2-pro/codec.pth "
+                "--listen 127.0.0.1:10241 --device cuda --half --workers 1",
+            ),
+        ),
+        "f5tts": Engine(
+            name="f5tts",
+            kind="http_form",
+            health_url=env("TTS_EVAL_F5TTS_HEALTH_URL", "http://127.0.0.1:10240/health"),
+            synth_url=env("TTS_EVAL_F5TTS_SYNTH_URL", "http://127.0.0.1:10240/synthesize"),
+            command_env="TTS_EVAL_F5TTS_CMD",
+            start_cmd=env("TTS_EVAL_F5TTS_START_CMD"),
+            stop_cmd=env("TTS_EVAL_F5TTS_STOP_CMD"),
+            spawn_cmd=env(
+                "TTS_EVAL_F5TTS_SPAWN_CMD",
+                "cd /home/braulio/Projects/F5-TTS && "
+                "CUDA_VISIBLE_DEVICES=${TTS_EVAL_F5TTS_CUDA_VISIBLE_DEVICES:-1} "
+                "F5TTS_MODEL=${F5TTS_MODEL:-F5TTS_Base} "
+                "F5TTS_CKPT_FILE=${F5TTS_CKPT_FILE:-hf://firstpixel/F5-TTS-pt-br/pt-br/model_last.safetensors} "
+                "F5TTS_DEVICE=${F5TTS_DEVICE:-cuda} "
+                "F5TTS_REF_AUDIO=${F5TTS_REF_AUDIO:-/home/braulio/Projects/media-downloader-bot/tmp/tts-eval-assets/f5-ref-ptbr.wav} "
+                "F5TTS_REF_TEXT=${F5TTS_REF_TEXT:-'Esta é uma voz de referência em português brasileiro para avaliação de síntese neural.'} "
+                "PORT=10240 HOST=127.0.0.1 "
+                "/home/braulio/Projects/F5-TTS/.venv/bin/python http_server.py",
+            ),
+        ),
+    }
+
+
+ALIASES = {
+    "resemble": "chatterbox",
+    "chatterbox_v3": "chatterbox",
+    "f5": "f5tts",
+    "f5-tts": "f5tts",
+    "fs-tts": "f5tts",
+    "fstts": "f5tts",
+    "fish-speech": "fish",
+}
+
+
+def resolve_engine_names(raw: str, engines: dict[str, Engine]) -> list[str]:
+    if raw.strip().lower() == "all":
+        return ["omnivoice", "chatterbox", "piper", "fish", "f5tts", "coqui"]
+    names = []
+    for part in raw.split(","):
+        name = ALIASES.get(part.strip().lower(), part.strip().lower())
+        if name not in engines:
+            raise SystemExit(f"Unknown engine: {part}")
+        names.append(name)
+    return names
+
+
+def start_engine(engine: Engine, args: argparse.Namespace) -> None:
+    if engine.health_url and http_available(engine.health_url, timeout=5):
+        log(f"{engine.name} is already healthy")
+        return
+
+    if engine.spawn_cmd:
+        log(f"Spawning {engine.name} without systemd")
+        log_path = args.output_dir / f"{engine.name}-server.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_file = log_path.open("ab")
+        process = subprocess.Popen(
+            engine.spawn_cmd,
+            shell=True,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+        args.spawned_processes[engine.name] = (process, log_file)
+        if engine.health_url:
+            try:
+                wait_http(engine.health_url, timeout=args.service_timeout)
+                return
+            except Exception:
+                stop_engine(engine, args)
+                raise
+        time.sleep(float(env(shell_env_name(engine.name, "READY_DELAY"), "3")))
+        return
+
+    if args.manage_services:
+        start_cmd = engine.resolved_start_cmd()
+        if start_cmd:
+            if systemd_command(start_cmd):
+                log(f"Skipping systemd start command for {engine.name}")
+            else:
+                try:
+                    run_shell(start_cmd, timeout=args.service_timeout)
+                except subprocess.CalledProcessError:
+                    if engine.health_url and http_available(engine.health_url, timeout=5):
+                        log(f"{engine.name} start command failed, but health check is OK; continuing")
+                    else:
+                        raise
+        elif engine.kind != "chatterbox":
+            log(f"No start command configured for {engine.name}; assuming it is already available")
+    if engine.health_url:
+        wait_http(engine.health_url, timeout=args.service_timeout)
+
+
+def stop_engine(engine: Engine, args: argparse.Namespace) -> None:
+    spawned = args.spawned_processes.pop(engine.name, None)
+    if spawned:
+        process, log_file = spawned
+        if process.poll() is None:
+            log(f"Stopping spawned {engine.name} process")
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+                process.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait(timeout=30)
+        log_file.close()
+        return
+
+    if not args.manage_services or args.keep_services:
+        return
+    if engine.name in args.keep_running_engines:
+        log(f"Keeping {engine.name} running")
+        return
+    stop_cmd = engine.resolved_stop_cmd()
+    if stop_cmd:
+        if systemd_command(stop_cmd):
+            log(f"Skipping systemd stop command for {engine.name}")
+            return
+        try:
+            run_shell(stop_cmd, timeout=args.service_timeout)
+        except subprocess.CalledProcessError as exc:
+            log(f"WARNING: failed to stop {engine.name}: {exc}")
+
+
+def evaluate_engine(engine: Engine, paragraphs: list[str], source_text: str, args: argparse.Namespace) -> dict[str, Any]:
+    engine_dir = args.output_dir / engine.name
+    engine_dir.mkdir(parents=True, exist_ok=True)
+    paragraph_wavs: list[Path] = []
+    timings: list[dict[str, Any]] = []
+
+    for idx, paragraph in enumerate(paragraphs, 1):
+        out_path = engine_dir / f"paragraph-{idx:02d}.wav"
+        started = time.monotonic()
+        engine.synthesize(paragraph, out_path, lang=args.lang)
+        elapsed = time.monotonic() - started
+        if not out_path.exists() or out_path.stat().st_size == 0:
+            raise RuntimeError(f"{engine.name} did not create {out_path}")
+        log(f"{engine.name}: paragraph {idx} synthesized in {elapsed:.2f}s")
+        timings.append({"paragraph": idx, "seconds": elapsed})
+        paragraph_wavs.append(out_path)
+
+    combined_wav = engine_dir / f"{engine.name}-{args.lang}-combined.wav"
+    duration = concat_wavs(paragraph_wavs, combined_wav, silence_s=args.paragraph_silence)
+    whisper_json = whisper_transcribe(combined_wav, args.whisper_url, lang=args.lang)
+    score = score_transcription(source_text, whisper_json)
+
+    (engine_dir / "whisper.json").write_text(json.dumps(whisper_json, ensure_ascii=False, indent=2), encoding="utf-8")
+    (engine_dir / "score.json").write_text(json.dumps(score, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    score.update(
+        {
+            "engine": engine.name,
+            "wav_path": str(combined_wav),
+            "duration_seconds": duration,
+            "synthesis_timings": timings,
+        }
+    )
+    return score
+
+
+def write_summary_csv(results: dict[str, Any], path: Path) -> None:
+    fields = [
+        "engine",
+        "expected_words",
+        "recognized_words",
+        "matching_words",
+        "match_rate",
+        "word_error_rate",
+        "substitutions",
+        "deletions",
+        "insertions",
+        "matched_word_confidence_mean",
+        "mismatched_word_confidence_mean",
+        "all_recognized_word_confidence_mean",
+        "segment_confidence_from_avg_logprob_mean",
+        "detected_language",
+        "detected_language_probability",
+        "duration_seconds",
+        "wav_path",
+    ]
+    with path.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=fields)
+        writer.writeheader()
+        for item in results["engines"].values():
+            writer.writerow({field: item.get(field) for field in fields})
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Compare TTS engines with whisper.cpp word confidence metrics")
+    parser.add_argument("--engines", default="omnivoice,chatterbox,piper,fish,f5tts,coqui")
+    parser.add_argument("--text-file", type=Path)
+    parser.add_argument("--output-dir", type=Path, default=ROOT / "tmp/tts-eval")
+    parser.add_argument("--lang", default="pt")
+    parser.add_argument("--whisper-url", default=env("WHISPER_CPP_SERVER", "http://127.0.0.1:8080"))
+    parser.add_argument("--manage-services", action="store_true", help="Run configured non-systemd start/stop commands around each engine")
+    parser.add_argument("--keep-services", action="store_true", help="Do not stop services after evaluation")
+    parser.add_argument(
+        "--keep-running-engines",
+        default=env("TTS_EVAL_KEEP_RUNNING_ENGINES"),
+        help="Comma-separated engines that must not be stopped. Defaults to TTS from .env/ENV.",
+    )
+    parser.add_argument("--service-timeout", type=int, default=180)
+    parser.add_argument("--paragraph-silence", type=float, default=0.35)
+    parser.add_argument("--skip-unavailable", action="store_true", default=True)
+    parser.add_argument("--require-all", action="store_true", help="Fail the whole run if any engine is unavailable")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str]) -> int:
+    args = parse_args(argv)
+    if args.require_all:
+        args.skip_unavailable = False
+
+    protected = args.keep_running_engines
+    if protected is None:
+        protected = default_tts_engine_name() or ""
+    args.keep_running_engines = {
+        ALIASES.get(item.strip().lower(), item.strip().lower())
+        for item in protected.split(",")
+        if item.strip()
+    }
+
+    source_text = args.text_file.read_text(encoding="utf-8") if args.text_file else DEFAULT_TEXT
+    paragraphs = split_paragraphs(source_text)
+    if not paragraphs:
+        raise SystemExit("No text paragraphs found")
+
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    args.spawned_processes = {}
+    (args.output_dir / "source.txt").write_text(source_text, encoding="utf-8")
+
+    engines = default_engines()
+    engine_names = resolve_engine_names(args.engines, engines)
+    results: dict[str, Any] = {
+        "source_text": source_text,
+        "source_words": len(words_from_text(source_text)),
+        "engines": {},
+        "errors": {},
+    }
+
+    for name in engine_names:
+        engine = engines[name]
+        log(f"=== {engine.name} ===")
+        try:
+            start_engine(engine, args)
+            results["engines"][engine.name] = evaluate_engine(engine, paragraphs, source_text, args)
+        except Exception as exc:  # noqa: BLE001 - reported in machine-readable output
+            results["errors"][engine.name] = str(exc)
+            log(f"ERROR {engine.name}: {exc}")
+            if not args.skip_unavailable:
+                raise
+        finally:
+            stop_engine(engine, args)
+            if shutil.which("nvidia-smi"):
+                subprocess.run(["nvidia-smi"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+
+    results_path = args.output_dir / "results.json"
+    results_path.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_summary_csv(results, args.output_dir / "summary.csv")
+    print(json.dumps(results, ensure_ascii=False, indent=2))
+    log(f"Wrote {results_path}")
+    return 0 if results["engines"] else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
