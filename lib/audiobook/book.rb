@@ -15,12 +15,15 @@ require_relative 'paragraph'
 require_relative 'reference'
 require_relative 'heading'
 require_relative 'image'
+require_relative 'ocr_text'
 require_relative 'page'
 require_relative '../translator'
 
 module Audiobook
   # Represents an intermediate structured manuscript that can be saved as YAML.
   class Book
+    LANGUAGE_SAMPLE_PAGES = 5
+
     attr_reader :metadata, :pages
 
     # Alias for backward compatibility
@@ -44,6 +47,9 @@ module Audiobook
     end
 
     def self.detect_language(input_path, opts: nil, stl: nil)
+      lang = explicit_language(opts)
+      return lang if lang
+
       data = case File.extname(input_path).downcase
       when '.yml', '.yaml' then SymMash.new(YAML.load_file(input_path) || {})
       when '.json'         then parse_json(input_path, opts: opts)
@@ -59,6 +65,11 @@ module Audiobook
       obj.instance_variable_set(:@stl, stl)
       obj.send(:detect_language_from_first_pages)
       obj.metadata.language || 'en'
+    end
+
+    def self.explicit_language(opts)
+      lang = opts&.alang || opts&.slang || opts&.lang
+      lang.to_s.strip.presence
     end
 
     def self.url_kindle?(input_path)
@@ -195,8 +206,9 @@ module Audiobook
       @metadata = @data.metadata || SymMash.new
       @opts = opts || SymMash.new
       @stl = stl
+      @metadata.language ||= self.class.explicit_language(@opts)
       
-      # Detect language from first 5 pages of content
+      # Detect language from the first content pages before TTS options are chosen.
       detect_language_from_first_pages
       @lang = @metadata.language || 'en'
 
@@ -278,28 +290,57 @@ module Audiobook
     end
 
     def extract_first_5_pages_text
-      return extract_from_lines if @data.content&.lines&.any?
-      return extract_from_paragraphs if @data.content&.paragraphs&.any?
+      ordered_sample = extract_ordered_content_sample
+      return ordered_sample if ordered_sample.any?
+
       return [SymMash.new(text: @data.content.text)] if @data.content&.text
       return [SymMash.new(text: @data.text)] if @data.text
       []
     end
 
-    def extract_from_lines
-      items = @data.content.lines.map { |l| normalize_symmash(l) }
-      extract_text_from_first_5_pages(items) { |item| item.page || 1 }
+    def extract_ordered_content_sample
+      return [] unless @data.content
+
+      text_items = language_text_items
+      image_items = Array(@data.content.images).map { |img| normalize_symmash(img) }
+      return [] if text_items.empty? && image_items.empty?
+
+      sample_pages(text_items, image_items).flat_map do |page|
+        texts_for_page(text_items, page) + image_texts_for_page(image_items, page)
+      end.map { |text| SymMash.new(text: text) }
     end
 
-    def extract_from_paragraphs
-      items = @data.content.paragraphs.map { |p| normalize_symmash(p) }
-      extract_text_from_first_5_pages(items) { |item| (item.page_numbers || [1]).first || 1 }
+    def language_text_items
+      lines = Array(@data.content.lines).map { |item| normalize_symmash(item) }
+      return lines if lines.any?
+
+      Array(@data.content.paragraphs).map { |item| normalize_symmash(item) }
     end
 
-    def extract_text_from_first_5_pages(items)
-      return [] if items.empty?
-      items_by_page = items.group_by { |item| yield(item) }
-      first_5_pages = items_by_page.sort_by { |page, _| page.to_i }.first(5).flat_map(&:last)
-      first_5_pages.filter_map { |item| text = item.text; SymMash.new(text: text) if text.to_s.strip != '' }
+    def sample_pages(text_items, image_items)
+      (text_items.map { |item| page_for(item) } + image_items.map { |item| page_for(item) })
+        .compact.uniq.sort_by(&:to_i).first(LANGUAGE_SAMPLE_PAGES)
+    end
+
+    def texts_for_page(items, page)
+      items.select { |item| page_for(item) == page }
+        .filter_map { |item| item.text.to_s.strip.presence }
+    end
+
+    def image_texts_for_page(items, page)
+      items.select { |item| page_for(item) == page }
+        .filter_map { |item| ocr_text_for_language_sample(item).strip.presence }
+    end
+
+    def ocr_text_for_language_sample(image_data)
+      return image_data.text.to_s if image_data.text.to_s.strip.present?
+      return '' unless image_data.path
+
+      image_data.text = OcrText.transcribe(image_data.path, stl: @stl, opts: @opts)
+    end
+
+    def page_for(item)
+      item.page || Array(item.page_numbers).first || 1
     end
 
     def normalize_symmash(obj)
@@ -544,7 +585,7 @@ module Audiobook
         page_context = total_pages ? SymMash.new(current: page_num, total: total_pages) : nil
         # Image will handle rasterization and OCR in its initializer
         pages_hash[page_num] ||= []
-        pages_hash[page_num] << Image.new(path, stl: @stl, page_context: page_context)
+        pages_hash[page_num] << Image.new(path, stl: @stl, page_context: page_context, text: img_data.text, opts: @opts)
         images_added << [page_num, path]
       end
       
