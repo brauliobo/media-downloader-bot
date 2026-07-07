@@ -18,7 +18,7 @@ Environment=CHATTERBOX_PT_BR_REPO=ResembleAI/Chatterbox-Multilingual-pt-br
 Environment=CHATTERBOX_GENERIC_REPO=ResembleAI/chatterbox
 Environment=CHATTERBOX_PRELOAD=1
 
-ExecStart=/srv/chatterbox/.venv/bin/python /srv/chatterbox/http_server.py
+ExecStart=/srv/chatterbox/venv/bin/python /srv/chatterbox/http_server.py
 
 Restart=on-failure
 RestartSec=30
