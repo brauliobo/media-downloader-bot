@@ -336,7 +336,7 @@ module Audiobook
       return image_data.text.to_s if image_data.text.to_s.strip.present?
       return '' unless image_data.path
 
-      image_data.text = OcrText.transcribe(image_data.path, stl: @stl, opts: @opts)
+      OcrText.transcribe(image_data.path, stl: @stl, opts: @opts)
     end
 
     def page_for(item)
@@ -585,7 +585,7 @@ module Audiobook
         page_context = total_pages ? SymMash.new(current: page_num, total: total_pages) : nil
         # Image will handle rasterization and OCR in its initializer
         pages_hash[page_num] ||= []
-        pages_hash[page_num] << Image.new(path, stl: @stl, page_context: page_context, text: img_data.text, opts: @opts)
+        pages_hash[page_num] << Image.new(path, stl: @stl, page_context: page_context, text: img_data.text, opts: ocr_opts)
         images_added << [page_num, path]
       end
       
@@ -606,6 +606,12 @@ module Audiobook
       font_counts_by_page.each_with_object(SymMash.new) do |(page, counts), acc|
         acc[page] = counts.to_a.max_by { |_, c| c }&.first
       end
+    end
+
+    def ocr_opts
+      opts = SymMash.new(@opts || {})
+      opts.lang ||= @metadata.language if @metadata.language
+      opts
     end
 
     def marker_ids_for(item)

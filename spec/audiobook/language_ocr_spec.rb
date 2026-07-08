@@ -25,12 +25,12 @@ RSpec.describe 'Audiobook OCR language detection' do
     expect(book.metadata.language).to eq('pt')
   end
 
-  it 'OCRs only sample pages for detection and reuses sampled text when building images' do
+  it 'OCRs only sample pages for detection and re-OCRs images with the detected language' do
     stub_const('Audiobook::Book::LANGUAGE_SAMPLE_PAGES', 2)
     calls = []
 
-    allow(Audiobook::OcrText).to receive(:transcribe) do |path, **_kwargs|
-      calls << path
+    allow(Audiobook::OcrText).to receive(:transcribe) do |path, opts: nil, **_kwargs|
+      calls << SymMash.new(path: path, lang: opts&.dig(:lang))
       "Texto portugues #{path}"
     end
 
@@ -44,13 +44,13 @@ RSpec.describe 'Audiobook OCR language detection' do
 
     Audiobook::Book.new(data: image_book_data(1, 2, 3))
 
-    expect(calls.count('book.pdf#page=1')).to eq(1)
-    expect(calls.count('book.pdf#page=2')).to eq(1)
-    expect(calls.count('book.pdf#page=3')).to eq(1)
-    expect(calls.first(2)).to eq(['book.pdf#page=1', 'book.pdf#page=2'])
+    expect(calls.map(&:path).first(2)).to eq(['book.pdf#page=1', 'book.pdf#page=2'])
+    expect(calls.first(2).map(&:lang)).to eq([nil, nil])
+    expect(calls.drop(2).map(&:path)).to eq(['book.pdf#page=1', 'book.pdf#page=2', 'book.pdf#page=3'])
+    expect(calls.drop(2).map(&:lang)).to eq(%w[pt pt pt])
   end
 
-  it 'passes audiobook options to sampled and lazy image OCR' do
+  it 'passes audiobook options to sampled OCR and adds detected language to final image OCR' do
     stub_const('Audiobook::Book::LANGUAGE_SAMPLE_PAGES', 1)
     opts = SymMash.new(includeall: true)
     seen_opts = []
@@ -63,7 +63,9 @@ RSpec.describe 'Audiobook OCR language detection' do
 
     Audiobook::Book.new(data: image_book_data(1, 2), opts: opts)
 
-    expect(seen_opts).to eq([opts, opts])
+    expect(seen_opts.first).to eq(opts)
+    expect(seen_opts.drop(1).map { |seen| seen[:lang] }).to eq(%w[pt pt])
+    expect(opts[:lang]).to be_nil
   end
 
   it 'returns only the yaml upload for onlyyml generation' do
