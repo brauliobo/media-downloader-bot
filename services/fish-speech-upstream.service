@@ -9,7 +9,7 @@ Nice=19
 
 WorkingDirectory=/srv/fish-speech
 
-Environment=CUDA_VISIBLE_DEVICES=1
+Environment=CUDA_VISIBLE_DEVICES=0
 
 ExecStart=/srv/fish-speech/.venv/bin/python tools/api_server.py --llama-checkpoint-path checkpoints/s2-pro --decoder-checkpoint-path checkpoints/s2-pro/codec.pth --listen 127.0.0.1:10241 --device cuda --half --workers 1
 

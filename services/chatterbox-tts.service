@@ -11,7 +11,7 @@ WorkingDirectory=/home/braulio/Projects/chatterbox
 
 Environment=HOST=127.0.0.1
 Environment=PORT=10250
-Environment=CUDA_VISIBLE_DEVICES=1
+Environment=CUDA_VISIBLE_DEVICES=0
 Environment=CHATTERBOX_DEVICE=cuda
 Environment=CHATTERBOX_T3_MODEL=v3
 Environment=CHATTERBOX_PT_BR_REPO=ResembleAI/Chatterbox-Multilingual-pt-br
