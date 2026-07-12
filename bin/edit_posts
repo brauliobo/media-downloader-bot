@@ -132,7 +132,17 @@ class EditPosts
     posts = posts.select { |post| generated_post?(post) } unless @opts[:all].to_s == '1'
     posts = posts.sort_by { |post| post[:id].to_i }
     posts.reverse! if order == 'newest'
+    posts = posts.drop(start_index(posts)) if start_at
     posts
+  end
+
+  def start_at
+    value = @opts[:start_at] || @opts[:from_post] || @opts[:from_message_id]
+    value.to_s.to_i if value.to_s.to_i.positive?
+  end
+
+  def start_index(posts)
+    posts.index { |post| post[:id].to_i == start_at } || abort("start_at=#{start_at} not found in selected posts")
   end
 
   def generated_post?(post)
@@ -230,7 +240,7 @@ class EditPosts
   end
 
   SCRIPT_OPT_KEYS = %i[
-    all apply channel chat drb fetch_limit limit media order plan public query source source_urls tmpdir
+    all apply channel chat drb fetch_limit from_message_id from_post limit media order plan public query source source_urls start_at tmpdir
   ].freeze
 
   def worker_text(post)
