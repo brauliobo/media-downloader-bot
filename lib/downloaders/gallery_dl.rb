@@ -5,13 +5,15 @@ module Downloaders
   class GalleryDl < Base
     Downloaders.register(self)
 
-    HOSTS = /(?:^|\.)(?:x|twitter|instagram|bsky|tumblr|reddit|imgur|flickr|pinterest|facebook|weibo|vk)\./i
-    BIN   = ENV['GALLERY_DL'].presence || File.expand_path('~/.local/bin/gallery-dl')
+    BIN = ENV['GALLERY_DL'].presence || File.expand_path('~/.local/bin/gallery-dl')
 
     def self.supports?(ctx)
-      URI(ctx.url.to_s).host.to_s.match?(HOSTS)
-    rescue URI::InvalidURIError
-      false
+      new(ctx).gallery_post?
+    end
+
+    def gallery_post?
+      items = gallery_rows.select { |item| item.is_a?(Array) && item.first == 3 }
+      items.present? && !(items.one? && items.first.last['type'].to_s == 'video')
     end
 
     def download
@@ -69,12 +71,18 @@ module Downloaders
     end
 
     def metadata
-      out, = Sh.run [gallery_dl, '-j', url.to_s], chdir: tmp
-      rows = JSON.parse(out)
+      rows = gallery_rows
       row  = rows.find { |item| item.is_a?(Array) && item.first == 2 } || rows.find { |item| item.is_a?(Array) && item.first == 3 }
       SymMash.new(row&.last || {})
     rescue StandardError
       SymMash.new
+    end
+
+    def gallery_rows
+      out, = Sh.run [gallery_dl, '-j', url.to_s], chdir: tmp
+      JSON.parse(out)
+    rescue StandardError
+      []
     end
 
     def cookie_path
@@ -90,10 +98,11 @@ module Downloaders
 
     def upload(file, pos, info, gopts)
       title = File.basename(file, File.extname(file))
+      mime  = Rack::Mime.mime_type(File.extname(file)) || 'application/octet-stream'
       SymMash.new(
         fn_out: file,
-        type:   SymMash.new(name: :document),
-        mime:   Rack::Mime.mime_type(File.extname(file)) || 'application/octet-stream',
+        type:   SymMash.new(name: mime.start_with?('video/') ? :video : :document),
+        mime:   mime,
         opts:   gopts.deep_dup,
         url:    url,
         info:   info.merge(title: info.title.presence || title, display_id: "#{info.display_id}-#{pos}")
