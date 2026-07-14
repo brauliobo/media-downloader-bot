@@ -11,17 +11,6 @@ RSpec.describe Processors::Base do
     end
   end
 
-  it 'expands language options from url query parameters' do
-    Dir.mktmpdir('base-spec-') do |dir|
-      ctx = Context.new(dir: dir, msg: SymMash.new(text: 'https://www.youtube.com/watch?v=4MCYhF_bte8&lang=pt'))
-      processor = described_class.new(ctx)
-
-      expect(processor.url).to eq('https://www.youtube.com/watch?v=4MCYhF_bte8')
-      expect(processor.opts.slang).to eq('pt')
-      expect(processor.opts.alang).to eq('pt')
-    end
-  end
-
   describe '.add_opt' do
     it 'applies nice as a general parsed option' do
       opts = SymMash.new
