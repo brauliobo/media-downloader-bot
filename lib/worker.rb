@@ -152,6 +152,20 @@ class Worker
     UploadCoordinator.new(self).upload(i)
   end
 
+  def cleanup_input(input)
+    return unless dir
+
+    Array(input.uploads).each { |upload| cleanup_input(upload) } if input.respond_to?(:uploads)
+
+    root = "#{File.expand_path(dir)}/"
+    %i[fn_in fn_out thumb thumbnail_path].filter_map do |name|
+      input.public_send(name) if input.respond_to?(name)
+    end.uniq.each do |path|
+      path = File.expand_path(path)
+      FileUtils.rm_f(path) if path.start_with?(root)
+    end
+  end
+
   def caption_limit
     service.respond_to?(:max_caption) ? service.max_caption : 1024
   end

@@ -6,6 +6,7 @@ RSpec.describe UploadCoordinator do
   let(:opts)   { SymMash.new(album: 1) }
   let(:msg)    { SymMash.new(chat: {id: 1}) }
 
+  before { allow(worker).to receive(:cleanup_input) }
   after { FileUtils.remove_entry(dir) if Dir.exist?(dir) }
 
   def item(name, mime)
@@ -32,6 +33,7 @@ RSpec.describe UploadCoordinator do
     coordinator.flush
 
     expect(worker).to have_received(:send_album).with(msg, '_caption_', uploads: uploads, parse_mode: 'MarkdownV2')
+    expect(worker).to have_received(:cleanup_input).with(have_attributes(uploads: uploads))
   end
 
   it 'limits album captions for media groups' do
@@ -71,6 +73,22 @@ RSpec.describe UploadCoordinator do
     coordinator.flush
 
     expect(worker).to have_received(:send).with(:upload_one, upload)
+    expect(worker).to have_received(:cleanup_input).with(upload)
+  end
+
+  it 'removes input files after uploading them' do
+    real_worker = Worker.new(SymMash.new(from: {id: 1}, chat: {id: 1}))
+    real_worker.instance_variable_set(:@dir, dir)
+    upload = item('1.mp4', 'video/mp4')
+    input  = File.join(dir, 'input.mp4')
+    File.write(input, '')
+    upload.fn_in = input
+    allow(real_worker).to receive(:upload_one)
+
+    described_class.new(real_worker).upload(upload)
+
+    expect(File.exist?(input)).to be(false)
+    expect(File.exist?(upload.fn_out)).to be(false)
   end
 
   it 'parses bare album as an upload option' do
