@@ -95,7 +95,8 @@ module Downloaders
         cmd << "--extractor-args #{Sh.escape('generic:impersonate')}"
 
         if opts.alang && url.match?(/youtu\.?be/)
-          cmd << "--extractor-args #{Sh.escape("youtube:lang=#{opts.alang}")}"
+          args = "youtube:lang=#{opts.alang};player_client=web_embedded,default"
+          cmd << "--extractor-args #{Sh.escape(args)}"
         end
         
         begin
