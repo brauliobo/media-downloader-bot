@@ -22,6 +22,13 @@ RSpec.describe Utils::InputParser do
     expect(parsed.opts).to eq('ss' => '14:57', 'to' => '20:00')
   end
 
+  it 'extracts language options from youtube urls' do
+    parsed = described_class.parse('https://www.youtube.com/watch?v=4MCYhF_bte8&lang=pt&alang=pt-BR audio alang=es')
+
+    expect(parsed.url.to_s).to eq('https://www.youtube.com/watch?v=4MCYhF_bte8')
+    expect(parsed.opts).to eq('lang' => 'pt', 'alang' => 'es', 'audio' => 1)
+  end
+
   it 'normalizes bare urls before parsing' do
     parsed = described_class.parse('x.com/i/status/2070518837150167314 audio')
 

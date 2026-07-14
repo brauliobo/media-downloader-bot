@@ -58,6 +58,18 @@ RSpec.describe Downloaders::YtDlp do
       expect(captured).to include('--extractor-args generic:impersonate')
     end
 
+    it 'requests the selected youtube audio language' do
+      ctx.url = 'https://www.youtube.com/watch?v=4MCYhF_bte8'
+      ctx.opts.alang = 'pt'
+      captured = nil
+      allow(Sh).to receive(:run) { |cmd, **_| captured = cmd; ['', '', 0] }
+
+      downloader.download
+
+      expect(captured).to include("--extractor-args #{Sh.escape('youtube:lang=pt')}")
+      expect(captured).to include("-f #{Sh.escape('bestvideo+bestaudio[language^=pt]/best[language^=pt]/bestvideo+bestaudio/best')}")
+    end
+
     it 'resolves rumble urls through oembed' do
       ctx.url = 'https://rumble.com/v7c086u-modern-education-is-working-exactly-as-planned-sf736.html?e9s=src_v1'
       captured = nil

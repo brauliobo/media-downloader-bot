@@ -6,6 +6,7 @@ module Utils
     Result = Data.define(:url, :opts)
     URL_TOKEN_REGEXP = %r{\A(?:https?://)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:[/?#][^\s]*)?\z}i
     OPT_TOKEN_REGEXP = /\A[a-z][a-z0-9_.-]*(?:=.*)?\z/
+    URL_OPTION_KEYS = %w[lang alang].freeze
 
     def self.parse(line)
       args = tokens(line)
@@ -18,16 +19,29 @@ module Utils
         url     = Addressable::URI.parse(url_str) rescue nil
       end
 
-      opts = args.each_with_object({}) do |a, h|
+      opts = url_options(url).merge(args.each_with_object({}) do |a, h|
         k, v = a.split('=', 2)
         h[k] = v || 1
-      end
+      end)
 
       Result.new(url: url, opts: opts)
     end
 
     def self.url_like?(token)
       token.to_s.match?(URI::DEFAULT_PARSER.make_regexp) || token.to_s.match?(URL_TOKEN_REGEXP)
+    end
+
+    def self.url_options(url)
+      return {} unless url
+
+      query = url.query_values(Array) || []
+      opts = query.each_with_object({}) do |(key, value), result|
+        result[key] = value || 1 if URL_OPTION_KEYS.include?(key)
+      end
+      return opts if opts.empty?
+
+      url.query_values = query.reject { |key, _| URL_OPTION_KEYS.include?(key) }
+      opts
     end
 
     def self.input_text(ctx)
