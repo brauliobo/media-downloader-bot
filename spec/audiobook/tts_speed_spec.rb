@@ -2,6 +2,7 @@ require 'spec_helper'
 
 RSpec.describe 'Audiobook TTS speed' do
   it 'builds speech options without speed and with default detected voice instruction' do
+    stub_const('TTS::BACKEND', TTS::OmniVoice)
     book = instance_double(Audiobook::Book, metadata: {}, pages: [])
     runner = Audiobook::Runner.new(book, nil, SymMash.new(speed: '1.25'))
 
@@ -24,6 +25,7 @@ RSpec.describe 'Audiobook TTS speed' do
   end
 
   it 'uses language-specific reference text for non-English audiobooks' do
+    stub_const('TTS::BACKEND', TTS::OmniVoice)
     book = instance_double(Audiobook::Book, metadata: { 'language' => 'pt' }, pages: [])
     runner = Audiobook::Runner.new(book, nil, SymMash.new)
 
@@ -53,6 +55,7 @@ RSpec.describe 'Audiobook TTS speed' do
   end
 
   it 'uses language-specific voice reference text for English audiobooks too' do
+    stub_const('TTS::BACKEND', TTS::OmniVoice)
     book = instance_double(Audiobook::Book, metadata: { language: 'en' }, pages: [])
     runner = Audiobook::Runner.new(book, nil, SymMash.new)
 
@@ -132,6 +135,7 @@ RSpec.describe 'Audiobook TTS speed' do
   end
 
   it 'detects author gender from the first pages and omits accent' do
+    stub_const('TTS::BACKEND', TTS::OmniVoice)
     page = Audiobook::Page.new(1, [
       Audiobook::Heading.new('Frankenstein'),
       Audiobook::Paragraph.new([Audiobook::Sentence.new('By Mary Shelley.')])
