@@ -20,13 +20,15 @@ class UploadCoordinator
     else
       worker.send(:upload_one, input)
     end
+  ensure
+    worker.cleanup_input(input)
   end
 
   def flush
     return if album_queue.empty?
     return upload(album_queue.first.second) if album_queue.one?
 
-    upload_album container(album_queue.sort_by(&:first).map(&:second), album_queue.first.second)
+    upload container(album_queue.sort_by(&:first).map(&:second), album_queue.first.second)
   end
 
   private
