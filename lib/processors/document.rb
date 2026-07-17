@@ -2,6 +2,8 @@ require_relative 'file'
 
 module Processors
   class Document < File
+    MAX_BYTES = ENV.fetch('MAX_DOCUMENT_BYTES', 200 * 1024 * 1024).to_i
+
     self.attr = :document
     def self.pdf_document?(doc_or_msg)
       doc = doc_or_msg.respond_to?(:document) ? doc_or_msg.document : doc_or_msg
@@ -36,6 +38,16 @@ module Processors
       self.class.yaml_document?(msg)
     end
 
+    def download
+      info = msg.document
+      size = info.file_size if info&.respond_to?(:file_size)
+      raise ArgumentError, 'document is too large' if size.to_i > MAX_BYTES
+
+      input = super
+      raise ArgumentError, 'document is too large' if input&.fn_in && ::File.size(input.fn_in) > MAX_BYTES
+      input
+    end
+
     def handle_input(i, pos: nil, **_kwargs)
       return super unless pdf_document? || epub_document? || yaml_document?
       raise 'no input provided' unless i
@@ -56,5 +68,4 @@ module Processors
     end
   end
 end
-
 

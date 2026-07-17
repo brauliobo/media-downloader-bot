@@ -2,10 +2,15 @@ require 'epub/parser'
 require 'nokogiri'
 require_relative 'base'
 require_relative '../../text_helpers'
+require_relative '../../utils/archive'
 
 module Audiobook
   module Parsers
     class Epub < Base
+      ARCHIVE_LIMITS = {
+        max_entries: 5_000, max_entry_bytes: 32.megabytes,
+        max_total_bytes: 256.megabytes, max_ratio: 200
+      }.freeze
       FONT_SIZES = {
         'h1' => 24, 'h2' => 22, 'h3' => 20, 'h4' => 18, 'h5' => 16, 'h6' => 14,
         'small' => 10, 'sup' => 10, 'sub' => 10
@@ -13,6 +18,7 @@ module Audiobook
       BLOCK_TAGS = %w[h1 h2 h3 h4 h5 h6 p li blockquote pre dt dd figcaption caption th td].freeze
 
       def self.extract_data(epub_path, stl: nil, opts: nil, **_kwargs)
+        Utils::Archive.validate_zip!(epub_path, **ARCHIVE_LIMITS)
         lines = []
         current_page = 1
         max_page_seen = 1

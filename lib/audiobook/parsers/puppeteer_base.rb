@@ -8,6 +8,7 @@ require_relative 'base'
 module Audiobook
   module Parsers
     class PuppeteerBase < Base
+      MAX_CAPTURE_PAGES = ENV.fetch('MAX_KINDLE_PAGES', 1_000).to_i
       # Extracts data by driving Chromium via puppeteer-ruby.
       # Subclasses can override capture_screenshots if needed.
       def self.extract_data(target_url, stl: nil, opts: nil, **_kwargs)
@@ -19,7 +20,7 @@ module Audiobook
             out_dir: out_dir,
             delay_ms: (opts&.delay_ms || 1000).to_i,
             stl: stl,
-            limit: (opts&.limit || 0).to_i,
+            limit: capture_limit(opts&.limit),
             cookies: (opts&.cookies || [])
           )
           # Compile screenshots into a single PDF and return its path; Book will parse/ocr
@@ -46,6 +47,11 @@ module Audiobook
           browser.close rescue nil
         end
         shots
+      end
+
+      def self.capture_limit(value)
+        requested = value.to_i
+        requested.positive? ? [requested, MAX_CAPTURE_PAGES].min : MAX_CAPTURE_PAGES
       end
 
       # Build a single PDF from the set of screenshot images.
@@ -141,4 +147,3 @@ module Audiobook
     end
   end
 end
-

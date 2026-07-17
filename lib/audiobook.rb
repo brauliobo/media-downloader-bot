@@ -29,12 +29,12 @@ module Audiobook
 
     book.write(yaml_path)
 
-    return SymMash.new(yaml: yaml_path) if opts.onlyyml
-
-    final_audio = Runner.new(book, stl, opts).process_to_audio(out_audio)
     # If Book came from Kindle capture, it may carry the compiled PDF path in metadata
     pdf_path = book.metadata['kindle_pdf'] || book.metadata[:kindle_pdf]
-    SymMash.new(yaml: yaml_path, audio: final_audio, pdf: pdf_path)
+    return SymMash.new(yaml: yaml_path, pdf: pdf_path, book: book) if opts.onlyyml
+
+    final_audio = Runner.new(book, stl, opts).process_to_audio(out_audio)
+    SymMash.new(yaml: yaml_path, audio: final_audio, pdf: pdf_path, book: book)
   end
 
   # Unified helper to generate audiobook and return ready-to-upload entries
@@ -51,7 +51,7 @@ module Audiobook
     )
     return [yaml_upload] if opts.onlyyml
 
-    book = Audiobook::Book.from_input(source, opts: opts, stl: stl)
+    book = result.book
     thumbnail_path = book.thumb(dir: dir, base: base)
 
     uploads = [
@@ -72,6 +72,21 @@ module Audiobook
     end
 
     uploads
+  ensure
+    cleanup_kindle_capture(result&.pdf)
+  end
+
+  def self.cleanup_kindle_capture(pdf_path)
+    return unless pdf_path && File.file?(pdf_path)
+
+    capture_dir = File.realpath(File.dirname(pdf_path))
+    tmp_root    = File.realpath(Dir.tmpdir)
+    return unless File.basename(capture_dir).start_with?('kindle_shots_')
+    return unless capture_dir.start_with?("#{tmp_root}#{File::SEPARATOR}")
+
+    FileUtils.remove_entry_secure(capture_dir)
+  rescue Errno::ENOENT, Errno::EACCES
+    nil
   end
 
   def self.base_from_source(source)

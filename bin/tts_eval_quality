@@ -16,7 +16,7 @@ Default engines:
   - f5tts/fs-tts: generic command engine via $TTS_EVAL_F5TTS_CMD
 
 Command engines receive these placeholders:
-  {text_file} {out_path} {lang} {text}
+  {text_file} {out_path} {lang}
 
 Example:
   TTS_EVAL_FISH_CMD='fish-speech ... --text-file {text_file} --output {out_path}' \
@@ -32,6 +32,7 @@ import json
 import math
 import os
 import re
+import shlex
 import shutil
 import signal
 import subprocess
@@ -464,16 +465,17 @@ sf.write(str(out), audio, model.sr, subtype="PCM_16")
             raise RuntimeError(
                 f"No command configured for {self.name}. Set {self.command_env or shell_env_name(self.name, 'CMD')}."
             )
+        if "{text}" in command:
+            raise RuntimeError("The unsafe {text} placeholder is not supported; use {text_file}.")
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".txt", delete=False) as file:
             file.write(paragraph)
             text_file = Path(file.name)
         try:
             rendered = command.format(
-                text=paragraph.replace("'", "'\\''"),
-                text_file=str(text_file),
-                out_path=str(out_path),
-                lang=lang,
+                text_file=shlex.quote(str(text_file)),
+                out_path=shlex.quote(str(out_path)),
+                lang=shlex.quote(lang),
             )
             run_shell(rendered, timeout=900)
         finally:

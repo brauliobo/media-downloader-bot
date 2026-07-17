@@ -3,6 +3,7 @@ require 'yaml'
 require 'set'
 require 'fileutils'
 require 'uri'
+require 'date'
 require_relative 'parsers/pdf'
 require_relative 'parsers/epub'
 require_relative 'parsers/kindle'
@@ -23,6 +24,7 @@ module Audiobook
   # Represents an intermediate structured manuscript that can be saved as YAML.
   class Book
     LANGUAGE_SAMPLE_PAGES = 5
+    MAX_STRUCTURED_BYTES = ENV.fetch('MAX_STRUCTURED_DOCUMENT_BYTES', 20 * 1024 * 1024).to_i
 
     attr_reader :metadata, :pages
 
@@ -51,7 +53,7 @@ module Audiobook
       return lang if lang
 
       data = case File.extname(input_path).downcase
-      when '.yml', '.yaml' then SymMash.new(YAML.load_file(input_path) || {})
+      when '.yml', '.yaml' then SymMash.new(load_yaml(input_path))
       when '.json'         then parse_json(input_path, opts: opts)
       when '.pdf'          then parse_pdf(input_path, stl: stl, opts: opts)
       when '.epub'         then parse_epub(input_path, stl: stl, opts: opts)
@@ -101,7 +103,7 @@ module Audiobook
     end
 
     def self.parse_json(json_path, opts: nil)
-      SymMash.new(JSON.parse(File.read(json_path)))
+      SymMash.new(JSON.parse(read_structured(json_path)))
     end
 
     def self.parse_pdf(pdf_path, stl: nil, opts: nil)
@@ -123,7 +125,7 @@ module Audiobook
     end
 
     def self.from_yaml(yaml_path, opts: nil, stl: nil)
-      data = SymMash.new(YAML.load_file(yaml_path) || {})
+      data = SymMash.new(load_yaml(yaml_path))
       # Support both new format (no metadata) and legacy format (with metadata)
       metadata = data.metadata || SymMash.new
       
@@ -149,6 +151,15 @@ module Audiobook
       obj.instance_variable_set(:@lang, metadata.language || 'en')
       obj.instance_variable_set(:@pages, pages)
       obj
+    end
+
+    def self.load_yaml(path)
+      YAML.safe_load(read_structured(path), permitted_classes: [Date, Time], aliases: false) || {}
+    end
+
+    def self.read_structured(path)
+      raise ArgumentError, 'structured document is too large' if File.size(path) > MAX_STRUCTURED_BYTES
+      File.binread(path)
     end
 
     def self.parse_item(item)
