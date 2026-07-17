@@ -25,14 +25,6 @@ module Presets
         vf: 'mpdecimate=hi=2048:lo=1024:frac=0.50',
         abrate: 16,
       },
-      120 => {
-        vf: 'mpdecimate=hi=3072:lo=1536:frac=0.60',
-        abrate: 12,
-      },
-      180 => {
-        vf: 'mpdecimate=hi=4096:lo=2048:frac=0.70',
-        abrate: 12,
-      },
       Float::INFINITY => {
         keyframes: 1,
         mpdecimate: 'hi=6144:lo=3072:frac=0.80',
