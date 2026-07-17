@@ -1,7 +1,7 @@
 require 'spec_helper'
 
 RSpec.describe 'Audiobook TTS speed' do
-  [TTS::OmniVoice].each do |backend|
+  [TTS::OmniVoice, TTS::MossTTS].each do |backend|
     it "builds and reuses stable speech options for #{backend.name}" do
       stub_const('TTS::BACKEND', backend)
       book = instance_double(Audiobook::Book, metadata: {}, pages: [])
@@ -32,15 +32,23 @@ RSpec.describe 'Audiobook TTS speed' do
     end
   end
 
-  it 'does not create a synthetic voice reference for MOSS-TTS' do
+  it 'uses book text instead of synthetic narration for the MOSS-TTS reference' do
     stub_const('TTS::BACKEND', TTS::MossTTS)
-    book = instance_double(Audiobook::Book, metadata: { 'language' => 'pt' }, pages: [])
+    source_text = 'Esta frase mais longa preserva uma voz consistente durante toda a leitura do livro.'
+    page = Audiobook::Page.new(1, [Audiobook::Heading.new(source_text)])
+    book = instance_double(Audiobook::Book, metadata: { 'language' => 'pt' }, pages: [page])
     runner = Audiobook::Runner.new(book, nil, SymMash.new)
 
-    expect(TTS).not_to receive(:synthesize)
+    allow(Language).to receive(:author_gender).and_return('female')
+    expect(Language).not_to receive(:voice_reference_text)
+    expect(TTS).to receive(:synthesize).with(hash_including(text: source_text)) do |out_path:, **_kwargs|
+      File.write(out_path, 'wav')
+    end
 
     Dir.mktmpdir do |dir|
-      expect(runner.send(:tts_options, dir)).not_to have_key(:speaker_wav)
+      options = runner.send(:tts_options, dir)
+      expect(options[:ref_text]).to eq(source_text)
+      expect(options[:speaker_wav]).to end_with('audiobook_voice_reference.wav')
     end
   end
 
