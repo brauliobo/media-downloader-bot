@@ -21,6 +21,7 @@ Environment=HF_HOME=/srv/moss-tts/cache/huggingface
 Environment=TORCH_HOME=/srv/moss-tts/cache/torch
 Environment=XDG_CACHE_HOME=/srv/moss-tts/cache
 Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=LD_LIBRARY_PATH=/srv/moss-tts/.venv/lib/python3.12/site-packages/nvidia/npp/lib
 
 NoNewPrivileges=true
 PrivateTmp=true
