@@ -45,16 +45,14 @@ RSpec.describe 'Image handling in PDFs with text' do
     expect(paragraphs.size).to eq(0)
   end
 
-  it 'creates both Image and Paragraph objects for pages with both text and images' do
-    # Page 2 and 3 should have both text (from copyright/quote) and images (Le Livros logo)
+  it 'does not add decorative images when a page has extractable text' do
     [1, 2].each do |page_idx|
       page = book.pages[page_idx]
       images = page.items.grep(Audiobook::Image)
       paragraphs = page.items.select { |i| i.is_a?(Audiobook::Paragraph) && !i.is_a?(Audiobook::Image) }
 
-      expect(images.size).to be >= 1, "Page #{page_idx + 1} should have at least one image"
+      expect(images).to be_empty
       expect(paragraphs.size).to be >= 1, "Page #{page_idx + 1} should have at least one paragraph"
-      expect(images.first).to be_a(Audiobook::Image)
     end
   end
 
@@ -84,4 +82,3 @@ RSpec.describe 'Image handling in PDFs with text' do
     expect(images.first.sentences).not_to be_empty
   end
 end
-
