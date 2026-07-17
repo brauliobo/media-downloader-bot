@@ -6,12 +6,14 @@ require_relative '../../utils/sh'
 module Audiobook
   module Parsers
     class Pdf < Base
+      MAX_PAGES = ENV.fetch('MAX_PDF_PAGES', 2_000).to_i
 
       def self.extract_data(pdf_path, stl: nil, opts: nil, **_kwargs)
         all_lines = []
         image_pages = []
 
         reader = PDF::Reader.new(pdf_path)
+        raise ArgumentError, "PDF has too many pages (maximum #{MAX_PAGES})" if reader.page_count > MAX_PAGES
         reader.pages.each_with_index do |page, idx|
           stl&.update "Analyzing document: page #{idx + 1}/#{reader.page_count}" if stl
           res = process_page(page, pdf_path)
@@ -122,8 +124,8 @@ module Audiobook
         end
 
         if page_lines.empty?
-          cmd = "pdftotext -enc UTF-8 -layout -f #{page_num} -l #{page_num} #{Sh.escape(pdf_path)} - 2>/dev/null"
-          `#{cmd}`.to_s.split(/\r?\n+/).each { |l| add_line.call(l) }
+          output, = Sh.run ['pdftotext', '-enc', 'UTF-8', '-layout', '-f', page_num.to_s, '-l', page_num.to_s, pdf_path, '-']
+          output.to_s.split(/\r?\n+/).each { |l| add_line.call(l) }
         end
 
         # Calculate spacing between lines and add x_position

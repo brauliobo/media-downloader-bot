@@ -1,6 +1,14 @@
 require 'spec_helper'
 
 RSpec.describe Sh do
+  describe '.run' do
+    it 'terminates commands that exceed their deadline' do
+      expect {
+        described_class.run([Gem.ruby, '-e', 'spawn(RbConfig.ruby, "-e", "sleep 10")'], timeout: 0.05)
+      }.to raise_error(Sh::Error, /timed out/)
+    end
+  end
+
   describe '.assert_success!' do
     it 'raises a structured error with stderr' do
       status = instance_double(Process::Status, success?: false, exitstatus: 127)
