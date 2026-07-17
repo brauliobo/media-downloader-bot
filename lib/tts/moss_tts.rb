@@ -8,7 +8,7 @@ class TTS
       base_url:               "http://127.0.0.1:#{ENV['MOSS_TTS_PORT']&.to_i || 10260}",
       segment_chars:          ENV['MOSS_TTS_SEGMENT_CHARS']&.to_i || 500,
       concurrency:            ENV['MOSS_TTS_CONCURRENCY']&.to_i || 1,
-      stable_voice_reference: true
+      stable_voice_reference: false
     )
 
     def self.supports_temperature?

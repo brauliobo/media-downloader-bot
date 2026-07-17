@@ -150,21 +150,9 @@ module Audiobook
           line.x ||= 0
         end
 
-        # Detect if page has images using pdfimages tool (more reliable)
-        has_images = begin
-          # Check if pdfimages can list images for this page
-          cmd = "pdfimages -f #{page_num} -l #{page_num} -list #{Sh.escape(pdf_path)} 2>/dev/null"
-          output = `#{cmd}`
-          # pdfimages outputs header lines, then image lines starting with spaces+digits+"image"
-          # Skip header lines (starting with "page" or dashes) and check for image lines
-          output.lines.any? { |line| line.match?(/^\s+\d+\s+\d+\s+image/i) }
-        rescue StandardError
-          false
-        end
-
         result = SymMash.new
         result.lines = page_lines if page_lines.any?
-        if has_images || page_lines.empty?
+        if page_lines.empty?
           result.image = SymMash.new(image: true, page: page_num, path: "#{pdf_path}#page=#{page_num}")
         end
 

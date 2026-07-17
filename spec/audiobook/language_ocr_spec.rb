@@ -78,4 +78,13 @@ RSpec.describe 'Audiobook OCR language detection' do
     expect(uploads.first.fn_out).to eq('book.yml')
     expect(uploads.first.mime).to eq('application/x-yaml')
   end
+
+  it 'loads the top-level language written by the audiobook YAML format' do
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, 'book.yml')
+      File.write(path, YAML.dump('language' => 'pt', 'pages' => []))
+
+      expect(Audiobook::Book.from_yaml(path).metadata.language).to eq('pt')
+    end
+  end
 end

@@ -1,8 +1,8 @@
 require 'spec_helper'
 
 RSpec.describe TTS::MossTTS do
-  it 'enables shared stable voice references without changing unrelated backends' do
-    expect(described_class.supports_stable_voice_reference?).to eq(true)
+  it 'avoids reference-audio leakage without changing unrelated backends' do
+    expect(described_class.supports_stable_voice_reference?).to eq(false)
     expect(TTS::OmniVoice.supports_stable_voice_reference?).to eq(true)
     expect(TTS::Chatterbox.supports_stable_voice_reference?).to eq(false)
   end
@@ -43,7 +43,7 @@ RSpec.describe TTS::MossTTS do
     expect(described_class.output_sample_rate).to eq(48_000)
   end
 
-  it 'uses the recommended sampling temperature by default' do
+  it 'uses the recommended sampling temperature for deterministic requests' do
     expect(described_class).to receive(:http_synthesize).with(
       text:        'Uma frase.',
       lang:        'pt',
@@ -53,5 +53,17 @@ RSpec.describe TTS::MossTTS do
     )
 
     described_class.synthesize(text: 'Uma frase.', lang: 'pt', out_path: '/tmp/moss.wav', temperature: 0)
+  end
+
+  it 'uses the recommended sampling temperature when none is supplied' do
+    expect(described_class).to receive(:http_synthesize).with(
+      text:        'Uma frase.',
+      lang:        'pt',
+      out_path:    '/tmp/moss.wav',
+      speaker_wav: nil,
+      temperature: 1.7
+    )
+
+    described_class.synthesize(text: 'Uma frase.', lang: 'pt', out_path: '/tmp/moss.wav')
   end
 end

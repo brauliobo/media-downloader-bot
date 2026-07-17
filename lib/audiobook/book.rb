@@ -128,6 +128,7 @@ module Audiobook
       data = SymMash.new(load_yaml(yaml_path))
       # Support both new format (no metadata) and legacy format (with metadata)
       metadata = data.metadata || SymMash.new
+      metadata.language ||= data.language
       
       # Parse pages or legacy items
       pages = if data.pages
