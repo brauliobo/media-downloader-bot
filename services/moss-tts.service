@@ -1,0 +1,55 @@
+[Unit]
+Description=MOSS-TTS standard HTTP server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=mdb
+Group=mdb
+Nice=19
+UMask=0077
+
+WorkingDirectory=/srv/moss-tts
+ReadWritePaths=/srv/moss-tts/cache
+
+Environment=HOST=127.0.0.1
+Environment=PORT=10260
+Environment=CUDA_VISIBLE_DEVICES=0
+Environment=MOSS_TTS_DEVICE=cuda:0
+Environment=MOSS_TTS_MODEL=OpenMOSS-Team/MOSS-TTS-Local-Transformer-v1.5
+Environment=HF_HOME=/srv/moss-tts/cache/huggingface
+Environment=TORCH_HOME=/srv/moss-tts/cache/torch
+Environment=XDG_CACHE_HOME=/srv/moss-tts/cache
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RemoveIPC=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+DevicePolicy=closed
+DeviceAllow=/dev/nvidia0 rw
+DeviceAllow=/dev/nvidiactl rw
+DeviceAllow=/dev/nvidia-uvm rw
+DeviceAllow=/dev/nvidia-uvm-tools rw
+
+ExecStart=/srv/moss-tts/.venv/bin/python /srv/moss-tts/http_server.py
+
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

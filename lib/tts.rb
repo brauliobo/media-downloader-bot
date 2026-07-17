@@ -5,9 +5,10 @@ require_relative 'tts/f5_tts'
 require_relative 'tts/fish_speech'
 require_relative 'tts/outetts'
 require_relative 'tts/omni_voice'
+require_relative 'tts/moss_tts'
 
 class TTS
-  BACKEND = const_get(ENV['TTS'] || 'Chatterbox')
+  BACKEND = const_get(ENV['TTS'] || 'MossTTS')
   INTERNAL_OPTIONS = %i[tts_batch_size].freeze
   DEFAULT_SAMPLE_RATE = 22_050
 
