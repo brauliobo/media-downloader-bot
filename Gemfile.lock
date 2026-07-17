@@ -10,7 +10,7 @@ GIT
 
 GIT
   remote: https://github.com/brauliobo/tdlib-ruby.git
-  revision: 38418c26ef2addf470af04c424ad71663043dbfb
+  revision: 084e14abe0e71397faba592e7eb6bf877a563c7b
   specs:
     tdlib-ruby (3.2.0)
       concurrent-ruby (~> 1.1)
@@ -20,7 +20,7 @@ GIT
 
 GIT
   remote: https://github.com/brauliobo/tdlib-schema.git
-  revision: e0c1457b6e17a816a4e25a92f39bc55faeb3f2aa
+  revision: 2df66b87094671bddc2d710cbd3252109ca8b190
   specs:
     tdlib-schema (1.7.0.4)
       dry-struct (~> 1.0)

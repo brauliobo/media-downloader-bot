@@ -18,7 +18,7 @@ module Utils
         FileUtils.cp url, im_in
       elsif Safety.public_http_url?(url)
         body = HTTP.get_public(url)
-        raise ArgumentError, 'thumbnail must be JPEG or PNG' unless image?(body)
+        raise ArgumentError, 'unsupported thumbnail format' unless image?(body)
         ::File.binwrite im_in, body
       else
         return nil
@@ -52,7 +52,8 @@ module Utils
     end
 
     def self.image?(body)
-      body.start_with?("\xFF\xD8\xFF".b) || body.start_with?("\x89PNG\r\n\x1A\n".b)
+      body.start_with?("\xFF\xD8\xFF".b, "\x89PNG\r\n\x1A\n".b, 'GIF87a', 'GIF89a') ||
+        body.start_with?('RIFF') && body.byteslice(8, 4) == 'WEBP'
     end
   end
 end

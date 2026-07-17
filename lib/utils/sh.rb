@@ -1,6 +1,5 @@
 require 'open3'
 require 'shellwords'
-require 'timeout'
 
 class Sh
 
@@ -25,39 +24,7 @@ class Sh
 
   def self.run cmd, *args, **params
     STDERR.puts(printable(cmd)) if ENV['PRINT_CMD']
-    timeout = params.delete(:timeout) || ENV.fetch('COMMAND_TIMEOUT', 7_200).to_f
-    unless timeout.positive?
-      return cmd.is_a?(Array) ? Open3.capture3(*cmd, *args, **params) : Open3.capture3(cmd, *args, **params)
-    end
-
-    command = cmd.is_a?(Array) ? [*cmd, *args] : [cmd, *args]
-    stdin_data = params.delete(:stdin_data)
-    Open3.popen3(*command, **params.merge(pgroup: true)) do |stdin, stdout, stderr, wait|
-      stdin.write(stdin_data) if stdin_data
-      stdin.close
-      out_reader = Thread.new { stdout.read }
-      err_reader = Thread.new { stderr.read }
-
-      begin
-        result = Timeout.timeout(timeout) do
-          status = wait.value
-          [out_reader.value, err_reader.value, status]
-        end
-      rescue Timeout::Error
-        terminate_group(wait.pid)
-        raise Error.new('command timed out', printable(cmd))
-      end
-
-      result
-    end
-  end
-
-  def self.terminate_group(pid)
-    Process.kill('KILL', -pid)
-  rescue Errno::ESRCH
-    nil
-  ensure
-    Process.wait(pid) rescue nil
+    cmd.is_a?(Array) ? Open3.capture3(*cmd, *args, **params) : Open3.capture3(cmd, *args, **params)
   end
 
   def self.error_message(stderr, status: nil, fallback: 'command failed')

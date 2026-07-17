@@ -69,7 +69,7 @@ EOS
   attr_reader :queue
 
   def initialize
-    @queue = SizedQueue.new([ENV.fetch('BOT_MANAGER_QUEUE_SIZE', 100).to_i, 1].max)
+    @queue = Queue.new
   end
 
   def self.http
@@ -108,7 +108,7 @@ EOS
     return if msg.text.blank? && msg.video.blank? && msg.audio.blank? && msg.document.blank?
     return send_help msg if msg.text&.starts_with? '/start'
     return send_help msg if msg.text&.starts_with? '/help'
-    raise 'user blocked' if msg.from.id.in? BLOCKED_USERS
+    return if msg.from.id.in? BLOCKED_USERS
 
     cmd_text = Utils::InputParser.message_text(msg).presence
     return Commands::Cookie.new(bot, msg).process if cmd_text&.starts_with?('/cookies') || (msg.document&.file_name&.downcase == 'cookies.txt')
@@ -126,10 +126,8 @@ EOS
       worker = Worker.new msg
       worker.process
     else
-      @queue.push(msg, true)
+      @queue.enq msg
     end
-  rescue ThreadError
-    bot.send_message(msg, Bot::MsgHelpers.me(Bot::UserQueue::BUSY_MSG))
   end
 
   def dequeue(timeout: nil)

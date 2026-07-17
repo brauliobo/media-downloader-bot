@@ -21,6 +21,15 @@ else
 
     after { FileUtils.remove_entry(dir) if Dir.exist?(dir) }
 
+    it 'accepts TDLib 1.8.65 link preview photos without an author' do
+      wrapped = TD::Types.wrap(
+        '@type' => 'linkPreviewTypePhoto',
+        'photo' => {'@type' => 'photo', 'has_stickers' => false, 'minithumbnail' => nil, 'sizes' => []},
+      )
+
+      expect(wrapped.author).to eq('')
+    end
+
     it 'delegates album sending to tdlib-ruby message sender' do
       path = File.join(dir, 'photo.jpg')
       File.write(path, '')
