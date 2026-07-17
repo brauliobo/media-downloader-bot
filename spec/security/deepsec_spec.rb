@@ -78,6 +78,11 @@ RSpec.describe 'DeepSec regressions' do
     expect(Utils::Thumb.process(info, base_filename: File.join(Dir.tmpdir, 'thumb-test'))).to end_with('-othumb.jpg')
   end
 
+  it 'accepts common thumbnail formats' do
+    expect(Utils::Thumb.image?("GIF89a".b)).to be(true)
+    expect(Utils::Thumb.image?("RIFF\0\0\0\0WEBP".b)).to be(true)
+  end
+
   it 'keeps generated video thumbnails within Telegram dimensions' do
     Dir.mktmpdir('thumb-size-') do |dir|
       src = File.join(dir, 'source.jpg')

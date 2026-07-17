@@ -1,9 +1,6 @@
 module Bot
   class UserQueue
     QUEUED_MSG = 'Queued'.freeze
-    BUSY_MSG   = 'The service is busy. Please try again later.'.freeze
-    ACTIVE_LIMIT  = [ENV.fetch('BOT_MAX_ACTIVE_JOBS', 8).to_i, 1].max
-    PENDING_LIMIT = [ENV.fetch('BOT_MAX_PENDING_JOBS', 50).to_i, ACTIVE_LIMIT].max
 
     class_attribute :limit
     self.limit = 1
@@ -14,40 +11,24 @@ module Bot
 
     def initialize
       @running = Hash.new(0)
-      @active  = 0
-      @pending = 0
       @mutex   = Mutex.new
       @cond    = ConditionVariable.new
     end
 
-    def reserve_dispatch
-      @mutex.synchronize do
-        return false if @pending >= PENDING_LIMIT
-        @pending += 1
-        true
-      end
-    end
-
-    def release_dispatch
-      @mutex.synchronize { @pending -= 1 if @pending.positive? }
-    end
-
     def queued?(user_id)
-      @mutex.synchronize { @running[user_id] >= limit || @active >= ACTIVE_LIMIT }
+      @mutex.synchronize { @running[user_id] >= limit }
     end
 
     def acquire(user_id)
       @mutex.synchronize do
-        @cond.wait(@mutex) while @running[user_id] >= limit || @active >= ACTIVE_LIMIT
+        @cond.wait(@mutex) while @running[user_id] >= limit
         @running[user_id] += 1
-        @active += 1
       end
     end
 
     def release(user_id)
       @mutex.synchronize do
         @running[user_id] -= 1
-        @active -= 1 if @active.positive?
         @running.delete(user_id) if @running[user_id] <= 0
         @cond.broadcast
       end
