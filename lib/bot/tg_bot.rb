@@ -31,9 +31,14 @@ module Bot
           bot.tg = tg_bot.api
           tg_bot.listen do |msg|
             next unless msg.is_a? Telegram::Bot::Types::Message
+            dispatch = Bot::UserQueue.instance
+            unless dispatch.reserve_dispatch
+              bot.send_message(SymMash.new(msg.to_h), Bot::MsgHelpers.me(Bot::UserQueue::BUSY_MSG)) rescue nil
+              next
+            end
             Thread.new do
               sym_msg = SymMash.new msg.to_h
-              Bot::UserQueue.instance.with_user_slot(bot, sym_msg) do
+              dispatch.with_user_slot(bot, sym_msg) do
                 pid = Kernel.fork do
                   DB.disconnect if defined? DB
                   Process.setproctitle 'media-downloader-tgbot worker'
@@ -43,6 +48,8 @@ module Bot
               end
             rescue => e
               STDERR.puts "tg dispatch error: #{e.full_message}"
+            ensure
+              dispatch.release_dispatch
             end
           end
         end
@@ -172,7 +179,7 @@ module Bot
       base_url = "https://api.telegram.org/file/bot#{ENV['TG_BOT_TOKEN']}/"
       agent    = Mechanize.new
       agent.redirect_ok = false if agent.respond_to?(:redirect_ok=)
-      File.binwrite local, agent.get(base_url + tg_path).body
+      Utils::Safety.write_exclusive(local, agent.get(base_url + tg_path).body)
       local
     end
   end

@@ -66,26 +66,22 @@ module Bot
     def report_error(msg, e, context: nil)
       return unless msg
 
-      if e.is_a?(StandardError)
-        error = ''
-        error << "\n\n<b>context</b>: #{he(context.to_s.first(100))}" if context
-        error << "\n\n<b>error</b>: <pre>#{he(e.class.to_s)}: #{he(e.message)}\n"
-        error << "#{he(clean_bc(e.backtrace).join("\n"))}</pre>"
-      else
-        error = e.to_s
-      end
+      parts = context ? ["context: #{context.to_s.first(100)}"] : []
+      parts += e.is_a?(StandardError) ? ["#{e.class}: #{e.message}", clean_bc(e.backtrace).join("\n")] : [e.to_s]
+      detail = redact_sensitive(parts.compact.join("\n\n"))
+      STDERR.puts "error: #{detail}"
+      return send_message(msg, "<pre>#{he(detail)}</pre>", parse_mode: 'HTML', delete_both: error_delete_time) if from_admin?(msg)
 
-      STDERR.puts "error: #{error}"
-      send_message(msg, error, parse_mode: 'HTML', delete_both: error_delete_time)
-      admin_report(msg, error) unless from_admin?(msg)
-    rescue => send_err
-      send_message(msg, he(error), parse_mode: 'HTML', delete_both: error_delete_time) rescue nil
+      send_message(msg, me('Processing failed. The error was reported.'), delete_both: error_delete_time)
+      admin_report(msg, detail)
+    rescue
+      send_message(msg, me('Processing failed.'), delete_both: error_delete_time) rescue nil
     end
 
     def admin_report(msg, _error, status: 'error')
       return unless ADMIN_CHAT_ID
       msg_ct = msg.respond_to?(:text) ? msg.text : msg.data
-      error = "<b>msg</b>: #{he(msg_ct.to_s)}"
+      error = "<b>msg</b>: #{he(redact_sensitive(msg_ct.to_s))}"
       error << "\n\n<b>#{status}</b>: <pre>#{he(_error)}</pre>\n"
       send_message(admin_msg, error, parse_mode: 'HTML')
     end
@@ -96,9 +92,16 @@ module Bot
 
     def clean_bc(bc)
       @bcl ||= ActiveSupport::BacktraceCleaner.new.tap { |c| c.add_filter { |line| line.gsub("#{Dir.pwd}/", '') } }
-      @bcl.clean(bc)
+      @bcl.clean(Array(bc))
+    end
+
+    def redact_sensitive(value)
+      value.to_s
+           .gsub(%r{/cookies\b[^\r\n]*}i, '/cookies [REDACTED]')
+           .gsub(/bot\d+:[A-Za-z0-9_-]+/, 'bot[REDACTED]')
+           .gsub(/\b(authorization|cookie|set-cookie)\s*[:=]\s*[^\r\n]+/i, '\1: [REDACTED]')
+           .gsub(%r{(https?://[^\s?]+)\?[^\s]+}, '\1?[REDACTED]')
     end
 
   end
 end
-

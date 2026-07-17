@@ -72,7 +72,7 @@ RSpec.describe 'DeepSec regressions' do
   it 'uses remote thumbnail entries when the primary thumbnail is absent' do
     info = SymMash.new(thumbnails: [{url: 'https://img.example/small.jpg'}, {url: 'https://img.example/large.jpg'}])
     allow(Utils::Safety).to receive(:public_http_url?).with('https://img.example/large.jpg').and_return(true)
-    allow(Utils::HTTP).to receive(:get).with('https://img.example/large.jpg').and_return(double(body: 'jpeg'))
+    allow(Utils::HTTP).to receive(:get_public).with('https://img.example/large.jpg').and_return("\xFF\xD8\xFFjpeg".b)
     allow(Sh).to receive(:run)
 
     expect(Utils::Thumb.process(info, base_filename: File.join(Dir.tmpdir, 'thumb-test'))).to end_with('-othumb.jpg')
@@ -154,5 +154,62 @@ RSpec.describe 'DeepSec regressions' do
 
   it 'falls back for unsafe tesseract language codes' do
     expect(Ocr::Tesseract.map_to_tesseract_lang(';ls')).to eq('eng')
+  end
+
+  it 'rejects private and IPv4-mapped loopback URLs' do
+    expect(Utils::Safety.public_http_url?('http://127.0.0.1/')).to be(false)
+    expect(Utils::Safety.public_ip?('::ffff:127.0.0.1')).to be(false)
+  end
+
+  it 'requires worker HTTP authentication' do
+    old_token = ENV.delete('BOT_HTTP_TOKEN')
+    request = double(get_header: '')
+    expect(Bot::Worker::HTTPService.allocate.authorized?(request)).to be(false)
+  ensure
+    ENV['BOT_HTTP_TOKEN'] = old_token
+  end
+
+  it 'rejects worker upload symlinks that escape allowed roots' do
+    Dir.mktmpdir('http-root-') do |dir|
+      link = File.join(dir, 'upload')
+      File.symlink(__FILE__, link)
+      service = Bot::Worker::HTTPService.allocate
+      allow(service).to receive(:allowed_roots).and_return([dir])
+
+      expect { service.require_allowed_path!(link) }.to raise_error(ArgumentError)
+    end
+  end
+
+  it 'preserves Netscape cookie scope and security attributes' do
+    input = "#HttpOnly_.example.com\tTRUE\t/account\tTRUE\t123\tsid\tsecret\n"
+    stored = Utils::CookieJar.parse_netscape(input)
+
+    Dir.mktmpdir('cookies-') do |dir|
+      session = double(cookies: stored, reload: nil)
+      allow(session).to receive(:reload).and_return(session)
+      line = File.readlines(Utils::CookieJar.write(session, dir)).last
+      expect(line).to eq("#HttpOnly_.example.com\tTRUE\t/account\tTRUE\t123\tsid\tsecret\n")
+    end
+  end
+
+  it 'imports cookie documents from a private temporary directory' do
+    document = SymMash.new(file_id: 'cookie', file_name: 'Gemfile', file_size: 10)
+    msg = SymMash.new(document: document, text: '')
+    bot = double
+    command = Manager::Commands::Cookie.new(bot, msg)
+    allow(bot).to receive(:download_file) do |_, dir:|
+      expect(dir).not_to eq(Dir.pwd)
+      File.binwrite(File.join(dir, 'Gemfile'), 'cookie data')
+      File.join(dir, 'Gemfile')
+    end
+
+    expect(command.send(:extract_cookie_content)).to eq('cookie data')
+  end
+
+  it 'rejects private Telegram links from non-admin users' do
+    msg = SymMash.new(from: {id: 123}, bot: double)
+    ctx = Context.new(url: 'https://t.me/c/123/456', opts: SymMash.new, msg: msg)
+
+    expect { Downloaders::Telegram.new(ctx).download }.to raise_error(/restricted/)
   end
 end

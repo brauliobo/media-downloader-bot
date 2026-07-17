@@ -3,6 +3,9 @@
 .env.user
 .tdlib/db
 .tdlib/files
+/logs/
+/tmp/*
+!/tmp/.gitkeep
 
 # bundle deployment
 vendor

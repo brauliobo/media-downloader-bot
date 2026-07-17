@@ -121,7 +121,7 @@ class Zipper
       return [nil, nil] unless lang
 
       entry = subtitles[lang].find { |sub| sub.ext == 'vtt' } || subtitles[lang].first
-      body  = Utils::HTTP.get(entry.url).body
+      body  = Utils::HTTP.get_public(entry.url)
       vtt   = Subtitler::VTT.to_vtt(body, entry.ext)
       zipper.stl&.update "subs:scraped:#{lang}"
       [vtt, lang]

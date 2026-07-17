@@ -16,7 +16,7 @@ module Bot
           @drb = DRbObject.new_with_uri(uri)
           @mode = :drb
         elsif uri.start_with?('http://') || uri.start_with?('https://')
-          @http_client = Faraday.new(url: uri) do |f|
+          @http_client = Faraday.new(url: uri, headers: {'Authorization' => "Bearer #{ENV.fetch('BOT_HTTP_TOKEN')}"}) do |f|
             f.request :json
             f.response :json
           end
@@ -75,9 +75,8 @@ module Bot
           payload = kwargs.dup
           payload[:msg] = payload[:msg].to_h if payload[:msg] && payload[:msg].respond_to?(:to_h)
           payload[:file_id_or_info] = payload[:file_id_or_info].is_a?(Hash) ? payload[:file_id_or_info] : payload[:file_id_or_info].to_s if payload[:file_id_or_info]
-          response = @http_client.post("/#{method}", payload) do |req|
-            req.headers['Authorization'] = "Bearer #{ENV['BOT_HTTP_TOKEN']}" if ENV['BOT_HTTP_TOKEN'].present?
-          end
+          response = @http_client.post("/#{method}", payload)
+          raise "bot HTTP service returned #{response.status}" unless response.success?
           block_given? ? yield(response.body) : response.body
         end
       end

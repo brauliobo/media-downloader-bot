@@ -1,4 +1,5 @@
 require 'roda'
+require 'puma'
 require 'json'
 require 'rack/utils'
 require 'tmpdir'
@@ -22,18 +23,13 @@ module Bot
       
       def self.start(service, port, host: default_host)
         host      = bind_host(host)
+        raise ArgumentError, 'BOT_HTTP_TOKEN is required' if ENV['BOT_HTTP_TOKEN'].to_s.empty?
+        raise ArgumentError, 'bot HTTP service must bind to loopback' unless loopback_host?(host)
         app_class = create(service)
+        server = Puma::Server.new(app_class.freeze.app, nil, http_content_length_limit: 1024 * 1024)
+        server.add_tcp_listener(host, port)
 
         Thread.new do
-          require 'puma'
-          server = Puma::Server.new(app_class.freeze.app)
-          begin
-            server.add_tcp_listener(host, port)
-          rescue Errno::EADDRINUSE
-            puts "Port #{port} in use, trying #{port + 1}..."
-            port += 1
-            retry
-          end
           puts "Bot HTTP service started on #{host}:#{port}"
           server.run
         end
@@ -49,6 +45,12 @@ module Bot
         host.casecmp('localhost').zero? ? '127.0.0.1' : host
       end
 
+      def self.loopback_host?(host)
+        IPAddr.new(host).loopback?
+      rescue IPAddr::InvalidAddressError
+        false
+      end
+
       def request_params(r)
         normalize_params(r.params)
       end
@@ -60,8 +62,8 @@ module Bot
       end
 
       def authorized?(r)
-        token = ENV['BOT_HTTP_TOKEN']
-        return true if token.to_s.empty?
+        token = ENV['BOT_HTTP_TOKEN'].to_s
+        return false if token.empty?
 
         Rack::Utils.secure_compare(auth_token(r), token)
       rescue
@@ -83,8 +85,17 @@ module Bot
       def require_allowed_path!(path)
         return unless path
 
-        expanded = File.expand_path(path)
-        raise ArgumentError, "path outside allowed roots: #{path}" unless Utils::Safety.inside_any?(expanded, allowed_roots)
+        allowed = allowed_roots.any? { |root| Utils::Safety.real_file_inside?(path, root) }
+        raise ArgumentError, "path outside allowed roots: #{path}" unless allowed && !File.symlink?(path)
+      end
+
+      def require_allowed_directory!(path)
+        real_path = File.realpath(path)
+        allowed   = allowed_roots.filter_map { |root| File.realpath(root) rescue nil }
+        raise ArgumentError, "directory outside allowed roots: #{path}" unless File.directory?(real_path) && Utils::Safety.inside_any?(real_path, allowed)
+        raise ArgumentError, "symlinked directory is not allowed: #{path}" if File.symlink?(path)
+      rescue Errno::ENOENT, Errno::EACCES
+        raise ArgumentError, "invalid destination directory: #{path}"
       end
 
       def require_allowed_paths!(params, keys)
@@ -98,6 +109,8 @@ module Bot
       end
 
       route do |r|
+        content_length = r.env['CONTENT_LENGTH'].to_i
+        r.halt [413, {'Content-Type' => 'application/json'}, [{error: 'request too large'}.to_json]] if content_length > 1024 * 1024
         r.halt [401, {'Content-Type' => 'application/json'}, [{error: 'unauthorized'}.to_json]] unless authorized?(r)
 
         r.get 'queue/dequeue' do
@@ -148,7 +161,7 @@ module Bot
         r.post 'download_file' do
           params = request_params(r)
           file_id_or_info = params.delete(:file_id_or_info)
-          require_allowed_path!(params[:dir]) if params[:dir]
+          require_allowed_directory!(params[:dir]) if params[:dir]
           result = service.bot.download_file(file_id_or_info, **params)
           {path: result}
         end

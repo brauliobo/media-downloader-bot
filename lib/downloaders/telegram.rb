@@ -9,9 +9,10 @@ module Downloaders
     # Downloads a file from a public t.me link using TDLib.
     # Returns a single input object (SymMash) compatible with the rest of the pipeline.
     def download
-      rx = %r{https?://t\.me/(?:(?<slug>[A-Za-z0-9_]+)/(?<msg>\d+)|c/(?<cid>-?\d+)/(?<msg2>\d+))}
+      rx = %r{\Ahttps?://t\.me/(?:c/(?<cid>\d+)/(?<msg2>\d+)|(?<slug>[A-Za-z0-9_]+)/(?<msg>\d+))(?:[?#].*)?\z}
       m  = url.to_s.match(rx)
       raise 'Invalid t.me link' unless m
+      raise 'Private Telegram links are restricted to the administrator' if m[:cid] && !admin?
 
       td = msg.bot.td
 
@@ -46,6 +47,12 @@ module Downloaders
           title: file_name || File.basename(local_path, File.extname(local_path)),
         },
       )
+    end
+
+    private
+
+    def admin?
+      msg && Bot::MsgHelpers.from_admin?(msg)
     end
   end
 end

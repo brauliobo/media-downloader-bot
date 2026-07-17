@@ -18,6 +18,7 @@ module Downloaders
       source_url = url.to_s
       return st.error('No URL found') if source_url.blank?
       source_url = normalize_url(source_url)
+      validate_public_url!(source_url)
 
       cmd = "#{base_cmd} --write-info-json --no-clean-infojson --skip-download -o #{Sh.escape("info-%(playlist_index)s.%(ext)s")} #{Sh.escape(source_url)}"
       cmd << " --match-filter #{Sh.escape('live_status != is_upcoming')}" if source_url.match?(/youtu\.?be/)
@@ -33,6 +34,7 @@ module Downloaders
       url = i.info&.webpage_url.presence || i.url
       url = "https://#{url}" unless url =~ /\Ahttps?:\/\//i
       url = normalize_url(url)
+      validate_public_url!(url)
       cmd = "#{base_cmd} -o #{Sh.escape("#{fn}.%(ext)s")} #{Sh.escape(url)}"
       _, e, s = Sh.run cmd, chdir: dir
       raise "download error: #{e}" unless s == 0
@@ -133,7 +135,7 @@ module Downloaders
       return source_url if uri.path.match?(%r{\A/embed/}i)
 
       clean_url = uri.dup.tap { |u| u.query = u.fragment = nil }.to_s
-      body      = Utils::HTTP.get("https://rumble.com/api/Media/oembed.json?#{URI.encode_www_form(url: clean_url)}").body
+      body      = Utils::HTTP.get_public("https://rumble.com/api/Media/oembed.json?#{URI.encode_www_form(url: clean_url)}")
       JSON.parse(body)['html'].to_s[%r{https://rumble\.com/embed/[^"']+}] || source_url
     rescue StandardError
       source_url

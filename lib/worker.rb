@@ -55,10 +55,7 @@ class Worker
     return unless defined? Models::Session
     @session = Models::Session.find_or_create uid: ENV['SESSION_UID'] || msg.from.id
     @session.daylog.reject!{ |l| l['sent_at'].to_time < 1.day.ago }
-    @session.daylog << {
-      msg:     msg,
-      sent_at: Time.now,
-    }
+    @session.daylog << {sent_at: Time.now}
     @session.msg_count += 1
     @session.save
   end
