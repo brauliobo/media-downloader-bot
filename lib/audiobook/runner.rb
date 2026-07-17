@@ -187,7 +187,7 @@ module Audiobook
     end
 
     def stable_voice_reference?
-      TTS::BACKEND == TTS::OmniVoice
+      backend_supports?(:stable_voice_reference)
     end
 
     def backend_supports?(feature)
