@@ -32,6 +32,12 @@ module Utils
       file
     end
 
+    def write_exclusive(path, body)
+      flags = File::WRONLY | File::CREAT | File::EXCL
+      flags |= File::NOFOLLOW if defined?(File::NOFOLLOW)
+      File.open(path, flags, 0o600) { |file| file.write(body) }
+    end
+
     def inside?(path, root)
       path = File.expand_path(path)
       root = File.expand_path(root)
@@ -83,18 +89,27 @@ module Utils
     def public_http_url?(value)
       uri = URI.parse(value.to_s)
       return false unless uri.is_a?(URI::HTTP) && uri.host
-      return false if uri.userinfo || uri.host == 'localhost'
+      return false if uri.userinfo || uri.host.casecmp('localhost').zero?
 
-      addresses = Resolv.getaddresses(uri.host)
-      addresses.any? && addresses.all? { |addr| public_ip?(addr) }
+      public_addresses(uri.host).any?
     rescue URI::InvalidURIError, Resolv::ResolvError
       false
     end
 
+    def public_addresses(host)
+      addresses = Resolv.getaddresses(host.to_s).map { |addr| IPAddr.new(addr) }
+      return [] if addresses.empty? || addresses.any? { |addr| !public_ip?(addr) }
+
+      addresses.map(&:to_s).uniq
+    rescue IPAddr::InvalidAddressError, Resolv::ResolvError
+      []
+    end
+
     def public_ip?(value)
-      ip = IPAddr.new(value)
+      ip = value.is_a?(IPAddr) ? value : IPAddr.new(value)
+      ip = ip.native if ip.ipv6? && ip.ipv4_mapped?
       PRIVATE_NETS.none? { |net| net.include?(ip) }
-    rescue IPAddr::InvalidAddressError
+    rescue IPAddr::InvalidAddressError, IPAddr::AddressFamilyError
       false
     end
 

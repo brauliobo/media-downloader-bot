@@ -6,6 +6,7 @@ module Utils
     Result = Data.define(:url, :opts)
     URL_TOKEN_REGEXP = %r{\A(?:https?://)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:[/?#][^\s]*)?\z}i
     OPT_TOKEN_REGEXP = /\A[a-z][a-z0-9_.-]*(?:=.*)?\z/
+    MAX_URLS = ENV.fetch('MAX_URLS_PER_MESSAGE', 10).to_i
 
     def self.parse(line)
       args = tokens(line)
@@ -48,6 +49,7 @@ module Utils
       lines = Array(lines).map(&:to_s)
       url_indexes = lines.each_index.select { |index| line_has_url?(lines[index]) }
       return [] if url_indexes.empty?
+      raise ArgumentError, "too many URLs (maximum #{MAX_URLS})" if url_indexes.size > MAX_URLS
 
       base_opts = base_option_tokens(lines, url_indexes.first)
 

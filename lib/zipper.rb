@@ -382,31 +382,7 @@ class Zipper
   # Prepare subtitles (download, transcribe, translate) and return
   # [vtt_string, language_iso, verbose_json_or_nil]
   def prepare_subtitle
-    vtt = nil; lng = nil; tsp = nil
-
-    vtt,lng = fetch_subtitle unless opts.gensubs
-
-    if vtt.nil?
-      stl&.update 'transcribing'
-      res = Subtitler.transcribe infile
-      tsp,lng = res.output, res.lang
-      vtt = Subtitler.vtt_convert tsp, word_tags: !opts.nowords
-      info.language ||= lng
-    end
-
-    if opts.slang && lng && opts.slang.to_s != lng.to_s
-      stl&.update 'translating'
-      if tsp
-        tsp = Subtitler.translate tsp, from: lng, to: opts.slang
-        vtt = Subtitler.vtt_convert tsp, word_tags: !opts.nowords
-      else
-        vtt = Translator.translate_vtt vtt, from: lng, to: opts.slang
-      end
-      lng = opts.slang
-    end
-
-    vtt = Zipper::Subtitle.sanitize_vtt(vtt)
-    [vtt, lng, tsp]
+    Zipper::Subtitle.prepare(self, translate_to: opts.slang)
   end
 
   protected
@@ -514,28 +490,6 @@ class Zipper
 
     # lower resolution
     opts.width = vstrea.width if vstrea.width < opts.width
-  end
-
-  def fetch_subtitle
-    # scraped subtitles
-    if (subs = info&.subtitles).present?
-      cads = [opts.slang, :en, subs.keys.first]
-      lng,lsub =  cads.each.with_object([]){ |s, r| break r = [s, subs[s]] if subs.key? s }
-      return if lng.blank?
-      lsub = lsub.find{ |s| s.ext == 'vtt' } || lsub[0]
-      sub  = Utils::HTTP.get(lsub.url).body
-      vtt  = subtitle_to_vtt sub, lsub.ext
-
-    # embedded subtitles
-    elsif (esubs = probe.streams.select{ |s| s.codec_type == 'subtitle' }).present?
-      esubs.each{ |s| s.lang = ISO_639.find_by_code(s.tags.language).alpha2 }
-      index = esubs.index{ |s| opts.slang.in? [s.lang, s.tags.language, s.tags.title] }
-      return unless index
-      vtt   = extract_vtt index
-      lng   = esubs[index].lang
-    end
-
-    [vtt, lng]
   end
 
   # Generate an SRT file from the given media and return its path

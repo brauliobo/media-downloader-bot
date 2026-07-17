@@ -23,7 +23,7 @@ class WorkerDaemon
   private
 
   def run_http
-    http_client = Faraday.new(url: @service_uri) do |conn|
+    http_client = Faraday.new(url: @service_uri, headers: {'Authorization' => "Bearer #{ENV.fetch('BOT_HTTP_TOKEN')}"}) do |conn|
       conn.options.timeout = 0.1
     end
     puts "Worker connected to HTTP service at #{@service_uri}"
@@ -33,6 +33,7 @@ class WorkerDaemon
 
       begin
         response = http_client.get('/queue/dequeue')
+        raise "bot HTTP service returned #{response.status}" unless response.success?
         result = response.body.is_a?(String) ? JSON.parse(response.body) : response.body
         job_data = result['job']
         
@@ -99,4 +100,3 @@ class WorkerDaemon
     STDERR.puts e.backtrace.join("\n")
   end
 end
-

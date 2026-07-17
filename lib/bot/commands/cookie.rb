@@ -1,6 +1,11 @@
+require_relative '../../utils/cookie_jar'
+
 class Manager
   module Commands
     class Cookie
+      MAX_COOKIE_BYTES = ENV.fetch('MAX_COOKIE_BYTES', 1024 * 1024).to_i
+      USAGE = 'Usage: /cookies (send Netscape cookie file as document or paste content)'.freeze
+
       attr_reader :bot, :msg
 
       def initialize(bot, msg)
@@ -9,79 +14,39 @@ class Manager
       end
 
       def process
-        process_netscape_cookies
+        cookie_content = extract_cookie_content
+        return bot.send_message(msg, Bot::MsgHelpers.me(USAGE)) unless cookie_content
+
+        cookies_by_domain = Utils::CookieJar.parse_netscape(cookie_content)
+        return bot.send_message(msg, Bot::MsgHelpers.me("No cookies found. Send a Netscape cookies.txt file or paste its contents after /cookies")) if cookies_by_domain.empty?
+
+        s = Models::Session.find_or_create uid: msg.from.id
+        s.update cookies: (s.cookies || {}).merge(cookies_by_domain)
+        bot.send_message msg, Bot::MsgHelpers.me("Saved #{cookies_by_domain.size} cookie(s) from Netscape file")
+      rescue => e
+        bot.report_error msg, e, context: 'cookie import'
       end
 
       private
 
-      def process_netscape_cookies
-        cookie_content = extract_cookie_content
-        return if cookie_content.nil?
-
-        cookies_by_domain = parse_netscape_format(cookie_content)
-        return bot.send_message(msg, Bot::MsgHelpers.me("No cookies found. Send a Netscape cookies.txt file or paste its contents after /cookies")) if cookies_by_domain.empty?
-
-        s = Models::Session.find_or_create uid: msg.from.id
-        data = (s.cookies || {}).dup
-        data.merge!(cookies_by_domain)
-        s.update cookies: data
-        domains_count = cookies_by_domain.keys.size
-        bot.send_message msg, Bot::MsgHelpers.me("Saved #{domains_count} cookie(s) from Netscape file")
-      rescue => e
-        bot.report_error msg, e, context: Utils::InputParser.message_text(msg)
-      end
-
       def extract_cookie_content
         if msg.document.present?
-          local_path = bot.download_file(msg.document)
-          return File.read(local_path) if local_path && File.exist?(local_path)
+          size = msg.document.file_size if msg.document.respond_to?(:file_size)
+          raise ArgumentError, 'cookie file is too large' if size.to_i > MAX_COOKIE_BYTES
+
+          return Dir.mktmpdir('cookies-') do |dir|
+            local_path = bot.download_file(msg.document, dir: dir)
+            raise ArgumentError, 'cookie download failed' unless local_path && File.file?(local_path)
+            raise ArgumentError, 'cookie file is too large' if File.size(local_path) > MAX_COOKIE_BYTES
+
+            File.binread(local_path)
+          end
         end
 
         text = Utils::InputParser.message_text(msg).strip
-        if text.present?
-          content = text.split(/[[:space:]]+/, 2)[1]
-          return content if content.present?
-          bot.send_message msg, Bot::MsgHelpers.me("Usage: /cookies (send Netscape cookie file as document or paste content)")
-          nil
-        else
-          bot.send_message msg, Bot::MsgHelpers.me("Usage: /cookies (send Netscape cookie file as document or paste content)")
-          nil
-        end
-      end
-
-      def parse_netscape_format(content)
-        cookies_by_domain = {}
-        domain_cookies = {}
-
-        content.each_line do |line|
-          line = line.strip
-          next if line.empty?
-          if line.start_with?('#HttpOnly_')
-            line = line.sub(/\A#HttpOnly_/, '')
-          elsif line.start_with?('#')
-            next
-          end
-
-          parts = line.split(/\s+/, 7)
-          next if parts.size < 7
-
-          domain, _flag, _path, _secure, _expiration, name, value = parts
-          next if domain.nil? || name.nil? || value.nil?
-
-          domain = domain.sub(/^\./, '')
-          cookie_pair = "#{name}=#{value}"
-          domain_cookies[domain] ||= []
-          domain_cookies[domain] << cookie_pair
-        end
-
-        domain_cookies.each do |domain, cookies|
-          cookies_by_domain[domain] = cookies.join('; ')
-        end
-
-        cookies_by_domain
+        text.split(/[[:space:]]+/, 2)[1].presence
       end
 
     end
   end
 end
-

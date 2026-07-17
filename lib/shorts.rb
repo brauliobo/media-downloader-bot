@@ -1,5 +1,5 @@
 require 'json'
-require_relative 'ai/codex'
+require_relative 'ai/ollama'
 require_relative 'ai/json_schema'
 
 module Shorts
@@ -14,6 +14,7 @@ module Shorts
     ),
   }.freeze
   TITLE_SCHEMA = AI::JSONSchema.object(title: { type: 'string', minLength: 1 }).freeze
+  MODEL = ENV['OLLAMA_SHORTS_MODEL'] || AI::Ollama::PROMPT_MODEL
 
   def generate_cuts_from_srt(srt, language: nil)
     task = <<~PROMPT
@@ -65,7 +66,7 @@ module Shorts
   end
 
   def ask_json(task, schema, input)
-    AI::JSONSchema.ask(backend: AI::Codex, task: task, schema: schema, input: input)
+    AI::JSONSchema.ask(backend: AI::Ollama, task: task, schema: schema, input: input, model: MODEL)
   end
 
   def normalize_title(t)

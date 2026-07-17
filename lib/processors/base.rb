@@ -7,7 +7,7 @@ require_relative '../context'
 
 module Processors
   class Base
-    BLOCKED_DOMAINS = (ENV['BLOCKED_DOMAINS'] || '').split.map{ |u| URI.parse u }
+    BLOCKED_DOMAINS = ENV.fetch('BLOCKED_DOMAINS', '').split.map { |host| host.downcase.delete_prefix('.') }.freeze
 
     attr_reader :ctx
     delegate :msg, :st, :dir, :tmp, :url, :opts, :session, to: :ctx
@@ -36,7 +36,10 @@ module Processors
       parsed = Utils::InputParser.parse(line)
       @ctx.url = parsed.url&.to_s
       
-      raise 'Blocked domain' if parsed.url && parsed.url.host && BLOCKED_DOMAINS.any?{ |d| parsed.url.host.include?(d) }
+      if parsed.url&.host
+        host = parsed.url.host.downcase.delete_suffix('.')
+        raise 'Blocked domain' if BLOCKED_DOMAINS.any? { |domain| host.include?(domain) }
+      end
 
       @ctx.opts = SymMash.new(parsed.opts.merge(session: @ctx.session))
       self.class.expand_lang_opt @ctx.opts

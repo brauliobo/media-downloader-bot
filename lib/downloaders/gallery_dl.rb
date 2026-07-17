@@ -12,11 +12,13 @@ module Downloaders
     end
 
     def gallery_post?
+      validate_public_url!(url)
       items = gallery_rows.select { |item| item.is_a?(Array) && item.first == 3 }
       items.present? && !(items.one? && items.first.last['type'].to_s == 'video')
     end
 
     def download
+      validate_public_url!(url)
       before = downloaded_files
       info   = gallery_info
       gopts  = gallery_opts

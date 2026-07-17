@@ -17,7 +17,9 @@ module Utils
       if local && File.exist?(url)
         FileUtils.cp url, im_in
       elsif Safety.public_http_url?(url)
-        ::File.write im_in, HTTP.get(url).body
+        body = HTTP.get_public(url)
+        raise ArgumentError, 'thumbnail must be JPEG or PNG' unless image?(body)
+        ::File.binwrite im_in, body
       else
         return nil
       end
@@ -28,7 +30,8 @@ module Utils
       else
         "-resize #{max_height}x#{max_height}\\>"
       end
-      Sh.run "convert #{Sh.escape(im_in)} #{opts} -define jpeg:extent=190kb #{Sh.escape(im_out)}"
+      limits = '-limit memory 128MiB -limit map 256MiB -limit disk 512MiB -limit time 30'
+      Sh.run "convert #{limits} #{Sh.escape(im_in)} #{opts} -define jpeg:extent=190kb #{Sh.escape(im_out)}"
 
       im_out
     rescue => e
@@ -46,6 +49,10 @@ module Utils
     def self.portrait?(info)
       return false unless info.width && info.height.to_i.positive?
       info.width < info.height
+    end
+
+    def self.image?(body)
+      body.start_with?("\xFF\xD8\xFF".b) || body.start_with?("\x89PNG\r\n\x1A\n".b)
     end
   end
 end

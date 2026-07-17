@@ -69,7 +69,7 @@ EOS
   attr_reader :queue
 
   def initialize
-    @queue = Queue.new
+    @queue = SizedQueue.new([ENV.fetch('BOT_MANAGER_QUEUE_SIZE', 100).to_i, 1].max)
   end
 
   def self.http
@@ -126,8 +126,10 @@ EOS
       worker = Worker.new msg
       worker.process
     else
-      @queue.enq msg
+      @queue.push(msg, true)
     end
+  rescue ThreadError
+    bot.send_message(msg, Bot::MsgHelpers.me(Bot::UserQueue::BUSY_MSG))
   end
 
   def dequeue(timeout: nil)

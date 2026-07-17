@@ -1,4 +1,5 @@
 require 'active_support/core_ext/module/delegation'
+require_relative '../utils/safety'
 
 module Downloaders
   class Base
@@ -12,6 +13,14 @@ module Downloaders
 
     def download
       raise NotImplementedError
+    end
+
+    private
+
+    def validate_public_url!(value)
+      raise ArgumentError, 'URL must resolve only to public addresses' unless Utils::Safety.public_http_url?(value)
+
+      value
     end
   end
 end
