@@ -1,9 +1,10 @@
-require 'json'
 require 'open3'
-require_relative 'json_schema'
+require_relative 'json_prompt'
 
 module AI
   class OpenCode
+    extend JSONPrompt
+
     MODEL     = ENV['OPENCODE_MODEL'] || ENV['OPENCODE_SHORTS_MODEL']
     CLEAN_ENV = {
       'OPENCODE'                                  => nil,
@@ -24,11 +25,6 @@ module AI
       raise "opencode failed (#{st.exitstatus}): #{err}" unless st.success?
 
       out.strip
-    end
-
-    def self.json_prompt(text, schema:, model: MODEL)
-      raw = prompt(text, model: model)
-      AI::JSONSchema.parse(raw, schema: schema)
     end
   end
 end

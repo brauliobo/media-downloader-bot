@@ -60,5 +60,29 @@ RSpec.describe Downloaders::GalleryDl do
       expect(input.uploads.last.type.name).to eq(:video)
       expect(input.uploads.last.mime).to eq('video/mp4')
     end
+
+    it 'reuses discovery metadata from downloader selection' do
+      rows = [
+        [2, {content: 'tweet text', user: {nick: 'alice'}, tweet_id: 1}],
+        [3, 'https://example.com/photo.jpg', {type: 'image'}]
+      ]
+      probes = 0
+      allow(Sh).to receive(:run) do |command, **_params|
+        if command.include?('-j')
+          probes += 1
+          [rows.to_json, '', 0]
+        else
+          File.write(File.join(tmp, 'photo.jpg'), '')
+          ['', '', 0]
+        end
+      end
+
+      downloader = Downloaders.for(Struct.new(:ctx).new(ctx))
+      input      = downloader.download
+
+      expect(downloader).to be_a(described_class)
+      expect(input.info.title).to eq('tweet text')
+      expect(probes).to eq(1)
+    end
   end
 end

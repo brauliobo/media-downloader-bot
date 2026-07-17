@@ -12,20 +12,25 @@ module Downloaders
       processor.ctx
     else
       Context.new(
-        url: processor.url,
-        opts: processor.opts,
-        dir: processor.dir,
-        tmp: processor.tmp,
-        st: processor.st,
+        url:     processor.url,
+        opts:    processor.opts,
+        dir:     processor.dir,
+        tmp:     processor.tmp,
+        st:      processor.st,
         session: processor.session,
-        msg: processor.msg,
-        stl: processor.stl
+        service: (processor.service if processor.respond_to?(:service)),
+        msg:     processor.msg,
+        stl:     processor.stl
       )
     end
 
-    # Prefer specific downloaders over the generic yt-dlp one
-    klass = REGISTRY.find { |k| k != Downloaders::YtDlp && k.respond_to?(:supports?) && k.supports?(ctx) }
-    (klass || Downloaders::YtDlp).new(ctx)
+    REGISTRY.each do |klass|
+      next if klass == Downloaders::YtDlp
+      downloader = klass.build(ctx)
+      return downloader if downloader
+    end
+
+    Downloaders::YtDlp.new(ctx)
   end
 end
 

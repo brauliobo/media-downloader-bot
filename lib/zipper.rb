@@ -56,18 +56,16 @@ class Zipper
   Types = Zipper::Formats::TYPES
 
   def self.max_audio_duration br
-    1000 * Zipper.size_mb_limit / (br.to_i / 8) / 60
+    Limits.max_audio_duration(br, size_mb_limit)
   end
 
   # Dynamic helpers that reevaluate the thresholds at runtime
   def self.vid_duration_thld
-    return Float::INFINITY unless size_mb_limit
-    # Baseline: 20 minutes when the limit is 50 MB (Telegram). Scale linearly with higher limits.
-    (size_mb_limit * 20.0 / 50).ceil
+    Limits.vid_duration_thld(size_mb_limit)
   end
 
   def self.aud_duration_thld
-    size_mb_limit ? max_audio_duration(Types.audio.opus.opts.bitrate) : Float::INFINITY
+    Limits.aud_duration_thld(size_mb_limit)
   end
 
   def self.zip_video *args, **params

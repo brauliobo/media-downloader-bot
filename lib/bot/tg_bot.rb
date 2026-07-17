@@ -34,12 +34,7 @@ module Bot
             Thread.new do
               sym_msg = SymMash.new msg.to_h
               Bot::UserQueue.instance.with_user_slot(bot, sym_msg) do
-                pid = Kernel.fork do
-                  DB.disconnect if defined? DB
-                  Process.setproctitle 'media-downloader-tgbot worker'
-                  block.call sym_msg
-                end
-                Process.waitpid pid
+                dispatch_message(sym_msg, &block)
               end
             rescue => e
               STDERR.puts "tg dispatch error: #{e.full_message}"
@@ -48,6 +43,17 @@ module Bot
         end
       end
       bot
+    end
+
+    def self.dispatch_message(msg, &block)
+      return block.call(msg) unless ENV['WITH_WORKER']
+
+      pid = Kernel.fork do
+        DB.disconnect if defined? DB
+        Process.setproctitle 'media-downloader-tgbot worker'
+        block.call msg
+      end
+      Process.waitpid pid
     end
 
     def tg_text_payload(msg, text, parse_mode)

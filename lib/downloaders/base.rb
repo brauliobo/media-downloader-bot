@@ -11,6 +11,10 @@ module Downloaders
       @ctx = ctx
     end
 
+    def self.build(ctx)
+      new(ctx) if supports?(ctx)
+    end
+
     def download
       raise NotImplementedError
     end

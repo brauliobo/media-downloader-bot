@@ -1,5 +1,6 @@
 require 'tempfile'
 require_relative '../utils/safety'
+require_relative 'segments'
 
 class Subtitler
   class VTT
@@ -57,7 +58,7 @@ class Subtitler
     def self.build(verbose_json, normalize: true, word_tags: true, stdsub: nil)
       mash = SymMash.new(verbose_json)
       use_norm = stdsub.nil? ? normalize : stdsub
-      merge_segments!(mash) if use_norm
+      Segments.merge_adjacent!(mash) if use_norm
 
       formatter = ->(t) { h, rem = t.divmod(3600); m, s = rem.divmod(60); format('%02d:%02d:%06.3f', h, m, s) }
 
@@ -204,41 +205,6 @@ class Subtitler
       format('%02d:%02d:%02d.%03d', hours, mins, secs, ms)
     end
 
-    def self.merge_segments!(mash, max_chars: 84, gap_threshold: 1.0)
-      segments = Array(mash.segments)
-      return mash if segments.empty?
-
-      merged = []
-      current = segments.first
-
-      segments.drop(1).each do |segment|
-        if mergeable?(current, segment, max_chars, gap_threshold)
-          merge_segment!(current, segment)
-        else
-          merged << current
-          current = segment
-        end
-      end
-
-      merged << current if current
-      mash.segments = merged
-      mash
-    end
-
-    def self.mergeable?(left, right, max_chars, gap_threshold)
-      gap = right.start.to_f - left.end.to_f
-      combined = left.text.to_s.length + 1 + right.text.to_s.length
-      gap <= gap_threshold && combined <= max_chars
-    end
-
-    def self.merge_segment!(left, right)
-      texts = [left.text, right.text].map { |text| text.to_s.strip }.reject(&:empty?)
-      left.text = texts.join(' ')
-      left.end  = right.end
-      left.words ||= []
-      left.words.concat(Array(right.words))
-    end
-
     def self.build_line(segment, formatter, word_tags)
       words = Array(segment.words)
       return segment.text.to_s.strip if words.empty?
@@ -252,7 +218,6 @@ class Subtitler
 
     private_class_method :translate_chunks, :skip_line?, :each_cue, :flush_buffer,
                          :hms_to_s, :hmsms_to_s, :s_to_hmsms,
-                         :merge_segments!, :mergeable?, :merge_segment!, :build_line
+                         :build_line
   end
 end
-

@@ -1,4 +1,5 @@
 require_relative '../text_helpers'
+require_relative 'segments'
 
 class Subtitler
   class Translator
@@ -13,7 +14,7 @@ class Subtitler
       apply_translations!(sentences, tl_texts)
       mash.segments = rebuild_segments(sentences)
       split_long_segments!(mash, max_chars: MAX_SUBTITLE_CHARS)
-      merge_segments_for_stdsub(mash, max_chars: MAX_SUBTITLE_CHARS)
+      Segments.merge_adjacent!(mash, max_chars: MAX_SUBTITLE_CHARS)
       mash
     end
 
@@ -204,32 +205,5 @@ class Subtitler
         end
       end
     end
-
-    def self.merge_segments_for_stdsub(mash, max_chars: MAX_SUBTITLE_CHARS, gap_threshold: 1.0)
-      segments = mash.segments || []
-      return mash if segments.empty?
-
-      merged = []
-      current = segments.first
-      segments.drop(1).each do |seg|
-        gap = seg.start.to_f - current.end.to_f
-        combined_len = current.text.to_s.length + 1 + seg.text.to_s.length
-        if gap <= gap_threshold && combined_len <= max_chars
-          current.text = "#{current.text} #{seg.text}"
-          current.end  = seg.end
-          current.words ||= []
-          current.words.concat(seg.words || [])
-        else
-          merged << current
-          current = seg
-        end
-      end
-      merged << current unless merged.last.equal?(current) rescue merged.push(current)
-      mash.segments = merged
-      mash
-    end
-
   end
 end
-
-
