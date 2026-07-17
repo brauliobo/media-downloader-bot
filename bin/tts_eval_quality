@@ -7,6 +7,7 @@ HTTP engines are used only if already reachable unless a non-systemd command
 is explicitly configured through TTS_EVAL_*_START_CMD / STOP_CMD.
 
 Default engines:
+  - moss: MOSS-TTS-Local-Transformer-v1.5 HTTP form service at 127.0.0.1:10260
   - omnivoice: HTTP form service at 127.0.0.1:10440
   - chatterbox: local Resemble Chatterbox checkout under ~/Projects/chatterbox
   - piper: HTTP JSON service at $PIPER_PORT_PT or 10220
@@ -482,6 +483,23 @@ sf.write(str(out), audio, model.sr, subtype="PCM_16")
 def default_engines() -> dict[str, Engine]:
     piper_port = env("PIPER_PORT_PT", "10220")
     return {
+        "moss": Engine(
+            name="moss",
+            kind="http_form",
+            health_url=env("TTS_EVAL_MOSS_HEALTH_URL", "http://127.0.0.1:10260/health"),
+            synth_url=env("TTS_EVAL_MOSS_SYNTH_URL", "http://127.0.0.1:10260/synthesize"),
+            start_cmd=env("TTS_EVAL_MOSS_START_CMD"),
+            stop_cmd=env("TTS_EVAL_MOSS_STOP_CMD"),
+            spawn_cmd=env(
+                "TTS_EVAL_MOSS_SPAWN_CMD",
+                "cd /home/braulio/Projects/moss-tts && "
+                "CUDA_VISIBLE_DEVICES=${TTS_EVAL_MOSS_CUDA_VISIBLE_DEVICES:-0} "
+                "MOSS_TTS_DEVICE=${TTS_EVAL_MOSS_DEVICE:-cuda:0} "
+                "HOST=127.0.0.1 PORT=10260 "
+                "/home/braulio/Projects/moss-tts/.venv/bin/python http_server.py",
+            ),
+            form={"temperature": env("TTS_EVAL_MOSS_TEMPERATURE", "1.7")},
+        ),
         "omnivoice": Engine(
             name="omnivoice",
             kind="http_form",
@@ -593,7 +611,7 @@ ALIASES = {
 
 def resolve_engine_names(raw: str, engines: dict[str, Engine]) -> list[str]:
     if raw.strip().lower() == "all":
-        return ["omnivoice", "chatterbox", "piper", "fish", "f5tts", "coqui"]
+        return ["moss", "omnivoice", "chatterbox", "piper", "fish", "f5tts", "coqui"]
     names = []
     for part in raw.split(","):
         name = ALIASES.get(part.strip().lower(), part.strip().lower())
@@ -711,6 +729,8 @@ def evaluate_engine(engine: Engine, paragraphs: list[str], source_text: str, arg
             "engine": engine.name,
             "wav_path": str(combined_wav),
             "duration_seconds": duration,
+            "synthesis_seconds": sum(item["seconds"] for item in timings),
+            "real_time_factor": sum(item["seconds"] for item in timings) / duration,
             "synthesis_timings": timings,
         }
     )
@@ -735,6 +755,8 @@ def write_summary_csv(results: dict[str, Any], path: Path) -> None:
         "detected_language",
         "detected_language_probability",
         "duration_seconds",
+        "synthesis_seconds",
+        "real_time_factor",
         "wav_path",
     ]
     with path.open("w", newline="", encoding="utf-8") as file:
@@ -746,7 +768,7 @@ def write_summary_csv(results: dict[str, Any], path: Path) -> None:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Compare TTS engines with whisper.cpp word confidence metrics")
-    parser.add_argument("--engines", default="omnivoice,chatterbox,piper,fish,f5tts,coqui")
+    parser.add_argument("--engines", default="moss,omnivoice,chatterbox,piper,fish,f5tts,coqui")
     parser.add_argument("--text-file", type=Path)
     parser.add_argument("--output-dir", type=Path, default=ROOT / "tmp/tts-eval")
     parser.add_argument("--lang", default="pt")
