@@ -1,8 +1,8 @@
 require 'spec_helper'
 
 RSpec.describe TTS::MossTTS do
-  it 'avoids reference-audio leakage without changing unrelated backends' do
-    expect(described_class.supports_stable_voice_reference?).to eq(false)
+  it 'enables stable seeded voice references without changing unrelated backends' do
+    expect(described_class.supports_stable_voice_reference?).to eq(true)
     expect(TTS::OmniVoice.supports_stable_voice_reference?).to eq(true)
     expect(TTS::Chatterbox.supports_stable_voice_reference?).to eq(false)
   end

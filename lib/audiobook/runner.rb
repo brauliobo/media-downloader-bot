@@ -6,8 +6,9 @@ require_relative '../language'
 
 module Audiobook
   class Runner
-    VOICE_REFERENCE_TEXT = Language::REF_FALLBACK
-    AUTHOR_SAMPLE_PAGES  = 3
+    VOICE_REFERENCE_TEXT  = Language::REF_FALLBACK
+    VOICE_REFERENCE_WORDS = 12..24
+    AUTHOR_SAMPLE_PAGES   = 3
 
     def initialize(book, stl = nil, opts = nil)
       @book = book
@@ -172,7 +173,17 @@ module Audiobook
     end
 
     def voice_reference_text
-      @voice_reference_text ||= Language.voice_reference_text(@lang)
+      @voice_reference_text ||= source_voice_reference_text || Language.voice_reference_text(@lang)
+    end
+
+    def source_voice_reference_text
+      @book.pages.each do |page|
+        page.all_sentences.each do |sentence|
+          text = sentence.text.to_s.strip
+          return text if VOICE_REFERENCE_WORDS.cover?(text.split.size)
+        end
+      end
+      nil
     end
 
     def detected_voice_instruct
