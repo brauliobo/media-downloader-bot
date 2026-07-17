@@ -153,7 +153,7 @@ class Worker
   end
 
   def cleanup_input(input)
-    return unless dir
+    return if skip_cleanup || !dir
 
     Array(input.uploads).each { |upload| cleanup_input(upload) } if input.respond_to?(:uploads)
 

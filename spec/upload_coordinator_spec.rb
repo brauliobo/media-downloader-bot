@@ -91,6 +91,20 @@ RSpec.describe UploadCoordinator do
     expect(File.exist?(upload.fn_out)).to be(false)
   end
 
+  it 'preserves generated files when cleanup is disabled' do
+    real_worker = Worker.new(SymMash.new(from: {id: 1}, chat: {id: 1}))
+    real_worker.instance_variable_set(:@dir, dir)
+    upload = item('1.mp4', 'video/mp4')
+    allow(real_worker).to receive(:upload_one)
+
+    Worker.skip_cleanup = true
+    described_class.new(real_worker).upload(upload)
+
+    expect(File.exist?(upload.fn_out)).to be(true)
+  ensure
+    Worker.skip_cleanup = false
+  end
+
   it 'parses bare album as an upload option' do
     parsed = SymMash.new(metadata: {})
 
