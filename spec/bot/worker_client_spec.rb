@@ -26,4 +26,13 @@ RSpec.describe Bot::Worker::Client do
 
     expect(client.max_caption).to eq(4096)
   end
+
+  it 'normalizes HTTP and DRb album results to the same shape' do
+    client = described_class.allocate
+    http   = client.send(:message_results, {'messages' => [{'id' => 123}]})
+    drb    = client.send(:message_results, [{id: 123}])
+
+    expect(http.map(&:id)).to eq([123])
+    expect(drb.map(&:id)).to eq([123])
+  end
 end

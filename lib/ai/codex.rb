@@ -1,10 +1,11 @@
-require 'json'
 require 'open3'
 require 'tempfile'
-require_relative 'json_schema'
+require_relative 'json_prompt'
 
 module AI
   class Codex
+    extend JSONPrompt
+
     MODEL = ENV['CODEX_SHORTS_MODEL']
 
     def self.prompt(text, model: MODEL)
@@ -27,11 +28,6 @@ module AI
         out_file.rewind
         out_file.read.strip
       end
-    end
-
-    def self.json_prompt(text, schema:, model: MODEL)
-      raw = prompt(text, model: model)
-      AI::JSONSchema.parse(raw, schema: schema)
     end
   end
 end

@@ -2,6 +2,7 @@ require 'tempfile'
 require 'iso-639'
 
 require_relative '../zipper'
+require_relative 'segments'
 require_relative 'translator'
 
 class Subtitler
@@ -31,7 +32,7 @@ class Subtitler
     def srt_convert verbose_json, normalize: true, word_tags: true, stdsub: nil
       mash = SymMash.new verbose_json
       use_norm = stdsub.nil? ? normalize : stdsub
-      merge_segments_for_stdsub!(mash) if use_norm
+      Segments.merge_adjacent!(mash) if use_norm
 
       ts = ->(t){ h, rem = t.divmod(3600); m, s = rem.divmod(60); "%02d:%02d:%02d,%03d" % [h, m, s.to_i, (s.modulo(1)*1000).round] }
 
@@ -160,32 +161,5 @@ class Subtitler
       end
       mash
     end
-
-    # Merge adjacent segments to build standard two-line movie subtitles.
-    # Merges when the silence gap ≤ gap_threshold and total text length ≤ max_chars.
-    def merge_segments_for_stdsub! mash, max_chars: 84, gap_threshold: 1.0
-      segments = mash.segments || []
-      return mash if segments.empty?
-
-      merged = []
-      current = segments.first
-      segments.drop(1).each do |seg|
-        gap = seg.start.to_f - current.end.to_f
-        combined_len = current.text.to_s.length + 1 + seg.text.to_s.length
-        if gap <= gap_threshold && combined_len <= max_chars
-          current.text = "#{current.text} #{seg.text}"
-          current.end  = seg.end
-          current.words ||= []
-          current.words.concat(seg.words || [])
-        else
-          merged << current
-          current = seg
-        end
-      end
-      merged << current unless merged.last.equal?(current) rescue merged.push(current)
-      mash.segments = merged
-      mash
-    end
-
   end
 end

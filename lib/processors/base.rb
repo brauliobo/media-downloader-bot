@@ -10,7 +10,7 @@ module Processors
     BLOCKED_DOMAINS = ENV.fetch('BLOCKED_DOMAINS', '').split.map { |host| host.downcase.delete_prefix('.') }.freeze
 
     attr_reader :ctx
-    delegate :msg, :st, :dir, :tmp, :url, :opts, :session, to: :ctx
+    delegate :msg, :st, :dir, :tmp, :url, :opts, :session, :service, to: :ctx
     attr_reader :stl
 
     # Maintain backward compatibility for readers if needed, but prefer delegating to ctx

@@ -34,7 +34,9 @@ module Bot
 
       def send_album(msg, text, uploads:, parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **params)
         safe_uploads, cleanup_paths = safe_album_uploads(uploads)
-        call(:send_album, msg: msg, text: text, uploads: safe_uploads, parse_mode: parse_mode, delete: delete, delete_both: delete_both, **params)
+        call(:send_album, msg: msg, text: text, uploads: safe_uploads, parse_mode: parse_mode, delete: delete, delete_both: delete_both, **params) do |result|
+          message_results(result)
+        end
       ensure
         Array(cleanup_paths).each { |path| FileUtils.rm_rf(path) }
       end
@@ -85,6 +87,11 @@ module Bot
         kwargs = kwargs.dup
         kwargs[:uploads] = Array(kwargs[:uploads]).map { |up| upload_payload(up) } if kwargs[:uploads]
         kwargs
+      end
+
+      def message_results(result)
+        messages = result.is_a?(Hash) ? result[:messages] || result['messages'] : result
+        Array(messages).map { |message| message.is_a?(Hash) ? SymMash.new(message) : message }
       end
 
       def upload_payload(upload)

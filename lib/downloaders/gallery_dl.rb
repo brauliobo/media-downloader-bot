@@ -7,8 +7,13 @@ module Downloaders
 
     BIN = ENV['GALLERY_DL'].presence || File.expand_path('~/.local/bin/gallery-dl')
 
+    def self.build(ctx)
+      downloader = new(ctx)
+      downloader if downloader.gallery_post?
+    end
+
     def self.supports?(ctx)
-      new(ctx).gallery_post?
+      !!build(ctx)
     end
 
     def gallery_post?
@@ -81,10 +86,12 @@ module Downloaders
     end
 
     def gallery_rows
+      return @gallery_rows if defined?(@gallery_rows)
+
       out, = Sh.run [gallery_dl, '-j', url.to_s], chdir: tmp
-      JSON.parse(out)
+      @gallery_rows = JSON.parse(out)
     rescue StandardError
-      []
+      @gallery_rows = []
     end
 
     def cookie_path

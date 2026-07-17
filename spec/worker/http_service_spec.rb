@@ -40,15 +40,4 @@ RSpec.describe Bot::Worker::HTTPService do
       expect(roots).to include(File.expand_path(File.join(Dir.pwd, 'tmp')))
     end
   end
-
-  describe '#message_result' do
-    it 'serializes TD message objects without calling to_h' do
-      message_class = Struct.new(:id, :media_group_id) do
-        def to_h = raise('unexpected to_h')
-      end
-      message = message_class.new(123, 456)
-
-      expect(described_class.allocate.message_result(message)).to eq(id: 123, media_group_id: 456)
-    end
-  end
 end

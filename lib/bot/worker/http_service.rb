@@ -4,6 +4,7 @@ require 'json'
 require 'rack/utils'
 require 'tmpdir'
 require_relative '../../utils/safety'
+require_relative '../message_result'
 
 module Bot
   module Worker
@@ -141,7 +142,7 @@ module Bot
           uploads.each { |up| require_allowed_path!(up.fn_out) }
           text = params.delete(:text)
           result = service.bot.send_album(msg, text, uploads: uploads, **params)
-          {messages: Array(result).map { |message| message_result(message) }}
+          {messages: Array(result).map { |message| MessageResult.dump(message) }}
         end
 
         r.post 'edit_message' do
@@ -175,15 +176,6 @@ module Bot
         end
       end
 
-      def message_result(message)
-        return message unless message.respond_to?(:id) || message.respond_to?(:message_id)
-
-        {
-          message_id:     message.respond_to?(:message_id) ? message.message_id : nil,
-          id:             message.respond_to?(:id) ? message.id : nil,
-          media_group_id: message.respond_to?(:media_group_id) ? message.media_group_id : nil,
-        }.compact
-      end
     end
   end
 end

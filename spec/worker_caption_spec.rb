@@ -1,6 +1,15 @@
 require 'spec_helper'
 
 RSpec.describe Worker do
+  it 'keeps service dependencies instance-scoped' do
+    first  = double('first service')
+    second = double('second service')
+    msg    = SymMash.new(from: {id: 1}, chat: {id: 1})
+
+    expect(described_class.new(msg, service: first).service).to equal(first)
+    expect(described_class.new(msg, service: second).service).to equal(second)
+  end
+
   it 'does not emit empty italic markers when caption title is blank' do
     worker = described_class.new(SymMash.new(from: {id: 1}, chat: {id: 1}))
     input  = SymMash.new(

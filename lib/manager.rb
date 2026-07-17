@@ -8,6 +8,7 @@ require 'ostruct'
 
 require_relative 'bot/user_queue'
 require_relative 'bot/base'
+require_relative 'bot/message_result'
 require_relative 'bot/commands/cookie'
 require_relative 'bot/worker/drb_service'
 require_relative 'bot/worker/http_service'
@@ -122,9 +123,7 @@ EOS
 
   def enqueue_message(msg)
     if ENV['WITH_WORKER']
-      Worker.service = bot
-      worker = Worker.new msg
-      worker.process
+      Worker.new(msg, service: bot).process
     else
       @queue.enq msg
     end
@@ -183,7 +182,7 @@ EOS
 
   def send_album(msg:, text:, uploads:, **params)
     uploads = Array(uploads).map { |upload| upload.is_a?(Hash) ? SymMash.new(upload) : upload }
-    Array(bot.send_album(msg, text, uploads: uploads, **params)).map { |result| drb_message_result(result) }
+    Array(bot.send_album(msg, text, uploads: uploads, **params)).map { |result| Bot::MessageResult.dump(result) }
   rescue => e
     raise RuntimeError, drb_error_message(e)
   end
@@ -212,14 +211,6 @@ EOS
 
   def drb_result(result)
     result.respond_to?(:to_h) ? result.to_h : result
-  end
-
-  def drb_message_result(result)
-    {
-      message_id:     result.respond_to?(:message_id) ? result.message_id : nil,
-      id:             result.respond_to?(:id) ? result.id : nil,
-      media_group_id: result.respond_to?(:media_group_id) ? result.media_group_id : nil,
-    }.compact
   end
 
   def drb_error_message(error)

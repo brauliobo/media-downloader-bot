@@ -71,7 +71,7 @@ module Processors
       end
 
       i.thumb = i.opts.thumb = Timeout.timeout(15) do
-        Utils::Thumb.process(i.info, base_filename: i.info._filename, on_error: -> e { Worker.service.report_error(msg, e) })
+        Utils::Thumb.process(i.info, base_filename: i.info._filename, on_error: -> e { service.report_error(msg, e) })
       end rescue nil
       i.fn_out = convert(i, pos: pos)
       return if i.stl.error?

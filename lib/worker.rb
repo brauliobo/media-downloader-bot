@@ -37,6 +37,7 @@ class Worker
   attr_reader :dir
   attr_reader :opts
   attr_reader :session
+  attr_reader :service
 
   class_attribute :tmpdir
   self.tmpdir = ENV['TMPDIR'] || Dir.tmpdir
@@ -44,8 +45,9 @@ class Worker
   class_attribute :workdir_path
   class_attribute :skip_cleanup
 
-  def initialize msg
-    @msg = msg
+  def initialize(msg, service: self.class.service)
+    @msg     = msg
+    @service = service
     load_session
   end
 
@@ -85,7 +87,7 @@ class Worker
       inputs = []
       init_status
 
-      ctx = Context.new(dir: work_dir, msg: msg, st: @st, session: @session)
+      ctx = Context.new(dir: work_dir, msg: msg, st: @st, session: @session, service: service)
       
       lines = Utils::InputParser.message_lines(msg)
       procs = process_lines(lines, ctx)

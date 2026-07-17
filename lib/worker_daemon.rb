@@ -91,8 +91,8 @@ class WorkerDaemon
     worker_uri = job[:worker_uri]
 
     msg = SymMash.new(message_data)
-    Worker.service = Bot::Worker::Client.new worker_uri if worker_uri
-    worker = Worker.new msg
+    service = Bot::Worker::Client.new(worker_uri) if worker_uri
+    worker  = Worker.new(msg, service: service || Worker.service)
 
     worker.process
   rescue => e

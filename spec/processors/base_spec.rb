@@ -11,6 +11,13 @@ RSpec.describe Processors::Base do
     end
   end
 
+  it 'exposes the request-scoped service' do
+    service   = double('service')
+    processor = described_class.new(Context.new(dir: Dir.tmpdir, service: service))
+
+    expect(processor.service).to equal(service)
+  end
+
   describe '.add_opt' do
     it 'applies nice as a general parsed option' do
       opts = SymMash.new
