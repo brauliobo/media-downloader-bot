@@ -21,13 +21,14 @@ RSpec.describe 'TTS batch synthesis' do
       ],
       lang:           'en',
       tts_batch_size: 100,
+      speaker_wav:    'speaker.wav',
       speed:          1.1
     )
 
     expect(result).to eq(%w[one.wav two.wav])
     expect(backend.calls).to eq([
-      { lang: 'en', speed: 1.1, text: 'One', out_path: 'one.wav' },
-      { lang: 'en', speed: 1.1, text: 'Two', out_path: 'two.wav' },
+      { lang: 'en', speaker_wav: 'speaker.wav', speed: 1.1, text: 'One', out_path: 'one.wav' },
+      { lang: 'en', speaker_wav: 'speaker.wav', speed: 1.1, text: 'Two', out_path: 'two.wav' },
     ])
   end
 

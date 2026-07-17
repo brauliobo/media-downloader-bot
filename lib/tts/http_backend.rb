@@ -18,17 +18,23 @@ class TTS
       mattr_accessor :synth_path
       mattr_accessor :batch_synth_path
       mattr_accessor :semaphore
+      mattr_accessor :stable_voice_reference
     end
 
     class_methods do
-      def configure_backend(base_url:, segment_chars: 500, concurrency: 1, synth_path: '/synthesize', batch_synth_path: nil, segment: true)
-        self.base_url         = base_url
-        self.segment_chars    = segment_chars
-        self.segment          = segment
-        self.synth_path       = synth_path
-        self.batch_synth_path = batch_synth_path
-        self.semaphore        = Concurrent::Semaphore.new(concurrency)
+      def configure_backend(base_url:, segment_chars: 500, concurrency: 1, synth_path: '/synthesize', batch_synth_path: nil, segment: true, stable_voice_reference: false)
+        self.base_url              = base_url
+        self.segment_chars         = segment_chars
+        self.segment               = segment
+        self.synth_path            = synth_path
+        self.batch_synth_path      = batch_synth_path
+        self.stable_voice_reference = stable_voice_reference
+        self.semaphore             = Concurrent::Semaphore.new(concurrency)
       end
+    end
+
+    def supports_stable_voice_reference?
+      stable_voice_reference
     end
 
     def synthesize(text:, lang:, out_path:, speaker_wav: nil, **kwargs)

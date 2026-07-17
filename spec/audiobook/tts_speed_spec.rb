@@ -1,26 +1,34 @@
 require 'spec_helper'
 
 RSpec.describe 'Audiobook TTS speed' do
-  it 'builds speech options without speed and with default detected voice instruction' do
-    stub_const('TTS::BACKEND', TTS::OmniVoice)
-    book = instance_double(Audiobook::Book, metadata: {}, pages: [])
-    runner = Audiobook::Runner.new(book, nil, SymMash.new(speed: '1.25'))
+  [TTS::OmniVoice, TTS::MossTTS].each do |backend|
+    it "builds and reuses stable speech options for #{backend.name}" do
+      stub_const('TTS::BACKEND', backend)
+      book = instance_double(Audiobook::Book, metadata: {}, pages: [])
+      runner = Audiobook::Runner.new(book, nil, SymMash.new(speed: '1.25'))
 
-    Dir.mktmpdir do |dir|
-      allow(Language).to receive(:voice_reference_text).with('en').and_return(Audiobook::Runner::VOICE_REFERENCE_TEXT)
-      allow(Language).to receive(:author_gender).and_return('female')
-      allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
-        File.write(out_path, 'wav')
+      Dir.mktmpdir do |dir|
+        syntheses = []
+        allow(Language).to receive(:voice_reference_text).with('en').and_return(Audiobook::Runner::VOICE_REFERENCE_TEXT)
+        allow(Language).to receive(:author_gender).and_return('female')
+        allow(TTS).to receive(:synthesize) do |out_path:, **kwargs|
+          syntheses << kwargs
+          File.write(out_path, 'wav')
+        end
+
+        options = runner.send(:tts_options, dir)
+        reused_options = runner.send(:tts_options, dir)
+
+        expect(backend.supports_stable_voice_reference?).to eq(true)
+        expect(options).not_to have_key(:speed)
+        expect(options[:audio_speed]).to eq(1.25)
+        expect(options[:temperature]).to eq(0)
+        expect(options[:instruct]).to eq('female, middle-aged, moderate pitch')
+        expect(options[:speaker_wav]).to end_with('audiobook_voice_reference.wav')
+        expect(options[:ref_text]).to eq(Audiobook::Runner::VOICE_REFERENCE_TEXT)
+        expect(reused_options[:speaker_wav]).to eq(options[:speaker_wav])
+        expect(syntheses.one?).to eq(true)
       end
-
-      options = runner.send(:tts_options, dir)
-
-      expect(options).not_to have_key(:speed)
-      expect(options[:audio_speed]).to eq(1.25)
-      expect(options[:temperature]).to eq(0)
-      expect(options[:instruct]).to eq('female, middle-aged, moderate pitch')
-      expect(options[:speaker_wav]).to end_with('audiobook_voice_reference.wav')
-      expect(options[:ref_text]).to eq(Audiobook::Runner::VOICE_REFERENCE_TEXT)
     end
   end
 

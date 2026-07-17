@@ -1,6 +1,12 @@
 require 'spec_helper'
 
 RSpec.describe TTS::MossTTS do
+  it 'enables shared stable voice references without changing unrelated backends' do
+    expect(described_class.supports_stable_voice_reference?).to eq(true)
+    expect(TTS::OmniVoice.supports_stable_voice_reference?).to eq(true)
+    expect(TTS::Chatterbox.supports_stable_voice_reference?).to eq(false)
+  end
+
   it 'sends language, temperature, and reference audio to the HTTP server' do
     Dir.mktmpdir('moss-tts-spec-') do |dir|
       out_path = File.join(dir, 'out.wav')
