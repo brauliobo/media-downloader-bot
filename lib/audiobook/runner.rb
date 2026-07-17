@@ -36,16 +36,22 @@ module Audiobook
         prepare_pages(pages, dir, para_offsets, total_paras, total_pages, speech_options)
         batch_synthesize_pages(pages, dir, speech_options)
 
+        errors = Queue.new
         pages.each.with_index.peach do |page, idx|
-          wavs[idx] = page.to_wav(
-            dir, format('%04d', idx + 1),
-            lang: @lang, stl: @stl,
-            para_context: { current: para_offsets[idx], total: total_paras },
-            page_context: { current: idx + 1, total: total_pages },
-            book_metadata: @book.metadata,
-            tts_options: speech_options
-          )
+          begin
+            wavs[idx] = page.to_wav(
+              dir, format('%04d', idx + 1),
+              lang: @lang, stl: @stl,
+              para_context: { current: para_offsets[idx], total: total_paras },
+              page_context: { current: idx + 1, total: total_pages },
+              book_metadata: @book.metadata,
+              tts_options: speech_options
+            )
+          rescue => error
+            errors << error
+          end
         end
+        raise errors.pop unless errors.empty?
 
         # Remove nil entries (empty pages)
         wavs.compact!
