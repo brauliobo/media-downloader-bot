@@ -32,7 +32,6 @@ gem 'faraday'
 gem 'httparty'
 gem 'http-cookie'
 
-gem 'pdf-reader'
 gem 'epub-parser'
 gem 'nokogiri'
 gem 'puppeteer-ruby'

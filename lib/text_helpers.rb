@@ -65,7 +65,7 @@ module TextHelpers
 
   def self.split_sentences(text)
     Array(text).join
-      .gsub(/([.!?…]"?)(?:\s*\d{1,3})?\s+(?=\p{Lu})/u, "\\1\n")
+      .gsub(/([.!?…]"?)(\s*\d{1,3})?\s+(?=\p{Lu})/u, "\\1\\2\n")
       .split(/\n+/)
       .map { |s| s.strip }
       .reject(&:empty?)
@@ -161,4 +161,3 @@ module TextHelpers
   end
 
 end
-
