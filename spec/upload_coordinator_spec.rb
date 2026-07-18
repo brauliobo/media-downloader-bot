@@ -6,8 +6,15 @@ RSpec.describe UploadCoordinator do
   let(:opts)   { SymMash.new(album: 1) }
   let(:msg)    { SymMash.new(chat: {id: 1}) }
 
-  before { allow(worker).to receive(:cleanup_input) }
-  after { FileUtils.remove_entry(dir) if Dir.exist?(dir) }
+  before do
+    Worker.skip_cleanup = false
+    allow(worker).to receive(:cleanup_input)
+  end
+
+  after do
+    Worker.skip_cleanup = false
+    FileUtils.remove_entry(dir) if Dir.exist?(dir)
+  end
 
   def item(name, mime)
     path = File.join(dir, name)
