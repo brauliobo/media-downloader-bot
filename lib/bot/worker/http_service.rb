@@ -124,6 +124,21 @@ module Bot
           {size: service.queue_size}
         end
 
+        r.get 'chat_messages' do
+          params = request_params(r)
+          params[:chat_id] = params[:chat_id].to_i
+          params[:limit] = params[:limit].to_i if params[:limit]
+          params[:from_message_id] = params[:from_message_id].to_i if params[:from_message_id]
+          service.chat_messages(**params)
+        end
+
+        r.get 'chat_message' do
+          params = request_params(r)
+          params[:chat_id] = params[:chat_id].to_i
+          params[:message_id] = params[:message_id].to_i
+          service.chat_message(**params)
+        end
+
         r.post 'max_caption' do
           {max_caption: service.max_caption}
         end
@@ -165,6 +180,15 @@ module Bot
           require_allowed_directory!(params[:dir]) if params[:dir]
           result = service.bot.download_file(file_id_or_info, **params)
           {path: result}
+        end
+
+        r.post 'edit_generated_message' do
+          params = request_params(r)
+          params[:chat_id] = params[:chat_id].to_i
+          params[:message_id] = params[:message_id].to_i
+          require_allowed_paths!(params, UPLOAD_PATH_KEYS)
+          service.edit_generated_message(**params)
+          {success: true}
         end
 
         r.post 'report_error' do
