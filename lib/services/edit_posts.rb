@@ -4,7 +4,6 @@ require 'fileutils'
 require 'json'
 require 'tmpdir'
 
-require_relative '../manager'
 require_relative '../worker'
 require_relative 'concerns/edit_posts/capture_service'
 require_relative 'concerns/edit_posts/http_manager'
@@ -20,7 +19,9 @@ module Services
     DEFAULT_FETCH_LIMIT = 100
     SCRIPT_OPT_KEYS = %i[all apply channel chat drb fetch_limit from_message_id from_post http limit media order plan public query reply_to_pdf source source_urls start_at tmpdir].freeze
 
-    def initialize(argv)
+    def initialize(argv, manager: nil, output: $stdout)
+      @manager = manager
+      @output  = output
       @opts = argv.each_with_object({}) do |arg, opts|
         key, value = arg.split('=', 2)
         opts[key.tr('-', '_').to_sym] = value || true
@@ -34,7 +35,7 @@ module Services
       posts   = select_posts(fetch_posts(manager, chat)).first(limit)
       posts   = select_pdf_audio_replies(manager, chat, posts) if @opts[:reply_to_pdf].to_s == '1'
 
-      puts "chat=#{chat[:id]} title=#{chat[:title].inspect} posts=#{posts.size} apply=#{apply?}"
+      @output.puts "chat=#{chat[:id]} title=#{chat[:title].inspect} posts=#{posts.size} apply=#{apply?}"
       posts.each.with_index(1) { |item, index| process_post(manager, chat, item, index) }
     end
 
@@ -42,25 +43,27 @@ module Services
 
     def process_post(manager, chat, item, index)
       post, source = @opts[:reply_to_pdf].to_s == '1' ? item : [item, source_post(manager, chat, item)]
-      puts "#{index}. post=#{post[:id]} type=#{post[:type]} source=#{source_label(source)}"
+      @output.puts "#{index}. post=#{post[:id]} type=#{post[:type]} source=#{source_label(source)}"
       return if plan?
 
       upload = select_upload(post, regenerate(manager, chat, post, source))
-      return warn('  no generated upload captured') unless upload
+      return @output.puts('  no generated upload captured') unless upload
 
-      puts "  generated type=#{upload[:type]} file=#{upload[:params][:"#{upload[:type]}_path"] || upload[:params][:file_path]}"
+      @output.puts "  generated type=#{upload[:type]} file=#{upload[:params][:"#{upload[:type]}_path"] || upload[:params][:file_path]}"
       return unless apply?
 
       manager.edit_generated_message(chat_id: chat[:id], message_id: post[:id], text: upload[:text], type: upload[:type], parse_mode: upload[:parse_mode], **upload[:params])
-      puts '  edited'
+      @output.puts '  edited'
     end
 
     def configure_worker_tmpdir
-      Worker.tmpdir = @opts[:tmpdir] || File.join(Dir.pwd, 'tmp', 'edit_posts')
-      FileUtils.mkdir_p(Worker.tmpdir)
+      @tmpdir = @opts[:tmpdir] || File.join(Dir.pwd, 'tmp', 'edit_posts')
+      FileUtils.mkdir_p(@tmpdir)
     end
 
     def manager_service
+      return @manager if @manager
+
       http_uri = @opts[:http] || ENV['BOT_HTTP']
       return HTTPManager::Client.new(http_uri) if http_uri.present?
 

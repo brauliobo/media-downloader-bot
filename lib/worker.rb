@@ -45,9 +45,16 @@ class Worker
   class_attribute :workdir_path
   class_attribute :skip_cleanup
 
-  def initialize(msg, service: self.class.service)
-    @msg     = msg
-    @service = service
+  attr_reader :tmpdir
+  attr_reader :workdir_path
+  attr_reader :skip_cleanup
+
+  def initialize(msg, service: self.class.service, tmpdir: self.class.tmpdir, workdir_path: self.class.workdir_path, skip_cleanup: self.class.skip_cleanup)
+    @msg          = msg
+    @service      = service
+    @tmpdir       = tmpdir
+    @workdir_path = workdir_path
+    @skip_cleanup = skip_cleanup
     load_session
   end
 

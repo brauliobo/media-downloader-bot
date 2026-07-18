@@ -5,6 +5,7 @@ require 'limiter'
 require 'retriable'
 require_relative 'base'
 require_relative 'rate_limiter'
+require_relative '../td_bot/chat_identifier'
 require_relative '../td_bot/post_editor'
 
 module Bot
@@ -251,6 +252,10 @@ module Bot
 
     def find_chats(query, limit: 20, public: false)
       post_editor.find_chats(query, limit: limit, public: public)
+    end
+
+    def resolve_chat_identifier(identifier)
+      post_editor.resolve_chat_identifier(identifier)
     end
 
     def chat_messages(chat_id:, limit: 20, query: nil, filter: nil, from_message_id: 0)
