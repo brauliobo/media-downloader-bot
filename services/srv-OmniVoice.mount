@@ -1,0 +1,13 @@
+[Unit]
+Description=Shared OmniVoice runtime
+Wants=network-online.target
+After=network-online.target
+
+[Mount]
+What=10.0.0.10:/srv/OmniVoice
+Where=/srv/OmniVoice
+Type=nfs4
+Options=ro,hard,vers=4.2,_netdev
+
+[Install]
+WantedBy=remote-fs.target

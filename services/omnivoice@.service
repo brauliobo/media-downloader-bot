@@ -1,0 +1,32 @@
+[Unit]
+Description=OmniVoice TTS HTTP server on GPU %i
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=/srv/OmniVoice
+
+[Service]
+DynamicUser=yes
+Nice=19
+WorkingDirectory=/srv/OmniVoice
+
+Environment=PORT_BASE=10440
+Environment=TTS_MODEL_ID=/srv/OmniVoice/model
+Environment=OMNIVOICE_DEVICE=cuda:0
+Environment=HF_HUB_OFFLINE=1
+Environment=TRANSFORMERS_OFFLINE=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=XDG_CACHE_HOME=/var/cache/omnivoice-%i
+
+CacheDirectory=omnivoice-%i
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+NoNewPrivileges=yes
+
+ExecStart=/bin/sh -c 'exec env CUDA_VISIBLE_DEVICES=%i PORT=$(($PORT_BASE + %i)) /srv/OmniVoice/runtime/venv/bin/python /srv/OmniVoice/http_server.py'
+
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
