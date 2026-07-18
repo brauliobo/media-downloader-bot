@@ -248,6 +248,31 @@ RSpec.describe Processors::Folder do
       end
     end
 
+    it 'does not remove another replacement in progress' do
+      Dir.mktmpdir do |dir|
+        replace_dir = File.join(dir, '.mediazip-replace')
+        FileUtils.mkdir_p replace_dir
+        pending = File.join(replace_dir, 'pending.mp4')
+        completed = File.join(replace_dir, 'completed.mp4')
+        write_media(pending)
+        write_media(completed)
+
+        processor = described_class.new(
+          paths: [dir],
+          opts: SymMash.new(replace: 1, metadata: {}),
+          option_args: %w[replace],
+          bot: Bot::Mock.new,
+        )
+        entry = SymMash.new(path: File.join(dir, 'completed.mp4'), out_dir: replace_dir)
+
+        processor.send(:cleanup_replace, entry)
+
+        expect(File.exist?(completed)).to be(false)
+        expect(File.exist?(pending)).to be(true)
+        expect(Dir.exist?(replace_dir)).to be(true)
+      end
+    end
+
     it 'filters folder entries by age options' do
       Dir.mktmpdir do |dir|
         recent = File.join(dir, "#{Date.today.strftime('%Y%m%d')}_000000.mp4")
