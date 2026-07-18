@@ -8,7 +8,7 @@ require_relative 'tts/omni_voice'
 require_relative 'tts/moss_tts'
 
 class TTS
-  BACKEND = const_get(ENV['TTS'] || 'MossTTS')
+  BACKEND = const_get(ENV['TTS'] || 'OmniVoice')
   INTERNAL_OPTIONS = %i[tts_batch_size].freeze
   DEFAULT_SAMPLE_RATE = 22_050
 
