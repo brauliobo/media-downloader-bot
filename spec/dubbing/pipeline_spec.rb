@@ -63,14 +63,12 @@ RSpec.describe Dubbing::Pipeline do
       text: 'Olá.',
       lang: 'pt',
       out_path: kind_of(String),
-      temperature: 0,
       speaker_wav: speaker
     ) { |out_path:, **_| File.write(out_path, 'raw') }
     expect(TTS).to receive(:synthesize).with(
       text: 'Tchau.',
       lang: 'pt',
       out_path: kind_of(String),
-      temperature: 0,
       speaker_wav: speaker
     ) { |out_path:, **_| File.write(out_path, 'raw') }
 

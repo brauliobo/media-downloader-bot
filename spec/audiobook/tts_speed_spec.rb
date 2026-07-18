@@ -22,7 +22,11 @@ RSpec.describe 'Audiobook TTS speed' do
         expect(backend.supports_stable_voice_reference?).to eq(true)
         expect(options).not_to have_key(:speed)
         expect(options[:audio_speed]).to eq(1.25)
-        expect(options[:temperature]).to eq(0)
+        if backend == TTS::MossTTS
+          expect(options[:temperature]).to eq(0)
+        else
+          expect(options).not_to have_key(:temperature)
+        end
         expect(options[:instruct]).to eq('female, middle-aged, moderate pitch')
         expect(options[:speaker_wav]).to end_with('audiobook_voice_reference.wav')
         expect(options[:ref_text]).to eq(Audiobook::Runner::VOICE_REFERENCE_TEXT)
@@ -102,7 +106,7 @@ RSpec.describe 'Audiobook TTS speed' do
     end
   end
 
-  it 'passes configured TTS temperature option' do
+  it 'ignores temperature when the backend does not support it' do
     book = instance_double(Audiobook::Book, metadata: {}, pages: [])
     runner = Audiobook::Runner.new(book, nil, SymMash.new(temp: '0.35'))
 
@@ -114,7 +118,7 @@ RSpec.describe 'Audiobook TTS speed' do
       allow(Language).to receive(:voice_reference_text).with('en').and_return(Audiobook::Runner::VOICE_REFERENCE_TEXT)
       allow(Language).to receive(:author_gender).and_return('male')
 
-      expect(runner.send(:tts_options, dir)[:temperature]).to eq(0.35)
+      expect(runner.send(:tts_options, dir)).not_to have_key(:temperature)
     end
   end
 
