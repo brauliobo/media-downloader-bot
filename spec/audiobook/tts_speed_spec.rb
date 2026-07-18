@@ -34,8 +34,12 @@ RSpec.describe 'Audiobook TTS speed' do
 
   it 'uses book text instead of synthetic narration for the MOSS-TTS reference' do
     stub_const('TTS::BACKEND', TTS::MossTTS)
+    short_text = 'Esta frase possui palavras suficientes para servir como uma referência de voz.'
     source_text = 'Esta frase mais longa preserva uma voz consistente durante toda a leitura do livro.'
-    page = Audiobook::Page.new(1, [Audiobook::Heading.new(source_text)])
+    page = Audiobook::Page.new(1, [
+      Audiobook::Heading.new(short_text),
+      Audiobook::Heading.new(source_text),
+    ])
     book = instance_double(Audiobook::Book, metadata: { 'language' => 'pt' }, pages: [page])
     runner = Audiobook::Runner.new(book, nil, SymMash.new)
 
