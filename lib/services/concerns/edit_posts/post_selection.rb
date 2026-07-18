@@ -28,6 +28,7 @@ module Services
       def resolve_chat(manager)
         raw = @opts[:chat] || @opts[:channel] || abort('chat= or channel= is required')
         return { id: raw.to_i, title: raw, type: 'Chat' } if raw.to_s.match?(/\A-?\d+\z/)
+        return manager.resolve_chat_identifier(raw) if TDBot::ChatIdentifier.public_username(raw)
 
         chats = manager.find_chats(raw.to_s.delete_prefix('@'), limit: 10, public: @opts[:public].to_s == '1')
         abort "no chat found for #{raw.inspect}" if chats.empty?

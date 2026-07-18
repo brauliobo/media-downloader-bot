@@ -2,11 +2,7 @@ module Services
   class EditPosts
     module Regeneration
       def regenerate(manager, chat, post, source_post)
-        service          = CaptureService::Service.new(manager)
-        old_service      = Worker.service
-        old_skip_cleanup = Worker.skip_cleanup
-        Worker.service = service
-        Worker.skip_cleanup = true
+        service = CaptureService::Service.new(manager, output: @output)
 
         text = worker_text(source_post)
         msg = SymMash.new(
@@ -21,11 +17,8 @@ module Services
           msg[media[:kind].to_sym] = SymMash.new(file_id: media[:file_id], file_name: media[:file_name], mime_type: media[:mime_type])
         end
 
-        Worker.new(msg).process
+        Worker.new(msg, service: service, tmpdir: @tmpdir, skip_cleanup: true).process
         service.uploads
-      ensure
-        Worker.service = old_service
-        Worker.skip_cleanup = old_skip_cleanup
       end
 
       def select_upload(post, uploads)

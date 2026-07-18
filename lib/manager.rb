@@ -15,6 +15,7 @@ require_relative 'bot/worker/http_service'
 require_relative 'utils/input_parser'
 
 require_relative 'worker' if ENV['WITH_WORKER']
+require_relative 'services/edit_posts/job_manager' if ENV['TD_BOT']
 require_relative 'bot/tg_bot' if ENV['TG_BOT']
 require_relative 'bot/td_bot' if ENV['TD_BOT']
 
@@ -71,6 +72,7 @@ EOS
 
   def initialize
     @queue = Queue.new
+    @edit_posts_jobs = Services::EditPosts::JobManager.new(self) if ENV['TD_BOT']
   end
 
   def self.http
@@ -137,6 +139,22 @@ EOS
     @queue.size
   end
 
+  def start_edit_posts_job(args)
+    @edit_posts_jobs.start(args)
+  end
+
+  def edit_posts_job(id)
+    @edit_posts_jobs.fetch(id)
+  end
+
+  def edit_posts_jobs
+    @edit_posts_jobs.list
+  end
+
+  def edit_posts_job_log(id, lines: 100)
+    @edit_posts_jobs.log(id, lines: lines)
+  end
+
   def start_bot_service
     if ENV['BOT_HTTP']
       uri = URI.parse(ENV['BOT_HTTP'])
@@ -158,6 +176,10 @@ EOS
 
   def find_chats(...)
     bot.find_chats(...)
+  end
+
+  def resolve_chat_identifier(...)
+    bot.resolve_chat_identifier(...)
   end
 
   def chat_messages(...)

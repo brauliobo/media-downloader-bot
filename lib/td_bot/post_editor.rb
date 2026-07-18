@@ -40,10 +40,10 @@ module TDBot
 
     def find_chats(query, limit: 20, public: false)
       ids = []
-      username = public_chat_username(query)
+      username = ChatIdentifier.public_username(query)
 
       if public && username
-        chat = td.search_public_chat(username: username).value!
+        chat = ChatIdentifier.resolve(td, username)
         ids << chat.id if chat
       end
 
@@ -59,6 +59,10 @@ module TDBot
     rescue => e
       dlog "[TD_FIND_CHATS_ERROR] #{e.class}: #{e.message}"
       []
+    end
+
+    def resolve_chat_identifier(identifier)
+      chat_summary(ChatIdentifier.resolve(td, identifier))
     end
 
     def chat_messages(chat_id:, limit: 20, query: nil, filter: nil, from_message_id: 0)
@@ -135,13 +139,6 @@ module TDBot
       else
         value
       end
-    end
-
-    def public_chat_username(query)
-      value = query.to_s.strip
-      value = value.delete_prefix('@')
-      value = value[%r{\Ahttps?://t\.me/([^/?#]+)}, 1] || value
-      value.match?(/\A[A-Za-z0-9_]{5,}\z/) ? value : nil
     end
 
     def generated_message_content(media_type, text, parse_mode, params)

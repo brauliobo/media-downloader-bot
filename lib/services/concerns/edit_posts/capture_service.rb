@@ -6,8 +6,9 @@ module Services
 
         attr_reader :uploads
 
-        def initialize(manager)
+        def initialize(manager, output: $stderr)
           @manager = manager
+          @output  = output
           @uploads = []
           @next_id = 1
         end
@@ -23,7 +24,7 @@ module Services
         def download_file(...) = @manager.download_file(...)
 
         def report_error(_msg, error, context: nil)
-          warn "error: #{context} #{error.class}: #{error.message}"
+          @output.puts "error: #{context} #{error.class}: #{error.message}"
         end
 
         private

@@ -1,0 +1,25 @@
+#!/usr/bin/env ruby
+
+require 'drb/drb'
+require 'json'
+
+manager = DRbObject.new_with_uri(ENV['BOT_DRB'] || 'druby://127.0.0.1:1188')
+action  = ARGV.first
+
+result = case action
+when 'list'
+  manager.edit_posts_jobs
+when 'status'
+  abort 'usage: edit_posts_job status JOB_ID' unless ARGV[1]
+  manager.edit_posts_job(ARGV[1])
+when 'log'
+  abort 'usage: edit_posts_job log JOB_ID [LINES]' unless ARGV[1]
+  puts manager.edit_posts_job_log(ARGV[1], lines: ARGV[2] || 100)
+  exit
+else
+  args = action == 'start' ? ARGV.drop(1) : ARGV
+  abort 'usage: edit_posts_job start KEY=VALUE...' if args.empty?
+  manager.start_edit_posts_job(args)
+end
+
+puts JSON.pretty_generate(result)
