@@ -13,6 +13,7 @@ ExecStart=/srv/OmniVoice/venv/bin/python /srv/OmniVoice/http_server.py
 
 Environment=PORT=10440
 Environment=TTS_MODEL_ID=/srv/OmniVoice/model
+Environment=CUDA_VISIBLE_DEVICES=1
 Environment=OMNIVOICE_DEVICE=cuda:0
 Environment=TMPDIR=/run/omnivoice-tts
 Environment=HF_HOME=/var/cache/omnivoice-tts/huggingface
