@@ -177,13 +177,13 @@ module Audiobook
     end
 
     def source_voice_reference_text
-      @book.pages.each do |page|
-        page.all_sentences.each do |sentence|
-          text = sentence.text.to_s.strip
-          return text if VOICE_REFERENCE_WORDS.cover?(text.split.size)
-        end
-      end
-      nil
+      @book.pages.flat_map(&:all_sentences).filter_map do |sentence|
+        text = sentence.text.to_s.strip
+        words = text.split
+        next unless VOICE_REFERENCE_WORDS.cover?(words.size)
+
+        text
+      end.max_by { |text| text.split.size }
     end
 
     def detected_voice_instruct
