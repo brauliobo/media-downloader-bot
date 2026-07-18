@@ -2,6 +2,7 @@ require 'spec_helper'
 
 RSpec.describe 'Page paragraph cross-page merge' do
   def fixture_path(name) = File.expand_path("../fixtures/#{name}", __dir__)
+  def fixture_book = Audiobook::Book.from_input(fixture_path('page-paragraphs-merge.pdf'), opts: SymMash.new(slang: 'pt'))
   def paragraph_text(para)
     para.sentences.map(&:text).join(' ').gsub(/\s+/, ' ').strip
   end
@@ -11,28 +12,28 @@ RSpec.describe 'Page paragraph cross-page merge' do
   PAGE_3_TO_4_PARAGRAPH = 'O mito também nos diz que o rei foi ferido na coxa, o que nos faz lembrar a passagem bíblica sobre Jacó lutando com o Anjo. Jacó é ferido na coxa. O toque de algo transpessoal - um anjo ou Cristo na representação do peixe - deixa uma terrível ferida, que grita incessantemente por redenção. O ferimento na coxa significa que o homem foi atingido na sua capacidade de gerar, na sua habilidade para relacionar-se.'
 
   it 'merges the last paragraph of page 1 with its continuation on page 2' do
-    book = Audiobook::Book.from_input(fixture_path('page-paragraphs-merge.pdf'))
+    book = fixture_book
     page1 = book.pages[0]
     last_para_p1 = page1.items.grep(Audiobook::Paragraph).last
     expect(paragraph_text(last_para_p1)).to eq(PAGE_1_TO_2_PARAGRAPH)
   end
 
   it 'merges the last paragraph of page 2 with its continuation on page 3' do
-    book = Audiobook::Book.from_input(fixture_path('page-paragraphs-merge.pdf'))
+    book = fixture_book
     page2 = book.pages[1]
     last_para_p2 = page2.items.grep(Audiobook::Paragraph).last
     expect(paragraph_text(last_para_p2)).to eq(PAGE_2_TO_3_PARAGRAPH)
   end
 
   it 'merges the last paragraph of page 3 with its continuation on page 4' do
-    book = Audiobook::Book.from_input(fixture_path('page-paragraphs-merge.pdf'))
+    book = fixture_book
     page3 = book.pages[2]
     last_para_p3 = page3.items.grep(Audiobook::Paragraph).last
     expect(paragraph_text(last_para_p3)).to eq(PAGE_3_TO_4_PARAGRAPH)
   end
 
   it 'does not create headings from numeric markers and attaches refs to correct sentences' do
-    book = Audiobook::Book.from_input(fixture_path('page-paragraphs-merge.pdf'))
+    book = fixture_book
     page1 = book.pages[0]
     # Ensure there is no heading like "1 2"
     expect(page1.items.grep(Audiobook::Heading).map { |h| h.text.to_s }).not_to include('1 2')
@@ -76,4 +77,3 @@ RSpec.describe 'Page paragraph cross-page merge' do
     )
   end
 end
-
