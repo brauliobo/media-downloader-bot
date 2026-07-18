@@ -35,7 +35,6 @@ module Audiobook
         total_pages = pages.size
         speech_options = tts_options(dir)
         prepare_pages(pages, dir, para_offsets, total_paras, total_pages, speech_options)
-        batch_synthesize_pages(pages, dir, speech_options)
 
         errors = Queue.new
         pages.each.with_index.peach do |page, idx|
@@ -142,19 +141,6 @@ module Audiobook
           tts_options: speech_options
         )
       end
-    end
-
-    def batch_synthesize_pages(pages, dir, speech_options)
-      return unless speech_options[:tts_batch_size].to_i > 1
-
-      jobs = pages.each_with_index.flat_map do |page, idx|
-        page.speech_jobs(dir, format('%04d', idx + 1), @lang)
-      end
-      return if jobs.empty?
-
-      speed, options = AudioFiles.split_speed_options(speech_options)
-      TTS.synthesize_batch(items: jobs, **options)
-      AudioFiles.speed_all(jobs.map { |job| job[:out_path] }, speed)
     end
 
     def audio_speed

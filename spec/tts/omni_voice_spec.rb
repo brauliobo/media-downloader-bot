@@ -1,6 +1,5 @@
 require 'spec_helper'
-require 'base64'
-require 'json'
+require 'timeout'
 require_relative '../../lib/tts/omni_voice'
 
 RSpec.describe TTS::OmniVoice do
@@ -47,43 +46,37 @@ RSpec.describe TTS::OmniVoice do
     end
   end
 
-  it 'sends batch synthesis as one request and writes returned wavs' do
+  it 'allows concurrent requests without backend throttling' do
     Dir.mktmpdir('omnivoice-spec-') do |dir|
-      paths = [File.join(dir, 'one.wav'), File.join(dir, 'two.wav')]
       agent = double
-      response = double(
-        code: '200',
-        body: JSON.dump(
-          'items' => [
-            { 'audio' => Base64.strict_encode64('wav1') },
-            { 'audio' => Base64.strict_encode64('wav2') },
-          ]
-        )
-      )
-      captured_form = nil
+      response = double(code: '200', body: 'wav')
+      started = Queue.new
+      release = Queue.new
 
       allow(Utils::HTTP).to receive(:client).and_return(agent)
-      allow(agent).to receive(:post) do |_url, form|
-        captured_form = form
+      allow(agent).to receive(:post) do
+        started << true
+        release.pop
         response
       end
 
-      described_class.synthesize_batch(
-        items: [
-          { text: 'One.', lang: 'en', out_path: paths[0] },
-          { text: 'Two.', lang: 'en', out_path: paths[1] },
-        ]
-      )
+      threads = 2.times.map do |idx|
+        Thread.new do
+          described_class.synthesize(
+            text: "Request #{idx}",
+            lang: 'en',
+            out_path: File.join(dir, "#{idx}.wav")
+          )
+        end
+      end
 
-      payload = JSON.parse(captured_form['items'])
-      expect(payload).to eq([
-        { 'text' => 'One.', 'language' => 'en' },
-        { 'text' => 'Two.', 'language' => 'en' },
-      ])
-      expect(captured_form).not_to have_key('position_temperature')
-      expect(captured_form).not_to have_key('class_temperature')
-      expect(File.read(paths[0])).to eq('wav1')
-      expect(File.read(paths[1])).to eq('wav2')
+      2.times { Timeout.timeout(1) { started.pop } }
+      2.times { release << true }
+      threads.each(&:join)
+    ensure
+      2.times { release << true }
+      threads&.each(&:join)
     end
   end
+
 end

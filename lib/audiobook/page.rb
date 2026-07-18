@@ -39,8 +39,6 @@ module Audiobook
       page_total = context[:page_total]
       is_ocr_book = context[:is_ocr_book]
 
-      batch_synthesize_items(dir, idx, lang, tts_options) if tts_options[:tts_batch_size].to_i > 1
-
       wavs = items.each_with_index.flat_map do |item, iidx|
         if item.is_a?(Audiobook::Paragraph)
           [item.to_wav]
@@ -95,46 +93,6 @@ module Audiobook
       end
 
       { page_idx: page_idx, page_total: page_total, is_ocr_book: is_ocr_book }
-    end
-
-    def batch_synthesize_items(dir, idx, lang, tts_options)
-      jobs = speech_jobs(dir, idx, lang)
-      return if jobs.empty?
-
-      speed, options = AudioFiles.split_speed_options(tts_options)
-      TTS.synthesize_batch(items: jobs, **options)
-      AudioFiles.speed_all(jobs.map { |job| job[:out_path] }, speed)
-    end
-
-    def speech_jobs(dir, idx, lang)
-      items.each_with_index.flat_map do |item, iidx|
-        if item.is_a?(Audiobook::Paragraph)
-          paragraph_jobs(item, lang)
-        elsif item.respond_to?(:spoken_text)
-          sentence_job(item, File.join(dir, "#{idx}_#{iidx}.wav"), lang)
-        end
-      end.compact
-    end
-
-    def paragraph_jobs(paragraph, lang)
-      paragraph.sentences.each_with_index.flat_map do |sent, sidx|
-        main = sentence_job(sent, File.join(paragraph.dir, "#{paragraph.idx}_#{sidx}.wav"), lang)
-        refs = sent.references.each_with_index.flat_map do |ref, ridx|
-          ref.sentences.each_with_index.map do |rs, j|
-            sentence_job(rs, File.join(paragraph.dir, "#{paragraph.idx}_#{sidx}_r#{ridx}_#{j}.wav"), lang)
-          end
-        end
-        [main, *refs]
-      end
-    end
-
-    def sentence_job(sentence, out_path, lang)
-      return if File.exist?(out_path)
-
-      spoken = sentence.spoken_text
-      return if spoken.empty?
-
-      { text: spoken, lang: lang, out_path: out_path }
     end
 
     # Extract all sentences from all items for translation

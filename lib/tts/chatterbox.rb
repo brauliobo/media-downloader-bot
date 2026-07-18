@@ -6,8 +6,7 @@ class TTS
 
     configure_backend(
       base_url:      "http://127.0.0.1:#{ENV['CHATTERBOX_PORT']&.to_i || 10250}",
-      segment_chars: ENV['CHATTERBOX_SEGMENT_CHARS']&.to_i || 300,
-      concurrency:   ENV['CHATTERBOX_CONCURRENCY']&.to_i || 1
+      segment_chars: ENV['CHATTERBOX_SEGMENT_CHARS']&.to_i || 300
     )
 
     def self.supports_temperature?

@@ -6,8 +6,7 @@ class TTS
 
     configure_backend(
       base_url:      "http://127.0.0.1:#{ENV['F5TTS_PORT']&.to_i || 10240}",
-      segment_chars: ENV['F5TTS_SEGMENT_CHARS']&.to_i || 500,
-      concurrency:   ENV['F5TTS_CONCURRENCY']&.to_i || 1
+      segment_chars: ENV['F5TTS_SEGMENT_CHARS']&.to_i || 500
     )
 
     def self.output_sample_rate
