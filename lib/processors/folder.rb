@@ -114,7 +114,7 @@ module Processors
       finish_entry(entry, started_at)
       delete_original(entry, started_at) if delete_originals? && !replace?
     ensure
-      FileUtils.rm_rf(entry&.out_dir) if replace?
+      cleanup_replace(entry)
     end
 
     def entry_option_args(entry)
@@ -133,6 +133,15 @@ module Processors
 
     def enabled?(*keys)
       keys.any? { |key| opts[key] }
+    end
+
+    def cleanup_replace(entry)
+      return unless replace? && entry
+
+      FileUtils.rm_f(output_path(entry.path, entry.out_dir))
+      Dir.rmdir(entry.out_dir)
+    rescue Errno::ENOENT, Errno::ENOTEMPTY
+      nil
     end
 
     def within_age?(path)
