@@ -12,7 +12,7 @@ module Bot
       plugin :json
       plugin :json_parser
 
-      UPLOAD_PATH_KEYS = %i[file_path audio_path video_path document_path thumb_path thumbnail_path].freeze
+      UPLOAD_PATH_KEYS = %i[file_path thumb_path thumbnail_path].freeze
 
       def self.create(service)
         Class.new(self) do

@@ -29,8 +29,8 @@ RSpec.describe UploadCoordinator do
     )
   end
 
-  it 'flushes queued media as one album' do
-    uploads = [item('1.jpg', 'image/jpeg'), item('2.jpg', 'image/jpeg')]
+  it 'flushes queued mixed media as one album' do
+    uploads = [item('1.jpg', 'image/jpeg'), item('2.mp4', 'video/mp4')]
     allow(worker).to receive(:send).with(:translate_caption_info, uploads.first.info, opts)
     allow(worker).to receive(:send).with(:msg_caption, anything, max: 1024).and_return('_caption_')
     allow(worker).to receive(:send_album)

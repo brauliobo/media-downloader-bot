@@ -55,7 +55,7 @@ RSpec.describe Downloaders::GalleryDl do
       expect(input.info.uploader).to eq('alice')
       expect(input.opts.caption).to eq(1)
       expect(input.uploads.size).to eq(2)
-      expect(input.uploads.first.type.name).to eq(:document)
+      expect(input.uploads.first.type.name).to eq(:photo)
       expect(input.uploads.first.mime).to eq('image/jpeg')
       expect(input.uploads.last.type.name).to eq(:video)
       expect(input.uploads.last.mime).to eq('video/mp4')

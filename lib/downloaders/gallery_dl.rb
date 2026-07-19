@@ -1,5 +1,6 @@
 require_relative 'base'
 require_relative '../utils/cookie_jar'
+require_relative '../utils/mime_types'
 
 module Downloaders
   class GalleryDl < Base
@@ -110,7 +111,7 @@ module Downloaders
       mime  = Rack::Mime.mime_type(File.extname(file)) || 'application/octet-stream'
       SymMash.new(
         fn_out: file,
-        type:   SymMash.new(name: mime.start_with?('video/') ? :video : :document),
+        type:   SymMash.new(name: Utils::MimeTypes.telegram_type(mime)),
         mime:   mime,
         opts:   gopts.deep_dup,
         url:    url,

@@ -81,7 +81,7 @@ module Bot
       payload = tg_text_payload(msg, text, parse_mode)
       payload.delete(:text) if type.to_s != 'message'
       payload[:reply_to_message_id] = incoming_message_id(msg)
-      resp  = SymMash.new tg.send(ep, **payload, **wrap_upload_params(params)).to_h
+      resp  = SymMash.new tg.send(ep, **payload, **wrap_upload_params(params.merge(type: type))).to_h
       resp.text = _text
 
       finalize_sent_message(msg, resp, delete: delete, delete_both: delete_both)
@@ -111,17 +111,16 @@ module Bot
 
     def wrap_upload_params(p)
       p = p.dup
-      if p[:type].to_s == 'paid_media' && p[:file_path]
+      type = p.delete(:type)
+      if type.to_s == 'paid_media'
         p[:file] = build_upload_io(p.delete(:file_path), p.delete(:file_mime))
         if (media = Array(p[:media]).first) && (path = pop_thumbnail_path(media))
           media[:thumbnail] = 'attach://thumbnail'
           p[:thumbnail] = build_upload_io(path, 'image/jpeg')
         end
-      end
-      %i[audio video document].each do |k|
-        kp = :"#{k}_path"
-        km = :"#{k}_mime"
-        p[k] = build_upload_io(p.delete(kp), p.delete(km)) if p[kp]
+      elsif p.key?(:file_path)
+        media_type = type.to_sym
+        p[media_type] = build_upload_io(p.delete(:file_path), p.delete(:file_mime))
       end
       thumb_path     = p.delete(:thumb_path)
       thumbnail_path = p.delete(:thumbnail_path) || thumb_path
@@ -142,20 +141,13 @@ module Bot
 
     def album_media(batch, caption, parse_mode)
       batch.map.with_index do |up, i|
-        media = { type: album_media_type(up), media: "attach://file#{i}" }
+        media = { type: Utils::MimeTypes.telegram_type(up.mime), media: "attach://file#{i}" }
         if i.zero? && caption.present?
           media[:caption] = parse_text(caption, parse_mode: parse_mode)
           media[:parse_mode] = parse_mode
         end
         media
       end.to_json
-    end
-
-    def album_media_type(up)
-      return 'photo' if up.mime.to_s.start_with?('image/')
-      return 'video' if up.mime.to_s.start_with?('video/')
-
-      up.type&.name.to_s.presence || 'document'
     end
 
     def telegram_response_error_message(error)

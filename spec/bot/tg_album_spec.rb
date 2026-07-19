@@ -15,7 +15,7 @@ RSpec.describe Bot::TgBot do
     SymMash.new(fn_out: path, mime: mime, type: SymMash.new(name: :document))
   end
 
-  it 'sends media groups with caption only on the first item' do
+  it 'sends mixed media groups with caption only on the first item' do
     captured = nil
     bot.tg = tg
     allow(bot).to receive(:throttle!)
@@ -24,10 +24,10 @@ RSpec.describe Bot::TgBot do
       [double(to_h: {message_id: 1})]
     end
 
-    bot.send_album(msg, 'caption', uploads: [upload('1.jpg', 'image/jpeg'), upload('2.jpg', 'image/jpeg')])
+    bot.send_album(msg, 'caption', uploads: [upload('1.jpg', 'image/jpeg'), upload('2.mp4', 'video/mp4')])
 
     media = JSON.parse(captured[:media])
-    expect(media.map { |item| item['type'] }).to eq(%w[photo photo])
+    expect(media.map { |item| item['type'] }).to eq(%w[photo video])
     expect(media.first['caption']).to eq('caption')
     expect(media.last).not_to have_key('caption')
   end
