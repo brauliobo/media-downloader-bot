@@ -237,4 +237,40 @@ RSpec.describe 'Audiobook TTS speed' do
     end
   end
 
+  it 'pre-synthesizes audiobook sentences through the concurrent batch path' do
+    page = Audiobook::Page.new(1, [
+      Audiobook::Heading.new('Chapter One.'),
+      Audiobook::Paragraph.new([
+        Audiobook::Sentence.new('Hello world.'),
+        Audiobook::Sentence.new('Second sentence!')
+      ])
+    ])
+    book = instance_double(Audiobook::Book, metadata: {}, pages: [page])
+    runner = Audiobook::Runner.new(book)
+
+    Dir.mktmpdir do |dir|
+      page.prepare_speech_items(dir, '0001', lang: 'en')
+
+      expect(TTS).to receive(:synthesize_batch) do |items:, **options|
+        expect(options).to eq(instruct: 'female narrator')
+        expect(items.map { |item| item[:text] }).to eq([
+          'Chapter One.',
+          'Hello world.',
+          'Second sentence!',
+        ])
+      end
+      expect(Audiobook::AudioFiles).to receive(:speed_all).with(
+        all(end_with('.wav')),
+        1.25
+      )
+
+      runner.send(
+        :batch_synthesize_pages,
+        [page],
+        dir,
+        { audio_speed: 1.25, instruct: 'female narrator' }
+      )
+    end
+  end
+
 end

@@ -25,7 +25,7 @@ TimeoutStopSec=300
 Environment=BUNDLE_DEPLOYMENT=true
 Environment=BUNDLE_FROZEN=false
 Environment=BOT_HTTP=http://localhost:8080
-Environment=THREADS=6
+Environment=THREADS=10
 Environment=DB=1
 
 Restart=always

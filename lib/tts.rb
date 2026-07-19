@@ -9,10 +9,26 @@ require_relative 'tts/moss_tts'
 
 class TTS
   BACKEND = const_get(ENV['TTS'] || 'OmniVoice')
+  BATCH_SIZE = 4
   DEFAULT_SAMPLE_RATE = 22_050
 
   def self.synthesize(**args)
     BACKEND.synthesize(**args)
+  end
+
+  def self.synthesize_batch(items:, **args)
+    batches = items.each_slice(BATCH_SIZE).to_a
+    errors = Queue.new
+
+    batches.peach do |batch|
+      BACKEND.synthesize_batch(items: batch, **args)
+    rescue => error
+      errors << error
+    end
+
+    raise errors.pop unless errors.empty?
+
+    items.map { |item| item.fetch(:out_path) }
   end
 
   def self.supports?(feature)

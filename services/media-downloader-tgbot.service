@@ -29,7 +29,7 @@ ExecStart=/usr/local/rvm/wrappers/ruby-3.4.4/bundle exec bin/tgbot
 Environment=BUNDLE_DEPLOYMENT=true
 Environment=BUNDLE_FROZEN=false
 #Environment=TG_BOT_TOKEN=xxx
-Environment=THREADS=6
+Environment=THREADS=10
 #Environment=CUDA=1
 #Environment=CUDA_VISIBLE_DEVICES=1
 #Environment=DEBUG=1

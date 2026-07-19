@@ -79,4 +79,41 @@ RSpec.describe TTS::OmniVoice do
     end
   end
 
+  it 'sends model batches in one request and writes each returned wav' do
+    Dir.mktmpdir('omnivoice-spec-') do |dir|
+      paths = [File.join(dir, 'one.wav'), File.join(dir, 'two.wav')]
+      agent = double
+      response = double(
+        code: '200',
+        body: JSON.dump(
+          'items' => [
+            { 'audio' => Base64.strict_encode64('wav1') },
+            { 'audio' => Base64.strict_encode64('wav2') },
+          ]
+        )
+      )
+      captured_form = nil
+
+      allow(Utils::HTTP).to receive(:client).and_return(agent)
+      allow(agent).to receive(:post) do |_url, form|
+        captured_form = form
+        response
+      end
+
+      described_class.synthesize_batch(
+        items: [
+          { text: 'One.', lang: 'en', out_path: paths[0] },
+          { text: 'Two.', lang: 'en', out_path: paths[1] },
+        ]
+      )
+
+      expect(JSON.parse(captured_form['items'])).to eq([
+        { 'text' => 'One.', 'language' => 'en' },
+        { 'text' => 'Two.', 'language' => 'en' },
+      ])
+      expect(File.read(paths[0])).to eq('wav1')
+      expect(File.read(paths[1])).to eq('wav2')
+    end
+  end
+
 end
