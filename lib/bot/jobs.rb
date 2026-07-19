@@ -18,6 +18,12 @@ module Bot
     end
 
     def submit(msg)
+      job = register(msg)
+      queue.enq(job)
+      job
+    end
+
+    def register(msg)
       id   = SecureRandom.urlsafe_base64(12)
       data = msg.respond_to?(:to_h) ? msg.to_h.except(:bot, :resp) : msg
       job = {
@@ -30,7 +36,6 @@ module Bot
       @mutex.synchronize do
         @jobs[id] = {owner_id: job[:owner_id], chat_id: job[:chat_id], cancelled: false}
       end
-      queue.enq(job)
       job
     end
 

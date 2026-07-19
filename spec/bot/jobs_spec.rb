@@ -18,6 +18,14 @@ RSpec.describe Bot::Jobs do
     expect(jobs.cancel(job[:id], user_id: 123, chat_id: 123)).to eq(:not_found)
   end
 
+  it 'registers inline jobs without adding them to the external queue' do
+    jobs = described_class.new
+    job  = jobs.register(msg)
+
+    expect(jobs.size).to eq(0)
+    expect(jobs.cancel(job[:id], user_id: 123, chat_id: 123)).to eq(:cancelled)
+  end
+
   it 'only lets the owner or an admin cancel a job' do
     jobs = described_class.new
     job  = jobs.submit(msg)
@@ -35,6 +43,38 @@ RSpec.describe Bot::Jobs do
     expect(data).to eq('job:cancel:job-id')
     expect(described_class.cancel_id(data)).to eq('job-id')
     expect(described_class.cancel_id('unrelated')).to be_nil
+  end
+end
+
+RSpec.describe Manager, '#enqueue_message' do
+  around do |example|
+    original = ENV['WITH_WORKER']
+    ENV['WITH_WORKER'] = '1'
+    example.run
+  ensure
+    ENV['WITH_WORKER'] = original
+  end
+
+  it 'keeps inline TGBot job state in the parent runner' do
+    manager = described_class.new
+    bot     = double(fork_workers?: true)
+    msg     = SymMash.new(from: {id: 123}, chat: {id: 456}, text: 'url')
+    runner  = double
+    manager.instance_variable_set(:@bot, bot)
+
+    allow(Bot::JobRunner).to receive(:new) do |cancelled:, finished:|
+      allow(runner).to receive(:run) do |id, &_work|
+        expect(manager.jobs.cancel(id, user_id: 123, chat_id: 456)).to eq(:cancelled)
+        expect(cancelled.call(id)).to be(true)
+        finished.call(id)
+      end
+      runner
+    end
+
+    manager.enqueue_message(msg)
+
+    expect(manager.queue_size).to eq(0)
+    expect(runner).to have_received(:run).with(kind_of(String))
   end
 end
 

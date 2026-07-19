@@ -65,14 +65,7 @@ module Bot
     end
 
     def self.dispatch_message(msg, &block)
-      return block.call(msg) unless ENV['WITH_WORKER']
-
-      pid = Kernel.fork do
-        DB.disconnect if defined? DB
-        Process.setproctitle 'media-downloader-tgbot worker'
-        block.call msg
-      end
-      Process.waitpid pid
+      block.call msg
     end
 
     def tg_text_payload(msg, text, parse_mode)
@@ -178,6 +171,10 @@ module Bot
 
     def answer_callback(callback, text: nil)
       tg.answer_callback_query(callback_query_id: callback.id, text: text)
+    end
+
+    def fork_workers?
+      true
     end
 
     def perform_delete_message(msg, id)
