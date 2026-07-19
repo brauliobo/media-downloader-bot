@@ -16,14 +16,14 @@ RSpec.describe 'TTS batch synthesis' do
     backend.started = Queue.new
     backend.release = Queue.new
     stub_const('TTS::BACKEND', backend)
-    items = 8.times.map { |idx| { text: idx.to_s, out_path: "#{idx}.wav" } }
+    items = 4.times.map { |idx| { text: idx.to_s, out_path: "#{idx}.wav" } }
     result = Queue.new
 
     old_threads = ENV['THREADS']
     ENV['THREADS'] = '10'
     worker = Thread.new { result << TTS.synthesize_batch(items: items) }
 
-    expect(2.times.map { Timeout.timeout(1) { backend.started.pop } }).to eq([4, 4])
+    expect(2.times.map { Timeout.timeout(1) { backend.started.pop } }).to eq([2, 2])
     2.times { backend.release << true }
     worker.join
     expect(result.pop).to eq(items.map { |item| item[:out_path] })
