@@ -4,6 +4,7 @@ require 'fileutils'
 require 'limiter'
 require 'retriable'
 require_relative 'base'
+require_relative 'jobs'
 require_relative 'rate_limiter'
 require_relative '../td_bot/chat_identifier'
 require_relative '../td_bot/post_editor'
@@ -25,13 +26,13 @@ module Bot
     self.file_manager    = TD::FileManager.new(td)
     td.setup_authentication_handlers
 
-    def self.start &block
+    def self.start(on_callback: nil, &block)
       ENV['CUDA'] = '1'
       Zipper.size_mb_limit = 2_000
 
       bot = self.new
       Thread.new{ td.connect }
-      bot.listen do |msg|
+      bot.listen(on_callback: on_callback) do |msg|
         Thread.new do
           Bot::UserQueue.instance.with_user_slot(bot, msg) { block.call msg }
         rescue => e
@@ -45,9 +46,10 @@ module Bot
       e.message[/retry after (\d+)/, 1]&.to_i || 60
     end
 
-    def listen(&handler)
+    def listen(on_callback: nil, &handler)
       dlog "[LISTEN] waiting for messages..."
       message_handler.setup_handlers(&handler)
+      setup_callback_handler(on_callback) if on_callback
       if ENV['TDLIB_PROCESS_UNREAD'].to_s == '1'
         Thread.new do
           dlog "[UNREAD_THREAD] starting wait for auth"
@@ -122,7 +124,7 @@ module Bot
       [media_type, p]
     end
 
-    def send_message(msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **params)
+    def send_message(msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, cancel_job: nil, **params)
       t = type.to_s
       media_type, params = normalize_params(params, type: type) unless t.in?(%w[message text])
       ret = td_with_rate_limit('send_message') do
@@ -133,7 +135,13 @@ module Bot
         if t.in? %w[message text]
           Manager.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0) do |attempt|
             reply_to = nil if attempt == 1
-            result = message_sender.send_text(msg.chat.id, text, parse_mode: parse_mode, reply_to: reply_to)
+            result = message_sender.send_text(
+              msg.chat.id,
+              text,
+              parse_mode:   parse_mode,
+              reply_to:     reply_to,
+              reply_markup: job_reply_markup(cancel_job),
+            )
           end
         else
           result = message_sender.public_send("send_#{media_type}", msg.chat.id, text, reply_to: reply_to, **params)
@@ -212,11 +220,12 @@ module Bot
       end
     end
 
-    def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', force: false, **params)
+    def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', force: false, cancel_job: nil, **params)
+      reply_markup = job_reply_markup(cancel_job)
       if force
         td_with_rate_limit('edit_message') do
           Manager.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0) do |_attempt|
-            message_sender.edit_message(msg.chat.id, id, text, parse_mode: parse_mode)
+            message_sender.edit_message(msg.chat.id, id, text, parse_mode: parse_mode, reply_markup: reply_markup)
             true
           end
         end
@@ -224,7 +233,7 @@ module Bot
         td_with_rate_limit('edit_message') do
           return false if throttle!(msg.chat.id, :low, discard: true, message_id: id) == :discard
           Manager.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0) do |_attempt|
-            message_sender.edit_message(msg.chat.id, id, text, parse_mode: parse_mode)
+            message_sender.edit_message(msg.chat.id, id, text, parse_mode: parse_mode, reply_markup: reply_markup)
             true
           end
         end || false
@@ -279,11 +288,53 @@ module Bot
       dlog "[READ_ERROR] #{e.class}: #{e.message}"
     end
 
+    def answer_callback(callback, text: nil)
+      td.answer_callback_query(
+        callback_query_id: callback.id,
+        text:              text.to_s,
+        show_alert:        false,
+        url:               '',
+        cache_time:        0,
+      ).value(15)
+    rescue TD::Error
+      nil
+    end
+
     def edit(msg, text)
       edit_message(msg, msg.id, text: text)
     end
 
     private
+
+    def setup_callback_handler(handler)
+      td.on TD::Types::Update::NewCallbackQuery do |query|
+        next unless query.payload.is_a?(TD::Types::CallbackQueryPayload::Data)
+
+        callback = Bot::Callback.new(
+          id:         query.id,
+          user_id:    query.sender_user_id,
+          chat_id:    query.chat_id,
+          message_id: query.message_id,
+          data:       query.payload.data,
+        )
+        Thread.new do
+          handler.call(callback)
+        rescue => e
+          STDERR.puts "td callback error: #{e.full_message}"
+        end
+      end
+    end
+
+    def job_reply_markup(job_id)
+      return nil unless job_id
+
+      TD::Types::ReplyMarkup::InlineKeyboard.new(rows: [[
+        TD::Types::InlineKeyboardButton.new(
+          text: 'Cancel',
+          type: TD::Types::InlineKeyboardButtonType::Callback.new(data: Bot::Jobs.cancel_data(job_id)),
+        ),
+      ]])
+    end
 
     def td_with_rate_limit(tag)
       return yield

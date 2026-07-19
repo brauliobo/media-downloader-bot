@@ -143,6 +143,15 @@ module Bot
           {max_caption: service.max_caption}
         end
 
+        r.post 'job_cancelled' do
+          {cancelled: service.job_cancelled(id: request_params(r)[:id])}
+        end
+
+        r.post 'finish_job' do
+          service.finish_job(id: request_params(r)[:id])
+          {success: true}
+        end
+
         r.post 'send_message' do
           params, msg = message_params(r)
           require_allowed_paths!(params, UPLOAD_PATH_KEYS)

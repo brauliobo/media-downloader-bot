@@ -7,6 +7,7 @@ require 'retriable'
 require 'ostruct'
 
 require_relative 'bot/user_queue'
+require_relative 'bot/jobs'
 require_relative 'bot/base'
 require_relative 'bot/message_result'
 require_relative 'bot/commands/cookie'
@@ -68,10 +69,10 @@ EOS
   end
 
   attr_reader :bot
-  attr_reader :queue
+  attr_reader :jobs
 
   def initialize
-    @queue = Queue.new
+    @jobs = Bot::Jobs.new
     @edit_posts_jobs = Services::EditPosts::JobManager.new(self) if ENV['TD_BOT']
   end
 
@@ -91,11 +92,11 @@ EOS
   end
 
   def start_td_bot
-    @bot = Bot::TDBot.start{ |msg| react msg }
+    @bot = Bot::TDBot.start(on_callback: ->(callback) { cancel_job(callback) }) { |msg| react msg }
   end
 
   def start_tg_bot
-    @bot = Bot::TgBot.start{ |msg| react msg }
+    @bot = Bot::TgBot.start(on_callback: ->(callback) { cancel_job(callback) }) { |msg| react msg }
   end
 
   def send_help msg
@@ -127,16 +128,24 @@ EOS
     if ENV['WITH_WORKER']
       Worker.new(msg, service: bot).process
     else
-      @queue.enq msg
+      jobs.submit(msg)
     end
   end
 
   def dequeue(timeout: nil)
-    @queue.deq(timeout: timeout)
+    jobs.dequeue(timeout: timeout)
   end
 
   def queue_size
-    @queue.size
+    jobs.size
+  end
+
+  def job_cancelled(id:)
+    jobs.cancelled?(id)
+  end
+
+  def finish_job(id:)
+    jobs.finish(id)
   end
 
   def start_edit_posts_job(args)
@@ -229,7 +238,30 @@ EOS
     bot.download_file(...)
   end
 
+  def cancel_job(callback)
+    id = Bot::Jobs.cancel_id(callback.data)
+    return unless id
+
+    admin_id = Bot::MsgHelpers::ADMIN_CHAT_ID
+    result = jobs.cancel(
+      id,
+      user_id: callback.user_id,
+      chat_id: callback.chat_id,
+      admin:   admin_id && callback.user_id.to_i == admin_id,
+    )
+    bot.answer_callback(callback, text: cancel_job_message(result))
+  end
+
   private
+
+  def cancel_job_message(result)
+    {
+      cancelled:         'Cancelling...',
+      already_cancelled: 'Cancellation already requested',
+      forbidden:         'This job belongs to another user',
+      not_found:         'This job is no longer active',
+    }.fetch(result)
+  end
 
   def drb_result(result)
     result.respond_to?(:to_h) ? result.to_h : result

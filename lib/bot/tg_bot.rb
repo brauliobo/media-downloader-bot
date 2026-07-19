@@ -3,6 +3,7 @@ require 'puma'
 require 'roda'
 require 'limiter'
 require_relative 'base'
+require_relative 'jobs'
 require_relative 'rate_limiter'
 require_relative '../utils/safety'
 
@@ -22,7 +23,7 @@ module Bot
     class_attribute :tg
     delegate_missing_to :tg
 
-    def self.start &block
+    def self.start(on_callback: nil, &block)
       Zipper.size_mb_limit = 50
       bot = new
       Thread.new do
@@ -30,7 +31,15 @@ module Bot
           puts 'bot: started, listening'
           bot.tg = tg_bot.api
           tg_bot.listen do |msg|
-            next unless msg.is_a? Telegram::Bot::Types::Message
+            if msg.is_a?(Telegram::Bot::Types::CallbackQuery)
+              Thread.new do
+                on_callback&.call(callback_from(msg))
+              rescue => e
+                STDERR.puts "tg callback error: #{e.full_message}"
+              end
+              next
+            end
+            next unless msg.is_a?(Telegram::Bot::Types::Message)
             Thread.new do
               sym_msg = SymMash.new msg.to_h
               Bot::UserQueue.instance.with_user_slot(bot, sym_msg) do
@@ -43,6 +52,16 @@ module Bot
         end
       end
       bot
+    end
+
+    def self.callback_from(query)
+      Bot::Callback.new(
+        id:         query.id,
+        user_id:    query.from.id,
+        chat_id:    query.message&.chat&.id,
+        message_id: query.message&.message_id,
+        data:       query.data,
+      )
     end
 
     def self.dispatch_message(msg, &block)
@@ -61,8 +80,9 @@ module Bot
       { chat_id: msg.chat.id, text: t, caption: t, parse_mode: parse_mode }
     end
 
-    def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', force: false, **params)
+    def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', force: false, cancel_job: nil, **params)
       return if throttle!(msg.chat.id, :low, discard: true, message_id: id) == :discard
+      params[:reply_markup] = job_reply_markup(cancel_job) unless cancel_job.nil?
       tg.send "edit_message_#{type}", **tg_text_payload(msg, text, parse_mode), message_id: id, **params
     rescue ::Telegram::Bot::Exceptions::ResponseError => e
       resp = SymMash.new(JSON.parse(e.response.body))
@@ -74,13 +94,14 @@ module Bot
       attr_accessor :resp
     end
 
-    def send_message(msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **params)
+    def send_message(msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, cancel_job: nil, **params)
       _text = text
       throttle! msg.chat.id, :high
       ep = "send_#{type}"
       payload = tg_text_payload(msg, text, parse_mode)
       payload.delete(:text) if type.to_s != 'message'
       payload[:reply_to_message_id] = incoming_message_id(msg)
+      params[:reply_markup] = job_reply_markup(cancel_job) unless cancel_job.nil?
       resp  = SymMash.new tg.send(ep, **payload, **wrap_upload_params(params.merge(type: type))).to_h
       resp.text = _text
 
@@ -155,8 +176,25 @@ module Bot
       body.present? ? "#{error.class}: #{error.message}: #{body}" : "#{error.class}: #{error.message}"
     end
 
+    def answer_callback(callback, text: nil)
+      tg.answer_callback_query(callback_query_id: callback.id, text: text)
+    end
+
     def perform_delete_message(msg, id)
       tg.delete_message chat_id: msg.chat.id, message_id: id
+    end
+
+    def job_reply_markup(job_id)
+      buttons = if job_id == false
+        []
+      else
+        [[Telegram::Bot::Types::InlineKeyboardButton.new(
+          text:          'Cancel',
+          callback_data: Bot::Jobs.cancel_data(job_id),
+        )]]
+      end
+
+      Telegram::Bot::Types::InlineKeyboardMarkup.new(inline_keyboard: buttons)
     end
 
 

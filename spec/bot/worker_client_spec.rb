@@ -35,4 +35,36 @@ RSpec.describe Bot::Worker::Client do
     expect(http.map(&:id)).to eq([123])
     expect(drb.map(&:id)).to eq([123])
   end
+
+  it 'delegates job lifecycle calls over DRb' do
+    client = described_class.allocate
+    remote = double
+    client.instance_variable_set(:@mode, :drb)
+    client.instance_variable_set(:@drb, remote)
+    allow(remote).to receive(:job_cancelled).with(id: 'job-id').and_return(true)
+    allow(remote).to receive(:finish_job).with(id: 'job-id').and_return(true)
+
+    expect(client.job_cancelled?('job-id')).to be(true)
+    expect(client.finish_job('job-id')).to be(true)
+  end
+
+  it 'preserves a false cancellation response' do
+    client = described_class.allocate
+    remote = double(job_cancelled: false)
+    client.instance_variable_set(:@mode, :drb)
+    client.instance_variable_set(:@drb, remote)
+
+    expect(client.job_cancelled?('job-id')).to be(false)
+  end
+
+  it 'uses the manager keyword interface over DRb' do
+    manager = Manager.new
+    job     = manager.jobs.submit(SymMash.new(from: {id: 123}, chat: {id: 123}, text: 'url'))
+    client  = described_class.allocate
+    client.instance_variable_set(:@mode, :drb)
+    client.instance_variable_set(:@drb, manager)
+
+    expect(client.job_cancelled?(job[:id])).to be(false)
+    expect(client.finish_job(job[:id])).to be(true)
+  end
 end

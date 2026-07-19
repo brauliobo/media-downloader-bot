@@ -65,6 +65,18 @@ module Bot
         self.class.max_caption
       end
 
+      def job_cancelled?(id)
+        call(:job_cancelled, id: id) do |result|
+          next result unless result.is_a?(Hash)
+
+          result.key?(:cancelled) ? result[:cancelled] : result['cancelled']
+        end
+      end
+
+      def finish_job(id)
+        call(:finish_job, id: id)
+      end
+
       private
 
       def call(method, **kwargs)
