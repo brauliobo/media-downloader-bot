@@ -1,4 +1,6 @@
 require 'uri'
+require 'base64'
+require 'json'
 require 'tempfile'
 require 'fileutils'
 
@@ -13,15 +15,17 @@ class TTS
       mattr_accessor :segment_chars
       mattr_accessor :segment
       mattr_accessor :synth_path
+      mattr_accessor :batch_synth_path
       mattr_accessor :stable_voice_reference
     end
 
     class_methods do
-      def configure_backend(base_url:, segment_chars: 500, synth_path: '/synthesize', segment: true, stable_voice_reference: false)
+      def configure_backend(base_url:, segment_chars: 500, synth_path: '/synthesize', batch_synth_path: nil, segment: true, stable_voice_reference: false)
         self.base_url               = base_url
         self.segment_chars          = segment_chars
         self.segment                = segment
         self.synth_path             = synth_path
+        self.batch_synth_path       = batch_synth_path
         self.stable_voice_reference = stable_voice_reference
       end
     end
@@ -32,6 +36,36 @@ class TTS
 
     def synthesize(text:, lang:, out_path:, speaker_wav: nil, **kwargs)
       http_synthesize(text: text, lang: lang, out_path: out_path, speaker_wav: speaker_wav, **kwargs)
+    end
+
+    def synthesize_batch(items:, lang: nil, speaker_wav: nil, **kwargs)
+      out_paths = []
+      payload = items.map do |item|
+        item = item.to_h.symbolize_keys
+        out_paths << item.fetch(:out_path)
+        {
+          text:     item.fetch(:text).to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: ''),
+          language: (item[:lang] || lang).to_s,
+        }
+      end
+      form = { 'items' => JSON.dump(payload) }
+      kwargs.each { |key, value| form[key.to_s] = value.to_s }
+
+      response = post_form(
+        Utils::HTTP.client,
+        "#{base_url}#{batch_synth_path}",
+        form,
+        speaker_wav || ENV['SPEAKER_WAV']
+      )
+      raise "TTS batch failed: #{response.code}" unless response.code == '200'
+
+      audios = JSON.parse(response.body).fetch('items')
+      raise "TTS batch returned #{audios.size} items for #{out_paths.size} requests" unless audios.size == out_paths.size
+
+      audios.each_with_index do |item, idx|
+        File.binwrite(out_paths[idx], Base64.decode64(item.fetch('audio')))
+      end
+      out_paths
     end
 
     private
@@ -81,26 +115,24 @@ class TTS
     def synth_segment(agent, url, payload, lang, speaker_wav, kwargs, dir, idx)
       wav = File.join(dir, format('%04d.wav', idx))
       spk_wav = speaker_wav || ENV['SPEAKER_WAV']
-      has_file = spk_wav && !spk_wav.empty? && File.exist?(spk_wav)
+      file_path = spk_wav if spk_wav && !spk_wav.empty? && File.exist?(spk_wav)
       form = { 'text' => payload, 'language' => lang }
       kwargs.each { |k, v| form[k.to_s] = v.to_s }
 
-      if has_file
-        file = File.open(spk_wav)
-        begin
-          form['audio'] = file
-          res = agent.post(url, form)
-          raise "TTS failed: #{res.code}" unless res.code == '200'
-          File.binwrite(wav, res.body)
-        ensure
-          file&.close
-        end
-      else
-        res = agent.post(url, form)
-        raise "TTS failed: #{res.code}" unless res.code == '200'
-        File.binwrite(wav, res.body)
-      end
+      res = post_form(agent, url, form, file_path)
+      raise "TTS failed: #{res.code}" unless res.code == '200'
+
+      File.binwrite(wav, res.body)
       wav
+    end
+
+    def post_form(agent, url, form, file_path)
+      return agent.post(url, form) unless file_path
+
+      File.open(file_path) do |file|
+        form['audio'] = file
+        agent.post(url, form)
+      end
     end
 
     def assemble_output(wavs, out_path, dir)

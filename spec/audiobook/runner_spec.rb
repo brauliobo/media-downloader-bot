@@ -12,6 +12,7 @@ RSpec.describe Audiobook::Runner do
       File.write(out_path, 'reference')
     end
     allow(page).to receive(:prepare_speech_items)
+    allow(page).to receive(:speech_jobs).and_return([])
     allow(page).to receive(:to_wav).and_raise('page TTS failed')
     expect(runner).not_to receive(:create_silent_wav)
 

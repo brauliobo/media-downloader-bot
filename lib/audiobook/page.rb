@@ -95,6 +95,39 @@ module Audiobook
       { page_idx: page_idx, page_total: page_total, is_ocr_book: is_ocr_book }
     end
 
+    def speech_jobs(dir, idx, lang)
+      items.each_with_index.flat_map do |item, iidx|
+        if item.is_a?(Audiobook::Paragraph)
+          paragraph_jobs(item, lang)
+        elsif item.respond_to?(:spoken_text)
+          sentence_job(item, File.join(dir, "#{idx}_#{iidx}.wav"), lang)
+        end
+      end.compact
+    end
+
+    def paragraph_jobs(paragraph, lang)
+      paragraph.sentences.each_with_index.flat_map do |sentence, sidx|
+        jobs = [sentence_job(sentence, File.join(paragraph.dir, "#{paragraph.idx}_#{sidx}.wav"), lang)]
+        sentence.references.each_with_index do |reference, ridx|
+          reference.sentences.each_with_index do |referenced, idx|
+            jobs << sentence_job(
+              referenced,
+              File.join(paragraph.dir, "#{paragraph.idx}_#{sidx}_r#{ridx}_#{idx}.wav"),
+              lang
+            )
+          end
+        end
+        jobs.compact
+      end
+    end
+
+    def sentence_job(sentence, out_path, lang)
+      return if File.exist?(out_path)
+
+      text = sentence.spoken_text
+      { text: text, lang: lang, out_path: out_path } unless text.empty?
+    end
+
     # Extract all sentences from all items for translation
     def all_sentences
       items.flat_map do |item|
