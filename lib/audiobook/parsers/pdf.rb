@@ -64,7 +64,8 @@ module Audiobook
         pages = document.xpath('//page').each_with_index.map do |page, index|
           page_height = page['height'].to_f
           lines       = page.xpath('.//line').filter_map do |line|
-            text = line.xpath('./word').map(&:text).join(' ').strip
+            words = line.xpath('./word')
+            text  = line_text(words)
             next if text.empty?
 
             y_min = line['yMin'].to_f
@@ -86,6 +87,18 @@ module Audiobook
           )
         end
         SymMash.new(pages: pages)
+      end
+
+      def self.line_text(words)
+        baseline = words.map { |word| word['yMax'].to_f }.max
+        words.each_with_index.map do |word, index|
+          separator = index.positive? && !superscript_marker?(word, baseline) ? ' ' : ''
+          "#{separator}#{word.text}"
+        end.join.strip
+      end
+
+      def self.superscript_marker?(word, baseline)
+        word.text.match?(/\A\d{1,3}\z/) && word['yMax'].to_f < baseline - 1.0
       end
     end
   end

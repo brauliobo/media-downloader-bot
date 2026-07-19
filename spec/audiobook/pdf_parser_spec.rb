@@ -39,8 +39,8 @@ RSpec.describe Audiobook::Parsers::Pdf do
 
     expect(data.metadata.page_count).to eq(4)
     expect(data.content.images).to be_empty
-    expect(line.text).to include('Chrétien de Troyes. 1')
-    expect(line.text).to include('Wolfram von Eschenbach 2')
+    expect(line.text).to include('Chrétien de Troyes.1')
+    expect(line.text).to include('Wolfram von Eschenbach2')
     expect(line.bottom_spacing).to be_a(Numeric)
     expect(line.x).to be_positive
   end

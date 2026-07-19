@@ -600,6 +600,8 @@ module Audiobook
         pages_hash[page_num] << Image.new(path, stl: @stl, page_context: page_context, text: img_data.text, opts: ocr_opts)
         images_added << [page_num, path]
       end
+
+      1.upto(total_pages) { |page_num| pages_hash[page_num] ||= [] } if total_pages
       
       # Create Page objects
       pages_hash.sort.map { |page_num, items| Page.new(page_num, items) }
@@ -627,14 +629,15 @@ module Audiobook
     end
 
     def marker_ids_for(item)
-      extract_ids = ->(raw) { raw.to_s.strip.scan(/\d+/) }
-      case item
+      raw = case item
       when Paragraph
         return nil unless item.sentences.size == 1
-        extract_ids.call(item.sentences.first.text)
+        item.sentences.first.text
       when Heading
-        extract_ids.call(item.text)
+        item.text
       end
+      value = raw.to_s.strip
+      value.scan(/\d+/) if value.match?(/\A\d+[\)\.\]]*(?:\s+\d+[\)\.\]]*)*\z/)
     end
 
     def group_items_by_page(items_with_pages)
