@@ -39,7 +39,7 @@ RSpec.describe 'Worker playlist with mixed failures (integration)' do
     allow(Bot::MsgHelpers).to receive(:from_admin?) { |arg = nil| arg.equal?(msg) }
     Worker.new(msg).run
 
-    uploads = bot.sent.select { |s| s.params[:type] || s.params[:video_path] || s.params[:audio_path] || s.params[:document_path] }
+    uploads = bot.sent.select { |s| s.params[:type] }
     titles  = uploads.flat_map { |u| [u.params[:title], u.params[:caption]] }.compact.join(' ')
 
     expect(uploads.size).to eq(2), "expected 2 successful uploads, got #{uploads.size}\nsent=#{bot.sent.map(&:to_h)}"
@@ -66,7 +66,7 @@ RSpec.describe 'Worker playlist with mixed failures (integration)' do
     msg = IntegrationHelper.build_msg(text: 'https://example.com/playlist?list=PL_TEST')
     Worker.new(msg).run
 
-    uploads = bot.sent.select { |s| s.params[:type] || s.params[:video_path] || s.params[:audio_path] || s.params[:document_path] }
+    uploads = bot.sent.select { |s| s.params[:type] }
     titles  = uploads.flat_map { |u| [u.params[:title], u.params[:caption]] }.compact.join(' ')
 
     expect(uploads.size).to eq(1), "expected 1 upload, got #{uploads.size}\nsent=#{bot.sent.map(&:to_h)}"

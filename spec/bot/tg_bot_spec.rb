@@ -28,6 +28,24 @@ RSpec.describe Bot::TgBot do
     end
   end
 
+  describe '#send_message' do
+    it 'uses the native endpoint and attachment field for the media type' do
+      bot = described_class.new
+      msg = SymMash.new(chat: {id: 123}, message_id: 456)
+      tg  = double
+      allow(bot).to receive(:throttle!)
+      allow(tg).to receive(:send).and_return(double(to_h: {message_id: 789}))
+      bot.tg = tg
+
+      bot.send_message(msg, 'caption', type: :photo, file_path: __FILE__, file_mime: 'image/jpeg')
+
+      expect(tg).to have_received(:send).with(
+        'send_photo',
+        hash_including(photo: an_instance_of(Faraday::UploadIO), caption: 'caption')
+      )
+    end
+  end
+
   describe '.dispatch_message' do
     around do |example|
       original = ENV['WITH_WORKER']

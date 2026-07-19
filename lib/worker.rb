@@ -230,26 +230,21 @@ class Worker
     mime       = i.mime.presence || i.opts.format&.mime || 'application/octet-stream'
     file_path  = i.fn_out
 
-    # Common send logic for both cases
-    paid  = (ENV['PAID'] || msg.from.id.in?([6884159818])) && !is_doc
-    type  = i.type
-    typek = paid ? :media : type.name
+    paid = (ENV['PAID'] || msg.from.id.in?([6884159818])) && !is_doc
+    type = i.type
 
     media  = SymMash.new(
       type: type.name, duration: durat, width: vstrea&.width, height: vstrea&.height,
-      title: info.title, performer: info.uploader, supports_streaming: true
-    )
-    media.merge!(
-      "#{typek}_path".to_sym => file_path, "#{typek}_mime".to_sym => mime,
-      thumb_path: thumb_path
+      title: info.title, performer: info.uploader, supports_streaming: true, thumb_path: thumb_path
     )
     ret_msg = i.ret_msg = SymMash.new star_count: (20 if paid)
     if paid
-      media[:media] = 'attach://file'
+      media.merge!(media: 'attach://file', media_path: file_path, media_mime: mime)
       ret_msg.merge!(media: [media], type: :paid_media, file_path: file_path, file_mime: mime)
-    else ret_msg.merge! media end
+    else
+      ret_msg.merge!(media, file_path: file_path, file_mime: mime)
+    end
 
-    # Ensure endpoint type is set for non-paid media (video/audio/document)
     ret_msg[:type] ||= type.name
 
     pp ret_msg if ENV['DEBUG']

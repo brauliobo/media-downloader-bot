@@ -104,23 +104,27 @@ module Bot
       text
     end
 
-    def normalize_params(params)
+    def normalize_params(params, type:)
       p = params.dup
-      if p[:type] == :paid_media && (media = p.delete(:media)&.first)
-        p[:file] = p.delete(:file_path)
-        p[media[:type]] = media[:media_path] if media[:type]
-        p[:thumb] = media.values_at(:thumbnail_path, :thumb_path, :thumbnail, :thumb).compact.first
+      if type.to_sym == :paid_media
+        media      = p.delete(:media).first
+        media_type = media[:type].to_sym
+        p[:file]      = p.delete(:file_path)
+        p[media_type] = media[:media_path]
+        p[:thumb]     = media.values_at(:thumbnail_path, :thumb_path, :thumbnail, :thumb).compact.first
         p.merge!(media.slice(:duration, :width, :height, :title, :performer, :supports_streaming).compact)
       else
-        %i[audio video document].each { |k| p[k] = p.delete(:"#{k}_path") if p[:"#{k}_path"] }
+        media_type = type.to_sym
+        p[media_type] = p.delete(:file_path)
+        p.delete(:file_mime)
         p[:thumb] = p.delete(:thumb_path) || p.delete(:thumbnail_path) || p.delete(:thumbnail)
       end
-      p
+      [media_type, p]
     end
 
     def send_message(msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **params)
       t = type.to_s
-      params = normalize_params(params) unless t.in?(%w[message text])
+      media_type, params = normalize_params(params, type: type) unless t.in?(%w[message text])
       ret = td_with_rate_limit('send_message') do
         throttle! msg.chat.id, :high
         reply_to = incoming_message_id(msg, :id, :message_id)
@@ -131,16 +135,8 @@ module Bot
             reply_to = nil if attempt == 1
             result = message_sender.send_text(msg.chat.id, text, parse_mode: parse_mode, reply_to: reply_to)
           end
-        elsif params[:audio]
-          result = message_sender.send_audio(msg.chat.id, text, reply_to: reply_to, **params)
-        elsif params[:video]
-          result = message_sender.send_video(msg.chat.id, text, reply_to: reply_to, **params)
-        elsif params[:document]
-          result = message_sender.send_document(msg.chat.id, text, reply_to: reply_to, **params)
         else
-          preview = text.to_s.gsub(/\s+/, ' ')[0, 200]
-          dlog "[TD_SEND] type=#{type} chat=#{msg.chat.id} text=#{preview}"
-          result = { message_id: (Time.now.to_f * 1000).to_i, text: text }
+          result = message_sender.public_send("send_#{media_type}", msg.chat.id, text, reply_to: reply_to, **params)
         end
         finalize_sent_message(msg, SymMash.new(result), delete: delete, delete_both: delete_both)
       end

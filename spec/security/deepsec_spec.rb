@@ -108,7 +108,7 @@ RSpec.describe 'DeepSec regressions' do
 
   it 'wraps regular video thumbnails with legacy and current Telegram fields' do
     bot = Bot::TgBot.new
-    params = bot.wrap_upload_params(type: :video, video_path: __FILE__, video_mime: 'video/mp4', thumb_path: __FILE__)
+    params = bot.wrap_upload_params(type: :video, file_path: __FILE__, file_mime: 'video/mp4', thumb_path: __FILE__)
 
     expect(params[:thumb]).to be_a(Faraday::UploadIO)
     expect(params[:thumbnail]).to be_a(Faraday::UploadIO)
