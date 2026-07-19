@@ -120,15 +120,11 @@ RSpec.describe Bot::TgBot do
       expect { |block| described_class.dispatch_message(msg, &block) }.to yield_with_args(msg)
     end
 
-    it 'forks inline processing work' do
+    it 'delegates inline process ownership to the manager' do
       ENV['WITH_WORKER'] = '1'
-      allow(Kernel).to receive(:fork).and_return(42)
-      allow(Process).to receive(:waitpid)
+      msg = SymMash.new(message_id: 123)
 
-      described_class.dispatch_message(SymMash.new) { raise 'must run in child' }
-
-      expect(Kernel).to have_received(:fork)
-      expect(Process).to have_received(:waitpid).with(42)
+      expect { |block| described_class.dispatch_message(msg, &block) }.to yield_with_args(msg)
     end
   end
 end

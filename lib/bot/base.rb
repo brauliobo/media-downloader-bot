@@ -45,6 +45,10 @@ module Bot
     def answer_callback(callback, text: nil)
     end
 
+    def fork_workers?
+      false
+    end
+
     private
 
     def finalize_sent_message(msg, response, delete: nil, delete_both: nil)

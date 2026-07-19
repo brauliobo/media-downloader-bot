@@ -8,6 +8,7 @@ require 'ostruct'
 
 require_relative 'bot/user_queue'
 require_relative 'bot/jobs'
+require_relative 'bot/job_runner'
 require_relative 'bot/base'
 require_relative 'bot/message_result'
 require_relative 'bot/commands/cookie'
@@ -125,7 +126,9 @@ EOS
   end
 
   def enqueue_message(msg)
-    if ENV['WITH_WORKER']
+    if ENV['WITH_WORKER'] && bot.fork_workers?
+      run_inline_job(msg)
+    elsif ENV['WITH_WORKER']
       Worker.new(msg, service: bot).process
     else
       jobs.submit(msg)
@@ -253,6 +256,16 @@ EOS
   end
 
   private
+
+  def run_inline_job(msg)
+    job = jobs.register(msg)
+    runner = Bot::JobRunner.new(cancelled: jobs.method(:cancelled?), finished: jobs.method(:finish))
+    runner.run(job[:id]) do
+      DB.disconnect if defined? DB
+      Process.setproctitle 'media-downloader-tgbot worker'
+      Worker.new(msg, service: bot, job_id: job[:id]).process
+    end
+  end
 
   def cancel_job_message(result)
     {
