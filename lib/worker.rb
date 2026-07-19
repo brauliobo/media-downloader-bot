@@ -22,6 +22,7 @@ require_relative 'processors/shorts'
 require_relative 'processors/local_file'
 
 require_relative 'bot/status'
+require_relative 'bot/jobs'
 require_relative 'bot/worker/client'
 
 require_relative 'audiobook'
@@ -38,6 +39,7 @@ class Worker
   attr_reader :opts
   attr_reader :session
   attr_reader :service
+  attr_reader :job_id
 
   class_attribute :tmpdir
   self.tmpdir = ENV['TMPDIR'] || Dir.tmpdir
@@ -49,9 +51,10 @@ class Worker
   attr_reader :workdir_path
   attr_reader :skip_cleanup
 
-  def initialize(msg, service: self.class.service, tmpdir: self.class.tmpdir, workdir_path: self.class.workdir_path, skip_cleanup: self.class.skip_cleanup)
+  def initialize(msg, service: self.class.service, job_id: nil, tmpdir: self.class.tmpdir, workdir_path: self.class.workdir_path, skip_cleanup: self.class.skip_cleanup)
     @msg          = msg
     @service      = service
+    @job_id       = job_id
     @tmpdir       = tmpdir
     @workdir_path = workdir_path
     @skip_cleanup = skip_cleanup
@@ -70,10 +73,15 @@ class Worker
   end
 
   def workdir &block
+    cancelled = false
     @dir = workdir_path || Dir.mktmpdir("mdb-", tmpdir)
     yield @dir
+  rescue Bot::JobCancelled
+    cancelled = true
+    FileUtils.rm_rf(@dir) unless skip_cleanup
+    raise
   ensure
-    cleanup_workdir(@dir) unless skip_cleanup
+    cleanup_workdir(@dir) unless skip_cleanup || cancelled
   end
 
   def cleanup_workdir(dir)
@@ -84,7 +92,14 @@ class Worker
   end
 
   def process
+    cancelled = false
     run
+  rescue Bot::JobCancelled
+    cancelled = true
+    @st&.error('Cancelled', cancel_job: false)
+    raise
+  ensure
+    clear_cancel_button unless cancelled
   end
 
   def run
@@ -191,6 +206,8 @@ class Worker
   def init_status
     return if @st
     @st = Bot::Status.new(on_empty: -> { delete_status_message }) do |text, *args, **params|
+      params[:cancel_job] = job_id if job_id && !params.key?(:cancel_job)
+      @status_update = [text, args, params]
       raw = text
       text = Bot::MsgHelpers.me(text) unless params[:parse_mode]
       begin
@@ -198,14 +215,30 @@ class Worker
         raise 'edit failed' unless result
       rescue
         # Fallback: retry without MarkdownV2 so error messages with special chars still display
-        edit_message(msg, msg.resp.message_id, text: raw, force: true, parse_mode: nil) rescue nil
+        edit_message(msg, msg.resp.message_id, text: raw, force: true, parse_mode: nil, cancel_job: params[:cancel_job]) rescue nil
       end
     end
-    msg.resp ||= send_message msg, Bot::MsgHelpers.me('Downloading metadata...')
+    initial_params = job_id ? {cancel_job: job_id} : {}
+    initial_text   = 'Downloading metadata...'
+    @status_update = [initial_text, [], initial_params]
+    msg.resp ||= send_message msg, Bot::MsgHelpers.me(initial_text), **initial_params
   end
 
   def delete_status_message
     delete_message(msg, msg.resp.message_id, wait: 0) if msg.resp&.message_id
+    @status_deleted = true
+  end
+
+  def clear_cancel_button
+    return unless job_id && !@status_deleted && @status_update && msg.resp&.message_id
+
+    text, args, params = @status_update
+    params = params.merge(cancel_job: false)
+    raw    = text
+    text   = Bot::MsgHelpers.me(text) unless params[:parse_mode]
+    edit_message(msg, msg.resp.message_id, *args, text: text, force: true, **params)
+  rescue
+    edit_message(msg, msg.resp.message_id, text: raw, force: true, parse_mode: nil, cancel_job: false) rescue nil
   end
 
   def upload_one i

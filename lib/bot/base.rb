@@ -42,6 +42,9 @@ module Bot
       STDERR.puts "error: #{e.class}: #{e.message}"
     end
 
+    def answer_callback(callback, text: nil)
+    end
+
     private
 
     def finalize_sent_message(msg, response, delete: nil, delete_both: nil)
