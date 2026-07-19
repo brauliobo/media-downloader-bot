@@ -9,7 +9,7 @@ require_relative 'tts/moss_tts'
 
 class TTS
   BACKEND = const_get(ENV['TTS'] || 'OmniVoice')
-  BATCH_SIZE = 4
+  BATCH_SIZE = 2
   DEFAULT_SAMPLE_RATE = 22_050
 
   def self.synthesize(**args)
