@@ -30,7 +30,9 @@ RSpec.describe 'Image handling in PDFs with text' do
     allow(Ocr).to receive(:detect_language).and_return('pt')
   end
 
-  let(:book) { Audiobook::Book.from_input(fixture_path('image-text-handler.pdf')) }
+  let(:book) do
+    Audiobook::Book.from_input(fixture_path('image-text-handler.pdf'), opts: SymMash.new(alang: 'pt'))
+  end
 
   it 'creates an Image object for the first page (image only)' do
     page1 = book.pages[0]

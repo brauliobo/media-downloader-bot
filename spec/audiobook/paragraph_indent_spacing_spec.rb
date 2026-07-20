@@ -3,7 +3,9 @@ require 'spec_helper'
 RSpec.describe 'Paragraph breaks based on indentation and spacing' do
   def fixture_path(name) = File.expand_path("../fixtures/#{name}", __dir__)
 
-  let(:book) { Audiobook::Book.from_input(fixture_path('paragraph-ident-and-spacing.pdf')) }
+  let(:book) do
+    Audiobook::Book.from_input(fixture_path('paragraph-ident-and-spacing.pdf'), opts: SymMash.new(alang: 'pt'))
+  end
 
   def paragraph_text(para)
     para.sentences.map(&:text).join(' ').gsub(/\s+/, ' ').strip
