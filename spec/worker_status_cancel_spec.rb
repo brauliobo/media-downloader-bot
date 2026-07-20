@@ -35,7 +35,9 @@ RSpec.describe Worker, 'job status controls' do
 
     expect(service.sent.last).to include(cancel_job: 'job-id')
     expect(service.edited[-2].last).to include(cancel_job: 'job-id')
+    expect(service.edited[-2].last).to include(force: false)
     expect(service.edited.last.last).to include(cancel_job: false)
+    expect(service.edited.last.last).to include(force: true)
   end
 
   it 'replaces the status with Cancelled when execution is interrupted' do
@@ -44,7 +46,7 @@ RSpec.describe Worker, 'job status controls' do
     allow(worker).to receive(:run).and_raise(Bot::JobCancelled)
 
     expect { worker.process }.to raise_error(Bot::JobCancelled)
-    expect(service.edited.last.last).to include(text: 'Cancelled', cancel_job: false)
+    expect(service.edited.last.last).to include(text: 'Cancelled', cancel_job: false, force: true)
   end
 
   it 'removes the work directory synchronously when cancelled' do

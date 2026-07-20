@@ -210,12 +210,12 @@ class Worker
       @status_update = [text, args, params]
       raw = text
       text = Bot::MsgHelpers.me(text) unless params[:parse_mode]
+      force = params[:cancel_job] == false
       begin
-        result = edit_message msg, msg.resp.message_id, *args, text: text, force: true, **params
-        raise 'edit failed' unless result
+        edit_message msg, msg.resp.message_id, *args, text: text, force: force, **params
       rescue
         # Fallback: retry without MarkdownV2 so error messages with special chars still display
-        edit_message(msg, msg.resp.message_id, text: raw, force: true, parse_mode: nil, cancel_job: params[:cancel_job]) rescue nil
+        edit_message(msg, msg.resp.message_id, text: raw, force: force, parse_mode: nil, cancel_job: params[:cancel_job]) rescue nil
       end
     end
     initial_params = job_id ? {cancel_job: job_id} : {}
