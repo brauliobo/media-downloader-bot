@@ -34,6 +34,7 @@ Download and convert videos/audios from Youtube, Facebook, Instagram, etc.
 Options:
 - Use `audio` keyword after link to extract audio
 - Use `caption` to put title and uploader
+- Use `clang=pt` to translate only the caption
 - Use `number` to add the number for each file in playlists
 
 Report issues at https://github.com/brauliobo/media-downloader-bot/issues/new

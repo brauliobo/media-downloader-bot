@@ -36,8 +36,8 @@ class UploadCoordinator
   attr_reader :worker, :album_queue
 
   def upload_album(input)
-    worker.send(:translate_caption_info, input.info, input.opts)
-    caption = worker.send(:msg_caption, input, max: worker.caption_limit)
+    info    = worker.send(:translate_caption_info, input.info, input.opts)
+    caption = worker.send(:msg_caption, input, max: worker.caption_limit, info: info)
     worker.send_album worker.msg, caption, uploads: input.uploads, parse_mode: 'MarkdownV2'
   end
 

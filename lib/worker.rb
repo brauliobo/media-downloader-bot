@@ -251,11 +251,11 @@ class Worker
     durat  = oprobe&.format&.duration&.to_i
     opts   = i.opts
 
-    translate_caption_info(info, opts)
+    caption_info = translate_caption_info(info, opts)
 
     info.title = msg_limit(info.title, percent: 90) if info.title
 
-    caption = msg_caption i, max: caption_limit
+    caption = msg_caption i, max: caption_limit, info: caption_info
     return send_message msg, caption if opts.simulate
 
     vstrea     = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
@@ -285,20 +285,20 @@ class Worker
     send_message msg, caption, **ret_msg
   end
 
-  def msg_caption(i, max: nil)
+  def msg_caption(i, max: nil, info: i.info)
     caption_opts = i.opts || opts || SymMash.new
     return '' if caption_opts.nocaption
 
-    return build_msg_caption(i) unless max
+    return build_msg_caption(i, info: info) unless max
 
-    title = i.info.title.to_s
+    title = info.title.to_s
     best  = nil
     low   = 0
     high  = title.size
 
     while low <= high
       mid  = (low + high) / 2
-      text = build_msg_caption(i, title: title.first(mid))
+      text = build_msg_caption(i, title: title.first(mid), info: info)
       if text.size <= max
         best = text
         low  = mid + 1
@@ -307,21 +307,21 @@ class Worker
       end
     end
 
-    best || build_msg_caption(i, title: '')
+    best || build_msg_caption(i, title: '', info: info)
   end
 
-  def build_msg_caption(i, title: nil)
+  def build_msg_caption(i, title: nil, info: i.info)
     caption_opts = i.opts || opts || SymMash.new
     text = ''
     if caption_opts.caption or i.type == Zipper::Types.video
-      title_text = (title || i.info.title).to_s
+      title_text = (title || info.title).to_s
       text  = markdown_italic(title_text) if title_text.present?
-      text << "\n" if text.present? && i.info.uploader
-      text << Bot::MsgHelpers.me(i.info.uploader) if i.info.uploader
+      text << "\n" if text.present? && info.uploader
+      text << Bot::MsgHelpers.me(info.uploader) if info.uploader
     end
-    if caption_opts.description and i.info.description.strip.presence
+    if caption_opts.description and info.description.strip.presence
       text << "\n\n" if text.present?
-      text << markdown_italic(i.info.description.strip)
+      text << markdown_italic(info.description.strip)
     end
     if i.url
       text << "\n\n" if text.present?
@@ -361,11 +361,14 @@ class Worker
   end
 
   def translate_caption_info(info, opts)
-    return unless opts.slang
+    target = opts.clang || opts.slang
+    return info unless target
 
+    caption_info = opts.clang ? info.deep_dup : info
     [:title, (:description if opts.description)].compact.each do |field|
-      info[field] = translate_caption_text(info[field], from: info.language, to: opts.slang) if info[field].present?
+      caption_info[field] = translate_caption_text(info[field], from: info.language, to: target) if info[field].present?
     end
+    caption_info
   end
 
 end
