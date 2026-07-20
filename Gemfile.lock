@@ -208,7 +208,6 @@ GEM
       diff-lcs (>= 1.2.0, < 2.0)
       rspec-support (~> 3.13.0)
     rspec-support (3.13.6)
-    ruby-limiter (2.3.0)
     rubyntlm (0.6.5)
       base64
     securerandom (0.4.1)
@@ -261,7 +260,6 @@ DEPENDENCIES
   retriable
   roda
   rspec
-  ruby-limiter
   sequel
   srt
   tdlib-ruby!

@@ -14,6 +14,7 @@ module TDBot
 
       content = generated_message_content(media_type, text, parse_mode, params)
       bot.send(:td_with_rate_limit, 'edit_generated_message') do
+        bot.send(:throttle!, chat_id, :high)
         result = td.edit_message_media(
           chat_id:               chat_id,
           message_id:            message_id,
@@ -29,6 +30,7 @@ module TDBot
       media_type = type.to_s
       timeout    = params[:timeout].to_i.nonzero? || UPLOAD_TIMEOUT
       content    = generated_message_content(media_type, text, parse_mode, params)
+      bot.send(:throttle!, chat_id, :high)
       sent       = send_message_content(chat_id, content, timeout)
 
       message   = wait_uploaded_message(chat_id, sent.id, timeout: timeout)

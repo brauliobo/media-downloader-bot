@@ -1,7 +1,7 @@
 require 'tdlib-ruby'
+require 'concurrent/map'
 require 'set'
 require 'fileutils'
-require 'limiter'
 require 'retriable'
 require_relative 'base'
 require_relative 'jobs'
@@ -16,14 +16,28 @@ module Bot
 
     self.max_caption = 4096
     MEDIA_CAPTION_LIMIT = 1024
+    MEDIA_SEND_TIMEOUT = 1_800
+    SEND_OUTCOME_LIMIT = 1_000
+    SendOutcome = Struct.new(:message_id, :error, keyword_init: true)
 
     class_attribute :td
-    class_attribute :message_handler, :message_sender, :file_manager
+    class_attribute :message_handler, :message_sender, :file_manager, :message_send_outcomes
     TD::Client.configure_for_bot
     self.td = TD::Client.new timeout: 1.minute
     self.message_handler = TD::MessageHandler.new(td)
     self.message_sender  = TD::MessageSender.new(td)
     self.file_manager    = TD::FileManager.new(td)
+    self.message_send_outcomes = Concurrent::Map.new
+    record_send_outcome = lambda do |message_id, outcome|
+      message_send_outcomes.delete(message_send_outcomes.keys.first) if message_send_outcomes.size >= SEND_OUTCOME_LIMIT
+      message_send_outcomes[message_id] = outcome
+    end
+    td.on TD::Types::Update::MessageSendSucceeded do |update|
+      record_send_outcome.call(update.old_message_id, SendOutcome.new(message_id: update.message.id))
+    end
+    td.on TD::Types::Update::MessageSendFailed do |update|
+      record_send_outcome.call(update.old_message_id, SendOutcome.new(error: TD::Error.new(update.error)))
+    end
     td.setup_authentication_handlers
 
     def self.start(on_callback: nil, &block)
@@ -145,6 +159,7 @@ module Bot
           end
         else
           result = message_sender.public_send("send_#{media_type}", msg.chat.id, text, reply_to: reply_to, **params)
+          result = wait_for_media_send(result, timeout: params[:timeout].to_i.nonzero? || MEDIA_SEND_TIMEOUT)
         end
         finalize_sent_message(msg, SymMash.new(result), delete: delete, delete_both: delete_both)
       end
@@ -160,6 +175,7 @@ module Bot
         batch_caption = first ? text : nil
         first = false
         result = td_with_rate_limit('send_album') do
+          throttle! msg.chat.id, :high
           message_sender.send_media_album(msg.chat.id, batch, caption: batch_caption, parse_mode: parse_mode, timeout: 1_800)
         end
         unless result
@@ -209,6 +225,7 @@ module Bot
       batch.map.with_index do |up, i|
         caption = i.zero? ? text.to_s : ''
         td_with_rate_limit('send_album_item') do
+          throttle! msg.chat.id, :high
           if up.mime.to_s.start_with?('video/')
             message_sender.send_video(msg.chat.id, caption, video: up.fn_out, reply_to: nil)
           elsif up.mime.to_s.start_with?('image/')
@@ -222,20 +239,11 @@ module Bot
 
     def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', force: false, cancel_job: nil, **params)
       reply_markup = job_reply_markup(cancel_job)
-      if force
-        td_with_rate_limit('edit_message') do
-          Manager.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0) do |_attempt|
-            message_sender.edit_message(msg.chat.id, id, text, parse_mode: parse_mode, reply_markup: reply_markup)
-            true
-          end
-        end
-      else
-        td_with_rate_limit('edit_message') do
-          return false if throttle!(msg.chat.id, :low, discard: true, message_id: id) == :discard
-          Manager.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0) do |_attempt|
-            message_sender.edit_message(msg.chat.id, id, text, parse_mode: parse_mode, reply_markup: reply_markup)
-            true
-          end
+      td_with_rate_limit('edit_message') do
+        return false if throttle!(msg.chat.id, :low, discard: !force, message_id: id) == :discard
+        Manager.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0) do |_attempt|
+          message_sender.edit_message(msg.chat.id, id, text, parse_mode: parse_mode, reply_markup: reply_markup)
+          true
         end || false
       end
     end
@@ -336,6 +344,25 @@ module Bot
       ]])
     end
 
+    def wait_for_media_send(result, timeout:)
+      response   = SymMash.new(result)
+      message_id = response.message_id.to_i
+      raise 'TDLib failed to queue media message' unless message_id.positive?
+
+      deadline = Time.now + timeout
+      loop do
+        if (outcome = self.class.message_send_outcomes.delete(message_id))
+          raise outcome.error if outcome.error
+
+          response.message_id = outcome.message_id
+          return response
+        end
+
+        raise "timed out waiting for media message #{message_id}" if Time.now >= deadline
+        sleep 0.1
+      end
+    end
+
     def td_with_rate_limit(tag)
       return yield
     rescue TD::Error => e
@@ -344,11 +371,11 @@ module Bot
       end
       STDERR.puts "[TD_ERROR] #{e.class}: #{e.message}"
       dlog "[TD_ERROR] #{e.class}: #{e.message}"
-      nil
+      raise
     rescue => e
       STDERR.puts "[TD_ERROR] #{e.class}: #{e.message}\n#{e.backtrace&.first(5)&.join("\n")}"
       dlog "[TD_ERROR] #{e.class}: #{e.message}"
-      nil
+      raise
     end
   end
 end

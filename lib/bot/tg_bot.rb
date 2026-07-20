@@ -1,7 +1,6 @@
 require 'telegram/bot'
 require 'puma'
 require 'roda'
-require 'limiter'
 require_relative 'base'
 require_relative 'jobs'
 require_relative 'rate_limiter'
