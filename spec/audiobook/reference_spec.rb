@@ -12,7 +12,7 @@ RSpec.describe 'Reference extraction from PDF' do
 
   def load_reference_data(fixture)
     pdf_path = fixture_path(fixture)
-    book = Audiobook::Book.from_input(pdf_path)
+    book = Audiobook::Book.from_input(pdf_path, opts: SymMash.new(alang: 'pt'))
     pages = book.pages
 
     references = pages.flat_map do |page|
@@ -67,4 +67,3 @@ RSpec.describe 'Reference extraction from PDF' do
   end
 
 end
-
