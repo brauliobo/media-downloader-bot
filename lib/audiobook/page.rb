@@ -96,24 +96,38 @@ module Audiobook
     end
 
     def speech_jobs(dir, idx, lang)
+      paragraph  = items.grep(Audiobook::Paragraph).first
+      page_idx   = paragraph&.page_idx || number
+      page_total = paragraph&.page_total || number
+
       items.each_with_index.flat_map do |item, iidx|
         if item.is_a?(Audiobook::Paragraph)
           paragraph_jobs(item, lang)
         elsif item.respond_to?(:spoken_text)
-          sentence_job(item, File.join(dir, "#{idx}_#{iidx}.wav"), lang)
+          parts  = ["page #{page_idx}/#{page_total}", "item #{iidx + 1}/#{items.size}", item.class.name.demodulize]
+          status = "Processing #{parts.join(', ')}"
+          sentence_job(item, File.join(dir, "#{idx}_#{iidx}.wav"), lang, status)
         end
       end.compact
     end
 
     def paragraph_jobs(paragraph, lang)
       paragraph.sentences.each_with_index.flat_map do |sentence, sidx|
-        jobs = [sentence_job(sentence, File.join(paragraph.dir, "#{paragraph.idx}_#{sidx}.wav"), lang)]
+        context = [
+          "page #{paragraph.page_idx}/#{paragraph.page_total}",
+          "item #{paragraph.item_idx}/#{paragraph.item_total}",
+          "paragraph #{paragraph.para_idx}/#{paragraph.para_total}",
+        ]
+        status = "Processing #{[*context, "sentence #{sidx + 1}/#{paragraph.sentences.size}"].join(', ')}"
+        jobs = [sentence_job(sentence, File.join(paragraph.dir, "#{paragraph.idx}_#{sidx}.wav"), lang, status)]
         sentence.references.each_with_index do |reference, ridx|
           reference.sentences.each_with_index do |referenced, idx|
+            status = "Processing #{[*context, "reference #{reference.id}", "sentence #{idx + 1}/#{reference.sentences.size}"].join(', ')}"
             jobs << sentence_job(
               referenced,
               File.join(paragraph.dir, "#{paragraph.idx}_#{sidx}_r#{ridx}_#{idx}.wav"),
-              lang
+              lang,
+              status
             )
           end
         end
@@ -121,11 +135,11 @@ module Audiobook
       end
     end
 
-    def sentence_job(sentence, out_path, lang)
+    def sentence_job(sentence, out_path, lang, status)
       return if File.exist?(out_path)
 
       text = sentence.spoken_text
-      { text: text, lang: lang, out_path: out_path } unless text.empty?
+      { text: text, lang: lang, out_path: out_path, status: status } unless text.empty?
     end
 
     # Extract all sentences from all items for translation

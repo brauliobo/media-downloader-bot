@@ -151,7 +151,15 @@ module Audiobook
       return if jobs.empty?
 
       speed, options = AudioFiles.split_speed_options(speech_options)
-      TTS.synthesize_batch(items: jobs, **options)
+      completed = 0
+      progress_mutex = Mutex.new
+      on_batch = lambda do |batch|
+        progress_mutex.synchronize do
+          completed += batch.size
+          @stl&.update "#{jobs[completed - 1][:status]}, audio #{completed}/#{jobs.size}"
+        end
+      end
+      TTS.synthesize_batch(items: jobs, on_batch: on_batch, **options)
       AudioFiles.speed_all(jobs.map { |job| job[:out_path] }, speed)
     end
 

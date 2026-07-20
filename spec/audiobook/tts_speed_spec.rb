@@ -246,18 +246,22 @@ RSpec.describe 'Audiobook TTS speed' do
       ])
     ])
     book = instance_double(Audiobook::Book, metadata: {}, pages: [page])
-    runner = Audiobook::Runner.new(book)
+    status = double
+    allow(status).to receive(:update)
+    runner = Audiobook::Runner.new(book, status)
 
     Dir.mktmpdir do |dir|
       page.prepare_speech_items(dir, '0001', lang: 'en')
 
-      expect(TTS).to receive(:synthesize_batch) do |items:, **options|
+      expect(TTS).to receive(:synthesize_batch) do |items:, on_batch:, **options|
         expect(options).to eq(instruct: 'female narrator')
         expect(items.map { |item| item[:text] }).to eq([
           'Chapter One.',
           'Hello world.',
           'Second sentence!',
         ])
+        on_batch.call(items.first(2))
+        on_batch.call(items.last(1))
       end
       expect(Audiobook::AudioFiles).to receive(:speed_all).with(
         all(end_with('.wav')),
@@ -269,6 +273,9 @@ RSpec.describe 'Audiobook TTS speed' do
         [page],
         dir,
         { audio_speed: 1.25, instruct: 'female narrator' }
+      )
+      expect(status).to have_received(:update).with(
+        'Processing page 1/1, item 2/2, paragraph 1/1, sentence 2/2, audio 3/3'
       )
     end
   end

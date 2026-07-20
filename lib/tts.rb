@@ -16,12 +16,13 @@ class TTS
     BACKEND.synthesize(**args)
   end
 
-  def self.synthesize_batch(items:, **args)
+  def self.synthesize_batch(items:, on_batch: nil, **args)
     batches = items.each_slice(BATCH_SIZE).to_a
     errors = Queue.new
 
     batches.peach do |batch|
       BACKEND.synthesize_batch(items: batch, **args)
+      on_batch&.call(batch)
     rescue => error
       errors << error
     end
