@@ -6,7 +6,7 @@ RSpec.describe 'Heading extraction from PDF' do
   end
 
   it 'captures title paragraphs and the intro heading from headings.pdf' do
-    book = Audiobook::Book.from_input(fixture_path('headings.pdf'))
+    book = Audiobook::Book.from_input(fixture_path('headings.pdf'), opts: SymMash.new(alang: 'pt'))
     items = book.pages.first.items
 
     title_paragraph = items.grep(Audiobook::Paragraph).first
