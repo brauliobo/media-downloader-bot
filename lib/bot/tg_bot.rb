@@ -73,13 +73,14 @@ module Bot
     end
 
     def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', force: false, cancel_job: nil, **params)
-      return if throttle!(msg.chat.id, :low, discard: true, message_id: id) == :discard
-      params[:reply_markup] = job_reply_markup(cancel_job) unless cancel_job.nil?
-      tg.send "edit_message_#{type}", **tg_text_payload(msg, text, parse_mode), message_id: id, **params
-    rescue ::Telegram::Bot::Exceptions::ResponseError => e
-      resp = SymMash.new(JSON.parse(e.response.body))
-      return if resp&.description&.match(/exactly the same as a current content/)
-      raise
+      throttle_edit(msg.chat.id, id, force: force) do
+        params[:reply_markup] = job_reply_markup(cancel_job) unless cancel_job.nil?
+        tg.send "edit_message_#{type}", **tg_text_payload(msg, text, parse_mode), message_id: id, **params
+      rescue ::Telegram::Bot::Exceptions::ResponseError => e
+        resp = SymMash.new(JSON.parse(e.response.body))
+        next if resp&.description&.match(/exactly the same as a current content/)
+        raise
+      end
     end
 
     class ::Telegram::Bot::Types::Message
@@ -88,7 +89,7 @@ module Bot
 
     def send_message(msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, cancel_job: nil, **params)
       _text = text
-      throttle! msg.chat.id, :high
+      throttle!
       ep = "send_#{type}"
       payload = tg_text_payload(msg, text, parse_mode)
       payload.delete(:text) if type.to_s != 'message'
@@ -105,7 +106,7 @@ module Bot
       first = true
 
       uploads.each_slice(10) do |batch|
-        throttle! msg.chat.id, :high
+        throttle!
         payload = {
           chat_id:             msg.chat.id,
           reply_to_message_id: incoming_message_id(msg),

@@ -20,6 +20,7 @@ else
     before do
       allow(bot).to receive(:message_sender).and_return(sender)
       allow(bot).to receive(:throttle!)
+      allow(bot).to receive(:throttle_edit).and_yield
       described_class.message_send_outcomes.clear
     end
 
@@ -43,7 +44,7 @@ else
       expect(sender).to have_received(:edit_message).with(
         123, 789, 'failed', parse_mode: 'MarkdownV2', reply_markup: nil
       )
-      expect(bot).to have_received(:throttle!).with(123, :low, discard: false, message_id: 789)
+      expect(bot).to have_received(:throttle_edit).with(123, 789, force: true)
     end
 
     it 'retries media after an asynchronous TDLib rate limit failure' do

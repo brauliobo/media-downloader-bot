@@ -142,7 +142,7 @@ module Bot
       t = type.to_s
       media_type, params = normalize_params(params, type: type) unless t.in?(%w[message text])
       ret = td_with_rate_limit('send_message') do
-        throttle! msg.chat.id, :high
+        throttle!
         reply_to = incoming_message_id(msg, :id, :message_id)
         dlog "[TD_SEND_MESSAGE] reply_to=#{reply_to} msg.class=#{msg.class}"
         result = nil
@@ -175,7 +175,7 @@ module Bot
         batch_caption = first ? text : nil
         first = false
         result = td_with_rate_limit('send_album') do
-          throttle! msg.chat.id, :high
+          throttle!
           message_sender.send_media_album(msg.chat.id, batch, caption: batch_caption, parse_mode: parse_mode, timeout: 1_800)
         end
         unless result
@@ -225,7 +225,7 @@ module Bot
       batch.map.with_index do |up, i|
         caption = i.zero? ? text.to_s : ''
         td_with_rate_limit('send_album_item') do
-          throttle! msg.chat.id, :high
+          throttle!
           if up.mime.to_s.start_with?('video/')
             message_sender.send_video(msg.chat.id, caption, video: up.fn_out, reply_to: nil)
           elsif up.mime.to_s.start_with?('image/')
@@ -239,11 +239,12 @@ module Bot
 
     def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', force: false, cancel_job: nil, **params)
       reply_markup = job_reply_markup(cancel_job)
-      td_with_rate_limit('edit_message') do
-        return false if throttle!(msg.chat.id, :low, discard: !force, message_id: id) == :discard
-        Manager.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0) do |_attempt|
-          message_sender.edit_message(msg.chat.id, id, text, parse_mode: parse_mode, reply_markup: reply_markup)
-          true
+      throttle_edit(msg.chat.id, id, force: force) do
+        td_with_rate_limit('edit_message') do
+          Manager.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0) do |_attempt|
+            message_sender.edit_message(msg.chat.id, id, text, parse_mode: parse_mode, reply_markup: reply_markup)
+            true
+          end || false
         end || false
       end
     end
