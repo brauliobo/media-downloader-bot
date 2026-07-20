@@ -52,7 +52,6 @@ class Zipper
     def apply_video_size_limits!(zipper)
       return if zipper.opts.onlysrt
       return unless Zipper.size_mb_limit
-      return if zipper.opts.custom_width
       return unless zipper.duration.finite? && zipper.duration.positive?
 
       minutes  = (zipper.duration / 60).ceil

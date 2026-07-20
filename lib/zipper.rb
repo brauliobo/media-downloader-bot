@@ -172,8 +172,10 @@ class Zipper
 
     @iopts = ''; @oopts = ''; @dopts = opts.format.opts.dup
     @opts = opts
-    @opts.custom_width = true if opts.width
-    @dopts.width = Formats.default_width(Zipper.size_mb_limit) if @dopts.width && !@opts.custom_width
+    @dopts.width = Formats.default_width(Zipper.size_mb_limit) if @dopts.width
+    if Formats.cuda_encode?(opts) && opts.format.in?([Types.video.h264, Types.video.h265])
+      @dopts.quality = 33
+    end
     @opts.reverse_merge! dopts
 
     @fgraph        = []
@@ -191,12 +193,6 @@ class Zipper
     opts.cudaenc = Formats.cuda_encode?(opts)
     opts.cudadec = Formats.cuda_decode?(opts)
     opts.cuda    = opts.cudaenc || opts.cudadec
-
-    case opts.format
-    when Types.video.h264 then opts.quality ||= if opts.cudaenc then 33 else 25 end
-    when Types.video.h265 then opts.quality ||= if opts.cudaenc then 33 else 25 end
-    else opts.quality ||= opts.format.opts.quality
-    end
   end
 
   # Detect the current format key (e.g. :h264, :aac).
