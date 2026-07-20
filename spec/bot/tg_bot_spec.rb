@@ -71,7 +71,7 @@ RSpec.describe Bot::TgBot do
       bot = described_class.new
       msg = SymMash.new(chat: {id: 123})
       tg  = double
-      allow(bot).to receive(:throttle!)
+      allow(bot).to receive(:throttle_edit).and_yield
       allow(tg).to receive(:send)
       bot.tg = tg
 

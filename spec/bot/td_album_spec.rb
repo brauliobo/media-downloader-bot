@@ -46,7 +46,7 @@ else
       expect(message_sender).to have_received(:send_media_album).with(
         123, [upload], caption: 'caption', parse_mode: 'MarkdownV2', timeout: 1_800
       )
-      expect(bot).to have_received(:throttle!).with(123, :high)
+      expect(bot).to have_received(:throttle!).with(no_args)
     end
 
     it 'sends full long album captions as text and keeps a truncated media caption' do
