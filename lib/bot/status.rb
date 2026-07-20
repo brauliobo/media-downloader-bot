@@ -1,5 +1,3 @@
-require 'limiter'
-
 module Bot
   class Status < Array
 

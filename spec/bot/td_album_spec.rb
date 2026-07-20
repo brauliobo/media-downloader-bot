@@ -19,6 +19,7 @@ else
     let(:dir) { Dir.mktmpdir('td-album-') }
     let(:bot) { described_class.new }
 
+    before { allow(bot).to receive(:throttle!) }
     after { FileUtils.remove_entry(dir) if Dir.exist?(dir) }
 
     it 'accepts TDLib 1.8.65 link preview photos without an author' do
@@ -45,6 +46,7 @@ else
       expect(message_sender).to have_received(:send_media_album).with(
         123, [upload], caption: 'caption', parse_mode: 'MarkdownV2', timeout: 1_800
       )
+      expect(bot).to have_received(:throttle!).with(123, :high)
     end
 
     it 'sends full long album captions as text and keeps a truncated media caption' do
