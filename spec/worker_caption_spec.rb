@@ -92,4 +92,29 @@ RSpec.describe Worker do
 
     expect(worker.send(:translate_caption_text, body, from: 'en', to: 'pt')).to eq("Primeiro paragrafo.\n\nSegundo paragrafo.")
   end
+
+  it 'translates only caption fields with clang' do
+    worker = described_class.new(SymMash.new(from: {id: 1}, chat: {id: 1}))
+    opts   = SymMash.new(caption: 1, description: 1, clang: 'pt')
+    info   = SymMash.new(title: 'English title', description: 'English description', language: 'en')
+
+    allow(Translator).to receive(:translate).with('English title', from: 'en', to: 'pt').and_return('Titulo em portugues')
+    allow(Translator).to receive(:translate).with('English description', from: 'en', to: 'pt').and_return('Descricao em portugues')
+
+    caption_info = worker.send(:translate_caption_info, info, opts)
+
+    expect(caption_info).to include(title: 'Titulo em portugues', description: 'Descricao em portugues')
+    expect(info).to include(title: 'English title', description: 'English description')
+  end
+
+  it 'preserves slang caption translation behavior' do
+    worker = described_class.new(SymMash.new(from: {id: 1}, chat: {id: 1}))
+    opts   = SymMash.new(caption: 1, slang: 'pt')
+    info   = SymMash.new(title: 'English title', description: '', language: 'en')
+
+    allow(Translator).to receive(:translate).with('English title', from: 'en', to: 'pt').and_return('Titulo em portugues')
+
+    expect(worker.send(:translate_caption_info, info, opts)).to equal(info)
+    expect(info.title).to eq('Titulo em portugues')
+  end
 end

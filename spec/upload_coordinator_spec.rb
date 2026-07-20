@@ -31,8 +31,8 @@ RSpec.describe UploadCoordinator do
 
   it 'flushes queued mixed media as one album' do
     uploads = [item('1.jpg', 'image/jpeg'), item('2.mp4', 'video/mp4')]
-    allow(worker).to receive(:send).with(:translate_caption_info, uploads.first.info, opts)
-    allow(worker).to receive(:send).with(:msg_caption, anything, max: 1024).and_return('_caption_')
+    allow(worker).to receive(:send).with(:translate_caption_info, uploads.first.info, opts).and_return(uploads.first.info)
+    allow(worker).to receive(:send).with(:msg_caption, anything, max: 1024, info: uploads.first.info).and_return('_caption_')
     allow(worker).to receive(:send_album)
 
     coordinator = described_class.new(worker)
@@ -46,8 +46,8 @@ RSpec.describe UploadCoordinator do
   it 'limits album captions for media groups' do
     uploads = [item('1.jpg', 'image/jpeg'), item('2.jpg', 'image/jpeg')]
     long = 'a' * 2_000
-    allow(worker).to receive(:send).with(:translate_caption_info, uploads.first.info, opts)
-    allow(worker).to receive(:send).with(:msg_caption, anything, max: 1024).and_return(long.first(1024))
+    allow(worker).to receive(:send).with(:translate_caption_info, uploads.first.info, opts).and_return(uploads.first.info)
+    allow(worker).to receive(:send).with(:msg_caption, anything, max: 1024, info: uploads.first.info).and_return(long.first(1024))
     allow(worker).to receive(:send_album)
 
     coordinator = described_class.new(worker)
@@ -60,8 +60,8 @@ RSpec.describe UploadCoordinator do
   it 'uses the worker caption limit for albums' do
     uploads = [item('1.jpg', 'image/jpeg'), item('2.jpg', 'image/jpeg')]
     allow(worker).to receive(:caption_limit).and_return(4096)
-    allow(worker).to receive(:send).with(:translate_caption_info, uploads.first.info, opts)
-    allow(worker).to receive(:send).with(:msg_caption, anything, max: 4096).and_return('td caption')
+    allow(worker).to receive(:send).with(:translate_caption_info, uploads.first.info, opts).and_return(uploads.first.info)
+    allow(worker).to receive(:send).with(:msg_caption, anything, max: 4096, info: uploads.first.info).and_return('td caption')
     allow(worker).to receive(:send_album)
 
     coordinator = described_class.new(worker)
@@ -134,7 +134,7 @@ RSpec.describe UploadCoordinator do
     real_worker = Worker.new(SymMash.new(from: {id: 1}, chat: {id: 1}))
     uploads     = [item('1.jpg', 'image/jpeg'), item('2.jpg', 'image/jpeg')]
     input       = SymMash.new(
-      opts:    opts.merge(caption: 1, slang: 'pt'),
+      opts:    opts.merge(caption: 1, clang: 'pt'),
       info:    SymMash.new(title: 'English caption', language: 'en', description: ''),
       url:     'https://x.com/i/status/2073169414275350804',
       uploads: uploads
@@ -151,5 +151,6 @@ RSpec.describe UploadCoordinator do
       uploads: uploads,
       parse_mode: 'MarkdownV2'
     )
+    expect(input.info.title).to eq('English caption')
   end
 end
