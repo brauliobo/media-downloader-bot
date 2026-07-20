@@ -56,7 +56,8 @@ module TextHelpers
 
   def self.strip_inline_markers(text)
     ids = []
-    clean = text.to_s.gsub(/([\p{L}\)\]\.\,;:\"])(\d{1,3})(?=(\s|$))/u) do
+    clean = text.to_s.gsub(/([\p{L}\)\]\.\,;:\"])(\d{1,3})(?=\s*:)/u, '\1')
+    clean = clean.gsub(/([\p{L}\)\]\.\,;:\"])(\d{1,3})(?=(\s|$))/u) do
       ids << $2
       $1
     end

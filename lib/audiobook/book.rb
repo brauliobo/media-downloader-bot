@@ -413,8 +413,8 @@ module Audiobook
         page_num = entry.page
         item.sentences.each do |sent|
           new_text, ids = TextHelpers.strip_inline_markers(sent.text)
+          sent.instance_variable_set(:@text, new_text) if new_text != sent.text
           if ids.any?
-            sent.instance_variable_set(:@text, new_text)
             ids.each do |id|
               ref = ref_map[page_num][id] ||= Reference.new(id)
               sent.add_reference(ref)

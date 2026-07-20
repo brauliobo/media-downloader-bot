@@ -11,5 +11,11 @@ RSpec.describe TextHelpers do
     it 'preserves ordinary spaced numbers' do
       expect(described_class.strip_inline_markers('Livro 2')).to eq(['Livro 2', []])
     end
+
+    it 'removes markers from footnote definitions without returning a citation' do
+      expect(described_class.strip_inline_markers('Trieiro1 : Dictionary definition')).to eq(
+        ['Trieiro : Dictionary definition', []]
+      )
+    end
   end
 end
