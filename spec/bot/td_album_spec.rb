@@ -61,13 +61,16 @@ else
       )
 
       expect(content).to eq(
-        '@type'                 => 'inputMessageAudio',
-        'audio'                 => {'@type' => 'inputFileLocal', 'path' => path},
-        'album_cover_thumbnail' => nil,
-        'duration'              => 34,
-        'title'                 => 'Title',
-        'performer'             => 'Performer',
-        'caption'               => caption
+        '@type'   => 'inputMessageAudio',
+        'audio'   => {
+          '@type'                 => 'inputAudio',
+          'audio'                 => {'@type' => 'inputFileLocal', 'path' => path},
+          'album_cover_thumbnail' => nil,
+          'duration'              => 34,
+          'title'                 => 'Title',
+          'performer'             => 'Performer'
+        },
+        'caption' => caption
       )
     end
 

@@ -29,7 +29,7 @@ FileUtils.mkdir_p(output)
 
 generate = lambda do |entry|
   base  = File.join(output, entry.slug)
-  audio = "#{base}.opus"
+  audio = "#{base}.m4a"
   next audio if File.size?(audio)
 
   book = Audiobook::Book.from_input(entry.path, opts: catalog.parse_options(entry))
@@ -56,7 +56,7 @@ if opts[:books].to_s == '1'
     inputs   = chapters.map { |chapter| generate.call(chapter) }
     next if inputs.empty?
 
-    output_path = File.join(output, "book-#{book.slug}.opus")
+    output_path = File.join(output, "book-#{book.slug}.m4a")
     Zipper.concat_audio(inputs, output_path) unless File.size?(output_path)
     puts "book #{index}/#{catalog.books.size}: #{book.title} (#{inputs.size}/#{book.chapters.size} chapters)"
   end
@@ -66,7 +66,7 @@ exit unless opts[:apply].to_s == '1'
 raise 'apply requires exactly one audiobook' unless entries.one?
 
 entry   = entries.first
-audio   = File.join(output, "#{entry.slug}.opus")
+audio   = File.join(output, "#{entry.slug}.m4a")
 probe   = Prober.for(audio)
 seconds = probe.format.duration.to_f.round
 minutes, secs = seconds.divmod(60)

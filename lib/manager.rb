@@ -208,7 +208,9 @@ EOS
   end
 
   def upload_generated_media(...)
-    bot.upload_generated_media(...)
+    drb_result bot.upload_generated_media(...)
+  rescue => e
+    raise RuntimeError, drb_error_message(e), cause: nil
   end
 
   def ensure_forum_topic(...)
