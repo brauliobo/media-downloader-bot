@@ -1,0 +1,91 @@
+#!/usr/bin/env ruby
+
+require 'drb/drb'
+require 'fileutils'
+require 'json'
+require_relative '../lib/boot'
+require_relative '../lib/audiobook'
+require_relative '../lib/audiobook/ewprs'
+require_relative '../lib/prober'
+
+opts = ARGV.each_with_object({}) do |arg, values|
+  key, value = arg.split('=', 2)
+  values[key.tr('-', '_').to_sym] = value || '1'
+end
+
+source  = opts[:source] || File.expand_path('../../eewprs', __dir__)
+output  = File.expand_path(opts[:output] || 'tmp/ewprs_audiobooks', Dir.pwd)
+catalog = Audiobook::Ewprs.new(source)
+
+if opts[:dry_run].to_s == '1'
+  audit = catalog.audit
+  expected = { discourses: 1_611, available_discourses: 1_561, books: 140 }
+  expected.each { |key, value| raise "#{key}: expected #{value}, got #{audit[key]}" unless audit[key] == value }
+  puts JSON.pretty_generate(audit)
+  exit
+end
+
+FileUtils.mkdir_p(output)
+
+generate = lambda do |entry|
+  base  = File.join(output, entry.slug)
+  audio = "#{base}.opus"
+  next audio if File.size?(audio)
+
+  book = Audiobook::Book.from_input(entry.path, opts: catalog.parse_options(entry))
+  raise "no speakable content: #{entry.path}" if book.items.empty?
+
+  book.write("#{base}.yml")
+  Audiobook::Runner.new(book, nil, catalog.parse_options(entry)).process_to_audio(audio)
+end
+
+entries = if opts[:all].to_s == '1'
+  catalog.available_discourses
+else
+  [catalog.find(opts[:only] || 'Laying_of_the_Foundation_Stone') || raise('audiobook not found')]
+end
+
+entries.each.with_index(1) do |entry, index|
+  puts "#{index}/#{entries.size} #{entry.kind}: #{entry.title}"
+  generate.call(entry)
+end
+
+if opts[:books].to_s == '1'
+  catalog.books.each.with_index(1) do |book, index|
+    chapters = catalog.chapter_discourses(book)
+    inputs   = chapters.map { |chapter| generate.call(chapter) }
+    next if inputs.empty?
+
+    output_path = File.join(output, "book-#{book.slug}.opus")
+    Zipper.concat_audio(inputs, output_path) unless File.size?(output_path)
+    puts "book #{index}/#{catalog.books.size}: #{book.title} (#{inputs.size}/#{book.chapters.size} chapters)"
+  end
+end
+
+exit unless opts[:apply].to_s == '1'
+raise 'apply requires exactly one audiobook' unless entries.one?
+
+entry   = entries.first
+audio   = File.join(output, "#{entry.slug}.opus")
+probe   = Prober.for(audio)
+seconds = probe.format.duration.to_f.round
+minutes, secs = seconds.divmod(60)
+caption = [
+  entry.title,
+  'P. R. Sarkar',
+  "Type: #{entry.kind.to_s.capitalize}",
+  ("Date/place: #{entry.info}" if entry.info.present?),
+  ("Published in: #{entry.sources.join('; ')}" if entry.sources.present?),
+  'Language: English',
+  format('Duration: %d:%02d', minutes, secs)
+].compact.join("\n")
+
+manager = DRbObject.new_with_uri(opts[:drb] || ENV['BOT_DRB'] || 'druby://127.0.0.1:1188')
+chat    = manager.resolve_chat_identifier(opts[:channel] || '@prsarkar_readings')
+topic   = manager.ensure_forum_topic(chat_id: chat[:id], name: opts[:topic] || 'English Audiobooks')
+result  = manager.upload_generated_media(
+  chat_id: chat[:id], message_thread_id: topic[:message_thread_id], text: caption,
+  type: :audio, parse_mode: nil, audio_path: audio, duration: seconds,
+  title: entry.title, performer: 'P. R. Sarkar', copy: false
+)
+puts JSON.pretty_generate(chat: chat, topic: topic, post: result)

@@ -211,6 +211,10 @@ EOS
     bot.upload_generated_media(...)
   end
 
+  def ensure_forum_topic(...)
+    bot.ensure_forum_topic(...)
+  end
+
   def send_message(msg:, text:, **params)
     drb_result bot.send_message(msg, text, **params)
   end

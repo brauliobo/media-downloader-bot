@@ -6,6 +6,7 @@ require 'uri'
 require 'date'
 require_relative 'parsers/pdf'
 require_relative 'parsers/epub'
+require_relative 'parsers/html'
 require_relative 'parsers/kindle'
 require_relative '../text_helpers'
 require_relative '../ocr'
@@ -44,6 +45,7 @@ module Audiobook
       when '.json'         then new(data: parse_json(input_path, opts: opts), opts: opts, stl: stl)
       when '.pdf'          then new(data: parse_pdf(input_path, stl: stl, opts: opts), opts: opts, stl: stl)
       when '.epub'         then new(data: parse_epub(input_path, stl: stl, opts: opts), opts: opts, stl: stl)
+      when '.html', '.htm' then new(data: parse_html(input_path, stl: stl, opts: opts), opts: opts, stl: stl)
       else                      new(data: parse_fallback_ocr(input_path, stl: stl, opts: opts), opts: opts, stl: stl)
       end
     end
@@ -57,6 +59,7 @@ module Audiobook
       when '.json'         then parse_json(input_path, opts: opts)
       when '.pdf'          then parse_pdf(input_path, stl: stl, opts: opts)
       when '.epub'         then parse_epub(input_path, stl: stl, opts: opts)
+      when '.html', '.htm' then parse_html(input_path, stl: stl, opts: opts)
       else                      parse_fallback_ocr(input_path, stl: stl, opts: opts)
       end
 
@@ -118,6 +121,11 @@ module Audiobook
       data = Parsers::Epub.parse(epub_path, stl: stl, opts: opts)
       stl&.update 'Structuring content and processing images...'
       data
+    end
+
+    def self.parse_html(html_path, stl: nil, opts: nil)
+      stl&.update 'Analyzing HTML document'
+      Parsers::Html.parse(html_path, stl: stl, opts: opts)
     end
 
     def self.parse_fallback_ocr(path, stl: nil, opts: nil)
