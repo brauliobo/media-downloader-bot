@@ -14,6 +14,7 @@ vendor
 
 # envs
 .venv
+__pycache__/
 
 # test media
 input
