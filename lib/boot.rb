@@ -4,6 +4,7 @@ require 'drb/drb'
 
 require 'dotenv'
 Dir.chdir File.dirname(__FILE__) + '/..' do
+  Dotenv.load '.env.local'
   Dotenv.load '.env.user'
   Dotenv.load! '.env'
 end
