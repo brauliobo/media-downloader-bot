@@ -74,6 +74,24 @@ else
       )
     end
 
+    it 'sends generated media to a typed forum topic' do
+      td      = double('TD::Client')
+      future  = double('future')
+      message = double(id: 456)
+      allow(bot).to receive(:td).and_return(td)
+      allow(td).to receive(:send_message).and_return(future)
+      allow(future).to receive(:value!).with(30).and_return(message)
+
+      result = bot.post_editor.send(:send_message_content, 123, 42, {'@type' => 'inputMessageText'}, 30)
+
+      expect(result).to be(message)
+      expect(td).to have_received(:send_message) do |args|
+        expect(args[:topic_id]).to be_a(TD::Types::MessageTopicForum)
+        expect(args[:topic_id].forum_topic_id).to eq(42)
+        expect(args).not_to have_key(:message_thread_id)
+      end
+    end
+
     it 'sends full long album captions as text and keeps a truncated media caption' do
       text = 'a' * (described_class::MEDIA_CAPTION_LIMIT + 1)
       msg  = SymMash.new(chat: {id: 123})

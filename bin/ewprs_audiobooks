@@ -84,7 +84,7 @@ manager = DRbObject.new_with_uri(opts[:drb] || ENV['BOT_DRB'] || 'druby://127.0.
 chat    = manager.resolve_chat_identifier(opts[:channel] || '@prsarkar_readings')
 topic   = manager.ensure_forum_topic(chat_id: chat[:id], name: opts[:topic] || 'English Audiobooks')
 result  = manager.upload_generated_media(
-  chat_id: chat[:id], message_thread_id: topic[:message_thread_id], text: caption,
+  chat_id: chat[:id], forum_topic_id: topic[:forum_topic_id], text: caption,
   type: :audio, parse_mode: nil, audio_path: audio, duration: seconds,
   title: entry.title, performer: 'P. R. Sarkar', copy: false
 )
