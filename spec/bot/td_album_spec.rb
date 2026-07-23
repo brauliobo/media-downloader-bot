@@ -49,6 +49,28 @@ else
       expect(bot).to have_received(:throttle!).with(no_args)
     end
 
+    it 'builds generated audio with the TDLib inputMessageAudio shape' do
+      path    = File.join(dir, 'audiobook.opus')
+      caption = {'@type' => 'formattedText', 'text' => 'Caption', 'entities' => []}
+      File.write(path, '')
+      allow(bot.message_sender).to receive(:parse_markdown_text).with('Caption', nil).and_return(caption)
+
+      content = bot.post_editor.send(
+        :generated_message_content, 'audio', 'Caption', nil,
+        audio_path: path, duration: 34, title: 'Title', performer: 'Performer', copy: false
+      )
+
+      expect(content).to eq(
+        '@type'                 => 'inputMessageAudio',
+        'audio'                 => {'@type' => 'inputFileLocal', 'path' => path},
+        'album_cover_thumbnail' => nil,
+        'duration'              => 34,
+        'title'                 => 'Title',
+        'performer'             => 'Performer',
+        'caption'               => caption
+      )
+    end
+
     it 'sends full long album captions as text and keeps a truncated media caption' do
       text = 'a' * (described_class::MEDIA_CAPTION_LIMIT + 1)
       msg  = SymMash.new(chat: {id: 123})
