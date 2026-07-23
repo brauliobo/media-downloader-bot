@@ -1,5 +1,6 @@
 # private
 .bundle
+.env.local
 .env.user
 .tdlib/db
 .tdlib/files
