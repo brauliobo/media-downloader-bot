@@ -162,16 +162,13 @@ module TDBot
       case media_type
       when 'audio'
         {
-          '@type'   => 'inputMessageAudio',
-          'audio'   => {
-            '@type'                 => 'inputAudio',
-            'audio'                 => input_file,
-            'album_cover_thumbnail' => thumbnail,
-            'duration'              => params[:duration].to_i,
-            'title'                 => params[:title].to_s,
-            'performer'             => params[:performer].to_s
-          },
-          'caption' => caption
+          '@type'                 => 'inputMessageAudio',
+          'audio'                 => input_file,
+          'album_cover_thumbnail' => thumbnail,
+          'duration'              => params[:duration].to_i,
+          'title'                 => params[:title].to_s,
+          'performer'             => params[:performer].to_s,
+          'caption'               => caption
         }
       when 'video'
         {
