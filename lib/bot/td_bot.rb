@@ -264,6 +264,10 @@ module Bot
       post_editor.upload_generated_media(chat_id: chat_id, text: text, type: type, parse_mode: parse_mode, **params)
     end
 
+    def ensure_forum_topic(chat_id:, name:)
+      post_editor.ensure_forum_topic(chat_id: chat_id, name: name)
+    end
+
     def find_chats(query, limit: 20, public: false)
       post_editor.find_chats(query, limit: limit, public: public)
     end

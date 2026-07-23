@@ -29,15 +29,26 @@ module TDBot
     def upload_generated_media(chat_id:, text: nil, type:, parse_mode: 'MarkdownV2', **params)
       media_type = type.to_s
       timeout    = params[:timeout].to_i.nonzero? || UPLOAD_TIMEOUT
+      message_thread_id = params.delete(:message_thread_id).to_i
       content    = generated_message_content(media_type, text, parse_mode, params)
       bot.send(:throttle!)
-      sent       = send_message_content(chat_id, content, timeout)
+      sent       = send_message_content(chat_id, message_thread_id, content, timeout)
 
       message   = wait_uploaded_message(chat_id, sent.id, timeout: timeout)
       remote_id = message_remote_file_id(message)
       raise "uploaded #{media_type} has no remote file id" if remote_id.to_s.empty?
 
       { message_id: message.id, remote_id: remote_id }
+    end
+
+    def ensure_forum_topic(chat_id:, name:)
+      topics = td.get_forum_topics(
+        chat_id: chat_id, query: name, offset_date: 0, offset_message_id: 0,
+        offset_message_thread_id: 0, limit: 100
+      ).value!(30)
+      info = Array(topics&.topics).map(&:info).find { |topic| topic.name == name }
+      info ||= td.create_forum_topic(chat_id: chat_id, name: name, icon: nil).value!(30)
+      { message_thread_id: info.message_thread_id, name: info.name }
     end
 
     def find_chats(query, limit: 20, public: false)
@@ -115,11 +126,11 @@ module TDBot
       bot.edit_message(msg, message_id, text: text.to_s, parse_mode: parse_mode, force: true)
     end
 
-    def send_message_content(chat_id, content, timeout)
+    def send_message_content(chat_id, message_thread_id, content, timeout)
       content = td_payload(content)
       td.send_message(
         chat_id:               chat_id,
-        message_thread_id:     0,
+        message_thread_id:     message_thread_id,
         reply_to:              nil,
         options:               nil,
         reply_markup:          nil,
