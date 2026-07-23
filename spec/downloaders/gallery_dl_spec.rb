@@ -37,6 +37,17 @@ RSpec.describe Downloaders::GalleryDl do
 
       expect(described_class.supports?(ctx)).to eq(false)
     end
+
+    it 'loads bundled extractors for YouTube community posts' do
+      ctx.url = 'https://youtube.com/post/Ugkx0123456789_-'
+      rows = [[3, 'https://yt3.ggpht.com/image=s0?imgmax=0', {type: 'image'}]]
+
+      expect(Sh).to receive(:run)
+        .with([anything, '-X', described_class::EXTRACTORS, '-j', ctx.url], chdir: tmp)
+        .and_return([rows.to_json, '', 0])
+
+      expect(described_class.supports?(ctx)).to eq(true)
+    end
   end
 
   describe '#download' do
@@ -59,6 +70,16 @@ RSpec.describe Downloaders::GalleryDl do
       expect(input.uploads.first.mime).to eq('image/jpeg')
       expect(input.uploads.last.type.name).to eq(:video)
       expect(input.uploads.last.mime).to eq('video/mp4')
+    end
+
+    it 'loads bundled extractors when downloading' do
+      allow(Sh).to receive(:run).and_return([[[2, {title: 'post'}]].to_json, '', 0])
+      expect(Sh).to receive(:run).with(array_including('-X', described_class::EXTRACTORS, '--no-part'), any_args) do |_cmd, **_|
+        File.write(File.join(tmp, 'photo.jpg'), '')
+        ['', '', 0]
+      end
+
+      expect(described_class.new(ctx).download.uploads.size).to eq(1)
     end
 
     it 'reuses discovery metadata from downloader selection' do

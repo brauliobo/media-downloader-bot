@@ -6,7 +6,8 @@ module Downloaders
   class GalleryDl < Base
     Downloaders.register(self)
 
-    BIN = ENV['GALLERY_DL'].presence || File.expand_path('~/.local/bin/gallery-dl')
+    BIN        = ENV['GALLERY_DL'].presence || File.expand_path('~/.local/bin/gallery-dl')
+    EXTRACTORS = File.expand_path(__dir__)
 
     def self.build(ctx)
       downloader = new(ctx)
@@ -49,7 +50,7 @@ module Downloaders
     private
 
     def command
-      cmd = [gallery_dl, '--no-part', '--no-mtime', '-D', tmp]
+      cmd = [gallery_dl, '-X', EXTRACTORS, '--no-part', '--no-mtime', '-D', tmp]
       cmd.concat ['--cookies', cookie_path] if cookie_path
       cmd << url.to_s
     end
@@ -89,7 +90,7 @@ module Downloaders
     def gallery_rows
       return @gallery_rows if defined?(@gallery_rows)
 
-      out, = Sh.run [gallery_dl, '-j', url.to_s], chdir: tmp
+      out, = Sh.run [gallery_dl, '-X', EXTRACTORS, '-j', url.to_s], chdir: tmp
       @gallery_rows = JSON.parse(out)
     rescue StandardError
       @gallery_rows = []
