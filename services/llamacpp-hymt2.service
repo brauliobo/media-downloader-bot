@@ -1,0 +1,38 @@
+[Unit]
+Description=llama.cpp Hy-MT2 translation server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=braulio
+Nice=19
+UMask=0077
+
+WorkingDirectory=/srv/llama.cpp-hymt2
+ExecStart=/srv/llama.cpp-hymt2/llama-server --model /srv/llama.cpp-hymt2/Hy-MT2-7B-Q4_K_M.gguf --host 127.0.0.1 --port 12002 --n-gpu-layers 99 --ctx-size 16384 --parallel 8 --cont-batching
+
+Environment=CUDA_VISIBLE_DEVICES=1
+Environment=LD_LIBRARY_PATH=/srv/llama.cpp-hymt2
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+MemoryMax=12G
+TasksMax=256
+
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
