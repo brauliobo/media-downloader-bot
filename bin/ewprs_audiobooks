@@ -7,7 +7,7 @@ require 'time'
 require_relative '../lib/boot'
 require_relative '../lib/audiobook'
 require_relative '../lib/audiobook/ewprs'
-require_relative '../lib/prober'
+require_relative '../lib/audiobook/ewprs_batch'
 
 $stdout.sync = true
 $stderr.sync = true
@@ -48,91 +48,6 @@ if opts[:plan].to_s == '1'
   exit
 end
 
-audio_path = lambda do |entry|
-  prefix = entry.kind == :book ? 'book-' : ''
-  File.join(output, "#{prefix}#{entry.slug}.m4a")
-end
-
-generate_discourse = lambda do |entry|
-  base  = File.join(output, entry.slug)
-  audio = audio_path.call(entry)
-  next audio if File.size?(audio)
-
-  book = Audiobook::Book.from_input(entry.path, opts: catalog.parse_options(entry))
-  raise "no speakable content: #{entry.path}" if book.items.empty?
-
-  book.write("#{base}.yml")
-  Audiobook::Runner.new(book, nil, catalog.parse_options(entry)).process_to_audio(audio)
-end
-
-generate_book = lambda do |entry|
-  audio    = audio_path.call(entry)
-  chapters = catalog.chapter_discourses(entry)
-  raise 'no mapped discourse chapters' if chapters.empty?
-
-  unless File.size?(audio)
-    inputs = chapters.map { |chapter| generate_discourse.call(chapter) }
-    Zipper.concat_audio(inputs, audio)
-  end
-  [audio, chapters.size]
-end
-
-failure_path = File.join(output, 'failures.jsonl')
-failures     = []
-record_failure = lambda do |stage, entry, error|
-  failure = {
-    at:      Time.now.utc.iso8601,
-    stage:   stage,
-    kind:    entry.kind,
-    slug:    entry.slug,
-    title:   entry.title,
-    error:   "#{error.class}: #{error.message}"
-  }
-  failures << failure
-  File.open(failure_path, 'a') do |file|
-    file.puts JSON.generate(failure)
-    file.flush
-    file.fsync
-  end
-  warn JSON.generate(failure)
-end
-
-manifest_path = File.expand_path(opts[:manifest] || File.join(output, 'published.jsonl'))
-published     = {}
-if File.exist?(manifest_path)
-  File.foreach(manifest_path) do |line|
-    next if line.strip.empty?
-
-    record = JSON.parse(line, symbolize_names: true)
-    published["#{record.fetch(:kind)}:#{record.fetch(:slug)}"] = record
-  end
-end
-
-append_record = lambda do |record|
-  File.open(manifest_path, 'a') do |file|
-    file.puts JSON.generate(record)
-    file.flush
-    file.fsync
-  end
-  published["#{record.fetch(:kind)}:#{record.fetch(:slug)}"] = record
-end
-
-if opts[:record_message_id]
-  raise 'record-message-id requires exactly one audiobook' unless entries.one? && books.empty?
-
-  entry = entries.first
-  append_record.call(
-    at:         Time.now.utc.iso8601,
-    kind:       entry.kind,
-    slug:       entry.slug,
-    title:      entry.title,
-    message_id: opts[:record_message_id].to_i,
-    remote_id:  opts[:record_remote_id]
-  )
-  puts JSON.pretty_generate(published.values.last)
-  exit
-end
-
 apply = opts[:apply].to_s == '1'
 if apply
   manager = DRbObject.new_with_uri(opts[:drb] || ENV['BOT_DRB'] || 'druby://127.0.0.1:1188')
@@ -150,72 +65,18 @@ if apply
     {forum_topic_id: forum_topic_id, name: opts[:topic] || 'English Audiobooks'}
   end
 end
+batch = Audiobook::EwprsBatch.new(
+  catalog: catalog, output: output, jobs: opts[:jobs] || 5, manifest: opts[:manifest],
+  manager: manager, chat_id: chat_id, topic: topic, apply: apply
+)
 
-targets = entries + books
-targets.each.with_index(1) do |entry, index|
-  key = "#{entry.kind}:#{entry.slug}"
-  if apply && published.key?(key)
-    puts "#{index}/#{targets.size} checkpointed: #{entry.title}"
-    next
-  end
+if opts[:record_message_id]
+  raise 'record-message-id requires exactly one audiobook' unless entries.one? && books.empty?
 
-  begin
-    if entry.kind == :book
-      audio, chapter_count = generate_book.call(entry)
-      puts "#{index}/#{targets.size} generated book: #{entry.title} (#{chapter_count}/#{entry.chapters.size} chapters)"
-    else
-      audio = generate_discourse.call(entry)
-      puts "#{index}/#{targets.size} generated discourse: #{entry.title}"
-    end
-    next unless apply
-
-    seconds = Prober.for(audio).format.duration.to_f.round
-    minutes, secs = seconds.divmod(60)
-    caption = [
-      entry.title,
-      'P. R. Sarkar',
-      "Type: #{entry.kind.to_s.capitalize}",
-      ("Date/place: #{entry.info}" if entry.info.present?),
-      ("Published in: #{entry.sources.join('; ')}" if entry.sources.present?),
-      ("Chapters: #{chapter_count}/#{entry.chapters.size}" if entry.kind == :book),
-      'Language: English',
-      format('Duration: %d:%02d', minutes, secs)
-    ].compact.join("\n")
-
-    result = manager.upload_generated_media(
-      chat_id: chat_id, forum_topic_id: topic[:forum_topic_id], text: caption,
-      type: :audio, parse_mode: nil, audio_path: audio, duration: seconds,
-      title: entry.title, performer: 'P. R. Sarkar', copy: false
-    )
-    raise 'upload returned no message ID' unless result[:message_id].to_i.positive?
-    raise 'upload returned no remote file ID' if result[:remote_id].to_s.empty?
-
-    record = {
-      at:             Time.now.utc.iso8601,
-      kind:           entry.kind,
-      slug:           entry.slug,
-      title:          entry.title,
-      chat_id:        chat_id,
-      forum_topic_id: topic[:forum_topic_id],
-      message_id:     result[:message_id],
-      remote_id:      result[:remote_id],
-      duration:       seconds,
-      bytes:          File.size(audio)
-    }
-    append_record.call(record)
-    puts JSON.generate(progress: "#{index}/#{targets.size}", checkpointed: record)
-  rescue => e
-    record_failure.call(apply ? 'generate_or_upload' : 'generate', entry, e)
-    raise
-  end
+  puts JSON.pretty_generate(
+    batch.record(entries.first, message_id: opts[:record_message_id], remote_id: opts[:record_remote_id])
+  )
+  exit
 end
 
-puts JSON.pretty_generate(
-  chat: chat,
-  topic: topic,
-  generated_discourses: entries.count { |entry| File.size?(audio_path.call(entry)) },
-  generated_books: books.count { |entry| File.size?(audio_path.call(entry)) },
-  published: published.size,
-  failures: failures.size
-)
-exit 1 if failures.any?
+puts JSON.pretty_generate(batch.run(discourses: entries, books: books))

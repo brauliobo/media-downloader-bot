@@ -1,4 +1,4 @@
-require 'concurrent'
+require_relative '../job_pool'
 
 Thread.report_on_exception = true
 Thread.abort_on_exception  = true
@@ -8,22 +8,17 @@ module Enumerable
   def peach method = :each, threads: nil, priority: nil, reraise: false, wait: true, &block
     block   ||= -> *args {}
     threads ||= (ENV['THREADS'] || '10').to_i
+    threads = threads.to_i
 
-    return each(&block) if threads == 1
+    return send(method, &block) if threads == 1
 
-    pool = Concurrent::FixedThreadPool.new threads
-    ret  = send method do |*args|
-      pool.post do
-        Thread.current.priority = priority if priority
-        block.call(*args)
-      rescue => e
-        raise if reraise
-        STDERR.puts "error: #{e.message} \n#{e.backtrace.join "\n"}"
-      end
+    arguments = []
+    ret = send method do |*args|
+      arguments << args
     end
-
-    pool.shutdown
-    pool.wait_for_termination if wait
+    JobPool.new(jobs: threads).each(arguments, priority: priority, reraise: reraise, wait: wait) do |args|
+      block.call(*args)
+    end
 
     ret
   end
