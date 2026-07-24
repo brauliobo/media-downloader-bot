@@ -81,12 +81,7 @@ class VoiceReference
         similarity >= MIN_TRANSCRIPT_SIMILARITY
       {
         accepted: audio.fetch(:accepted) && transcript_ok,
-        tools: {
-          transcription: 'Subtitler::WhisperCpp',
-          signal:        'ffmpeg astats',
-          loudness:      'ffmpeg ebur128',
-          silence:       'ffmpeg silencedetect'
-        },
+        tools: Audio::Quality::TOOLS.merge(transcription: 'Subtitler::WhisperCpp'),
         voice_quality_filter: Zipper::VOICE_QUALITY_FILTER,
         transcript: {
           accepted:            transcript_ok,
