@@ -1,0 +1,20 @@
+#!/usr/bin/env ruby
+
+require 'json'
+require_relative '../lib/boot'
+require_relative '../lib/voice_reference'
+
+opts = ARGV.to_h do |arg|
+  key, value = arg.split('=', 2)
+  [key.tr('-', '_').to_sym, value]
+end
+
+source      = File.expand_path(opts.fetch(:source))
+output      = File.expand_path(opts.fetch(:output))
+audio_files = Dir[File.join(source, '*.{flac,m4a,mp3,ogg,wav,webm}')]
+transcriber = VoiceReference::Transcriber.new(cache_dir: opts[:cache])
+selector    = VoiceReference::Selector.new(language: opts[:language] || 'en')
+builder     = VoiceReference::Builder.new(transcriber: transcriber, selector: selector)
+
+candidate = builder.build(audio_files: audio_files, output: output)
+puts JSON.pretty_generate(candidate.to_h)

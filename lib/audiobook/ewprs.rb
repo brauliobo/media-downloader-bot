@@ -69,13 +69,18 @@ module Audiobook
 
     def parse_options(entry)
       selector = entry.slug.match?(/Sarkars?_English_Grammar/) ? Audiobook::Parsers::Html::BLOCK_SELECTOR : BODY_SELECTOR
-      SymMash.new(
+      options = SymMash.new(
         html_content_selector: selector,
         html_title_selector:   entry.kind == :discourse ? '.discourse_title' : '.book_title',
         html_language:         'en',
         html_block_comments:   !entry.slug.match?(/Sarkars?_English_Grammar/),
-        instruct:              'male, middle-aged, moderate pitch'
+        instruct:              'male, middle-aged, moderate pitch, neutral English accent'
       )
+      if ENV['EWPRS_VOICE_REFERENCE'].present?
+        options.speaker_wav = File.expand_path(ENV['EWPRS_VOICE_REFERENCE'])
+        options.ref_text    = File.read(options.speaker_wav.sub(/\.[^.]+\z/, '.txt')).strip
+      end
+      options
     end
 
     def chapter_discourses(book)

@@ -19,6 +19,7 @@ end
 
 source  = opts[:source] || File.expand_path('../../eewprs', __dir__)
 output  = File.expand_path(opts[:output] || 'tmp/ewprs_audiobooks', Dir.pwd)
+ENV['EWPRS_VOICE_REFERENCE'] = opts[:voice_reference] if opts[:voice_reference]
 catalog = Audiobook::Ewprs.new(source)
 
 if opts[:dry_run].to_s == '1'
