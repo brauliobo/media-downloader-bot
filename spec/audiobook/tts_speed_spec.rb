@@ -106,6 +106,25 @@ RSpec.describe 'Audiobook TTS speed' do
     end
   end
 
+  it 'uses an explicit recorded voice reference without synthesizing one' do
+    stub_const('TTS::BACKEND', TTS::OmniVoice)
+    book = instance_double(Audiobook::Book, metadata: { language: 'en' }, pages: [])
+
+    Dir.mktmpdir do |dir|
+      reference = File.join(dir, 'speaker.wav')
+      File.write(reference, 'wav')
+      runner = Audiobook::Runner.new(
+        book, nil, SymMash.new(speaker_wav: reference, ref_text: 'Recorded reference text.')
+      )
+      expect(TTS).not_to receive(:synthesize)
+
+      options = runner.send(:tts_options, dir)
+
+      expect(options[:speaker_wav]).to eq(reference)
+      expect(options[:ref_text]).to eq('Recorded reference text.')
+    end
+  end
+
   it 'ignores temperature when the backend does not support it' do
     book = instance_double(Audiobook::Book, metadata: {}, pages: [])
     runner = Audiobook::Runner.new(book, nil, SymMash.new(temp: '0.35'))
