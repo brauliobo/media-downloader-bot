@@ -1,9 +1,9 @@
-require 'json'
 require 'time'
 
 require_relative 'book'
 require_relative 'runner'
 require_relative '../job_pool'
+require_relative '../jsonl_store'
 require_relative '../prober'
 require_relative '../zipper'
 
@@ -17,7 +17,9 @@ module Audiobook
 
       @catalog       = catalog
       @output        = File.expand_path(output)
-      @manifest_path = File.expand_path(manifest || File.join(@output, 'published.jsonl'))
+      manifest_path  = File.expand_path(manifest || File.join(@output, 'published.jsonl'))
+      @manifest      = JsonlStore.new(manifest_path)
+      @failure_log   = JsonlStore.new(File.join(@output, 'failures.jsonl'))
       @jobs          = jobs.to_i
       @manager       = manager
       @chat_id       = chat_id
@@ -56,20 +58,10 @@ module Audiobook
 
       current = nil
       checkpoints = entries.map { |entry| checkpointed?(entry) }
-      work = entries.each_with_index.map do |entry, index|
-        [entry, index]
+      perform = lambda do |entry, index|
+        generate_entry(entry) unless checkpoints[index]
       end
-      JobPool.new(jobs: jobs).ordered_map(work) do |entry, index|
-        result = begin
-          generate_entry(entry) unless checkpoints[index]
-        rescue => error
-          {error: error}
-        end
-        {entry: entry, index: index, result: result}
-      end.each do |item|
-        entry    = item[:entry]
-        index    = item[:index]
-        result   = item[:result]
+      JobPool.new(jobs: jobs).ordered_each(entries, perform: perform) do |entry, result, index|
         current  = entry
         position = offset + index + 1
         if checkpoints[index]
@@ -77,14 +69,14 @@ module Audiobook
           next
         end
 
-        raise result[:error] if result[:error]
-
         stdout.puts generation_message(entry, result, position, total)
         upload_entry(entry, result[:audio], result[:chapter_count], position, total) if @apply
       end
     rescue => error
-      record_failure(@apply ? 'generate_or_upload' : 'generate', current, error)
-      raise
+      entry    = error.is_a?(JobPool::TaskError) ? error.item : current
+      original = error.is_a?(JobPool::TaskError) ? error.original : error
+      record_failure(@apply ? 'generate_or_upload' : 'generate', entry, original)
+      raise original
     end
 
     def generate_entry(entry)
@@ -183,27 +175,14 @@ module Audiobook
       "#{entry.kind}:#{entry.slug}"
     end
 
-    def manifest_path
-      @manifest_path
-    end
-
     def load_manifest
-      return {} unless File.exist?(manifest_path)
-
-      File.foreach(manifest_path).each_with_object({}) do |line, records|
-        next if line.strip.empty?
-
-        record = JSON.parse(line, symbolize_names: true)
+      @manifest.each_with_object({}) do |record, records|
         records["#{record.fetch(:kind)}:#{record.fetch(:slug)}"] = record
       end
     end
 
     def append_record(record)
-      File.open(manifest_path, 'a') do |file|
-        file.puts JSON.generate(record)
-        file.flush
-        file.fsync
-      end
+      @manifest.append(record)
       published["#{record.fetch(:kind)}:#{record.fetch(:slug)}"] = record
       record
     end
@@ -218,11 +197,7 @@ module Audiobook
         error: "#{error.class}: #{error.message}"
       }
       failures << failure
-      File.open(File.join(output, 'failures.jsonl'), 'a') do |file|
-        file.puts JSON.generate(failure)
-        file.flush
-        file.fsync
-      end
+      @failure_log.append(failure)
       stderr.puts JSON.generate(failure)
     end
 

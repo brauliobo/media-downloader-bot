@@ -1,6 +1,18 @@
 require 'concurrent'
 
 class JobPool
+  class TaskError < StandardError
+    attr_reader :item, :index, :original
+
+    def initialize(item:, index:, original:)
+      @item     = item
+      @index    = index
+      @original = original
+      super(original.message)
+      set_backtrace(original.backtrace)
+    end
+  end
+
   attr_reader :jobs
 
   def initialize(jobs:)
@@ -70,6 +82,17 @@ class JobPool
     ensure
       pool&.kill unless completed
       pool&.wait_for_termination
+    end
+  end
+
+  def ordered_each(items, priority: nil, perform:, &consume)
+    ordered_map(items.each_with_index, priority: priority) do |item, index|
+      value = perform.arity == 1 ? perform.call(item) : perform.call(item, index)
+      [item, value, index]
+    rescue => error
+      raise TaskError.new(item: item, index: index, original: error), cause: error
+    end.each do |item, value, index|
+      consume.call(item, value, index)
     end
   end
 end
