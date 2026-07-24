@@ -23,4 +23,21 @@ RSpec.describe JobPool do
 
     expect { results.to_a }.to raise_error('worker failed')
   end
+
+  it 'identifies failed ordered tasks without exposing worker coordination' do
+    error = nil
+    begin
+      described_class.new(jobs: 2).ordered_each(%w[first second], perform: lambda { |item|
+        raise 'worker failed' if item == 'second'
+
+        item.upcase
+      }) { |_item, _value, _index| }
+    rescue described_class::TaskError => e
+      error = e
+    end
+
+    expect(error.item).to eq('second')
+    expect(error.index).to eq(1)
+    expect(error.original.message).to eq('worker failed')
+  end
 end
