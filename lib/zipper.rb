@@ -105,10 +105,12 @@ class Zipper
     path
   end
 
-  def self.get_pause_file seconds, dir, sample_rate: nil
+  def self.get_pause_file seconds, dir, sample_rate: nil, source: nil
     return nil if seconds.to_f <= 0
     key = seconds.to_f.round(3)
     sample_rate = (sample_rate || 22_050).to_i
+    return white_noise_file(key, dir, sample_rate: sample_rate) if source
+
     cache_key = "#{dir}:#{key}:#{sample_rate}"
     pause_cache[cache_key] ||= File.join(dir, "pause_#{key.to_s.gsub('.', '_')}_#{sample_rate}.wav").then do |pause_file|
       unless File.exist?(pause_file)
@@ -116,6 +118,35 @@ class Zipper
       end
       pause_file
     end
+  end
+
+  def self.white_noise_file seconds, dir, sample_rate: 22_050
+    key = seconds.to_f.round(3)
+    cache_key = "#{dir}:white-noise:#{key}:#{sample_rate}"
+    pause_cache[cache_key] ||= File.join(dir, "white_noise_#{key.to_s.gsub('.', '_')}_#{sample_rate}.wav").then do |output|
+      unless File.exist?(output)
+        source = "anoisesrc=color=white:amplitude=0.0035:sample_rate=#{sample_rate}:duration=#{key}"
+        command = "#{FFMPEG} -f lavfi -i #{Sh.escape(source)} -af lowpass=f=6000 -ac 1 -ar #{sample_rate} " \
+                  "-c:a pcm_s16le #{Sh.escape(output)}"
+        _, stderr, status = Sh.run(command)
+        Sh.assert_success!('Failed to create white-noise audio file', stderr, status: status, output: output)
+      end
+      output
+    end
+  end
+
+  def self.add_room_tone! wav_path, sample_rate: 22_050
+    dir = File.dirname(wav_path)
+    tone = white_noise_file(0.5, dir, sample_rate: sample_rate)
+    output = File.join(dir, "room_tone_mix_#{SecureRandom.hex(4)}.wav")
+    filter = '[0:a]volume=-2dB[speech];[speech][1:a]amix=inputs=2:duration=first:dropout_transition=0:normalize=0'
+    command = "#{FFMPEG} -i #{Sh.escape(wav_path)} -stream_loop -1 -i #{Sh.escape(tone)} " \
+              "-filter_complex #{Sh.escape(filter)} -ac 1 -ar #{sample_rate} " \
+              "-c:a pcm_s16le #{Sh.escape(output)}"
+    _, stderr, status = Sh.run(command)
+    Sh.assert_success!('Failed to add room tone', stderr, status: status, output: output)
+    FileUtils.mv output, wav_path, force: true
+    wav_path
   end
 
   def self.prepend_silence! wav_path, seconds, dir: nil

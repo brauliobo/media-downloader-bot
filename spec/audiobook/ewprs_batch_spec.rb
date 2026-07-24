@@ -66,4 +66,13 @@ RSpec.describe Audiobook::EwprsBatch do
     expect { batch.run(discourses: entries, books: []) }.to raise_error('failed generation')
     expect(published).to eq(['First'])
   end
+
+  it 'omits duration from publication captions' do
+    batch = described_class.new(catalog: catalog, output: output)
+
+    caption = batch.send(:caption, entries.first, 62, nil)
+
+    expect(caption).to include("First\nP. R. Sarkar", 'Language: English')
+    expect(caption).not_to include('Duration:')
+  end
 end

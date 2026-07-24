@@ -139,8 +139,7 @@ module Audiobook
       stdout.puts JSON.generate(progress: "#{position}/#{total}", checkpointed: record)
     end
 
-    def caption(entry, seconds, chapter_count)
-      minutes, secs = seconds.divmod(60)
+    def caption(entry, _seconds, chapter_count)
       [
         entry.title,
         'P. R. Sarkar',
@@ -148,8 +147,7 @@ module Audiobook
         ("Date/place: #{entry.info}" if entry.info.present?),
         ("Published in: #{entry.sources.join('; ')}" if entry.sources.present?),
         ("Chapters: #{chapter_count}/#{entry.chapters.size}" if entry.kind == :book),
-        'Language: English',
-        format('Duration: %d:%02d', minutes, secs)
+        'Language: English'
       ].compact.join("\n")
     end
 

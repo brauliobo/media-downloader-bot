@@ -229,7 +229,12 @@ RSpec.describe 'Audiobook TTS speed' do
     ])
 
     Dir.mktmpdir do |dir|
-      allow(Zipper).to receive(:get_pause_file).and_return(nil)
+      expect(Zipper).to receive(:get_pause_file).with(
+        0.1,
+        dir,
+        sample_rate: TTS.output_sample_rate,
+        source: end_with('0001_0_0.wav')
+      ).and_return(nil)
       allow(Zipper).to receive(:concat_audio) do |_inputs, outfile, **_kwargs|
         File.write(outfile, 'combined')
         outfile
@@ -244,6 +249,7 @@ RSpec.describe 'Audiobook TTS speed' do
         File.write(out_path, 'wav')
       end
       expect(Audiobook::AudioFiles).to receive(:speed!).with(kind_of(String), 1.25)
+      expect(Audiobook::AudioFiles).to receive(:room_tone!).with(kind_of(String))
 
       page.to_wav(
         dir, '0001',
@@ -286,6 +292,7 @@ RSpec.describe 'Audiobook TTS speed' do
         all(end_with('.wav')),
         1.25
       )
+      expect(Audiobook::AudioFiles).to receive(:room_tone_all).with(all(end_with('.wav')))
 
       runner.send(
         :batch_synthesize_pages,

@@ -165,6 +165,7 @@ module Audiobook
       end
       TTS.synthesize_batch(items: jobs, on_batch: on_batch, **options)
       AudioFiles.speed_all(jobs.map { |job| job[:out_path] }, speed)
+      AudioFiles.room_tone_all(jobs.map { |job| job[:out_path] })
     end
 
     def audio_speed

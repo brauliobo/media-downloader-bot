@@ -287,6 +287,55 @@ RSpec.describe Zipper do
     end
   end
 
+  it 'creates stationary white noise for audiobook pauses' do
+    Dir.mktmpdir('room-tone-spec-') do |dir|
+      source = File.join(dir, 'sentence.wav')
+      File.write(source, 'sentence')
+      allow(Sh).to receive(:run) do |command|
+        output = command.split.last
+        File.write(output, 'room tone')
+        ['', '', double(success?: true)]
+      end
+
+      path = described_class.get_pause_file(0.5, dir, sample_rate: 24_000, source: source)
+
+      expect(path).to end_with('white_noise_0_5_24000.wav')
+      expect(Sh).to have_received(:run).with(
+        include(
+          '-f lavfi',
+          'anoisesrc\=color\=white:amplitude\=0.0035:sample_rate\=24000:duration\=0.5',
+          '-af lowpass=f=6000'
+        )
+      )
+      expect(Sh).not_to have_received(:run).with(include(Sh.escape(source)))
+    end
+  end
+
+  it 'fills generated silence with room tone without extending the wav' do
+    Dir.mktmpdir('room-tone-mix-spec-') do |dir|
+      source = File.join(dir, 'sentence.wav')
+      tone = File.join(dir, 'tone.wav')
+      File.write(source, 'sentence')
+      File.write(tone, 'tone')
+      command = nil
+      allow(described_class).to receive(:white_noise_file).and_return(tone)
+      allow(Sh).to receive(:run) do |value|
+        command = value
+        File.write(value.split.last, 'mixed')
+        ['', '', double(success?: true)]
+      end
+
+      result = described_class.add_room_tone!(source, sample_rate: 24_000)
+
+      expect(result).to eq(source)
+      expect(File.read(source)).to eq('mixed')
+      expect(command).to include(
+        '\[0:a\]volume\=-2dB\[speech\]\;\[speech\]\[1:a\]amix\=inputs\=2:duration\=first:dropout_transition\=0:normalize\=0',
+        '-ar 24000'
+      )
+    end
+  end
+
   it 'stream-copies audio concat when input streams match' do
     stream = SymMash.new(
       codec_type:      'audio',

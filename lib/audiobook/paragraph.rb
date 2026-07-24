@@ -52,14 +52,14 @@ module Audiobook
         status_line << " (OCR)" if defined?(@is_ocr) && @is_ocr
         
         stl&.update status_line
-        pause_file = sent.pause_file(dir)
         main_wav = sent.to_wav(dir, "#{idx}_#{sidx}", lang: lang || 'en', tts_options: speech_options)
+        pause_file = sent.pause_file(dir, source: main_wav)
         ref_wavs = (sent.references || []).each_with_index.flat_map do |ref, ridx|
           stl&.update "Processing reference #{ref.id} for sentence #{sidx+1}/#{sentences.size}"
-          ref_pause = (ridx == 0 ? AudioFiles.pause(0.15, dir) : nil)
           ref.sentences.each_with_index.flat_map do |rs, j|
-            rs_pause = rs.pause_file(dir)
             wav_path = rs.to_wav(dir, "#{idx}_#{sidx}_r#{ridx}_#{j}", lang: lang || 'en', tts_options: speech_options)
+            ref_pause = AudioFiles.pause(0.15, dir, source: wav_path) if ridx == 0 && j == 0
+            rs_pause = rs.pause_file(dir, source: wav_path)
             [j == 0 ? ref_pause : nil, rs_pause, wav_path].compact
           end
         end

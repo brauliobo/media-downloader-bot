@@ -48,8 +48,8 @@ module Audiobook
           status_line = "Processing #{status_parts.join(', ')}"
           status_line << " (OCR)" if is_ocr_book
           stl&.update status_line
-          heading_pause = item.pause_file(dir) if item.respond_to?(:pause_file)
           wav = item.to_wav(dir, "#{idx}_#{iidx}", lang: lang, stl: stl, tts_options: tts_options)
+          heading_pause = item.pause_file(dir, source: wav) if item.respond_to?(:pause_file)
           [heading_pause, wav].compact
         end
       end.compact
