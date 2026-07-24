@@ -31,7 +31,7 @@ class Zipper
   VOICE_QUALITY_FILTER = (
     'highpass=f=80,lowpass=f=9000,afftdn=nf=-25,' \
     'acompressor=threshold=-18dB:ratio=2.5:attack=20:release=250,' \
-    'dynaudnorm=f=150:g=15,loudnorm=I=-16:TP=-1.5:LRA=11'
+    'dynaudnorm=f=150:g=15,loudnorm=I=-16:TP=-1.5:LRA=11,volume=-2.5dB'
   ).freeze
   SPEECH_CLEANUP_FILTER = 'highpass=f=80'.freeze
 
