@@ -3,6 +3,7 @@
 require 'drb/drb'
 require 'fileutils'
 require 'json'
+require 'time'
 require_relative '../lib/boot'
 require_relative '../lib/audiobook'
 require_relative '../lib/audiobook/ewprs'
@@ -27,9 +28,31 @@ end
 
 FileUtils.mkdir_p(output)
 
-generate = lambda do |entry|
+entries = if opts[:all].to_s == '1'
+  catalog.available_discourses
+else
+  [catalog.find(opts[:only] || 'Laying_of_the_Foundation_Stone') || raise('audiobook not found')]
+end
+books = opts[:books].to_s == '1' ? catalog.books : []
+
+if opts[:plan].to_s == '1'
+  puts JSON.pretty_generate(
+    output: output,
+    discourses: entries.size,
+    books: books.size,
+    uploads: entries.size + books.size
+  )
+  exit
+end
+
+audio_path = lambda do |entry|
+  prefix = entry.kind == :book ? 'book-' : ''
+  File.join(output, "#{prefix}#{entry.slug}.m4a")
+end
+
+generate_discourse = lambda do |entry|
   base  = File.join(output, entry.slug)
-  audio = "#{base}.m4a"
+  audio = audio_path.call(entry)
   next audio if File.size?(audio)
 
   book = Audiobook::Book.from_input(entry.path, opts: catalog.parse_options(entry))
@@ -39,53 +62,161 @@ generate = lambda do |entry|
   Audiobook::Runner.new(book, nil, catalog.parse_options(entry)).process_to_audio(audio)
 end
 
-entries = if opts[:all].to_s == '1'
-  catalog.available_discourses
-else
-  [catalog.find(opts[:only] || 'Laying_of_the_Foundation_Stone') || raise('audiobook not found')]
+failure_path = File.join(output, 'failures.jsonl')
+failures     = []
+record_failure = lambda do |stage, entry, error|
+  failure = {
+    at:      Time.now.utc.iso8601,
+    stage:   stage,
+    kind:    entry.kind,
+    slug:    entry.slug,
+    title:   entry.title,
+    error:   "#{error.class}: #{error.message}"
+  }
+  failures << failure
+  File.open(failure_path, 'a') do |file|
+    file.puts JSON.generate(failure)
+    file.flush
+    file.fsync
+  end
+  warn JSON.generate(failure)
 end
 
 entries.each.with_index(1) do |entry, index|
   puts "#{index}/#{entries.size} #{entry.kind}: #{entry.title}"
-  generate.call(entry)
+  generate_discourse.call(entry)
+rescue => e
+  record_failure.call('generate', entry, e)
 end
 
-if opts[:books].to_s == '1'
-  catalog.books.each.with_index(1) do |book, index|
-    chapters = catalog.chapter_discourses(book)
-    inputs   = chapters.map { |chapter| generate.call(chapter) }
-    next if inputs.empty?
+books.each.with_index(1) do |book, index|
+  begin
+    output_path = audio_path.call(book)
+    chapters    = catalog.chapter_discourses(book)
+    raise 'no mapped discourse chapters' if chapters.empty?
 
-    output_path = File.join(output, "book-#{book.slug}.m4a")
-    Zipper.concat_audio(inputs, output_path) unless File.size?(output_path)
-    puts "book #{index}/#{catalog.books.size}: #{book.title} (#{inputs.size}/#{book.chapters.size} chapters)"
+    unless File.size?(output_path)
+      inputs = chapters.map { |chapter| generate_discourse.call(chapter) }
+      Zipper.concat_audio(inputs, output_path)
+    end
+    puts "book #{index}/#{catalog.books.size}: #{book.title} (#{chapters.size}/#{book.chapters.size} chapters)"
+  rescue => e
+    record_failure.call('generate_book', book, e)
   end
 end
 
-exit unless opts[:apply].to_s == '1'
-raise 'apply requires exactly one audiobook' unless entries.one?
+manifest_path = File.expand_path(opts[:manifest] || File.join(output, 'published.jsonl'))
+published     = {}
+if File.exist?(manifest_path)
+  File.foreach(manifest_path) do |line|
+    next if line.strip.empty?
 
-entry   = entries.first
-audio   = File.join(output, "#{entry.slug}.m4a")
-probe   = Prober.for(audio)
-seconds = probe.format.duration.to_f.round
-minutes, secs = seconds.divmod(60)
-caption = [
-  entry.title,
-  'P. R. Sarkar',
-  "Type: #{entry.kind.to_s.capitalize}",
-  ("Date/place: #{entry.info}" if entry.info.present?),
-  ("Published in: #{entry.sources.join('; ')}" if entry.sources.present?),
-  'Language: English',
-  format('Duration: %d:%02d', minutes, secs)
-].compact.join("\n")
+    record = JSON.parse(line, symbolize_names: true)
+    published["#{record.fetch(:kind)}:#{record.fetch(:slug)}"] = record
+  end
+end
+
+append_record = lambda do |record|
+  File.open(manifest_path, 'a') do |file|
+    file.puts JSON.generate(record)
+    file.flush
+    file.fsync
+  end
+  published["#{record.fetch(:kind)}:#{record.fetch(:slug)}"] = record
+end
+
+if opts[:record_message_id]
+  raise 'record-message-id requires exactly one audiobook' unless entries.one? && books.empty?
+
+  entry = entries.first
+  append_record.call(
+    at:         Time.now.utc.iso8601,
+    kind:       entry.kind,
+    slug:       entry.slug,
+    title:      entry.title,
+    message_id: opts[:record_message_id].to_i,
+    remote_id:  opts[:record_remote_id]
+  )
+  puts JSON.pretty_generate(published.values.last)
+  exit
+end
+
+exit unless opts[:apply].to_s == '1'
 
 manager = DRbObject.new_with_uri(opts[:drb] || ENV['BOT_DRB'] || 'druby://127.0.0.1:1188')
-chat    = manager.resolve_chat_identifier(opts[:channel] || '@prsarkar_readings')
-topic   = manager.ensure_forum_topic(chat_id: chat[:id], name: opts[:topic] || 'English Audiobooks')
-result  = manager.upload_generated_media(
-  chat_id: chat[:id], forum_topic_id: topic[:forum_topic_id], text: caption,
-  type: :audio, parse_mode: nil, audio_path: audio, duration: seconds,
-  title: entry.title, performer: 'P. R. Sarkar', copy: false
+chat_id = opts[:chat_id].to_i
+if chat_id.zero?
+  chat    = manager.resolve_chat_identifier(opts[:channel] || '@prsarkar_readings')
+  chat_id = chat[:id]
+else
+  chat = {id: chat_id}
+end
+forum_topic_id = opts[:forum_topic_id].to_i
+topic = if forum_topic_id.zero?
+  manager.ensure_forum_topic(chat_id: chat_id, name: opts[:topic] || 'English Audiobooks')
+else
+  {forum_topic_id: forum_topic_id, name: opts[:topic] || 'English Audiobooks'}
+end
+
+targets = entries + books
+targets.each.with_index(1) do |entry, index|
+  key = "#{entry.kind}:#{entry.slug}"
+  if published.key?(key)
+    puts "upload #{index}/#{targets.size} skipped: #{entry.title}"
+    next
+  end
+
+  begin
+    audio = audio_path.call(entry)
+    raise "generated audio is missing: #{audio}" unless File.size?(audio)
+
+    seconds = Prober.for(audio).format.duration.to_f.round
+    minutes, secs = seconds.divmod(60)
+    chapter_count = catalog.chapter_discourses(entry).size if entry.kind == :book
+    caption = [
+      entry.title,
+      'P. R. Sarkar',
+      "Type: #{entry.kind.to_s.capitalize}",
+      ("Date/place: #{entry.info}" if entry.info.present?),
+      ("Published in: #{entry.sources.join('; ')}" if entry.sources.present?),
+      ("Chapters: #{chapter_count}/#{entry.chapters.size}" if entry.kind == :book),
+      'Language: English',
+      format('Duration: %d:%02d', minutes, secs)
+    ].compact.join("\n")
+
+    result = manager.upload_generated_media(
+      chat_id: chat_id, forum_topic_id: topic[:forum_topic_id], text: caption,
+      type: :audio, parse_mode: nil, audio_path: audio, duration: seconds,
+      title: entry.title, performer: 'P. R. Sarkar', copy: false
+    )
+    raise 'upload returned no message ID' unless result[:message_id].to_i.positive?
+    raise 'upload returned no remote file ID' if result[:remote_id].to_s.empty?
+
+    record = {
+      at:             Time.now.utc.iso8601,
+      kind:           entry.kind,
+      slug:           entry.slug,
+      title:          entry.title,
+      chat_id:        chat_id,
+      forum_topic_id: topic[:forum_topic_id],
+      message_id:     result[:message_id],
+      remote_id:      result[:remote_id],
+      duration:       seconds,
+      bytes:          File.size(audio)
+    }
+    append_record.call(record)
+    puts JSON.generate(progress: "#{index}/#{targets.size}", published: record)
+  rescue => e
+    record_failure.call('upload', entry, e)
+  end
+end
+
+puts JSON.pretty_generate(
+  chat: chat,
+  topic: topic,
+  generated_discourses: entries.count { |entry| File.size?(audio_path.call(entry)) },
+  generated_books: books.count { |entry| File.size?(audio_path.call(entry)) },
+  published: published.size,
+  failures: failures.size
 )
-puts JSON.pretty_generate(chat: chat, topic: topic, post: result)
+exit 1 if failures.any?
