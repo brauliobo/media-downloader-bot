@@ -1,6 +1,6 @@
 class VoiceReference
   Candidate = Struct.new(
-    :audio, :start, :finish, :text, :confidence, :metrics, :score,
+    :audio, :start, :finish, :text, :confidence, :metrics, :score, :validation, :artifacts,
     keyword_init: true
   ) do
     def duration = finish - start
@@ -14,7 +14,9 @@ class VoiceReference
         text:       text,
         confidence: confidence,
         metrics:    metrics,
-        score:      score
+        score:      score,
+        validation: validation,
+        artifacts:  artifacts
       }
     end
   end

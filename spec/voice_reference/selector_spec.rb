@@ -39,19 +39,36 @@ RSpec.describe VoiceReference::Selector do
     transcript = {
       language: 'en',
       segments: [
-        segment(0, 6.5, 'The supreme goal is the hub of the universe that controls'),
-        segment(6.5, 15, 'everything and is above the world of movements.'),
-        segment(15, 30, 'This segment falls beyond the maximum reference duration and must not be included.')
+        segment(0, 6, 'The supreme goal is the hub of the universe that controls'),
+        segment(6, 12, 'everything and is above the world of movements.'),
+        segment(12, 30, 'This segment falls beyond the maximum reference duration and must not be included.')
       ]
     }
 
     selected = selector.select([{audio: 'clean.webm', transcript: transcript}])
 
     expect(selected.start).to eq(0)
-    expect(selected.finish).to eq(15)
+    expect(selected.finish).to eq(12)
     expect(selected.text).to eq(
       'The supreme goal is the hub of the universe that controls everything and is above the world of movements.'
     )
+  end
+
+  it 'does not append the next sentence to a complete reference passage' do
+    selector = described_class.new(analyzer: analyzer)
+    transcript = {
+      language: 'en',
+      segments: [
+        segment(0, 6, 'This clean reference sentence begins with enough distinct words'),
+        segment(6, 10, 'and reaches a natural ending.'),
+        segment(10, 14, 'Unrelated closing words follow immediately afterward.')
+      ]
+    }
+
+    selected = selector.select([{audio: 'clean.webm', transcript: transcript}])
+
+    expect(selected.finish).to eq(10)
+    expect(selected.text).not_to include('Unrelated')
   end
 
   it 'compares complete passages from each recording instead of global confidence leaders' do
@@ -76,6 +93,41 @@ RSpec.describe VoiceReference::Selector do
       segments: [
         segment(0, 15, 'The sentence begins here with several distinct words and continues,'),
         segment(15, 25, 'then it may create something good or something bad for the universe.')
+      ]
+    }
+
+    expect(selector.select([{audio: 'clean.webm', transcript: transcript}])).to be_nil
+  end
+
+  it 'trims a low-confidence leading clause from an otherwise clean passage' do
+    selector = described_class.new(analyzer: analyzer)
+    weak = segment(0, 7, 'Due to geographical conditions,')
+    weak[:probabilities][0] = 0.1
+    transcript = {
+      language: 'en',
+      segments: [
+        weak,
+        segment(7, 10, 'due to historical facts,'),
+        segment(10, 14, 'there are differences in color.')
+      ]
+    }
+
+    selected = selector.select([{audio: 'clean.webm', transcript: transcript}])
+
+    expect(selected.start).to eq(7)
+    expect(selected.finish).to eq(14)
+    expect(selected.text).to eq('due to historical facts, there are differences in color.')
+  end
+
+  it 'rejects a passage when trimming its noisy ending leaves an incomplete phrase' do
+    selector = described_class.new(analyzer: analyzer)
+    weak = segment(7, 12, 'good parties.')
+    weak[:probabilities][0] = 0.1
+    transcript = {
+      language: 'en',
+      segments: [
+        segment(0, 7, 'But for providing security to good ideas, good thoughts and'),
+        weak
       ]
     }
 
