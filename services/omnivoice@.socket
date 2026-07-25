@@ -1,0 +1,12 @@
+[Unit]
+Description=OmniVoice TTS activation socket for GPU %i
+
+[Socket]
+ListenStream=127.0.0.1:1045%i
+Service=omnivoice-proxy@%i.service
+Accept=no
+NoDelay=yes
+Backlog=128
+
+[Install]
+WantedBy=sockets.target

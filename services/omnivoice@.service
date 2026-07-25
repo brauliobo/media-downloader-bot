@@ -1,15 +1,17 @@
 [Unit]
-Description=OmniVoice TTS HTTP server on GPU %i
+Description=OmniVoice TTS backend on GPU %i
 Wants=network-online.target
 After=network-online.target
 RequiresMountsFor=/srv/OmniVoice
+StopWhenUnneeded=yes
 
 [Service]
 DynamicUser=yes
 Nice=19
 WorkingDirectory=/srv/OmniVoice
 
-Environment=PORT_BASE=10440
+Environment=HOST=127.0.0.1
+Environment=PORT_BASE=10550
 Environment=TTS_MODEL_ID=/srv/OmniVoice/model
 Environment=OMNIVOICE_DEVICE=cuda:0
 Environment=HF_HUB_OFFLINE=1
@@ -24,9 +26,8 @@ ProtectHome=yes
 NoNewPrivileges=yes
 
 ExecStart=/bin/sh -c 'exec env CUDA_VISIBLE_DEVICES=%i PORT=$(($PORT_BASE + %i)) /srv/OmniVoice/runtime/venv/bin/python /srv/OmniVoice/http_server.py'
+ExecStartPost=/bin/sh -c 'exec /usr/bin/curl --fail --silent --show-error --retry 90 --retry-delay 1 --retry-connrefused --retry-all-errors --retry-max-time 90 --max-time 2 "http://127.0.0.1:$(($PORT_BASE + %i))/health" >/dev/null'
 
 Restart=on-failure
 RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
+TimeoutStartSec=2min

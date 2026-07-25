@@ -1,0 +1,12 @@
+[Unit]
+Description=Hy-MT2 activation socket
+
+[Socket]
+ListenStream=127.0.0.1:12012
+Service=hymt2-proxy.service
+Accept=no
+NoDelay=yes
+Backlog=512
+
+[Install]
+WantedBy=sockets.target

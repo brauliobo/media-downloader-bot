@@ -1,0 +1,13 @@
+[Unit]
+Description=whisper.cpp idle proxy
+BindsTo=whispercpp-server.service
+After=whispercpp-server.service
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd --exit-idle-time=30min 127.0.0.1:8082
+DynamicUser=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

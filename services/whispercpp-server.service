@@ -1,20 +1,33 @@
 [Unit]
-Description=whispercpp-server
+Description=whisper.cpp transcription backend
 After=network-online.target
 Wants=network-online.target
+RequiresMountsFor=/srv/whisper.cpp
+StopWhenUnneeded=yes
 
 [Service]
 User=braulio
 Nice=19
+UMask=0077
 
-WorkingDirectory=/home/braulio/Projects/whisper.cpp
-ExecStart=/home/braulio/Projects/whisper.cpp/build/bin/whisper-server \
-  --model /home/braulio/Projects/media-downloader-bot/models/ggml-large-v3-turbo.bin \
-  --threads 16 -l auto
+WorkingDirectory=/run/whispercpp-server
+RuntimeDirectory=whispercpp-server
+RuntimeDirectoryMode=0700
+Environment=INFERENCE_GPU=0
+EnvironmentFile=-/etc/default/inference-node
+Environment=LD_LIBRARY_PATH=/srv/whisper.cpp/runtime
+ExecStart=/srv/whisper.cpp/runtime/whisper-server \
+  --model /srv/whisper.cpp/models/ggml-large-v3-turbo.bin \
+  --host 127.0.0.1 --port 8082 --threads 16 -l auto --device ${INFERENCE_GPU} --convert
+ExecStartPost=/usr/bin/curl --fail --silent --show-error --retry 90 --retry-delay 1 --retry-connrefused --retry-all-errors --retry-max-time 90 --max-time 2 http://127.0.0.1:8082/health
 
-Environment=CUDA_VISIBLE_DEVICES=1
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
+Restart=on-failure
 RestartSec=30
-
-[Install]
-WantedBy=multi-user.target
+TimeoutStartSec=2min
+TimeoutStopSec=2min

@@ -1,0 +1,13 @@
+[Unit]
+Description=Hy-MT2 idle proxy
+BindsTo=llamacpp-hymt2.service
+After=llamacpp-hymt2.service
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd --exit-idle-time=30min 127.0.0.1:12022
+DynamicUser=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
