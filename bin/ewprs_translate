@@ -1,0 +1,28 @@
+#!/usr/bin/env ruby
+
+require 'json'
+require_relative '../lib/boot'
+require_relative '../lib/ewprs'
+
+$stdout.sync = true
+$stderr.sync = true
+
+opts = ARGV.each_with_object({}) do |arg, values|
+  key, value = arg.split('=', 2)
+  values[key.tr('-', '_').to_sym] = value || '1'
+end
+
+batch = Ewprs::TranslationBatch.new(
+  root:       opts[:source] || File.expand_path('../../eewprs', __dir__),
+  target:     opts[:to] || 'pt',
+  source_ref: opts[:source_ref] || '7.5',
+  branch:     opts[:branch] || '7.5-pt',
+  cache:      opts[:cache]
+)
+
+result = if opts[:apply].to_s == '1'
+  batch.run(only: opts[:only])
+else
+  batch.plan(only: opts[:only])
+end
+puts JSON.pretty_generate(result)
