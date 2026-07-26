@@ -29,7 +29,11 @@ module Ewprs
         water where which while who whom why will with world would you your
       ].to_h { |word| [word, true] }.freeze
     }.freeze
+    SOURCE_SUFFIXES = {
+      'en' => /(?:able|hood|ible|ise|ised|ises|ising|ity|ive|less|ly|ment|ness|ous|ship|sion|tion|ward|wise|ize|ized|izes|izing)\z/
+    }.freeze
     DELIMITER_PAIRS = {'(' => ')', '[' => ']', '{' => '}'}.freeze
+    DELIMITER = /[()\[\]{}]/
     EDITORIAL_BRACKET = /\[\[?|\]\]?/
 
     attr_reader :source_language, :target_language
@@ -118,10 +122,7 @@ module Ewprs
     def validate_delimiters!(source, translated)
       source_text = visible_text(source)
       translated_text = visible_text(translated)
-      changed = DELIMITER_PAIRS.any? do |opening, closing|
-        source_text.count(opening) != translated_text.count(opening) ||
-          source_text.count(closing) != translated_text.count(closing)
-      end
+      changed = source_text.scan(DELIMITER) != translated_text.scan(DELIMITER)
       changed ||= source_text.scan(EDITORIAL_BRACKET) != translated_text.scan(EDITORIAL_BRACKET)
       raise Error.new(:delimiters, 'translation changed paired delimiters') if changed
     end
@@ -131,8 +132,7 @@ module Ewprs
       target_words = normalized_words(translated)
       return if source_words.empty? || target_words.empty?
 
-      common = source_words(source_words)
-      if source_words == target_words && untranslated_prose?(source, source_words, common)
+      if source_words == target_words && untranslated_prose?(source, source_words)
         excerpt = visible_text(source)[0, 80]
         raise Error.new(:untranslated, "translation left source prose unchanged: #{excerpt}")
       end
@@ -154,15 +154,17 @@ module Ewprs
     end
 
     def validate_sentence_duplicates!(source, translated)
-      source_duplicates = duplicate_sentences(source)
-      added = duplicate_sentences(translated).reject { |sentence| source_duplicates.include?(sentence) }
-      raise Error.new(:duplicate_sentence, 'translation duplicated a source sentence') unless added.empty?
+      source_profile = duplicate_profile(source)
+      added = duplicate_profile(translated).each_with_index.any? do |count, index|
+        count > source_profile.fetch(index, 1)
+      end
+      raise Error.new(:duplicate_sentence, 'translation duplicated a source sentence') if added
     end
 
-    def duplicate_sentences(value)
-      sentences(value).each_cons(2).filter_map do |left, right|
-        left if left == right && left.split.size >= 4
-      end
+    def duplicate_profile(value)
+      sentences(value).tally.filter_map do |sentence, count|
+        count if count > 1 && sentence.split.size >= 4
+      end.sort.reverse
     end
 
     def sentences(value)
@@ -178,10 +180,11 @@ module Ewprs
       end
     end
 
-    def untranslated_prose?(source, words, common)
+    def untranslated_prose?(source, words)
       return false if words.size < 2 || formula_or_reference?(source)
+      return false if protected_source_fragment?(source)
 
-      common >= 2
+      source_words(words) >= 2 || source_suffix_words(words) >= 2
     end
 
     def formula_or_reference?(source)
@@ -200,6 +203,11 @@ module Ewprs
     def source_words(words)
       dictionary = SOURCE_WORDS.fetch(source_language, {})
       words.count { |word| dictionary.key?(word) }
+    end
+
+    def source_suffix_words(words)
+      suffixes = SOURCE_SUFFIXES[source_language]
+      suffixes ? words.count { |word| word.match?(suffixes) } : 0
     end
 
     def marked_word_count(value)

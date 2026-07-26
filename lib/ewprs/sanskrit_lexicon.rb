@@ -1,0 +1,68 @@
+require 'nokogiri'
+
+require_relative 'translation_markup'
+
+module Ewprs
+  class SanskritLexicon
+    include TranslationMarkup
+
+    DEFAULT_TERMS = %w[
+      Brahma Shiva Shakti Prakrti Purusa Purusottama dharma Tantra yoga
+      sadhana samadhi mantra kiirtana tattva vrtti pravrtti nivrtti samskara
+      amrta caetanya hasant madhyama mudra nrtya pratibha sarjana sargam srjanii
+      Shivatattva utsarjana vilambita visarjana
+      pra karoti iti
+    ].freeze
+
+    attr_reader :gloss_pattern, :inline_gloss_pattern
+
+    def initialize(root)
+      path = File.join(root, 'HTML/Info/MasterGlossary.html')
+      raw = File.binread(path)
+      html = raw.dup.force_encoding(Encoding::UTF_8)
+      html = raw.force_encoding(Encoding::Windows_1252).encode(Encoding::UTF_8) unless html.valid_encoding?
+      document = Nokogiri::HTML5.parse(html)
+      @terms = document.css('b').flat_map { |node| variants(node.text) }
+      @terms.concat(DEFAULT_TERMS)
+      @terms = @terms.map(&:strip).reject { |term| term.length < 3 }.uniq.sort_by { |term| -term.length }
+      @pattern = /(?<![A-Za-z])(?:#{@terms.map { |term| Regexp.escape(term) }.join('|')})(?![A-Za-z])/i
+      @inline_pattern = %r{<(?<tag>i|em)\b[^>]*>\s*#{@pattern}\s*</\k<tag>\s*>}i
+      @inline_gloss_pattern = %r{
+        (?<term>#{@inline_pattern})(?<spacing>\s*)
+        (?<opening>\[\[?)(?<gloss>[^\[\]\r\n]+)(?<closing>\]\]?)
+      }ix
+      @gloss_pattern = %r{
+        (?<term>(?:#{MARKED_WORD}|#{ASCII_TRANSLITERATED_WORD}|#{@pattern}))(?<spacing>\s*)
+        (?<opening>\[\[?)(?<gloss>[^\[\]\r\n]+)(?<closing>\]\]?)
+        (?<suffix>\s+(?<![A-Za-z])(?-i:[A-Z])[A-Za-z'’-]*(?![A-Za-z]))?
+      }ix
+    end
+
+    def mask(value, tokens)
+      value.gsub(@pattern) do |match|
+        marker = format('__P%04d__', tokens.size + 1)
+        tokens[marker] = match
+        marker
+      end
+    end
+
+    def mask_inline(value, tokens)
+      value.gsub(@inline_pattern) do |match|
+        marker = format('__P%04d__', tokens.size + 1)
+        tokens[marker] = match
+        marker
+      end
+    end
+
+    private
+
+    def variants(value)
+      values = [value, *value.split(/\s+(?:or|and)\s+|[,;]/i)]
+      values.flat_map do |term|
+        clean = term.gsub(/\b[fm]\.$/i, '').strip
+        ascii = clean.unicode_normalize(:nfd).gsub(/\p{M}/, '')
+        [clean, ascii]
+      end
+    end
+  end
+end

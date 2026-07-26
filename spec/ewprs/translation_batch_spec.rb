@@ -988,6 +988,19 @@ RSpec.describe Ewprs::TranslationBatch do
     expect(resumed_translator.calls).to eq(['English plain sentence.'])
   end
 
+  it 'rejects a restored translation with reordered HTML tags' do
+    unit = described_class::Unit.new(
+      key: 'cached-markup', source: '<i>English term</i>',
+      prepared: '__P0001__English term__P0002__',
+      tokens: {'__P0001__' => '<i>', '__P0002__' => '</i>'},
+      leading: '', trailing: ''
+    )
+
+    expect do
+      batch.send(:validate_restored_translation!, unit, '</i>Termo em português<i>')
+    end.to raise_error(Ewprs::TranslationValidator::Error, /changed HTML tag sequence/)
+  end
+
   it 'preserves the source file mode when writing a translated document' do
     path = File.join(root, 'HTML/Discourses/Mode.html')
     File.binwrite(path, 'source')
@@ -1068,6 +1081,21 @@ RSpec.describe Ewprs::TranslationBatch do
 
     expect(batch.send(:restore_tokens, unit, '__P0001__nasceram')).to eq(
       'ks&#x301;atriyas nasceram'
+    )
+  end
+
+  it 'does not insert Latin spacing into non-Latin target text' do
+    chinese = described_class.new(
+      root: root, target: 'zh', cache: cache, translator: translator, stdout: StringIO.new
+    )
+    unit = described_class::Unit.new(
+      key: 'chinese-term-boundary', source: 'This is Brahma.',
+      prepared: 'This is __P0001__.', tokens: {'__P0001__' => 'Brahma'},
+      leading: '', trailing: ''
+    )
+
+    expect(chinese.send(:normalize_protected_boundaries, unit, '这是__P0001__概念')).to eq(
+      '这是__P0001__概念'
     )
   end
 

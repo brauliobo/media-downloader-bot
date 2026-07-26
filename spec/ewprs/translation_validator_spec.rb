@@ -19,6 +19,13 @@ RSpec.describe Ewprs::TranslationValidator do
     end.to raise_error(described_class::Error, /left source prose unchanged/)
 
     expect do
+      validator.validate!(
+        source: 'Meditation transforms consciousness profoundly.',
+        translated: 'Meditation transforms consciousness profoundly.'
+      )
+    end.to raise_error(described_class::Error, /left source prose unchanged/)
+
+    expect do
       validator.validate!(source: 'O Soul Supreme!', translated: 'O Soul Supreme!')
     end.to raise_error(described_class::Error, /left source prose unchanged/)
   end
@@ -86,6 +93,14 @@ RSpec.describe Ewprs::TranslationValidator do
     expect do
       validator.validate!(source: 'The mind (and body) move.', translated: 'A mente (e o corpo se movem.')
     end.to raise_error(described_class::Error, /changed paired delimiters/)
+
+    expect do
+      validator.validate!(source: 'The mind (and body) move.', translated: 'A mente )e o corpo( se movem.')
+    end.to raise_error(described_class::Error, /changed paired delimiters/)
+
+    expect do
+      validator.validate!(source: 'The {mind (and body)} moves.', translated: 'A {mente) e o corpo (}se move.')
+    end.to raise_error(described_class::Error, /changed paired delimiters/)
   end
 
   it 'rejects whitespace that splits double editorial brackets' do
@@ -104,6 +119,22 @@ RSpec.describe Ewprs::TranslationValidator do
         translated: 'A mente esta se movendo. A mente esta se movendo. O corpo esta parado.'
       )
     end.to raise_error(described_class::Error, /duplicated a source sentence/)
+
+    expect do
+      validator.validate!(
+        source: 'The mind is moving. The body is still. The soul is calm.',
+        translated: 'A mente esta se movendo. O corpo esta parado. A mente esta se movendo.'
+      )
+    end.to raise_error(described_class::Error, /duplicated a source sentence/)
+  end
+
+  it 'allows source-authorized repeated sentences' do
+    expect(
+      validator.valid?(
+        source: 'The mind is moving. The mind is moving.',
+        translated: 'A mente esta se movendo. A mente esta se movendo.'
+      )
+    ).to be(true)
   end
 
   it 'rejects changed protected source text' do

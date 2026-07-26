@@ -96,10 +96,18 @@ module Ewprs
     end
 
     def untranslated_repair_prompt(source, from:, to:)
-      placeholders = source.scan(/__P\d{4}__/).uniq
-      copy = " Copy #{placeholders.join(', ')} exactly." unless placeholders.empty?
-      "Translate this #{language_name(from)} sentence completely into #{target_language_name(to)}. " \
-        "Do not output any #{language_name(from)} words.#{copy} Only output the translation:\n#{source}"
+      instructions = [
+        "Translate this #{language_name(from)} sentence completely into #{target_language_name(to)}.",
+        "Do not output any #{language_name(from)} words.",
+        'Preserve every sentence and line break; do not omit or repeat text.',
+        delimiter_instruction(source)
+      ]
+      tags = tag_instruction(source)
+      instructions << tags if tags
+      placeholders = placeholder_instruction(source)
+      instructions << placeholders if placeholders
+      instructions << 'Only output the translation without any additional explanation:'
+      "#{instructions.join("\n")}\n\n#{source}"
     end
 
     def target_language_name(code)

@@ -126,7 +126,9 @@ RSpec.describe Ewprs::Translator do
       expect(prompt).to include(
         'Translate this English sentence completely into Brazilian Portuguese.',
         'Do not output any English words.',
-        'Copy __P0001__ exactly.',
+        'Preserve every sentence and line break',
+        'including unmatched delimiters',
+        'Preserve exactly these placeholder occurrences, including every repeated entry',
         source
       )
       expect(prompt).not_to include('Invalid translation to correct:')
