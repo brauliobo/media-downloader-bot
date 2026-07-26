@@ -2,13 +2,15 @@ module Ewprs
   module SentenceSplitter
     CONTRAST_BOUNDARY = /(?<=,)\s+(?=but\b)/i
     CONTRAST_MIN_CHARS = 300
+    OPENING_QUOTE = /(?:&(?:ldquo|lsquo|quot);|["“‘])/
 
     module_function
 
     def split(text, boundary_tokens:, max_chars:)
       transparent = "(?:#{boundary_tokens.source})*"
-      boundary = /([.!?…]"?)(\s*\d{1,3})?(#{transparent})\s+(?=#{transparent}\p{Lu})/u
+      boundary = /([.!?…]"?)(\s*\d{1,3})?(#{transparent})\s+(?=#{transparent}(?:\[\[?|#{OPENING_QUOTE})?\p{Lu})/u
       sentences = Array(text).join
+        .gsub(/(?<=&#8230;)\s+/i, "\n")
         .gsub(boundary, "\\1\\2\\3\n")
         .split(/\n+/)
         .map(&:strip)

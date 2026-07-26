@@ -10,6 +10,38 @@ RSpec.describe Ewprs::SentenceSplitter do
     )
   end
 
+  it 'starts a new sentence before opening editorial brackets' do
+    text = 'First sentence. [[And the]] second sentence.'
+
+    expect(described_class.split(text, boundary_tokens: /__P\d{4}__/, max_chars: 800)).to eq(
+      ['First sentence.', '[[And the]] second sentence.']
+    )
+  end
+
+  it 'starts a new sentence before opening quote entities' do
+    text = 'First reference. &ldquo;Second Reference&rdquo; follows.'
+
+    expect(described_class.split(text, boundary_tokens: /__P\d{4}__/, max_chars: 800)).to eq(
+      ['First reference.', '&ldquo;Second Reference&rdquo; follows.']
+    )
+  end
+
+  it 'starts a new sentence before literal opening quotes' do
+    text = 'First sentence. “Second sentence.”'
+
+    expect(described_class.split(text, boundary_tokens: /__P\d{4}__/, max_chars: 800)).to eq(
+      ['First sentence.', '“Second sentence.”']
+    )
+  end
+
+  it 'splits excerpts after an HTML omission marker' do
+    text = 'First excerpt.&#8230; to [[vest]] an incompetent person with power.'
+
+    expect(described_class.split(text, boundary_tokens: /__P\d{4}__/, max_chars: 800)).to eq(
+      ['First excerpt.&#8230;', 'to [[vest]] an incompetent person with power.']
+    )
+  end
+
   it 'splits oversized sentences at clause boundaries' do
     text = 'Alpha beta gamma; delta epsilon zeta, eta theta iota.'
 
