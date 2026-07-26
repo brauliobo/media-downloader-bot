@@ -13,10 +13,11 @@ module Ewprs
         template = template.gsub(INLINE_ORIGINAL) { |value| protect_content(value) }
         template = template.gsub(BLOCK_CONTENT) do
           opening, content, closing = Regexp.last_match.captures
-          "#{opening}#{register_content(content)}#{closing}"
+          force_translation = opening.match?(/\btype=title\b/i)
+          "#{opening}#{register_content(content, force_translation: force_translation)}#{closing}"
         end
         template = unitize_grouped(template, GROUPED_PARAGRAPH)
-        template = unitize_grouped(template, GROUPED_DIV)
+        template = unitize_grouped(template, GROUPED_DIV, force_translation: true)
         template = template.gsub(TEXT_NODE) do |value|
           translatable?(value) ? register_content(value) : value
         end
@@ -34,18 +35,22 @@ module Ewprs
         marker
       end
 
-      def unitize_grouped(template, pattern)
+      def unitize_grouped(template, pattern, force_translation: false)
         template.gsub(pattern) do
           content = Regexp.last_match(2)
-          translated = translatable?(content) ? register_content(content) : content
+          translated = if translatable?(content, force_translation: force_translation)
+            register_content(content, force_translation: force_translation)
+          else
+            content
+          end
           "#{Regexp.last_match(1)}#{translated}#{Regexp.last_match(3)}"
         end
       end
 
-      def translatable?(value)
+      def translatable?(value, force_translation: false)
         core = value.to_s.strip
         return false if core.empty? || core.match?(UNIT_MARKER)
-        return false if validator.protected_source_fragment?(core)
+        return false if !force_translation && validator.protected_source_fragment?(core)
 
         core.gsub(PROTECTED_MARKER, '').match?(/[A-Za-z]/)
       end
@@ -56,8 +61,8 @@ module Ewprs
         "⟦U#{key}⟧"
       end
 
-      def register_content(source)
-        return protect_content(source) if non_english_verse?(source)
+      def register_content(source, force_translation: false)
+        return protect_content(source) if !force_translation && non_english_verse?(source)
 
         source.split(/(#{STRUCTURAL_MARKUP})/).map do |part|
           if part.empty?
@@ -65,18 +70,23 @@ module Ewprs
           elsif part.match?(/\A#{STRUCTURAL_MARKUP}\z/)
             part
           else
-            translatable?(part) ? register_sentences(part) : part
+            if translatable?(part, force_translation: force_translation)
+              register_sentences(part, force_translation: force_translation)
+            else
+              part
+            end
           end
         end.join
       end
 
-      def register_sentences(source)
+      def register_sentences(source, force_translation: false)
         leading = source[/\A\s*/m]
         trailing = source[/\s*\z/m]
         core = source[leading.length, source.length - leading.length - trailing.length]
         if core.match?(/\A#{EDITORIAL_CONTENT}\z/)
           opening, content, closing = editorial_parts(core)
-          return "#{leading}#{opening}#{register_sentences(content)}#{closing}#{trailing}"
+          translated = register_sentences(content, force_translation: force_translation)
+          return "#{leading}#{opening}#{translated}#{closing}#{trailing}"
         end
 
         tags = {}
@@ -91,7 +101,8 @@ module Ewprs
 
           template << restore_split_markup(masked[cursor...index], tags)
           value = restore_split_markup(sentence, tags)
-          template << (translatable?(value) ? register_unit(value) : value)
+          translated = translatable?(value, force_translation: force_translation) ? register_unit(value) : value
+          template << translated
           cursor = index + sentence.length
         end << restore_split_markup(masked[cursor..], tags)
       end

@@ -40,6 +40,17 @@ RSpec.describe Audiobook::Parsers::Html do
     end
   end
 
+  it 'uses an explicit localized title for metadata and structured narration' do
+    opts = SymMash.new(html_title: 'Título traduzido', html_block_comments: true)
+
+    with_html('<h1>English title</h1><p><!-- block type=paragraph -->Body.<!-- /block --></p>') do |path|
+      data = described_class.extract_data(path, opts: opts)
+
+      expect(data.metadata.title).to eq('Título traduzido')
+      expect(data.content.lines.map(&:text)).to eq(['Título traduzido', 'Body.'])
+    end
+  end
+
   it 'falls back to Windows-1252 and normalizes legacy punctuation' do
     with_html("<p>It\x92s readable.</p>".b, encoding: Encoding::ASCII_8BIT) do |path|
       data = described_class.extract_data(path)

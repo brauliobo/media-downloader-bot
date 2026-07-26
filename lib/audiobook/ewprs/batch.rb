@@ -1,18 +1,19 @@
+require 'fileutils'
 require 'time'
 
-require_relative 'book'
-require_relative 'runner'
-require_relative '../job_pool'
-require_relative '../jsonl_store'
-require_relative '../prober'
-require_relative '../zipper'
+require_relative '../book'
+require_relative '../runner'
+require_relative '../../job_pool'
+require_relative '../../jsonl_store'
+require_relative '../../prober'
+require_relative '../../zipper'
 
-module Audiobook
-  class EwprsBatch
+module Audiobook::Ewprs
+  class Batch
     attr_reader :catalog, :output, :jobs, :published, :failures
 
-    def initialize(catalog:, output:, jobs: 5, manifest: nil, manager: nil, chat_id: nil, topic: nil, apply: false,
-                   stdout: $stdout, stderr: $stderr)
+    def initialize(catalog:, output:, jobs: 5, manifest: nil, upload_dir: nil, manager: nil, chat_id: nil, topic: nil,
+                   apply: false, stdout: $stdout, stderr: $stderr)
       raise ArgumentError, 'jobs must be positive' unless jobs.to_i.positive?
 
       @catalog       = catalog
@@ -20,6 +21,7 @@ module Audiobook
       manifest_path  = File.expand_path(manifest || File.join(@output, 'published.jsonl'))
       @manifest      = JsonlStore.new(manifest_path)
       @failure_log   = JsonlStore.new(File.join(@output, 'failures.jsonl'))
+      @upload_dir    = File.expand_path(upload_dir) if upload_dir
       @jobs          = jobs.to_i
       @manager       = manager
       @chat_id       = chat_id
@@ -51,7 +53,7 @@ module Audiobook
 
     private
 
-    attr_reader :manager, :chat_id, :topic, :stdout, :stderr
+    attr_reader :manager, :chat_id, :topic, :stdout, :stderr, :upload_dir
 
     def process_stage(entries, offset:, total:)
       return if entries.empty?
@@ -114,10 +116,11 @@ module Audiobook
     end
 
     def upload_entry(entry, audio, chapter_count, position, total)
-      seconds = Prober.for(audio).format.duration.to_f.round
-      result  = manager.upload_generated_media(
+      seconds      = Prober.for(audio).format.duration.to_f.round
+      upload_audio = stage_upload(audio)
+      result       = manager.upload_generated_media(
         chat_id: chat_id, forum_topic_id: topic[:forum_topic_id], text: caption(entry, seconds, chapter_count),
-        type: :audio, parse_mode: nil, audio_path: audio, duration: seconds,
+        type: :audio, parse_mode: nil, audio_path: upload_audio, duration: seconds,
         title: entry.title, performer: 'P. R. Sarkar', copy: false
       )
       raise 'upload returned no message ID' unless result[:message_id].to_i.positive?
@@ -137,17 +140,35 @@ module Audiobook
       }
       append_record(record)
       stdout.puts JSON.generate(progress: "#{position}/#{total}", checkpointed: record)
+    ensure
+      FileUtils.rm_f(upload_audio) if upload_audio && upload_audio != audio
+    end
+
+    def stage_upload(audio)
+      return audio unless upload_dir
+
+      FileUtils.mkdir_p(upload_dir)
+      staged = File.join(upload_dir, File.basename(audio))
+      return audio if staged == audio
+
+      FileUtils.cp(audio, staged)
+      staged
     end
 
     def caption(entry, _seconds, chapter_count)
+      locale = catalog.language
+      scope  = 'audiobook.ewprs.caption'
+      text   = lambda do |key, **options|
+        I18n.t(key, locale: locale, scope: scope, raise: true, **options)
+      end
       [
         entry.title,
         'P. R. Sarkar',
-        "Type: #{entry.kind.to_s.capitalize}",
-        ("Date/place: #{entry.info}" if entry.info.present?),
-        ("Published in: #{entry.sources.join('; ')}" if entry.sources.present?),
-        ("Chapters: #{chapter_count}/#{entry.chapters.size}" if entry.kind == :book),
-        'Language: English'
+        text.call(:type, kind: text.call("kinds.#{entry.kind}")),
+        (text.call(:date_place, value: entry.info) if entry.info.present?),
+        (text.call(:published_in, value: entry.sources.join('; ')) if entry.sources.present?),
+        (text.call(:chapters, count: chapter_count, total: entry.chapters.size) if entry.kind == :book),
+        text.call(:language, language: text.call("languages.#{locale}"))
       ].compact.join("\n")
     end
 

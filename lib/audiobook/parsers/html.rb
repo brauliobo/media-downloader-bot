@@ -25,8 +25,9 @@ module Audiobook
         root.css(EXCLUDED_SELECTOR).remove
         selector = opts&.html_content_selector.to_s.presence || BLOCK_SELECTOR
         title_node = document.at(opts&.html_title_selector.to_s.presence || 'title,h1')
+        title = normalize(opts&.html_title.presence || title_node&.text)
         lines = if opts&.html_block_comments
-          structured_lines(html, root, title_node)
+          structured_lines(html, root, title)
         else
           selected_lines(root, selector)
         end
@@ -34,7 +35,7 @@ module Audiobook
 
         SymMash.new(
           metadata: SymMash.new(
-            title:      normalize(title_node&.text),
+            title:      title,
             language:   opts&.html_language,
             page_count: page_count
           ).compact,
@@ -51,8 +52,8 @@ module Audiobook
         end
       end
 
-      def self.structured_lines(html, root, title_node)
-        lines = [line(normalize(title_node&.text), 24)].compact
+      def self.structured_lines(html, root, title)
+        lines = [line(title, 24)].compact
         html.to_enum(:scan, /<!--\s*block\b[^>]*\btype=paragraph\b[^>]*-->(.*?)<!--\s*\/block\s*-->/mi).each do
           match = Regexp.last_match
           fragment = Nokogiri::HTML5.fragment(match[1])

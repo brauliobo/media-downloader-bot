@@ -9,6 +9,7 @@ def source github:, dir:
 end
 
 gem 'activesupport'
+gem 'i18n'
 gem 'dotenv'
 gem 'hashie'
 gem 'json_schemer'

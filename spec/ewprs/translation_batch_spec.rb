@@ -85,6 +85,17 @@ RSpec.describe Ewprs::TranslationBatch do
     expect(template).to match(/⟦U[0-9a-f]{64}⟧/)
   end
 
+  it 'translates English connectors in Sanskrit-heavy titles' do
+    title = 'Abhedajin&#x32D;a&#x301;na and Daeshika Vyavadha&#x301;na Vilopa'
+    source = '<div class=discourse_box_title_ref><!-- block a=title type=title -->' \
+             "#{title}<!-- /block --></div><div class=discourse_title>#{title}</div>"
+    template = batch.send(:unitize, source)
+    translations = batch.send(:translate_units)
+    rendered = batch.send(:render, described_class::Document.new(template: template), translations)
+
+    expect(rendered.scan('Abhedajin&#x32D;a&#x301;na e Daeshika Vyavadha&#x301;na Vilopa').size).to eq(2)
+  end
+
   it 'translates prose while preserving structure, slokas, scripts, markup, and Sanskrit bytes' do
     document, translations = prepare_translation(batch)
     rendered = batch.send(:render, document, translations)

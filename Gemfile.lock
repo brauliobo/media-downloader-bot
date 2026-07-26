@@ -248,6 +248,7 @@ DEPENDENCIES
   hashie
   http-cookie
   httparty
+  i18n
   iso-639
   json_schemer
   mechanize

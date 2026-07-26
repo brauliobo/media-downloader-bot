@@ -1,0 +1,19 @@
+pt:
+  audiobook:
+    ewprs:
+      caption:
+        type: "Tipo: %{kind}"
+        date_place: "Data/local: %{value}"
+        published_in: "Publicado em: %{value}"
+        chapters: "Capítulos: %{count}/%{total}"
+        language: "Idioma: %{language}"
+        kinds:
+          discourse: Discurso
+          book: Livro
+        languages:
+          en: Inglês
+          pt: Português
+      titles:
+        Babas_Grace_Fillers: Textos Complementares da Graça de Bábá
+        Gurukul_Song: Canção do Gurukul
+        Babas_Grace: A Graça de Bábá [uma compilação]

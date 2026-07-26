@@ -1,13 +1,13 @@
 require 'spec_helper'
-require_relative '../../lib/audiobook/ewprs_batch'
+require_relative '../../../lib/audiobook/ewprs'
 
-RSpec.describe Audiobook::EwprsBatch do
+RSpec.describe Audiobook::Ewprs::Batch do
   Entry = Struct.new(:kind, :title, :path, :info, :sources, :chapters, keyword_init: true) do
     def slug = title.downcase.tr(' ', '_')
   end
 
   let(:output) { Dir.mktmpdir('ewprs-batch-') }
-  let(:catalog) { double(parse_options: SymMash.new) }
+  let(:catalog) { double(parse_options: SymMash.new, language: 'en', language_name: 'English') }
   let(:topic) { {forum_topic_id: 2721, name: 'English Audiobooks'} }
   let(:entries) do
     %w[First Second Third].map do |title|
@@ -74,5 +74,44 @@ RSpec.describe Audiobook::EwprsBatch do
 
     expect(caption).to include("First\nP. R. Sarkar", 'Language: English')
     expect(caption).not_to include('Duration:')
+  end
+
+  it 'labels Portuguese publications from the catalog language' do
+    entry = Entry.new(
+      kind: :discourse, title: 'Primeiro', path: 'first', info: '1969, Ranchi',
+      sources: ['Ánanda Vacanámrtam Parte 31'], chapters: nil
+    )
+    allow(catalog).to receive(:language_name).and_return('Portuguese')
+    allow(catalog).to receive(:language).and_return('pt')
+    batch = described_class.new(catalog: catalog, output: output)
+
+    expect(batch.send(:caption, entry, 62, nil)).to eq(
+      "Primeiro\nP. R. Sarkar\nTipo: Discurso\nData/local: 1969, Ranchi\n" \
+      "Publicado em: Ánanda Vacanámrtam Parte 31\nIdioma: Português"
+    )
+  end
+
+  it 'stages uploads outside the persistent output directory' do
+    upload_dir = Dir.mktmpdir('ewprs-upload-')
+    audio      = File.join(output, 'first.m4a')
+    File.write(audio, 'audio')
+    allow(Prober).to receive(:for).with(audio).and_return(double(format: double(duration: 12.4)))
+    manager = double
+    expect(manager).to receive(:upload_generated_media) do |params|
+      expect(params[:audio_path]).to eq(File.join(upload_dir, 'first.m4a'))
+      expect(File.read(params[:audio_path])).to eq('audio')
+      {message_id: 123, remote_id: 'remote'}
+    end
+    batch = described_class.new(
+      catalog: catalog, output: output, upload_dir: upload_dir, manager: manager, chat_id: -100123,
+      topic: topic, apply: true, stdout: StringIO.new
+    )
+
+    batch.send(:upload_entry, entries.first, audio, nil, 1, 1)
+
+    expect(File).to exist(audio)
+    expect(File).not_to exist(File.join(upload_dir, 'first.m4a'))
+  ensure
+    FileUtils.remove_entry(upload_dir) if upload_dir && Dir.exist?(upload_dir)
   end
 end
