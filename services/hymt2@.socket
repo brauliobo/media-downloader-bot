@@ -1,0 +1,12 @@
+[Unit]
+Description=Hy-MT2 activation socket for GPU %i
+
+[Socket]
+ListenStream=127.0.0.1:1201%i
+Service=hymt2-proxy@%i.service
+Accept=no
+NoDelay=yes
+Backlog=512
+
+[Install]
+WantedBy=sockets.target

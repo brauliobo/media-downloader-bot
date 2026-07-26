@@ -1,0 +1,13 @@
+[Unit]
+Description=Hy-MT2 idle proxy for GPU %i
+BindsTo=llamacpp-hymt2@%i.service
+After=llamacpp-hymt2@%i.service
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd --exit-idle-time=30min 127.0.0.1:1202%i
+DynamicUser=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

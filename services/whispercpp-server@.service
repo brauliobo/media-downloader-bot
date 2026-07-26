@@ -1,5 +1,5 @@
 [Unit]
-Description=whisper.cpp transcription backend
+Description=whisper.cpp transcription backend on GPU %i
 After=network-online.target
 Wants=network-online.target
 RequiresMountsFor=/srv/whisper.cpp
@@ -10,16 +10,14 @@ User=braulio
 Nice=19
 UMask=0077
 
-WorkingDirectory=/run/whispercpp-server
-RuntimeDirectory=whispercpp-server
+WorkingDirectory=/run/whispercpp-server-%i
+RuntimeDirectory=whispercpp-server-%i
 RuntimeDirectoryMode=0700
-Environment=INFERENCE_GPU=0
-EnvironmentFile=-/etc/default/inference-node
 Environment=LD_LIBRARY_PATH=/srv/whisper.cpp/runtime
 ExecStart=/srv/whisper.cpp/runtime/whisper-server \
   --model /srv/whisper.cpp/models/ggml-large-v3-turbo.bin \
-  --host 127.0.0.1 --port 8082 --threads 16 -l auto --device ${INFERENCE_GPU} --convert
-ExecStartPost=/usr/bin/curl --fail --silent --show-error --retry 90 --retry-delay 1 --retry-connrefused --retry-all-errors --retry-max-time 90 --max-time 2 http://127.0.0.1:8082/health
+  --host 127.0.0.1 --port 828%i --threads 16 -l auto --device %i --convert
+ExecStartPost=/usr/bin/curl --fail --silent --show-error --retry 90 --retry-delay 1 --retry-connrefused --retry-all-errors --retry-max-time 90 --max-time 2 http://127.0.0.1:828%i/health
 
 NoNewPrivileges=yes
 PrivateTmp=yes
