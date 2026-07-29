@@ -11,6 +11,7 @@ class Zipper
 
   class_attribute :size_mb_limit
   class_attribute :pause_cache
+  class_attribute :pause_cache_mutex
 
   # Constants removed; quality defaults are set dynamically per instance.
   VFR_OPTS    = '-vsync vfr'
@@ -96,7 +97,8 @@ class Zipper
     outfile
   end
 
-  self.pause_cache = {}
+  self.pause_cache       = {}
+  self.pause_cache_mutex = Mutex.new
 
   def self.silence_file(path, seconds, sample_rate: 22_050)
     cmd = "#{FFMPEG} -f lavfi -i anullsrc=channel_layout=mono:sample_rate=#{sample_rate.to_i} -t #{seconds} #{Sh.escape(path)}"
@@ -112,26 +114,31 @@ class Zipper
     return white_noise_file(key, dir, sample_rate: sample_rate) if source
 
     cache_key = "#{dir}:#{key}:#{sample_rate}"
-    pause_cache[cache_key] ||= File.join(dir, "pause_#{key.to_s.gsub('.', '_')}_#{sample_rate}.wav").then do |pause_file|
-      unless File.exist?(pause_file)
-        silence_file(pause_file, key, sample_rate: sample_rate)
-      end
-      pause_file
+    pause_file = File.join(dir, "pause_#{key.to_s.gsub('.', '_')}_#{sample_rate}.wav")
+    cached_pause_file(cache_key, pause_file) do
+      silence_file(pause_file, key, sample_rate: sample_rate)
     end
   end
 
   def self.white_noise_file seconds, dir, sample_rate: 22_050
     key = seconds.to_f.round(3)
     cache_key = "#{dir}:white-noise:#{key}:#{sample_rate}"
-    pause_cache[cache_key] ||= File.join(dir, "white_noise_#{key.to_s.gsub('.', '_')}_#{sample_rate}.wav").then do |output|
-      unless File.exist?(output)
-        source = "anoisesrc=color=white:amplitude=0.0035:sample_rate=#{sample_rate}:duration=#{key}"
-        command = "#{FFMPEG} -f lavfi -i #{Sh.escape(source)} -af lowpass=f=6000 -ac 1 -ar #{sample_rate} " \
-                  "-c:a pcm_s16le #{Sh.escape(output)}"
-        _, stderr, status = Sh.run(command)
-        Sh.assert_success!('Failed to create white-noise audio file', stderr, status: status, output: output)
+    output = File.join(dir, "white_noise_#{key.to_s.gsub('.', '_')}_#{sample_rate}.wav")
+    cached_pause_file(cache_key, output) do
+      source = "anoisesrc=color=white:amplitude=0.0035:sample_rate=#{sample_rate}:duration=#{key}"
+      command = "#{FFMPEG} -f lavfi -i #{Sh.escape(source)} -af lowpass=f=6000 -ac 1 -ar #{sample_rate} " \
+                "-c:a pcm_s16le #{Sh.escape(output)}"
+      _, stderr, status = Sh.run(command)
+      Sh.assert_success!('Failed to create white-noise audio file', stderr, status: status, output: output)
+    end
+  end
+
+  def self.cached_pause_file cache_key, path
+    pause_cache_mutex.synchronize do
+      pause_cache[cache_key] ||= begin
+        yield unless File.exist?(path)
+        path
       end
-      output
     end
   end
 

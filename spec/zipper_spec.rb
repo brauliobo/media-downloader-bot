@@ -311,6 +311,28 @@ RSpec.describe Zipper do
     end
   end
 
+  it 'creates each cached white-noise file only once across concurrent callers' do
+    Dir.mktmpdir('room-tone-concurrency-spec-') do |dir|
+      source = File.join(dir, 'sentence.wav')
+      File.write(source, 'sentence')
+      runs = 0
+      runs_mutex = Mutex.new
+      allow(Sh).to receive(:run) do |command|
+        runs_mutex.synchronize { runs += 1 }
+        sleep 0.05
+        File.write(command.split.last, 'room tone')
+        ['', '', double(success?: true)]
+      end
+
+      threads = 4.times.map do
+        Thread.new { described_class.get_pause_file(0.1, dir, sample_rate: 24_000, source: source) }
+      end
+
+      expect(threads.map(&:value).uniq).to contain_exactly(File.join(dir, 'white_noise_0_1_24000.wav'))
+      expect(runs).to eq(1)
+    end
+  end
+
   it 'fills generated silence with room tone without extending the wav' do
     Dir.mktmpdir('room-tone-mix-spec-') do |dir|
       source = File.join(dir, 'sentence.wav')
