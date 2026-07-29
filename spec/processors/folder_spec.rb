@@ -187,6 +187,29 @@ RSpec.describe Processors::Folder do
       end
     end
 
+    it 'skips camera files already converted by the archive preset' do
+      Dir.mktmpdir do |dir|
+        source = File.join(dir, 'camera-20260101_000000.mp4')
+        write_media(source)
+
+        processor = described_class.new(
+          paths: [dir],
+          opts: SymMash.new(camera: 1, replace: 1, metadata: {}),
+          option_args: %w[camera replace],
+          bot: Bot::Mock.new,
+        )
+
+        allow(Prober).to receive(:for).with(source).and_return(
+          SymMash.new(streams: [SymMash.new(codec_type: 'video')])
+        )
+        allow(Processors::LocalFile).to receive(:attach_to_message)
+
+        processor.run
+
+        expect(Processors::LocalFile).not_to have_received(:attach_to_message)
+      end
+    end
+
     it 'replaces originals in place when replace mode is enabled' do
       Dir.mktmpdir do |dir|
         folder = File.join(dir, 'Camera')

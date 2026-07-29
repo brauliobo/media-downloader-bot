@@ -102,6 +102,8 @@ module Processors
     end
 
     def process_entry(entry)
+      return if archive_output?(entry.path)
+
       Worker.workdir_path = entry.out_dir
       FileUtils.mkdir_p Worker.workdir_path
       started_at = Time.now
@@ -133,6 +135,15 @@ module Processors
 
     def enabled?(*keys)
       keys.any? { |key| opts[key] }
+    end
+
+    def archive_output?(path)
+      return false unless replace? && (opts.camera || opts.efficient)
+      return false unless Presets::Camera.tier(path)[:noaudio]
+
+      Prober.for(path).streams&.none? { |stream| stream.codec_type == 'audio' }
+    rescue
+      false
     end
 
     def cleanup_replace(entry)
