@@ -29,12 +29,15 @@ RSpec.describe Ewprs::Translator do
       expect(payload.dig('messages', 0, 'content')).to include(
         'Brazilian Portuguese',
         'Preserve every sentence and line break',
-        'including unmatched delimiters: "("=0, ")"=0, "["=0, "]"=0, "{"=0, "}"=0',
+        'Choose one direct translation; do not output alternatives, annotations, or parenthetical variants.',
+        'including unmatched delimiters: "("=0, ")"=0, "["=0, "]"=0, "{"=2, "}"=2',
         'Preserve exactly these placeholder occurrences, including every repeated entry, without translating or ' \
-        'renumbering them: __P0001__. Do not append this list to the translation.',
-        '__P0001__'
+        'renumbering them: {{EWPRS_P1}}. Do not append this list to the translation.',
+        '{{EWPRS_P1}}'
       )
-      Struct.new(:body).new({choices: [{message: {content: "  A palavra __P0001__ significa felicidade.\n"}}]}.to_json)
+      Struct.new(:body).new(
+        {choices: [{message: {content: "  A palavra {{EWPRS_P1}} significa felicidade.\n"}}]}.to_json
+      )
     end
 
     expect(translator.translate_markup('The word __P0001__ means bliss.', to: 'pt')).to eq(
@@ -51,16 +54,39 @@ RSpec.describe Ewprs::Translator do
       prompt = JSON.parse(body).dig('messages', 0, 'content')
       expect(prompt).to include(
         'Preserve exactly these placeholder occurrences, including every repeated entry, without translating or ' \
-        'renumbering them: __P0002__, __P0001__, __P0002__. Do not append this list to the translation.'
+        'renumbering them: {{EWPRS_P2}}, {{EWPRS_P1}}, {{EWPRS_P2}}. ' \
+        'Do not append this list to the translation.'
       )
       Struct.new(:body).new(
-        {choices: [{message: {content: '__P0002__ Buda __P0001__ __P0002__'}}]}.to_json
+        {choices: [{message: {content: '{{EWPRS_P2}} Buda {{EWPRS_P1}} {{EWPRS_P2}}'}}]}.to_json
       )
     end
 
     expect(translator.translate_markup('__P0002__ Buddha __P0001__ __P0002__', to: 'pt')).to eq(
       '__P0002__ Buda __P0001__ __P0002__'
     )
+  end
+
+  it 'protects HTML character references from the translation model' do
+    expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
+      prompt = JSON.parse(body).dig('messages', 0, 'content')
+      expect(prompt).to include(
+        '{{EWPRS_E1}}The word{{EWPRS_E2}} {{EWPRS_E3}} another word {{EWPRS_E4}}:',
+        '{{EWPRS_E1}}, {{EWPRS_E2}}, {{EWPRS_E3}}, {{EWPRS_E4}}'
+      )
+      expect(prompt).not_to include('&ldquo;', '&rdquo;', '&ndash;', '&nbsp')
+      Struct.new(:body).new(
+        {
+          choices: [
+            {message: {content: '{{EWPRS_E1}}A palavra{{EWPRS_E2}} {{EWPRS_E3}} outra palavra {{EWPRS_E4}}:'}}
+          ]
+        }.to_json
+      )
+    end
+
+    expect(
+      translator.translate_markup('&ldquo;The word&rdquo; &ndash; another word &nbsp:', to: 'pt')
+    ).to eq('&ldquo;A palavra&rdquo; &ndash; outra palavra &nbsp:')
   end
 
   it 'does not seed placeholders into unprotected translation prompts' do
@@ -106,12 +132,17 @@ RSpec.describe Ewprs::Translator do
     expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
       prompt = JSON.parse(body).dig('messages', 0, 'content')
       expect(prompt).to include(
-        source, invalid, issue,
+        source.gsub('__P0002__', '{{EWPRS_P2}}').gsub('__P0003__', '{{EWPRS_P3}}')
+          .gsub('__P0004__', '{{EWPRS_P4}}'),
+        invalid.gsub('__P0002__', '{{EWPRS_P2}}').gsub('__P0003__', '{{EWPRS_P3}}')
+          .gsub('__P0004__', '{{EWPRS_P4}}'), issue,
         'Translate every English prose word outside placeholders; do not copy source-language prose.',
         'Copy every placeholder literally; never replace it with its meaning.',
-        '__P0002__ = Tamoguna', '__P0003__ = Rajoguna', '__P0004__ = sattvaguna'
+        '{{EWPRS_P2}} = Tamoguna', '{{EWPRS_P3}} = Rajoguna', '{{EWPRS_P4}} = sattvaguna'
       )
-      Struct.new(:body).new({choices: [{message: {content: corrected}}]}.to_json)
+      encoded = corrected.gsub('__P0002__', '{{EWPRS_P2}}').gsub('__P0003__', '{{EWPRS_P3}}')
+        .gsub('__P0004__', '{{EWPRS_P4}}')
+      Struct.new(:body).new({choices: [{message: {content: encoded}}]}.to_json)
     end
 
     expect(
@@ -129,11 +160,11 @@ RSpec.describe Ewprs::Translator do
         'Preserve every sentence and line break',
         'including unmatched delimiters',
         'Preserve exactly these placeholder occurrences, including every repeated entry',
-        source
+        source.gsub('__P0001__', '{{EWPRS_P1}}')
       )
       expect(prompt).not_to include('Invalid translation to correct:')
       Struct.new(:body).new(
-        {choices: [{message: {content: 'Borrifar água como uma fonte também se chama __P0001__.'}}]}.to_json
+        {choices: [{message: {content: 'Borrifar água como uma fonte também se chama {{EWPRS_P1}}.'}}]}.to_json
       )
     end
 

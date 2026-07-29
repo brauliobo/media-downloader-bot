@@ -6,6 +6,9 @@ module Ewprs
   class Translator
     API_PATH = '/v1/chat/completions'
     HEADERS  = {'Content-Type' => 'application/json'}.freeze
+    INTERNAL_PLACEHOLDER = /__P\d{4}__/
+    CHARACTER_REFERENCE = /&(?:#\d+|#x[\da-f]+|[a-z][\w]+);?/i
+    WIRE_PLACEHOLDER     = /\{\{EWPRS_[PE]\d+\}\}/
 
     attr_reader :jobs
 
@@ -32,13 +35,47 @@ module Ewprs
     end
 
     def repair_markup(source, invalid:, issue:, tokens:, from: 'en', to:)
-      complete(repair_prompt(source, invalid: invalid, issue: issue, tokens: tokens, from: from, to: to))
+      placeholders = placeholder_mapping(source)
+      encoded_tokens = tokens.to_h do |marker, value|
+        [placeholders.fetch(marker, marker), replace_placeholders(value, placeholders)]
+      end
+      output = complete(
+        repair_prompt(
+          replace_placeholders(source, placeholders),
+          invalid: replace_placeholders(invalid, placeholders), issue: issue,
+          tokens: encoded_tokens, from: from, to: to
+        )
+      )
+      restore_placeholders(output, placeholders)
     end
 
     private
 
     def translate_one(text, from:, to:)
-      complete(prompt(text, from: from, to: to))
+      placeholders = placeholder_mapping(text)
+      output = complete(prompt(replace_placeholders(text, placeholders), from: from, to: to))
+      restore_placeholders(output, placeholders)
+    end
+
+    def placeholder_mapping(text)
+      placeholders = text.to_s.scan(INTERNAL_PLACEHOLDER).uniq.to_h do |marker|
+        [marker, "{{EWPRS_P#{marker[/\d+/].to_i}}}"]
+      end
+      text.to_s.scan(CHARACTER_REFERENCE).uniq.each_with_index do |reference, index|
+        placeholders[reference] = "{{EWPRS_E#{index + 1}}}"
+      end
+      placeholders
+    end
+
+    def replace_placeholders(text, placeholders)
+      text.to_s.gsub(/#{INTERNAL_PLACEHOLDER}|#{CHARACTER_REFERENCE}/) do |marker|
+        placeholders.fetch(marker, marker)
+      end
+    end
+
+    def restore_placeholders(text, placeholders)
+      internal = placeholders.invert
+      text.to_s.gsub(WIRE_PLACEHOLDER) { |marker| internal.fetch(marker, marker) }
     end
 
     def complete(prompt)
@@ -56,6 +93,7 @@ module Ewprs
       instructions = [
         "Translate the #{language_name(from)} prose in the following text into #{target_language_name(to)}.",
         'Preserve every sentence and line break; do not omit or repeat text.',
+        'Choose one direct translation; do not output alternatives, annotations, or parenthetical variants.',
         delimiter_instruction(text)
       ]
       tags = tag_instruction(text)
@@ -79,6 +117,7 @@ module Ewprs
         Validation failure: #{issue}
         Translate every #{language_name(from)} prose word outside placeholders; do not copy source-language prose.
         Preserve every sentence and line break; do not omit or repeat text.
+        Choose one direct translation; do not output alternatives, annotations, or parenthetical variants.
         #{delimiter_instruction(source)}
         #{tag_instruction(source)}
         #{placeholder_instruction(source)}
@@ -100,6 +139,7 @@ module Ewprs
         "Translate this #{language_name(from)} sentence completely into #{target_language_name(to)}.",
         "Do not output any #{language_name(from)} words.",
         'Preserve every sentence and line break; do not omit or repeat text.',
+        'Choose one direct translation; do not output alternatives, annotations, or parenthetical variants.',
         delimiter_instruction(source)
       ]
       tags = tag_instruction(source)
@@ -132,7 +172,7 @@ module Ewprs
     end
 
     def placeholder_instruction(source)
-      placeholders = source.scan(/__P\d{4}__/)
+      placeholders = source.scan(WIRE_PLACEHOLDER)
       return if placeholders.empty?
 
       'Preserve exactly these placeholder occurrences, including every repeated entry, without translating or ' \

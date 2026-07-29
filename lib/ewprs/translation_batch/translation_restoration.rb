@@ -13,6 +13,11 @@ module Ewprs
           validator.validate!(source: unit.prepared, translated: output)
           restore_tokens(unit, output)
         rescue ProtectedTokenError, TranslationValidator::Error => error
+          projected = project_missing_editorial_tags(unit, output) if error.message.match?(/changed editorial tags/)
+          if projected
+            output = projected
+            retry
+          end
           raise if retries >= TOKEN_RETRIES
 
           retries += 1
@@ -23,6 +28,30 @@ module Ewprs
           )
           retry
         end
+      end
+
+      def project_missing_editorial_tags(unit, output)
+        editorials = unit.prepared.scan(%r{(<span data-ewprs="[12][12]">)(.*?)</span>}mi)
+        return if editorials.empty?
+
+        untagged = output.gsub(EDITORIAL_TAG, '').gsub(/[ \t]{2,}/, ' ')
+        editorials.each_with_object(untagged) do |(opening, source), projected|
+          target = Array(
+            translator.translate_markup([source], from: source_language, to: self.target)
+          ).first.to_s.strip
+          return if target.empty?
+
+          pattern = exact_phrase_pattern(target)
+          return unless projected.scan(pattern).size == 1
+
+          projected.sub!(pattern) { "#{opening}#{Regexp.last_match[0]}</span>" }
+        end
+      end
+
+      def exact_phrase_pattern(value)
+        opening = value.match?(/\A[\p{L}\p{M}]/u) ? '(?<![\p{L}\p{M}])' : ''
+        closing = value.match?(/[\p{L}\p{M}]\z/u) ? '(?![\p{L}\p{M}])' : ''
+        Regexp.new("#{opening}#{Regexp.escape(value)}#{closing}", Regexp::IGNORECASE)
       end
 
       def repair_token_values(tokens)
@@ -63,7 +92,7 @@ module Ewprs
         end
 
         translated = restore_editorial_tags(output).split(/(#{PLACEHOLDER})/).map do |part|
-          unit.tokens.fetch(part) { preserve_entities(CGI.escapeHTML(part)) }
+          unit.tokens.fetch(part) { preserve_entities(CGI.escapeHTML(part), source: unit.source) }
         end.join
         validate_restored_translation!(unit, "#{unit.leading}#{translated}#{unit.trailing}")
       end
@@ -73,6 +102,9 @@ module Ewprs
           visible = CGI.unescapeHTML(value.gsub(MARKUP, ' ').gsub(UNIT_MARKER, ' ')).strip
           normalized.gsub!(/(?<=\p{Latin})#{Regexp.escape(marker)}/u, " #{marker}") if visible.match?(/\A\p{L}/u)
           normalized.gsub!(/#{Regexp.escape(marker)}(?=\p{Latin})/u, "#{marker} ") if visible.match?(/\p{L}\z/u)
+          if (punctuation = visible[/[,.!?;:]\z/])
+            normalized.gsub!(/#{Regexp.escape(marker)}#{Regexp.escape(punctuation)}/, marker)
+          end
         end
       end
 
@@ -153,7 +185,7 @@ module Ewprs
       end
 
       def structural_token?(value)
-        value.match?(STANDALONE_MARKUP) || value.match?(/\A#{EDITORIAL_BRACKET}\z/)
+        value.match?(STANDALONE_MARKUP) || value.match?(/\A(?:#{EDITORIAL_BRACKET}|#{PAIRED_DELIMITER})\z/)
       end
 
       def validate_restored_translation!(unit, translation)
@@ -207,8 +239,12 @@ module Ewprs
         end
       end
 
-      def preserve_entities(value)
-        value.gsub(ESCAPED_ENTITY, '&')
+      def preserve_entities(value, source: nil)
+        preserved = value.gsub(ESCAPED_ENTITY, '&')
+        source.to_s.scan(/&(?:#\d+|#x[\da-f]+|[a-z][\w]+);?/i).uniq.each do |reference|
+          preserved.gsub!(CGI.escapeHTML(reference), reference)
+        end
+        preserved
       end
     end
   end

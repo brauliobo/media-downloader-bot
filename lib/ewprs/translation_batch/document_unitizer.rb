@@ -5,11 +5,22 @@ module Ewprs
     module DocumentUnitizer
       include TranslationMarkup
 
+      ENGLISH_GRAMMAR_DOCUMENT = /<p\b[^>]*\bclass\s*=\s*["']?title\b[^>]*>\s*<b>Sarkar's English Grammar<\/b>/i
+      INSTRUCTIONAL_TABLE = %r{
+        (<p\b(?=[^>]*\bclass\s*=\s*["']?table\b)[^>]*>\s*<table\b[^>]*>)
+        (.*?)
+        (</table\s*>)
+      }mix
+      TABLE_CELL = %r{(<td\b[^>]*>)(.*?)(</td\s*>)}mi
+      TABLE_HEADER_CLASS = /\bclass\s*=\s*["']?[^"'>\s]*Hdr\b/i
+      LIST_ITEM_PREFIX = /\A(?<prefix>(?:[A-Za-z]|\d{1,3})\)\s+)(?<content>.+)\z/m
+
       private
 
       def unitize(html)
         @document_protected = {}
-        template = html.gsub(PROTECTED_ELEMENT) { |value| protect_content(value) }
+        template = protect_english_grammar_examples(html)
+        template = template.gsub(PROTECTED_ELEMENT) { |value| protect_content(value) }
         template = template.gsub(INLINE_ORIGINAL) { |value| protect_content(value) }
         template = template.gsub(BLOCK_CONTENT) do
           opening, content, closing = Regexp.last_match.captures
@@ -33,6 +44,20 @@ module Ewprs
         @document_protected[marker] = value
         @protected += 1
         marker
+      end
+
+      def protect_english_grammar_examples(html)
+        return html unless html.match?(ENGLISH_GRAMMAR_DOCUMENT)
+
+        html.gsub(INSTRUCTIONAL_TABLE) do
+          opening, rows, closing = Regexp.last_match.captures
+          protected_rows = rows.gsub(TABLE_CELL) do
+            cell_opening, content, cell_closing = Regexp.last_match.captures
+            protected = cell_opening.match?(TABLE_HEADER_CLASS) ? content : protect_content(content)
+            "#{cell_opening}#{protected}#{cell_closing}"
+          end
+          "#{opening}#{protected_rows}#{closing}"
+        end
       end
 
       def unitize_grouped(template, pattern, force_translation: false)
@@ -101,22 +126,27 @@ module Ewprs
 
           template << restore_split_markup(masked[cursor...index], tags)
           value = restore_split_markup(sentence, tags)
-          translated = translatable?(value, force_translation: force_translation) ? register_unit(value) : value
-          template << translated
+            translated = if translatable?(value, force_translation: force_translation)
+              register_sentence_unit(value)
+            else
+              value
+            end
+            template << translated
           cursor = index + sentence.length
         end << restore_split_markup(masked[cursor..], tags)
       end
 
       def mask_editorial_boundaries(source, tags)
-        depth = 0
-        source.gsub(/\[+|\]+|[.!?]+/) do |match|
-          if match.start_with?('[')
-            depth += match.length
+        depths = Hash.new(0)
+        source.gsub(/\[+|\]+|\(+|\)+|[.!?]+/) do |match|
+          if match.start_with?('[', '(')
+            depths[match[0]] += match.length
             match
-          elsif match.start_with?(']')
-            depth = [depth - match.length, 0].max
+          elsif match.start_with?(']', ')')
+            opening = match.start_with?(']') ? '[' : '('
+            depths[opening] = [depths[opening] - match.length, 0].max
             match
-          elsif depth.positive?
+          elsif depths.values.any?(&:positive?)
             marker = format('__P%04d__', tags.size + 1)
             tags[marker] = match
             marker
@@ -124,6 +154,13 @@ module Ewprs
             match
           end
         end
+      end
+
+      def register_sentence_unit(source)
+        match = source.match(LIST_ITEM_PREFIX)
+        return register_unit(source) unless match
+
+        "#{match[:prefix]}#{register_unit(match[:content])}"
       end
 
       def restore_split_markup(value, tags)

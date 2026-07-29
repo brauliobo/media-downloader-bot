@@ -28,7 +28,8 @@ module Ewprs
     BATCH_SIZE     = 50
     MAX_UNIT_CHARS = 800
     MAX_INLINE_EDITORIAL_CHARS = 80
-    TOKEN_RETRIES  = 2
+    MAX_INLINE_PARENTHETICAL_CHARS = 60
+    TOKEN_RETRIES  = 5
 
     class ProtectedTokenError < StandardError; end
 

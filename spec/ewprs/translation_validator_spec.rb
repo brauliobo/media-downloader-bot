@@ -65,6 +65,14 @@ RSpec.describe Ewprs::TranslationValidator do
     ).to be(true)
   end
 
+  it 'allows an unchanged phrase made only of words shared with the target language' do
+    spanish = described_class.new(source_language: 'en', target_language: 'es')
+
+    expect(spanish.valid?(source: 'No, no.', translated: 'No, no.')).to be(true)
+    expect(spanish.valid?(source: 'Oh, no, no, no.', translated: 'Oh, no, no, no.')).to be(true)
+    expect(validator.valid?(source: 'No, no.', translated: 'No, no.')).to be(false)
+  end
+
   it 'rejects a long source-language span prepended to a translation' do
     source = 'The human mind can move through the world in many different ways.'
     translated = "#{source} A mente humana pode se mover pelo mundo de muitas maneiras diferentes."
@@ -101,6 +109,22 @@ RSpec.describe Ewprs::TranslationValidator do
     expect do
       validator.validate!(source: 'The {mind (and body)} moves.', translated: 'A {mente) e o corpo (}se move.')
     end.to raise_error(described_class::Error, /changed paired delimiters/)
+  end
+
+  it 'rejects newly escaped HTML character references' do
+    expect do
+      validator.validate!(
+        source: 'The word &ldquo;dharma&rdquo; has a meaning.',
+        translated: 'La palabra &ldquo;dharma&rdquo; tiene un significado&amp;rdquo.'
+      )
+    end.to raise_error(described_class::Error, /introduced an escaped HTML character reference/)
+
+    expect(
+      validator.valid?(
+        source: 'The literal &amp;rdquo is shown.',
+        translated: 'Se muestra el literal &amp;rdquo.'
+      )
+    ).to be(true)
   end
 
   it 'rejects whitespace that splits double editorial brackets' do
@@ -193,6 +217,7 @@ RSpec.describe Ewprs::TranslationValidator do
   it 'identifies a foreign inline phrase without treating source prose as foreign' do
     expect(validator.protected_inline_fragment?('praka&#x301;ram&#x301; karoti iti')).to be(true)
     expect(validator.protected_inline_fragment?('a,')).to be(true)
+    expect(validator.protected_inline_fragment?('bauls')).to be(false)
     expect(validator.protected_inline_fragment?('the Supreme Entity')).to be(false)
   end
 end

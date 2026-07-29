@@ -47,6 +47,10 @@ module Ewprs
       (?<term><(?<tag>i|em)\b[^>]*>(?=[^<]*[A-Za-z])[^<]*</\k<tag>>)(?<spacing>\s*)
       (?<opening>\[\[?)(?<gloss>[^\[\]\r\n]+)(?<closing>\]\]?)
     }ix
+    INLINE_PARENTHETICAL_GLOSS = %r{
+      (?<term><(?<tag>i|em)\b[^>]*>(?<content>[^<]+)</\k<tag>>)(?<spacing>\s*)
+      \((?<gloss>[^()\r\n]+)\)
+    }ix
     MARKED_PHRASE_GLOSS = %r{
       (?<term>#{MARKED_WORD}(?:\s+(?:#{MARKED_WORD}|[A-Za-z][A-Za-z'’-]*)){1,6})(?<spacing>\s*)
       (?<opening>\[\[?)(?<gloss>[^\[\]\r\n]+)(?<closing>\]\]?)
@@ -63,6 +67,10 @@ module Ewprs
       (?<term>(?<![A-Za-z])[A-Za-z][A-Za-z'’]*(?:-[A-Za-z][A-Za-z'’]*)+)(?<spacing>\s*)
       (?<opening>\[\[?)(?<gloss>[^\[\]\r\n]+)(?<closing>\]\]?)
     }x
+    ASCII_PHRASE_PARENTHETICAL_GLOSS = %r{
+      (?<term>#{ASCII_TRANSLITERATED_WORD}(?:\s+[A-Za-z][A-Za-z'’-]*){1,6})(?<spacing>\s*)
+      (?<opening>\()(?<gloss>[^()\r\n]+)(?<closing>\))
+    }ix
     QUOTED_GLOSS = %r{
       (?<term>&(?:rdquo|quot);)(?<spacing>\s*)
       (?<opening>\[\[?)(?<gloss>[^\[\]\r\n]+)(?<closing>\]\]?)
@@ -72,10 +80,23 @@ module Ewprs
       (?<name>(?<![A-Za-z])[A-Z][A-Za-z'’-]*(?![A-Za-z]))\s+(?<group>#{MARKED_WORD})
     }x
     GLOSS_TERM = /(?:#{MARKED_WORD}|(?<![A-Za-z])[A-Za-z][A-Za-z'’-]*(?![A-Za-z]))/
+    PARENTHETICAL_GLOSS = %r{
+      (?<term>#{GLOSS_TERM})(?<spacing>\s*)\((?<gloss>[^()\r\n]+)\)
+    }ix
     COORDINATED_PARENTHETICAL_GLOSSES = %r{
-      (?<first_term>#{GLOSS_TERM})(?<first_spacing>\s*)\((?<first_gloss>[^()\r\n]+)\)
-      (?<coordination>\s+and\s+)
-      (?<second_term>#{GLOSS_TERM})(?<second_spacing>\s*)\((?<second_gloss>[^()\r\n]+)\)
+      #{GLOSS_TERM}\s*\([^()\r\n]+\)
+      (?:(?:\s*,\s*|\s+(?:and|or)\s+)#{GLOSS_TERM}\s*\([^()\r\n]+\))+
+    }ix
+    FORMULA_PARENTHETICAL_GLOSSES = %r{
+      #{GLOSS_TERM}\s*\([^()\r\n]+\)
+      (?:(?:\s*(?:&ndash;|[+=])\s*)#{GLOSS_TERM}\s*\([^()\r\n]+\))+
+    }ix
+    PARENTHETICAL_GLOSS_LIST = Regexp.union(
+      COORDINATED_PARENTHETICAL_GLOSSES, FORMULA_PARENTHETICAL_GLOSSES
+    )
+    COORDINATED_TERMS_PARENTHETICAL_GLOSS = %r{
+      (?<terms>#{GLOSS_TERM}(?:(?:\s*,\s*|\s+(?:and|or)\s+)#{GLOSS_TERM})+)(?<spacing>\s*)
+      \((?<gloss>[^()\r\n]+)\)
     }ix
     COORDINATED_BRACKETED_GLOSSES = %r{
       (?<first_term>#{MARKED_WORD})(?<first_spacing>\s*)
@@ -107,6 +128,11 @@ module Ewprs
       )
     }ix
     BIBLIOGRAPHIC_TITLE = /(?<=\bsee\s)[A-Z][^,.;\r\n]+(?=,\s*\d{4}\b)/
+    AUTHORED_CITATION_TITLE = %r{
+      (?<=,\s)[A-Z][A-Za-z'’-]*
+      (?:\s+(?:a|an|and|for|from|in|of|on|or|the|to|with|[A-Z][A-Za-z'’-]*)){2,}
+      (?=,\s*\d{4}\b)
+    }x
     PARTED_PUBLICATION_TITLE = %r{
       (?<=\bpublication\sin\s)[A-Z][^,.\r\n]+(?=,\s*Part\s+\d+,\s*\d{4}\b)
     }ix
@@ -121,6 +147,20 @@ module Ewprs
       <(?<tag>i|em)\b[^>]*>[^<>]+</\k<tag>\s*>
       (?=\s*,?\s*(?:\d{4}\b|(?:\d+(?:st|nd|rd|th)|[A-Z][a-z]+)\s+edition\b))
     }ix
+    ITALIC_PART_TITLE = %r{
+      <(?<tag>i|em)\b[^>]*>(?=[^<>]*\bPart\s+\d+\b)[^<>]+</\k<tag>\s*>
+    }ix
+    IN_DATED_CITATION_TITLE = %r{
+      (?<=\b(?i:in)\s)
+      [A-Z](?:&(?:\#x[\dA-Fa-f]+|\#\d+|[A-Za-z]+);|[A-Za-z0-9'’ -])+
+      (?=,\s*\d{4}\b)
+    }x
+    NUMBERED_PUBLICATION_CITATION_TITLE = %r{
+      [A-Z][A-Za-z'’-]*
+      (?:\s+(?:a|an|and|for|from|in|of|on|or|the|to|with|[A-Z][A-Za-z'’-]*)){1,}
+      \s+(?:Part|Volume)\s+\d+
+      (?=,\s*\d{4}\b)
+    }x
     ITALIC_EDITION_TITLE = %r{
       (?<=\bEdition\sof\s)<(?<tag>i|em)\b[^>]*>[^<>]+</\k<tag>\s*>
     }ix
@@ -139,6 +179,11 @@ module Ewprs
       (?:\s+(?:a|an|and|for|from|in|of|on|or|the|to|[A-Z][A-Za-z'’-]*)){2,}
       (?=,\s*\d+(?:st|nd|rd|th)\s+edition\b)
     }x
+    PRINTED_EDITION_TITLE = %r{
+      (?<=\bprinted\s)[A-Z][A-Za-z'’-]*
+      (?:\s+(?:a|an|and|for|from|in|of|on|or|the|to|[A-Z][A-Za-z'’-]*)){2,}
+      (?=,\s*\d+(?:st|nd|rd|th)\s+edition\b)
+    }x
     VOLUME_CITATION_TITLE = %r{
       (?<=\bin\s)[A-Z](?:&(?:\#x[\dA-Fa-f]+|\#\d+|[A-Za-z]+);|[^,.;\r\n])+
       (?=\s+(?i:Vol(?:ume)?\.?)\s*\d+\b)
@@ -150,6 +195,14 @@ module Ewprs
         \b(?:(?:published|appeared|publication)[^.!?\r\n]{0,120}\bas(?:\s+parts?\s+of)?|titled|entitled)\s
       )
       (?<title>&ldquo;.*?&rdquo;)
+    }ix
+    QUOTED_CITED_TITLE = %r{
+      &ldquo;.*?&rdquo;
+      (?=
+        \s+in\s+[A-Z]
+        (?:&(?:\#x[\dA-Fa-f]+|\#\d+|[A-Za-z]+);|[^.;\r\n])+?
+        ,\s*\d{4}\b
+      )
     }ix
     QUOTED_LANGUAGE_EXAMPLE = %r{
       (?<prefix>
@@ -163,7 +216,7 @@ module Ewprs
       (?=\s+in\s+which\b)
     }x
     QUOTED_TITLE = /&ldquo;.*?&rdquo;/i
-    TITLE_CONNECTORS = %w[a an and for from in of on or the to].freeze
+    TITLE_CONNECTORS = %w[a an and for from in of on or the to with].freeze
     MARKUP           = /#{FOOTNOTE}|#{MARKED_INLINE}|<!--.*?-->|<[^>]+>/m
     STANDALONE_MARKUP = /\A(?:<!--.*?-->|<[^>]+>)\z/m
     INDIC_SCRIPT     = /[\p{Devanagari}\p{Bengali}]+/

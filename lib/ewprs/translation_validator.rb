@@ -13,6 +13,7 @@ module Ewprs
 
     MARKUP = /<!--.*?-->|<[^>]+>/m
     MARKER = /__P\d{4}__|⟦[UP][^⟧]*⟧/
+    ESCAPED_CHARACTER_REFERENCE = /&amp;(?=(?:#\d+|#x[\da-f]+|[a-z][\w]+))/i
     WORD = /\p{L}[\p{L}\p{M}]*(?:[-'’]\p{L}[\p{L}\p{M}]*)*/u
     FORMULA_EXPRESSION = %r{
       (?<![\p{L}\p{M}])[\p{L}\p{M}]+(?:\s*[+=→]\s*[\p{L}\p{M}]+)+(?![\p{L}\p{M}])
@@ -31,6 +32,9 @@ module Ewprs
     }.freeze
     SOURCE_SUFFIXES = {
       'en' => /(?:able|hood|ible|ise|ised|ises|ising|ity|ive|less|ly|ment|ness|ous|ship|sion|tion|ward|wise|ize|ized|izes|izing)\z/
+    }.freeze
+    TARGET_SHARED_WORDS = {
+      'es' => %w[no oh].to_h { |word| [word, true] }.freeze
     }.freeze
     DELIMITER_PAIRS = {'(' => ')', '[' => ']', '{' => '}'}.freeze
     DELIMITER = /[()\[\]{}]/
@@ -53,6 +57,7 @@ module Ewprs
     def validate!(source:, translated:, protected_values: [])
       validate_line_breaks!(source, translated)
       validate_delimiters!(source, translated)
+      validate_escaped_character_references!(source, translated)
       validate_protected!(source: source, translated: translated, protected_values: protected_values)
       unless source_language == target_language
         counts = protected_value_counts(source, protected_values)
@@ -127,12 +132,21 @@ module Ewprs
       raise Error.new(:delimiters, 'translation changed paired delimiters') if changed
     end
 
+    def validate_escaped_character_references!(source, translated)
+      source_count     = source.to_s.scan(ESCAPED_CHARACTER_REFERENCE).size
+      translated_count = translated.to_s.scan(ESCAPED_CHARACTER_REFERENCE).size
+      return if translated_count <= source_count
+
+      raise Error.new(:entities, 'translation introduced an escaped HTML character reference')
+    end
+
     def validate_translation_progress!(source, translated)
       source_words = normalized_words(source)
       target_words = normalized_words(translated)
       return if source_words.empty? || target_words.empty?
 
-      if source_words == target_words && untranslated_prose?(source, source_words)
+      if source_words == target_words && untranslated_prose?(source, source_words) &&
+         !shared_target_phrase?(source_words)
         excerpt = visible_text(source)[0, 80]
         raise Error.new(:untranslated, "translation left source prose unchanged: #{excerpt}")
       end
@@ -208,6 +222,11 @@ module Ewprs
     def source_suffix_words(words)
       suffixes = SOURCE_SUFFIXES[source_language]
       suffixes ? words.count { |word| word.match?(suffixes) } : 0
+    end
+
+    def shared_target_phrase?(words)
+      shared = TARGET_SHARED_WORDS.fetch(target_language, {})
+      words.all? { |word| shared.key?(word) }
     end
 
     def marked_word_count(value)

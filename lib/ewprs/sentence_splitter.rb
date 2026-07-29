@@ -2,13 +2,19 @@ module Ewprs
   module SentenceSplitter
     CONTRAST_BOUNDARY = /(?<=,)\s+(?=but\b)/i
     CONTRAST_MIN_CHARS = 300
+    CONTRAST_MIN_COMMAS = 4
+    PAIRED_COORDINATION = /\bboth\b[^.!?]*,\s+[^.!?]*,\s+and\b[^.!?]*,/i
+    COMMA_BOUNDARY = /(?<=,)\s+/
     OPENING_QUOTE = /(?:&(?:ldquo|lsquo|quot);|["“‘])/
 
     module_function
 
     def split(text, boundary_tokens:, max_chars:)
       transparent = "(?:#{boundary_tokens.source})*"
-      boundary = /([.!?…]"?)(\s*\d{1,3})?(#{transparent})\s+(?=#{transparent}(?:\[\[?|#{OPENING_QUOTE})?\p{Lu})/u
+      boundary = %r{
+        ([.!?…]"?)(\s*\d{1,3})?(#{transparent})\s+
+        (?=#{transparent}(?:(?:\[\[?|#{OPENING_QUOTE})?\p{Lu}|\())
+      }ux
       sentences = Array(text).join
         .gsub(/(?<=&#8230;)\s+/i, "\n")
         .gsub(boundary, "\\1\\2\\3\n")
@@ -16,7 +22,9 @@ module Ewprs
         .map(&:strip)
         .reject(&:empty?)
         .flat_map do |sentence|
-          if sentence.length >= CONTRAST_MIN_CHARS
+          if sentence.match?(PAIRED_COORDINATION)
+            sentence.split(COMMA_BOUNDARY)
+          elsif sentence.length >= CONTRAST_MIN_CHARS || sentence.count(',') >= CONTRAST_MIN_COMMAS
             sentence.split(CONTRAST_BOUNDARY)
           else
             sentence

@@ -6,15 +6,19 @@ module Ewprs
   class SanskritLexicon
     include TranslationMarkup
 
-    DEFAULT_TERMS = %w[
-      Brahma Shiva Shakti Prakrti Purusa Purusottama dharma Tantra yoga
-      sadhana samadhi mantra kiirtana tattva vrtti pravrtti nivrtti samskara
-      amrta caetanya hasant madhyama mudra nrtya pratibha sarjana sargam srjanii
-      Shivatattva utsarjana vilambita visarjana
-      pra karoti iti
+    DEFAULT_TERMS = [
+      'Yoga Darshana',
+      *%w[
+        Brahma Shiva Shakti Prakrti Purusa Purusottama Japa Khotta Saptasindhu Shaorasenii
+        Demi-Shaorasenii Ardha Vaedika agni ajja ajjii arya bauls dharma kula Tantra yoga
+        sadhana samadhi mantra kiirtana tattva vrtti pravrtti nivrtti samskara
+        amrta caetanya hasant madhyama mudra nrtya pratibha sarjana sargam srjanii
+        Shivatattva utsarjana vilambita visarjana
+        pra karoti iti
+      ]
     ].freeze
 
-    attr_reader :gloss_pattern, :inline_gloss_pattern
+    attr_reader :gloss_pattern, :inline_gloss_pattern, :parenthetical_gloss_pattern
 
     def initialize(root)
       path = File.join(root, 'HTML/Info/MasterGlossary.html')
@@ -25,7 +29,10 @@ module Ewprs
       @terms = document.css('b').flat_map { |node| variants(node.text) }
       @terms.concat(DEFAULT_TERMS)
       @terms = @terms.map(&:strip).reject { |term| term.length < 3 }.uniq.sort_by { |term| -term.length }
-      @pattern = /(?<![A-Za-z])(?:#{@terms.map { |term| Regexp.escape(term) }.join('|')})(?![A-Za-z])/i
+      patterns = @terms.map do |term|
+        term.split(/\s+/).map { |word| Regexp.escape(word) }.join('\\s+')
+      end
+      @pattern = /(?<![A-Za-z])(?:#{patterns.join('|')})(?![A-Za-z])/i
       @inline_pattern = %r{<(?<tag>i|em)\b[^>]*>\s*#{@pattern}\s*</\k<tag>\s*>}i
       @inline_gloss_pattern = %r{
         (?<term>#{@inline_pattern})(?<spacing>\s*)
@@ -34,7 +41,11 @@ module Ewprs
       @gloss_pattern = %r{
         (?<term>(?:#{MARKED_WORD}|#{ASCII_TRANSLITERATED_WORD}|#{@pattern}))(?<spacing>\s*)
         (?<opening>\[\[?)(?<gloss>[^\[\]\r\n]+)(?<closing>\]\]?)
-        (?<suffix>\s+(?<![A-Za-z])(?-i:[A-Z])[A-Za-z'’-]*(?![A-Za-z]))?
+        (?<suffix>\s+(?<![A-Za-z])(?-i:[A-Z])[A-Za-z'’-]*(?![A-Za-z]|&\#x(?:301|32D);))?
+      }ix
+      @parenthetical_gloss_pattern = %r{
+        (?<term>#{@pattern})(?<spacing>\s*)
+        (?<opening>\()(?<gloss>[^()\r\n]+)(?<closing>\))
       }ix
     end
 
