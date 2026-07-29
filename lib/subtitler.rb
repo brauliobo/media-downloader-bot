@@ -1,6 +1,7 @@
 require 'iso-639'
 
 require_relative 'subtitler/whisper_cpp'
+require_relative 'subtitler/transcribe_cpp'
 require_relative 'subtitler/vtt'
 require_relative 'subtitler/srt'
 

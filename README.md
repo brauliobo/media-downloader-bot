@@ -21,3 +21,26 @@ THREADS=1 TTS=OmniVoice /home/braulio/.rvm/wrappers/ruby-3.4.4/ruby bin/zip \
 ```
 
 The `voice=` value is passed to OmniVoice as the direct voice instruction on each TTS request. Use underscores for spaces inside attributes when calling from the shell, for example `young_adult`, `moderate_pitch`, or `american_accent`.
+
+## transcribe.cpp Subtitles
+
+The `TranscribeCpp` subtitle backend runs the local CLI and maps its segment and
+word timestamps into the same structure used by the existing Whisper renderer:
+
+```bash
+SUBTITLER=TranscribeCpp \
+TRANSCRIBE_CPP_CLI=/path/to/transcribe.cpp/build/bin/transcribe-cli \
+TRANSCRIBE_CPP_MODEL=/path/to/canary-1b-v2-timestamps-Q8_0.gguf \
+TRANSCRIBE_CPP_LANGUAGE=en \
+TRANSCRIBE_CPP_BACKEND=cuda \
+TRANSCRIBE_CPP_DEVICE=0 \
+bundle exec ruby bin/zip input.wav gensubs onlysrt
+```
+
+The model must advertise word timestamps. Canary requires an explicit language;
+`TRANSCRIBE_CPP_LANGUAGE` defaults to `en`. The adapter converts input media to
+16 kHz mono PCM before invoking the CLI. Canary rejects inputs longer than its
+model limit (about 400 seconds for the current v2 model), so long-form bot media
+still requires a chunking layer. Canary word timestamps do not include
+confidence scores and therefore cannot be used by the separate voice-reference
+quality selector.
