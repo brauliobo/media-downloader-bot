@@ -34,8 +34,8 @@ module Audiobook
       wav_path
     end
 
-    def pause_file(dir, source: nil)
-      AudioFiles.pause(pause, dir, source: source) if pause > 0
+    def pause_file(dir)
+      AudioFiles.pause(pause, dir) if pause > 0
     end
 
     protected

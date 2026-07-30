@@ -114,7 +114,11 @@ RSpec.describe 'Audiobook TTS speed' do
       reference = File.join(dir, 'speaker.wav')
       File.write(reference, 'wav')
       runner = Audiobook::Runner.new(
-        book, nil, SymMash.new(speaker_wav: reference, ref_text: 'Recorded reference text.')
+        book, nil, SymMash.new(
+          speaker_wav: reference,
+          ref_text: 'Recorded reference text.',
+          position_temperature: 0
+        )
       )
       expect(TTS).not_to receive(:synthesize)
 
@@ -122,6 +126,7 @@ RSpec.describe 'Audiobook TTS speed' do
 
       expect(options[:speaker_wav]).to eq(reference)
       expect(options[:ref_text]).to eq('Recorded reference text.')
+      expect(options[:position_temperature]).to eq(0.0)
     end
   end
 
@@ -232,8 +237,7 @@ RSpec.describe 'Audiobook TTS speed' do
       expect(Zipper).to receive(:get_pause_file).with(
         0.1,
         dir,
-        sample_rate: TTS.output_sample_rate,
-        source: end_with('0001_0_0.wav')
+        sample_rate: TTS.output_sample_rate
       ).and_return(nil)
       allow(Zipper).to receive(:concat_audio) do |_inputs, outfile, **_kwargs|
         File.write(outfile, 'combined')
@@ -249,7 +253,6 @@ RSpec.describe 'Audiobook TTS speed' do
         File.write(out_path, 'wav')
       end
       expect(Audiobook::AudioFiles).to receive(:speed!).with(kind_of(String), 1.25)
-      expect(Audiobook::AudioFiles).to receive(:room_tone!).with(kind_of(String))
 
       page.to_wav(
         dir, '0001',
@@ -292,7 +295,6 @@ RSpec.describe 'Audiobook TTS speed' do
         all(end_with('.wav')),
         1.25
       )
-      expect(Audiobook::AudioFiles).to receive(:room_tone_all).with(all(end_with('.wav')))
 
       runner.send(
         :batch_synthesize_pages,

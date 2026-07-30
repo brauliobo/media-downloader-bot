@@ -287,73 +287,49 @@ RSpec.describe Zipper do
     end
   end
 
-  it 'creates stationary white noise for audiobook pauses' do
-    Dir.mktmpdir('room-tone-spec-') do |dir|
-      source = File.join(dir, 'sentence.wav')
-      File.write(source, 'sentence')
-      allow(Sh).to receive(:run) do |command|
-        output = command.split.last
-        File.write(output, 'room tone')
-        ['', '', double(success?: true)]
-      end
-
-      path = described_class.get_pause_file(0.5, dir, sample_rate: 24_000, source: source)
-
-      expect(path).to end_with('white_noise_0_5_24000.wav')
-      expect(Sh).to have_received(:run).with(
-        include(
-          '-f lavfi',
-          'anoisesrc\=color\=white:amplitude\=0.0035:sample_rate\=24000:duration\=0.5',
-          '-af lowpass=f=6000'
-        )
-      )
-      expect(Sh).not_to have_received(:run).with(include(Sh.escape(source)))
-    end
-  end
-
-  it 'creates each cached white-noise file only once across concurrent callers' do
-    Dir.mktmpdir('room-tone-concurrency-spec-') do |dir|
-      source = File.join(dir, 'sentence.wav')
-      File.write(source, 'sentence')
+  it 'creates each cached pause file only once across concurrent callers' do
+    Dir.mktmpdir('pause-concurrency-spec-') do |dir|
       runs = 0
       runs_mutex = Mutex.new
       allow(Sh).to receive(:run) do |command|
         runs_mutex.synchronize { runs += 1 }
         sleep 0.05
-        File.write(command.split.last, 'room tone')
+        File.write(command.split.last, 'silence')
         ['', '', double(success?: true)]
       end
 
       threads = 4.times.map do
-        Thread.new { described_class.get_pause_file(0.1, dir, sample_rate: 24_000, source: source) }
+        Thread.new { described_class.get_pause_file(0.1, dir, sample_rate: 24_000) }
       end
 
-      expect(threads.map(&:value).uniq).to contain_exactly(File.join(dir, 'white_noise_0_1_24000.wav'))
+      expect(threads.map(&:value).uniq).to contain_exactly(File.join(dir, 'pause_0_1_24000.wav'))
       expect(runs).to eq(1)
     end
   end
 
-  it 'fills generated silence with room tone without extending the wav' do
-    Dir.mktmpdir('room-tone-mix-spec-') do |dir|
-      source = File.join(dir, 'sentence.wav')
-      tone = File.join(dir, 'tone.wav')
-      File.write(source, 'sentence')
-      File.write(tone, 'tone')
+  it 'adds a calibrated continuous floor without lowering speech' do
+    Dir.mktmpdir('audio-floor-spec-') do |dir|
+      source = File.join(dir, 'speech.wav')
+      File.write(source, 'speech')
       command = nil
-      allow(described_class).to receive(:white_noise_file).and_return(tone)
-      allow(Sh).to receive(:run) do |value|
-        command = value
-        File.write(value.split.last, 'mixed')
+      allow(Sh).to receive(:run) do |command|
+        File.write(command.split.last, 'speech with floor')
         ['', '', double(success?: true)]
       end
 
-      result = described_class.add_room_tone!(source, sample_rate: 24_000)
+      path = described_class.add_audio_floor!(source, amplitude: 0.001, loudness_lufs: -18, sample_rate: 24_000)
 
-      expect(result).to eq(source)
-      expect(File.read(source)).to eq('mixed')
-      expect(command).to include(
-        '\[0:a\]volume\=-2dB\[speech\]\;\[speech\]\[1:a\]amix\=inputs\=2:duration\=first:dropout_transition\=0:normalize\=0',
-        '-ar 24000'
+      expect(path).to eq(source)
+      expect(File.read(source)).to eq('speech with floor')
+      expect(Sh).to have_received(:run).with(
+        include(
+          '-f lavfi',
+          'anoisesrc\=color\=white:amplitude\=0.001:sample_rate\=24000',
+          '\[0:a\]loudnorm\=I\=-18:TP\=-2:LRA\=11\[speech\]',
+          '\[1:a\]lowpass\=f\=6000\[floor\]',
+          'normalize\=0',
+          'alimiter\=limit\=0.841395:attack\=5:release\=50:level\=false'
+        )
       )
     end
   end

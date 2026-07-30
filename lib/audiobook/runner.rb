@@ -61,6 +61,7 @@ module Audiobook
         combined_wav = File.join(dir, 'combined.wav')
         @stl&.update 'Concatenating audio'
         Zipper.concat_audio(wavs, combined_wav, stl: @stl)
+        add_audio_floor!(combined_wav)
 
         @stl&.update 'Encoding combined audio'
         final_audio = encode_audio_file(combined_wav, out_audio)
@@ -70,6 +71,18 @@ module Audiobook
     end
 
     private
+
+    def add_audio_floor!(wav_path)
+      amplitude = @opts&.audio_floor_amplitude.to_f
+      return wav_path unless amplitude.positive?
+
+      Zipper.add_audio_floor!(
+        wav_path,
+        amplitude: amplitude,
+        loudness_lufs: @opts&.audio_loudness_lufs.to_f,
+        sample_rate: AudioFiles.sample_rate
+      )
+    end
 
     def create_silent_audiobook(out_audio)
       @stl&.update 'No text found anywhere - creating silent audio file'
@@ -112,6 +125,9 @@ module Audiobook
 
     def tts_options(dir)
       options = TTS::Options.for(@opts, lang: @lang)
+      if @opts&.position_temperature.present?
+        options[:position_temperature] = @opts.position_temperature.to_f
+      end
       options[:audio_speed] = audio_speed if audio_speed
       options[:instruct] ||= detected_voice_instruct if stable_voice_reference?
       return options unless stable_voice_reference?
@@ -165,7 +181,6 @@ module Audiobook
       end
       TTS.synthesize_batch(items: jobs, on_batch: on_batch, **options)
       AudioFiles.speed_all(jobs.map { |job| job[:out_path] }, speed)
-      AudioFiles.room_tone_all(jobs.map { |job| job[:out_path] })
     end
 
     def audio_speed

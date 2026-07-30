@@ -3,10 +3,16 @@ require_relative '../../../lib/audiobook/ewprs'
 
 RSpec.describe Audiobook::Ewprs::Catalog do
   around do |example|
-    original = ENV.delete('EWPRS_VOICE_REFERENCE')
+    original    = ENV.delete('EWPRS_VOICE_REFERENCE')
+    temperature = ENV.delete('EWPRS_POSITION_TEMPERATURE')
+    floor       = ENV.delete('EWPRS_AUDIO_FLOOR_AMPLITUDE')
+    loudness    = ENV.delete('EWPRS_AUDIO_LOUDNESS_LUFS')
     example.run
   ensure
     original ? ENV['EWPRS_VOICE_REFERENCE'] = original : ENV.delete('EWPRS_VOICE_REFERENCE')
+    temperature ? ENV['EWPRS_POSITION_TEMPERATURE'] = temperature : ENV.delete('EWPRS_POSITION_TEMPERATURE')
+    floor ? ENV['EWPRS_AUDIO_FLOOR_AMPLITUDE'] = floor : ENV.delete('EWPRS_AUDIO_FLOOR_AMPLITUDE')
+    loudness ? ENV['EWPRS_AUDIO_LOUDNESS_LUFS'] = loudness : ENV.delete('EWPRS_AUDIO_LOUDNESS_LUFS')
   end
 
   it 'uses the recorded reference and neutral English instruction when configured' do
@@ -22,6 +28,9 @@ RSpec.describe Audiobook::Ewprs::Catalog do
       expect(options.instruct).to eq('male, middle-aged, moderate pitch, neutral English accent')
       expect(options.speaker_wav).to eq(reference)
       expect(options.ref_text).to eq('An exact recorded reference sentence.')
+      expect(options.position_temperature).to eq(0.0)
+      expect(options.audio_floor_amplitude).to eq(0.001)
+      expect(options.audio_loudness_lufs).to eq(-17.0)
     end
   end
 
@@ -36,6 +45,9 @@ RSpec.describe Audiobook::Ewprs::Catalog do
       expect(options.html_title).to eq('Título traduzido')
       expect(options.html_language).to eq('pt')
       expect(options.instruct).to eq('male, middle-aged, moderate pitch, portuguese accent')
+      expect(options.position_temperature).to be_nil
+      expect(options.audio_floor_amplitude).to be_nil
+      expect(options.audio_loudness_lufs).to be_nil
     end
   end
 

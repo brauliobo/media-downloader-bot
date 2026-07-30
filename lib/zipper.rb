@@ -107,29 +107,15 @@ class Zipper
     path
   end
 
-  def self.get_pause_file seconds, dir, sample_rate: nil, source: nil
+  def self.get_pause_file seconds, dir, sample_rate: nil
     return nil if seconds.to_f <= 0
     key = seconds.to_f.round(3)
     sample_rate = (sample_rate || 22_050).to_i
-    return white_noise_file(key, dir, sample_rate: sample_rate) if source
 
     cache_key = "#{dir}:#{key}:#{sample_rate}"
     pause_file = File.join(dir, "pause_#{key.to_s.gsub('.', '_')}_#{sample_rate}.wav")
     cached_pause_file(cache_key, pause_file) do
       silence_file(pause_file, key, sample_rate: sample_rate)
-    end
-  end
-
-  def self.white_noise_file seconds, dir, sample_rate: 22_050
-    key = seconds.to_f.round(3)
-    cache_key = "#{dir}:white-noise:#{key}:#{sample_rate}"
-    output = File.join(dir, "white_noise_#{key.to_s.gsub('.', '_')}_#{sample_rate}.wav")
-    cached_pause_file(cache_key, output) do
-      source = "anoisesrc=color=white:amplitude=0.0035:sample_rate=#{sample_rate}:duration=#{key}"
-      command = "#{FFMPEG} -f lavfi -i #{Sh.escape(source)} -af lowpass=f=6000 -ac 1 -ar #{sample_rate} " \
-                "-c:a pcm_s16le #{Sh.escape(output)}"
-      _, stderr, status = Sh.run(command)
-      Sh.assert_success!('Failed to create white-noise audio file', stderr, status: status, output: output)
     end
   end
 
@@ -142,16 +128,17 @@ class Zipper
     end
   end
 
-  def self.add_room_tone! wav_path, sample_rate: 22_050
-    dir = File.dirname(wav_path)
-    tone = white_noise_file(0.5, dir, sample_rate: sample_rate)
-    output = File.join(dir, "room_tone_mix_#{SecureRandom.hex(4)}.wav")
-    filter = '[0:a]volume=-2dB[speech];[speech][1:a]amix=inputs=2:duration=first:dropout_transition=0:normalize=0'
-    command = "#{FFMPEG} -i #{Sh.escape(wav_path)} -stream_loop -1 -i #{Sh.escape(tone)} " \
+  def self.add_audio_floor! wav_path, amplitude:, loudness_lufs:, sample_rate: 22_050
+    output = File.join(File.dirname(wav_path), "audio_floor_#{SecureRandom.hex(4)}.wav")
+    source = "anoisesrc=color=white:amplitude=#{amplitude}:sample_rate=#{sample_rate}"
+    filter = "[0:a]loudnorm=I=#{loudness_lufs}:TP=-2:LRA=11[speech];[1:a]lowpass=f=6000[floor];" \
+      '[speech][floor]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,' \
+      'alimiter=limit=0.841395:attack=5:release=50:level=false'
+    command = "#{FFMPEG} -i #{Sh.escape(wav_path)} -f lavfi -i #{Sh.escape(source)} " \
               "-filter_complex #{Sh.escape(filter)} -ac 1 -ar #{sample_rate} " \
               "-c:a pcm_s16le #{Sh.escape(output)}"
     _, stderr, status = Sh.run(command)
-    Sh.assert_success!('Failed to add room tone', stderr, status: status, output: output)
+    Sh.assert_success!('Failed to add audiobook audio floor', stderr, status: status, output: output)
     FileUtils.mv output, wav_path, force: true
     wav_path
   end

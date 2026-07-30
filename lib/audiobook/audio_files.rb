@@ -5,8 +5,8 @@ module Audiobook
   module AudioFiles
     module_function
 
-    def pause(seconds, dir, source: nil)
-      Zipper.get_pause_file(seconds, dir, sample_rate: sample_rate, source: source)
+    def pause(seconds, dir)
+      Zipper.get_pause_file(seconds, dir, sample_rate: sample_rate)
     end
 
     def silence(path, seconds)
@@ -19,14 +19,6 @@ module Audiobook
 
     def speed_all(paths, speed)
       Array(paths).each { |path| speed!(path, speed) }
-    end
-
-    def room_tone!(path)
-      Zipper.add_room_tone!(path, sample_rate: sample_rate)
-    end
-
-    def room_tone_all(paths)
-      Array(paths).each { |path| room_tone!(path) }
     end
 
     def split_speed_options(options)
