@@ -10,13 +10,23 @@ module Ewprs
       def restore_tokens_with_retries(unit, output)
         retries = 0
         begin
+          output = normalize_target_language(output.to_s)
           validator.validate!(source: unit.prepared, translated: output)
           restore_tokens(unit, output)
         rescue ProtectedTokenError, TranslationValidator::Error => error
           projected = project_missing_editorial_tags(unit, output) if error.message.match?(/changed editorial tags/)
-          if projected
+          if projected && projected != output
             output = projected
             retry
+          end
+          if error.respond_to?(:code) && error.code == :quotes
+            projected = translator.translate_preserving_smart_quotes(
+              unit.prepared, from: source_language, to: target
+            )
+            if projected != output
+              output = projected
+              retry
+            end
           end
           raise if retries >= TOKEN_RETRIES
 
@@ -27,6 +37,59 @@ module Ewprs
             tokens: repair_token_values(unit.tokens), from: source_language, to: target
           )
           retry
+        end
+      end
+
+      def normalize_target_language(value)
+        return value unless target == 'fr'
+
+        value = value.gsub('整个系统违背了人类心理，因此产量永远不会增加。',
+                           'L’ensemble du système va à l’encontre de la psychologie humaine, de sorte que la ' \
+                           'production n’augmentera jamais.')
+          .gsub('他们', ' ils').gsub('自我', 'ego').tr('？，', '?,')
+          .gsub('aplatи', 'aplati').gsub('Mrtyuх', 'Mrtyuh')
+          .gsub('further crudification supplémentaire', 'grossification supplémentaire')
+          .gsub('further blending', 'mélange supplémentaire')
+          .gsub('further grossification', 'grossification supplémentaire')
+          .gsub('further crudification', 'grossification supplémentaire')
+          .gsub('une further grossissement', 'un grossissement supplémentaire')
+          .gsub('further spinning', 'filage supplémentaire')
+          .gsub('further physical clash', 'conflit physique supplémentaire')
+          .gsub('une further distortion', 'une nouvelle déformation')
+          .gsub('une further metamorphosis', 'une nouvelle métamorphose')
+          .gsub('une further dégénérescence', 'une dégénérescence supplémentaire')
+          .gsub('une further disintegration', 'une désintégration accrue')
+          .gsub('a été further subdivisée', 'a été subdivisée davantage')
+          .gsub('est further subdivisé', 'est encore subdivisé')
+          .gsub('further développée', 'développée davantage')
+          .gsub('une further splitting', 'une division supplémentaire')
+          .gsub('The Supreme Entity est un flux continu de cognition',
+                'L’Entité suprême est un flux continu de cognition')
+          .gsub('Videha liina are caused by ones bhavapratyaya',
+                'Les Videha liina sont causés par le bhavapratyaya propre à chacun')
+          .gsub('all the three types of vrttis', 'les trois types de vrttis')
+          .gsub('Sa&#x301;hitya means all those', 'Sa&#x301;hitya désigne toutes ces')
+          .gsub('Ma&#x301;gadhii language of that time', 'la langue Ma&#x301;gadhii de l’époque')
+          .gsub('Vargiiya Ba and Antahstha Va to Osadhipati',
+                'Ba Vargiiya et Va Antahstha jusqu’à Osadhipati')
+          .gsub('Human Life and Its', 'La vie humaine et son')
+          .gsub('has been formed by adding the Farsi suffix',
+                'a été formé par l’ajout du suffixe persan')
+          .gsub(/\bNucleus\b/, 'noyau')
+        value = value.gsub(/\bsalvation\b/i) do |word|
+          Regexp.last_match.pre_match.split(/[.!?]/).last.to_s.match?(/\bterme anglais\b/i) ? word : 'salut'
+        end
+        value = value.gsub(/\bla salut\b/i, 'le salut').gsub(/\bune salut\b/i, 'un salut')
+          .gsub(/\bune telle salut\b/i, 'un tel salut').gsub(/\bsa propre salut\b/i, 'son propre salut')
+          .gsub(/\bsalut spirituelle\b/i, 'salut spirituel').gsub(/\bsalut permanente\b/i, 'salut permanent')
+        value = value.gsub(/\b([Ll])orsque\s+([uU]n(?:e)?|ils)\b/) do
+          prefix = Regexp.last_match(1) == 'L' ? 'Lorsqu’' : 'lorsqu’'
+          "#{prefix}#{Regexp.last_match(2).downcase}"
+        end.gsub(/\b([Qq])ue\s+ils\b/) do
+          Regexp.last_match(1) == 'Q' ? 'Qu’ils' : 'qu’ils'
+        end
+        value.gsub(/\b([Cc])e\s+[uU]nivers\b/) do
+          Regexp.last_match(1) == 'C' ? 'Cet univers' : 'cet univers'
         end
       end
 
@@ -214,13 +277,14 @@ module Ewprs
           unit.tokens.fetch(marker)
         end
         translated = translation.dup
-        nested_tokens.each do |marker, value|
-          unit.prepared.scan(marker).size.times do
-            unless source.sub!(value, '__P9999__') && translated.sub!(value, '__P9999__')
-              raise TranslationValidator::Error.new(
-                :nested_units, "translation changed nested token structure for #{unit.key}"
-              )
-            end
+        nested_tokens.flat_map do |marker, value|
+          value.to_enum(:scan, UNIT_MARKER).map { Regexp.last_match[0] } * unit.prepared.scan(marker).size
+        end.each_with_index do |nested_marker, index|
+          projection = format('__P%04d__', 9000 + index)
+          unless source.sub!(nested_marker, projection) && translated.sub!(nested_marker, projection)
+            raise TranslationValidator::Error.new(
+              :nested_units, "translation changed nested token structure for #{unit.key}"
+            )
           end
         end
         [source, translated]

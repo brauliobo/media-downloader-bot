@@ -237,6 +237,7 @@ module Ewprs
         source.gsub(COORDINATED_TERMS_PARENTHETICAL_GLOSS) do |match|
           captures = Regexp.last_match
           next match unless captures[:terms].match?(MARKED_WORD) && translatable?(captures[:gloss])
+          next match if captures.post_match.match?(/\A\s+#{MARKED_WORD}/)
 
           protect_content(
             "#{captures[:terms]}#{captures[:spacing]}(#{register_unit(captures[:gloss])})"

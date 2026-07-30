@@ -89,6 +89,42 @@ RSpec.describe Ewprs::Translator do
     ).to eq('&ldquo;A palavra&rdquo; &ndash; outra palavra &nbsp:')
   end
 
+  it 'assigns a distinct placeholder to every repeated character reference' do
+    expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
+      prompt = JSON.parse(body).dig('messages', 0, 'content')
+      expect(prompt).to include(
+        '{{EWPRS_E1}}One{{EWPRS_E2}} and {{EWPRS_E3}}two{{EWPRS_E4}}',
+        '{{EWPRS_E1}}, {{EWPRS_E2}}, {{EWPRS_E3}}, {{EWPRS_E4}}'
+      )
+      Struct.new(:body).new(
+        {
+          choices: [
+            {message: {content: '{{EWPRS_E1}}Um{{EWPRS_E2}} e {{EWPRS_E3}}dois{{EWPRS_E4}}'}}
+          ]
+        }.to_json
+      )
+    end
+
+    expect(
+      translator.translate_markup('&ldquo;One&rdquo; and &ldquo;two&rdquo;', to: 'pt')
+    ).to eq('&ldquo;Um&rdquo; e &ldquo;dois&rdquo;')
+  end
+
+  it 'translates prose segments while preserving smart quote delimiters and editorial tags' do
+    expect(translator).to receive(:translate_markup).with(
+      ['The statement', 'The', 'selection board', 'stopped.'], from: 'en', to: 'pt'
+    ).and_return(['«A afirmação»', 'O', 'comitê de seleção', 'parou.'])
+
+    expect(
+      translator.translate_preserving_smart_quotes(
+        '<span data-ewprs="11">The statement</span> &ldquo;The &lsquo;selection board&rsquo; stopped.&rdquo;',
+        to: 'pt'
+      )
+    ).to eq(
+      '<span data-ewprs="11">A afirmação</span> &ldquo;O &lsquo;comitê de seleção&rsquo; parou.&rdquo;'
+    )
+  end
+
   it 'does not seed placeholders into unprotected translation prompts' do
     expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
       prompt = JSON.parse(body).dig('messages', 0, 'content')

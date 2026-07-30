@@ -9,6 +9,8 @@ module Ewprs
     INTERNAL_PLACEHOLDER = /__P\d{4}__/
     CHARACTER_REFERENCE = /&(?:#\d+|#x[\da-f]+|[a-z][\w]+);?/i
     WIRE_PLACEHOLDER     = /\{\{EWPRS_[PE]\d+\}\}/
+    SMART_QUOTE          = /(?:&(?:l|r)[sd]quo;|[“”«»])/i
+    TRANSLATION_BOUNDARY = /(#{SMART_QUOTE}|<span data-ewprs="[12][12]">|<\/span>)/i
 
     attr_reader :jobs
 
@@ -49,12 +51,47 @@ module Ewprs
       restore_placeholders(output, placeholders)
     end
 
+    def translate_preserving_smart_quotes(text, from: 'en', to:)
+      parts = text.to_s.split(TRANSLATION_BOUNDARY)
+      prose = parts.each_index.filter_map do |index|
+        next if index.odd?
+
+        core = parts[index].strip
+        core unless core.empty?
+      end
+      translated = Array(translate_markup(prose, from: from, to: to)).each
+      parts.each_with_index.map do |part, index|
+        next part if index.odd? || part.strip.empty?
+
+        part.sub(part.strip, translated.next.gsub(SMART_QUOTE, ''))
+      end.join
+    end
+
     private
 
     def translate_one(text, from:, to:)
-      placeholders = placeholder_mapping(text)
-      output = complete(prompt(replace_placeholders(text, placeholders), from: from, to: to))
-      restore_placeholders(output, placeholders)
+      encoded, placeholders = encode_translation_placeholders(text)
+      output = complete(prompt(encoded, from: from, to: to))
+      restore_encoded_placeholders(output, placeholders)
+    end
+
+    def encode_translation_placeholders(text)
+      replacements = {}
+      encoded = text.to_s.gsub(CHARACTER_REFERENCE).with_index do |reference, index|
+        marker = "{{EWPRS_E#{index + 1}}}"
+        replacements[marker] = reference
+        marker
+      end
+      encoded = encoded.gsub(INTERNAL_PLACEHOLDER) do |placeholder|
+        marker = "{{EWPRS_P#{placeholder[/\d+/].to_i}}}"
+        replacements[marker] = placeholder
+        marker
+      end
+      [encoded, replacements]
+    end
+
+    def restore_encoded_placeholders(text, replacements)
+      text.to_s.gsub(WIRE_PLACEHOLDER) { |marker| replacements.fetch(marker, marker) }
     end
 
     def placeholder_mapping(text)

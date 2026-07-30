@@ -127,6 +127,77 @@ RSpec.describe Ewprs::TranslationValidator do
     ).to be(true)
   end
 
+  it 'rejects changed or emptied smart quotes' do
+    french = described_class.new(source_language: 'en', target_language: 'fr')
+
+    expect do
+      french.validate!(
+        source: 'The word &ldquo;dharma&rdquo; has a meaning.',
+        translated: 'Le mot &rdquo;dharma&ldquo; a un sens.'
+      )
+    end.to raise_error(described_class::Error, /reversed smart quotes/)
+
+    expect do
+      french.validate!(
+        source: 'The word &ldquo;flow&rdquo; has a meaning.',
+        translated: 'Le mot &ldquo;&rdquo; a un sens.'
+      )
+    end.to raise_error(described_class::Error, /introduced empty smart quotes/)
+  end
+
+  it 'rejects foreign-script characters introduced into Latin translations' do
+    french = described_class.new(source_language: 'en', target_language: 'fr')
+
+    expect do
+      french.validate!(
+        source: 'They direct their desires toward Him.',
+        translated: 'Lorsque他们 orientent leurs désirs vers Lui.'
+      )
+    end.to raise_error(described_class::Error, /introduced foreign-script character/)
+
+    expect(
+      french.valid?(
+        source: 'In Hindi, में indicates the locative case.',
+        translated: 'En hindi, में indique le cas locatif.'
+      )
+    ).to be(true)
+  end
+
+  it 'rejects narrow high-confidence retained English words in French translations' do
+    french = described_class.new(source_language: 'en', target_language: 'fr')
+
+    expect do
+      french.validate!(
+        source: 'The liquid factor undergoes further crudification.',
+        translated: 'Le facteur liquide subit une further crudification.'
+      )
+    end.to raise_error(described_class::Error, /retained source-language word: further/)
+
+    expect(
+      french.valid?(
+        source: 'Published in The Great Universe.',
+        translated: 'Publié dans The Great Universe.',
+        protected_values: {'The Great Universe' => 1}
+      )
+    ).to be(true)
+  end
+
+  it 'rejects invalid unprotected French elisions' do
+    french = described_class.new(source_language: 'en', target_language: 'fr')
+
+    expect do
+      french.validate!(source: 'When a person moves.', translated: 'Lorsque une personne se déplace.')
+    end.to raise_error(described_class::Error, /invalid French elision/)
+
+    expect(
+      french.valid?(
+        source: 'The French phrase &ldquo;de le&rdquo; is incorrect here.',
+        translated: 'La locution française &ldquo;de le&rdquo; est incorrecte ici.',
+        protected_values: {'&ldquo;de le&rdquo;' => 1}
+      )
+    ).to be(true)
+  end
+
   it 'rejects whitespace that splits double editorial brackets' do
     expect do
       validator.validate!(

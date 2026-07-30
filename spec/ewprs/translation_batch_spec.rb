@@ -65,7 +65,7 @@ RSpec.describe Ewprs::TranslationBatch do
     File.write(
       File.join(root, 'HTML/Info/MasterGlossary.html'),
       '<html><body><p><b>Brahma</b> Supreme Entity</p><p><b>Prakrti</b> Operative Principle</p>' \
-      '<p><b>Vayus</b> vital airs</p></body></html>'
+      '<p><b>Sat</b> unchangeable entity</p><p><b>Vayus</b> vital airs</p></body></html>'
     )
     File.binwrite(File.join(root, 'HTML/Discourses/Complete.html'), source)
   end
@@ -94,6 +94,42 @@ RSpec.describe Ewprs::TranslationBatch do
     rendered = batch.send(:render, described_class::Document.new(template: template), translations)
 
     expect(rendered.scan('Abhedajin&#x32D;a&#x301;na e Daeshika Vyavadha&#x301;na Vilopa').size).to eq(2)
+  end
+
+  it 'normalizes deterministic French elisions before validation' do
+    french = described_class.new(root: root, target: 'fr', cache: cache, translator: translator, stdout: StringIO.new)
+
+    expect(
+      french.send(
+        :normalize_target_language,
+        'Lorsque Un être contemple Ce Univers, lorsque une idée surgit, lorsque他们 arrivent？ ' \
+        'Ce Nucleus subit une further grossification vers la salvation. ' \
+        'The Supreme Entity est un flux continu de cognition. Le terme anglais est salvation.'
+      )
+    ).to eq(
+      'Lorsqu’un être contemple Cet univers, lorsqu’une idée surgit, lorsqu’ils arrivent? ' \
+      'Ce noyau subit une grossification supplémentaire vers le salut. ' \
+      'L’Entité suprême est un flux continu de cognition. Le terme anglais est salvation.'
+    )
+  end
+
+  it 'normalizes deterministic mixed-language French residues' do
+    french = described_class.new(root: root, target: 'fr', cache: cache, translator: translator, stdout: StringIO.new)
+    residues = 'Videha liina are caused by ones bhavapratyaya. ' \
+               'Sa&#x301;hitya means all those manifestations. ' \
+               'Ma&#x301;gadhii language of that time. ' \
+               'Vargiiya Ba and Antahstha Va to Osadhipati. ' \
+               'Human Life and Its goal has been formed by adding the Farsi suffix. ' \
+               'all the three types of vrttis.'
+
+    expect(french.send(:normalize_target_language, residues)).to eq(
+      'Les Videha liina sont causés par le bhavapratyaya propre à chacun. ' \
+      'Sa&#x301;hitya désigne toutes ces manifestations. ' \
+      'la langue Ma&#x301;gadhii de l’époque. ' \
+      'Ba Vargiiya et Va Antahstha jusqu’à Osadhipati. ' \
+      'La vie humaine et son goal a été formé par l’ajout du suffixe persan. ' \
+      'les trois types de vrttis.'
+    )
   end
 
   it 'translates prose while preserving structure, slokas, scripts, markup, and Sanskrit bytes' do
@@ -206,6 +242,14 @@ RSpec.describe Ewprs::TranslationBatch do
     expect(unit.tokens.values.join).not_to include('you know')
   end
 
+  it 'distinguishes short title-cased glossary terms from English homographs' do
+    prose = batch.send(:prepare_unit, 'english-homograph', 'The jackals sat down.')
+    term  = batch.send(:prepare_unit, 'sanskrit-term', 'Sat is the unchangeable entity.')
+
+    expect(prose.prepared).to eq('The jackals sat down.')
+    expect(term.tokens.values).to include('Sat')
+  end
+
   it 'does not treat comma-separated glossary entries as an inline original' do
     source = 'ba&#x301;dsha&#x301;h [emperor] (Farsi), nava&#x301;b [nawab] (Farsi), ' \
              'shekh [sheik] (Arabic), a&#x301;lla&#x301;h [God] (Arabic).'
@@ -270,6 +314,18 @@ RSpec.describe Ewprs::TranslationBatch do
       a_string_matching(/\A&rdquo; \[⟦U[0-9a-f]{64}⟧\]\z/)
     )
     expect(batch.instance_variable_get(:@units).values.map(&:source)).to include('goddess of power')
+  end
+
+  it 'validates quote content around a nested gloss after restoring tokens' do
+    unit = batch.send(
+      :prepare_unit, 'quoted-nested-gloss',
+      'The stove was replaced by an electric &ldquo;heater&rdquo; [hotplate].'
+    )
+    marker = unit.prepared.scan(/__P\d{4}__/).last
+
+    expect do
+      batch.send(:restore_tokens, unit, "Le poêle a été remplacé par un chauffage électrique &ldquo;#{marker}.")
+    end.to raise_error(Ewprs::TranslationValidator::Error, /introduced empty smart quotes/)
   end
 
   it 'translates a gloss for a short consonantal term as a nested unit' do
@@ -665,6 +721,18 @@ RSpec.describe Ewprs::TranslationBatch do
     expect(batch.instance_variable_get(:@units).values.map(&:source)).to include(
       'psychic, physical and spiritual attainment, respectively'
     )
+  end
+
+  it 'keeps a parenthetical qualifier with the term it precedes' do
+    source = 'Kashmir Sa&#x301;rasvata, Dogri Sa&#x301;rasvata and ' \
+             'Saptanada (Punjabi) Sa&#x301;rasvata.'
+
+    outer = batch.send(:prepare_unit, 'parenthetical-term-qualifier', source)
+
+    expect(outer.tokens.values).not_to include(a_string_including('and Saptanada'))
+    expect(outer.prepared).to match(/and Saptanada __P\d{4}__ __P\d{4}__\./)
+    expect(outer.tokens.values).to include(a_string_matching(/\A\(⟦U[0-9a-f]{64}⟧\)\z/))
+    expect(batch.instance_variable_get(:@units).values.map(&:source)).to include('Punjabi')
   end
 
   it 'nests coordinated bracketed glosses when the second foreign term is unmarked' do
@@ -1251,6 +1319,27 @@ RSpec.describe Ewprs::TranslationBatch do
       )
     ).to eq('[linaje ancestral] nombre.')
     expect(translator.repair_calls).to be_empty
+  end
+
+  it 'falls back to bounded repair when editorial projection remains invalid' do
+    unit = described_class::Unit.new(
+      key: 'editorial-projection-scope', source: 'Music [the seven notes] <i>term</i>.',
+      prepared: 'Music <span data-ewprs="11">the seven notes</span> __P0001__term__P0002__.',
+      tokens: {'__P0001__' => '<i>', '__P0002__' => '</i>'}, leading: '', trailing: ''
+    )
+    valid = 'Música <span data-ewprs="11">as sete notas</span> __P0001__termo__P0002__.'
+    translator = FakeMarkupTranslator.new do |text|
+      text == 'the seven notes' ? 'as sete notas' : valid
+    end
+    batch = described_class.new(root: root, target: 'pt', cache: cache, translator: translator)
+
+    expect(
+      batch.send(
+        :restore_tokens_with_retries, unit,
+        'Música __P0001__termo__P0002__ as sete notas.'
+      )
+    ).to eq('Música [as sete notas] <i>termo</i>.')
+    expect(translator.repair_calls.size).to eq(1)
   end
 
   it 'keeps complete footnotes out of model input' do

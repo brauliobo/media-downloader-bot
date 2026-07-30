@@ -30,7 +30,8 @@ module Ewprs
       @terms.concat(DEFAULT_TERMS)
       @terms = @terms.map(&:strip).reject { |term| term.length < 3 }.uniq.sort_by { |term| -term.length }
       patterns = @terms.map do |term|
-        term.split(/\s+/).map { |word| Regexp.escape(word) }.join('\\s+')
+        pattern = term.split(/\s+/).map { |word| Regexp.escape(word) }.join('\\s+')
+        term.match?(/\A[A-Z][a-z]{0,2}\z/) ? "(?-i:#{pattern})" : pattern
       end
       @pattern = /(?<![A-Za-z])(?:#{patterns.join('|')})(?![A-Za-z])/i
       @inline_pattern = %r{<(?<tag>i|em)\b[^>]*>\s*#{@pattern}\s*</\k<tag>\s*>}i

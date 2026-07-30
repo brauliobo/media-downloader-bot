@@ -33,12 +33,26 @@ module Ewprs
     SOURCE_SUFFIXES = {
       'en' => /(?:able|hood|ible|ise|ised|ises|ising|ity|ive|less|ly|ment|ness|ous|ship|sion|tion|ward|wise|ize|ized|izes|izing)\z/
     }.freeze
+    RETAINED_SOURCE_WORDS = {
+      'fr' => %w[further nucleus salvation stamina].to_h { |word| [word, true] }.freeze
+    }.freeze
     TARGET_SHARED_WORDS = {
       'es' => %w[no oh].to_h { |word| [word, true] }.freeze
+    }.freeze
+    TARGET_INVALID_PHRASES = {
+      'fr' => {
+        /\blorsque (?:un|une)\b/i => 'invalid French elision',
+        /\bce univers\b/i          => 'invalid French demonstrative',
+      }.freeze
     }.freeze
     DELIMITER_PAIRS = {'(' => ')', '[' => ']', '{' => '}'}.freeze
     DELIMITER = /[()\[\]{}]/
     EDITORIAL_BRACKET = /\[\[?|\]\]?/
+    DOUBLE_SMART_QUOTE = /&(?:l|r)dquo;|[“”«»]/i
+    EMPTY_SMART_QUOTES = /(?:&ldquo;\s*&rdquo;|&lsquo;\s*&rsquo;|“\s*”|‘\s*’|«\s*»)/i
+    REVERSED_SMART_QUOTES = /(?:&rdquo;\s*&ldquo;|&rsquo;\s*&lsquo;|”\s*“|’\s*‘|»\s*«)/i
+    NON_LATIN_ARTIFACT = /[\p{Han}\p{Cyrillic}\uFF00-\uFFEF]/u
+    LATIN_TARGETS = %w[en es fr pt].to_h { |language| [language, true] }.freeze
 
     attr_reader :source_language, :target_language
 
@@ -58,12 +72,18 @@ module Ewprs
       validate_line_breaks!(source, translated)
       validate_delimiters!(source, translated)
       validate_escaped_character_references!(source, translated)
+      validate_smart_quotes!(source, translated)
+      validate_introduced_scripts!(source, translated)
       validate_protected!(source: source, translated: translated, protected_values: protected_values)
       unless source_language == target_language
         counts = protected_value_counts(source, protected_values)
+        unprotected_source = without_protected_values(source, counts)
+        unprotected_translation = without_protected_values(translated, counts)
         validate_translation_progress!(
-          without_protected_values(source, counts), without_protected_values(translated, counts)
+          unprotected_source, unprotected_translation
         )
+        validate_retained_source_words!(unprotected_source, unprotected_translation)
+        validate_target_language!(unprotected_translation)
       end
       validate_sentence_duplicates!(source, translated)
       true
@@ -140,6 +160,40 @@ module Ewprs
       raise Error.new(:entities, 'translation introduced an escaped HTML character reference')
     end
 
+    def validate_smart_quotes!(source, translated)
+      if balanced_double_quotes?(source) && !balanced_double_quotes?(translated)
+        raise Error.new(:quotes, 'translation reversed smart quotes')
+      end
+      if translated.to_s.scan(REVERSED_SMART_QUOTES).size > source.to_s.scan(REVERSED_SMART_QUOTES).size
+        raise Error.new(:quotes, 'translation introduced reversed smart quotes')
+      end
+      return if translated.to_s.scan(EMPTY_SMART_QUOTES).size <= source.to_s.scan(EMPTY_SMART_QUOTES).size
+
+      raise Error.new(:quotes, 'translation introduced empty smart quotes')
+    end
+
+    def balanced_double_quotes?(value)
+      balance = 0
+      value.to_s.scan(DOUBLE_SMART_QUOTE).all? do |quote|
+        balance += quote.match?(/&ldquo;|[“«]/i) ? 1 : -1
+        balance >= 0
+      end && balance.zero?
+    end
+
+    def validate_introduced_scripts!(source, translated)
+      return unless LATIN_TARGETS.key?(target_language)
+
+      source_counts = source.to_s.scan(NON_LATIN_ARTIFACT).tally
+      source_counts.default = 0
+      introduced = translated.to_s.scan(NON_LATIN_ARTIFACT).find do |character|
+        source_counts[character] -= 1
+        source_counts[character].negative?
+      end
+      return unless introduced
+
+      raise Error.new(:script, "translation introduced foreign-script character: #{introduced}")
+    end
+
     def validate_translation_progress!(source, translated)
       source_words = normalized_words(source)
       target_words = normalized_words(translated)
@@ -165,6 +219,34 @@ module Ewprs
       return unless retained
 
       raise Error.new(:untranslated, 'translation retained a long source-language span')
+    end
+
+    def validate_retained_source_words!(source, translated)
+      forbidden = RETAINED_SOURCE_WORDS.fetch(target_language, {})
+      return if forbidden.empty?
+
+      source_counts = normalized_words(source).tally
+      retained = normalized_words(translated).find do |word|
+        next false unless forbidden.key?(word) && source_counts[word].positive?
+        next false if word == 'salvation' && visible_text(translated).match?(/\bterme anglais\b.*\bsalvation\b/i)
+
+        source_counts[word] -= 1
+        true
+      end
+      return unless retained
+
+      raise Error.new(:untranslated, "translation retained source-language word: #{retained}")
+    end
+
+    def validate_target_language!(translated)
+      invalid = TARGET_INVALID_PHRASES.fetch(target_language, {}).find do |pattern, _message|
+        visible_text(translated).match?(pattern)
+      end
+      return unless invalid
+
+      pattern, message = invalid
+      phrase = visible_text(translated)[pattern]
+      raise Error.new(:target_language, "#{message}: #{phrase}")
     end
 
     def validate_sentence_duplicates!(source, translated)
