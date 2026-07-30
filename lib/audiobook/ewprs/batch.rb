@@ -246,7 +246,6 @@ module Audiobook::Ewprs
     def checkpointed?(entry)
       return false unless @apply && published.key?(entry_key(entry))
       return true unless @edit
-      return false if @regenerate
 
       audio = audio_path(entry)
       File.size?(audio) && published[entry_key(entry)][:audio_sha256] == audio_sha256(entry, audio)
