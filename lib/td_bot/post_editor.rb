@@ -12,6 +12,7 @@ module TDBot
       media_type = (type || params[:type]).to_s
       return edit_generated_text(chat_id, message_id, text, parse_mode) if media_type.in?(%w[message text])
 
+      timeout = params[:timeout].to_i.nonzero? || UPLOAD_TIMEOUT
       content = generated_message_content(media_type, text, parse_mode, params)
       bot.send(:td_with_rate_limit, 'edit_generated_message') do
         bot.send(:throttle!)
@@ -22,7 +23,11 @@ module TDBot
           input_message_content: content
         ).value!(120)
         dlog "[TD_EDIT_GENERATED] chat=#{chat_id} id=#{message_id} type=#{media_type} result=#{result&.class}"
-        result
+        message   = wait_uploaded_message(chat_id, result&.id || message_id, timeout: timeout)
+        remote_id = message_remote_file_id(message)
+        raise "edited #{media_type} has no remote file id" if remote_id.to_s.empty?
+
+        {message_id: message.id, remote_id: remote_id}
       end
     end
 

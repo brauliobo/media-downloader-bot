@@ -1,3 +1,4 @@
+require 'digest'
 require 'fileutils'
 require 'time'
 
@@ -10,10 +11,10 @@ require_relative '../../zipper'
 
 module Audiobook::Ewprs
   class Batch
-    attr_reader :catalog, :output, :jobs, :published, :failures
+    attr_reader :catalog, :output, :jobs, :published, :failures, :edited
 
     def initialize(catalog:, output:, jobs: 5, manifest: nil, upload_dir: nil, manager: nil, chat_id: nil, topic: nil,
-                   apply: false, stdout: $stdout, stderr: $stderr)
+                   apply: false, edit: false, regenerate: false, stdout: $stdout, stderr: $stderr)
       raise ArgumentError, 'jobs must be positive' unless jobs.to_i.positive?
 
       @catalog       = catalog
@@ -27,9 +28,13 @@ module Audiobook::Ewprs
       @chat_id       = chat_id
       @topic         = topic
       @apply         = apply
+      @edit          = edit
+      @regenerate    = regenerate
       @stdout        = stdout
       @stderr        = stderr
       @failures      = []
+      @edited        = 0
+      @audio_hashes  = {}
       @published     = load_manifest
     end
 
@@ -61,7 +66,7 @@ module Audiobook::Ewprs
       current = nil
       checkpoints = entries.map { |entry| checkpointed?(entry) }
       perform = lambda do |entry, index|
-        generate_entry(entry) unless checkpoints[index]
+        prepare_entry(entry) unless checkpoints[index]
       end
       JobPool.new(jobs: jobs).ordered_each(entries, perform: perform) do |entry, result, index|
         current  = entry
@@ -71,29 +76,50 @@ module Audiobook::Ewprs
           next
         end
 
-        stdout.puts generation_message(entry, result, position, total)
-        upload_entry(entry, result[:audio], result[:chapter_count], position, total) if @apply
+        if @edit
+          edit_entry(entry, result, position, total)
+        else
+          stdout.puts generation_message(entry, result, position, total)
+          upload_entry(entry, result[:audio], result[:chapter_count], position, total) if @apply
+        end
       end
     rescue => error
       entry    = error.is_a?(JobPool::TaskError) ? error.item : current
       original = error.is_a?(JobPool::TaskError) ? error.original : error
-      record_failure(@apply ? 'generate_or_upload' : 'generate', entry, original)
+      stage = @edit ? 'edit' : (@apply ? 'generate_or_upload' : 'generate')
+      record_failure(stage, entry, original)
       raise original
     end
 
-    def generate_entry(entry)
+    def prepare_entry(entry)
+      return generate_entry(entry, force: @regenerate) unless @edit
+
+      published.fetch(entry_key(entry))
+      result = @regenerate ? generate_entry(entry, force: true) : existing_entry(entry)
+      result.merge(audio_sha256: audio_sha256(entry, result[:audio]))
+    end
+
+    def generate_entry(entry, force: false)
       if entry.kind == :book
-        audio, chapter_count = generate_book(entry)
+        audio, chapter_count = generate_book(entry, force: force)
         {audio: audio, chapter_count: chapter_count}
       else
-        {audio: generate_discourse(entry), chapter_count: nil}
+        {audio: generate_discourse(entry, force: force), chapter_count: nil}
       end
     end
 
-    def generate_discourse(entry)
+    def existing_entry(entry)
+      audio = audio_path(entry)
+      raise "audiobook audio not found: #{audio}" unless File.size?(audio)
+
+      chapter_count = catalog.chapter_discourses(entry).size if entry.kind == :book
+      {audio: audio, chapter_count: chapter_count}
+    end
+
+    def generate_discourse(entry, force: false)
       base  = File.join(output, entry.slug)
       audio = audio_path(entry)
-      return audio if File.size?(audio)
+      return audio if !force && File.size?(audio)
 
       options = catalog.parse_options(entry)
       book    = Audiobook::Book.from_input(entry.path, opts: options)
@@ -103,12 +129,12 @@ module Audiobook::Ewprs
       Audiobook::Runner.new(book, nil, options).process_to_audio(audio)
     end
 
-    def generate_book(entry)
+    def generate_book(entry, force: false)
       audio    = audio_path(entry)
       chapters = catalog.chapter_discourses(entry)
       raise 'no mapped discourse chapters' if chapters.empty?
 
-      unless File.size?(audio)
+      if force || !File.size?(audio)
         inputs = chapters.map { |chapter| generate_discourse(chapter) }
         Zipper.concat_audio(inputs, audio)
       end
@@ -142,6 +168,37 @@ module Audiobook::Ewprs
       stdout.puts JSON.generate(progress: "#{position}/#{total}", checkpointed: record)
     ensure
       FileUtils.rm_f(upload_audio) if upload_audio && upload_audio != audio
+    end
+
+    def edit_entry(entry, result, position, total)
+      previous     = published.fetch(entry_key(entry))
+      message_id   = previous.fetch(:message_id).to_i
+      seconds      = Prober.for(result[:audio]).format.duration.to_f.round
+      upload_audio = stage_upload(result[:audio])
+      response     = SymMash.new(manager.edit_generated_message(
+        chat_id: chat_id, message_id: message_id, text: caption(entry, seconds, result[:chapter_count]),
+        type: :audio, parse_mode: nil, audio_path: upload_audio, duration: seconds,
+        title: entry.title, performer: 'P. R. Sarkar', copy: false
+      ))
+      raise 'edit returned no message ID' unless response.message_id.to_i.positive?
+      raise 'edit returned no remote file ID' if response.remote_id.to_s.empty?
+
+      record = previous.merge(
+        at:             Time.now.utc.iso8601,
+        operation:      'edit',
+        chat_id:        chat_id,
+        forum_topic_id: topic[:forum_topic_id],
+        message_id:     response.message_id,
+        remote_id:      response.remote_id,
+        duration:       seconds,
+        bytes:          File.size(result[:audio]),
+        audio_sha256:   result[:audio_sha256]
+      )
+      append_record(record)
+      @edited += 1
+      stdout.puts JSON.generate(progress: "#{position}/#{total}", edited: record)
+    ensure
+      FileUtils.rm_f(upload_audio) if upload_audio && upload_audio != result&.dig(:audio)
     end
 
     def stage_upload(audio)
@@ -187,7 +244,16 @@ module Audiobook::Ewprs
     end
 
     def checkpointed?(entry)
-      @apply && published.key?(entry_key(entry))
+      return false unless @apply && published.key?(entry_key(entry))
+      return true unless @edit
+      return false if @regenerate
+
+      audio = audio_path(entry)
+      File.size?(audio) && published[entry_key(entry)][:audio_sha256] == audio_sha256(entry, audio)
+    end
+
+    def audio_sha256(entry, audio)
+      @audio_hashes[entry_key(entry)] ||= Digest::SHA256.file(audio).hexdigest
     end
 
     def entry_key(entry)
@@ -227,6 +293,7 @@ module Audiobook::Ewprs
         generated_discourses: discourses.count { |entry| File.size?(audio_path(entry)) },
         generated_books:      books.count { |entry| File.size?(audio_path(entry)) },
         published:             published.size,
+        edited:                edited,
         failures:              failures.size
       }
     end

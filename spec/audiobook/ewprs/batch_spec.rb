@@ -50,6 +50,59 @@ RSpec.describe Audiobook::Ewprs::Batch do
     expect(result[:published]).to eq(1)
   end
 
+  it 'edits published audio and checkpoints the installed audio hash' do
+    audio = File.join(output, 'first.m4a')
+    File.write(audio, 'replacement audio')
+    allow(Prober).to receive(:for).with(audio).and_return(double(format: double(duration: 12.4)))
+    manager = double
+    expect(manager).to receive(:edit_generated_message).with(
+      hash_including(chat_id: -100123, message_id: 123, audio_path: audio, duration: 12)
+    ).and_return(message_id: 123, remote_id: 'replacement-remote')
+
+    batch = described_class.new(catalog: catalog, output: output)
+    batch.record(entries.first, message_id: 123, remote_id: 'original-remote')
+    editor = described_class.new(
+      catalog: catalog, output: output, jobs: 1, manager: manager, chat_id: -100123,
+      topic: topic, apply: true, edit: true, stdout: StringIO.new, stderr: StringIO.new
+    )
+
+    result = editor.run(discourses: [entries.first], books: [])
+    record = editor.published.fetch('discourse:first')
+
+    expect(result[:edited]).to eq(1)
+    expect(record).to include(
+      operation: 'edit', message_id: 123, remote_id: 'replacement-remote',
+      audio_sha256: Digest::SHA256.file(audio).hexdigest
+    )
+
+    resumed = described_class.new(
+      catalog: catalog, output: output, jobs: 1, manager: manager, chat_id: -100123,
+      topic: topic, apply: true, edit: true, stdout: StringIO.new, stderr: StringIO.new
+    )
+    expect(manager).not_to receive(:edit_generated_message)
+    expect(resumed.run(discourses: [entries.first], books: [])[:edited]).to eq(0)
+  end
+
+  it 'regenerates audio before editing when requested' do
+    batch = described_class.new(
+      catalog: catalog, output: output, jobs: 1, manager: double, chat_id: -100123,
+      topic: topic, apply: true, edit: true, regenerate: true, stdout: StringIO.new, stderr: StringIO.new
+    )
+    batch.record(entries.first, message_id: 123)
+    expect(batch).to receive(:generate_entry).with(entries.first, force: true).and_return(
+      audio: File.join(output, 'first.m4a'), chapter_count: nil
+    )
+    allow(batch).to receive(:audio_sha256).and_return('new-hash')
+    expect(batch).to receive(:edit_entry).with(
+      entries.first,
+      {audio: File.join(output, 'first.m4a'), chapter_count: nil, audio_sha256: 'new-hash'},
+      1,
+      1
+    )
+
+    batch.run(discourses: [entries.first], books: [])
+  end
+
   it 'does not publish entries after a failed catalog position' do
     published = []
     batch = described_class.new(

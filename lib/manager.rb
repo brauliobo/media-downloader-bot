@@ -204,7 +204,9 @@ EOS
   end
 
   def edit_generated_message(...)
-    bot.edit_generated_message(...)
+    drb_result bot.edit_generated_message(...)
+  rescue => e
+    raise RuntimeError, drb_error_message(e), cause: nil
   end
 
   def upload_generated_media(...)

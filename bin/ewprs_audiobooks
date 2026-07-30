@@ -16,10 +16,12 @@ opts = ARGV.each_with_object({}) do |arg, values|
   values[key.tr('-', '_').to_sym] = value || '1'
 end
 
-language = opts[:lang] || 'en'
-source   = opts[:source] || File.expand_path('../../eewprs', __dir__)
+language       = opts[:lang] || 'en'
+source         = opts[:source] || File.expand_path('../../eewprs', __dir__)
 default_output = language == 'en' ? 'tmp/ewprs_audiobooks' : "tmp/ewprs_audiobooks/#{language}"
-output   = File.expand_path(opts[:output] || default_output, Dir.pwd)
+output         = File.expand_path(opts[:output] || default_output, Dir.pwd)
+edit           = opts[:edit].to_s == '1'
+regenerate     = opts[:regenerate].to_s == '1'
 ENV['EWPRS_VOICE_REFERENCE'] = opts[:voice_reference] if opts[:voice_reference]
 catalog = Audiobook::Ewprs::Catalog.new(source, language: language)
 
@@ -45,12 +47,15 @@ if opts[:plan].to_s == '1'
     output: output,
     discourses: entries.size,
     books: books.size,
+    operation: edit ? 'edit' : 'publish',
+    regenerate: regenerate,
     uploads: entries.size + books.size
   )
   exit
 end
 
 apply = opts[:apply].to_s == '1'
+raise 'edit requires apply=1' if edit && !apply
 if apply
   manager = DRbObject.new_with_uri(opts[:drb] || ENV['BOT_DRB'] || 'druby://127.0.0.1:1188')
   chat_id = opts[:chat_id].to_i
@@ -70,7 +75,7 @@ if apply
 end
 batch = Audiobook::Ewprs::Batch.new(
   catalog: catalog, output: output, jobs: opts[:jobs] || 5, manifest: opts[:manifest], upload_dir: opts[:upload_dir],
-  manager: manager, chat_id: chat_id, topic: topic, apply: apply
+  manager: manager, chat_id: chat_id, topic: topic, apply: apply, edit: edit, regenerate: regenerate
 )
 
 if opts[:record_message_id]

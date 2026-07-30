@@ -74,6 +74,32 @@ else
       )
     end
 
+    it 'waits for edited generated media to finish uploading' do
+      path     = File.join(dir, 'audiobook.m4a')
+      td       = double('TD::Client')
+      future   = double('future')
+      edited   = double(id: 456)
+      uploaded = double(id: 456)
+      File.write(path, '')
+      allow(bot).to receive(:td).and_return(td)
+      allow(bot).to receive(:td_with_rate_limit).and_yield
+      allow(td).to receive(:edit_message_media).and_return(future)
+      allow(future).to receive(:value!).with(120).and_return(edited)
+      allow(bot.message_sender).to receive(:parse_markdown_text).and_return(
+        '@type' => 'formattedText', 'text' => 'Caption', 'entities' => []
+      )
+      allow(bot.post_editor).to receive(:wait_uploaded_message).with(123, 456, timeout: 90).and_return(uploaded)
+      allow(bot.post_editor).to receive(:message_remote_file_id).with(uploaded).and_return('remote-id')
+
+      result = bot.edit_generated_message(
+        chat_id: 123, message_id: 456, text: 'Caption', type: :audio,
+        audio_path: path, duration: 34, title: 'Title', performer: 'Performer', copy: false, timeout: 90
+      )
+
+      expect(result).to eq(message_id: 456, remote_id: 'remote-id')
+      expect(bot).to have_received(:throttle!)
+    end
+
     it 'sends generated media to a typed forum topic' do
       td      = double('TD::Client')
       future  = double('future')
