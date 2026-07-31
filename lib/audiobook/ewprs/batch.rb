@@ -3,6 +3,7 @@ require 'fileutils'
 require 'time'
 
 require_relative '../book'
+require_relative '../chapter'
 require_relative '../runner'
 require_relative '../../job_pool'
 require_relative '../../jsonl_store'
@@ -17,25 +18,26 @@ module Audiobook::Ewprs
                    apply: false, edit: false, regenerate: false, stdout: $stdout, stderr: $stderr)
       raise ArgumentError, 'jobs must be positive' unless jobs.to_i.positive?
 
-      @catalog       = catalog
-      @output        = File.expand_path(output)
-      manifest_path  = File.expand_path(manifest || File.join(@output, 'published.jsonl'))
-      @manifest      = JsonlStore.new(manifest_path)
-      @failure_log   = JsonlStore.new(File.join(@output, 'failures.jsonl'))
-      @upload_dir    = File.expand_path(upload_dir) if upload_dir
-      @jobs          = jobs.to_i
-      @manager       = manager
-      @chat_id       = chat_id
-      @topic         = topic
-      @apply         = apply
-      @edit          = edit
-      @regenerate    = regenerate
-      @stdout        = stdout
-      @stderr        = stderr
-      @failures      = []
-      @edited        = 0
-      @audio_hashes  = {}
-      @published     = load_manifest
+      @catalog                = catalog
+      @output                 = File.expand_path(output)
+      manifest_path           = File.expand_path(manifest || File.join(@output, 'published.jsonl'))
+      @manifest               = JsonlStore.new(manifest_path)
+      @failure_log            = JsonlStore.new(File.join(@output, 'failures.jsonl'))
+      @upload_dir             = File.expand_path(upload_dir) if upload_dir
+      @jobs                   = jobs.to_i
+      @manager                = manager
+      @chat_id                = chat_id
+      @topic                  = topic
+      @apply                  = apply
+      @edit                   = edit
+      @regenerate             = regenerate
+      @stdout                 = stdout
+      @stderr                 = stderr
+      @failures               = []
+      @edited                 = 0
+      @discourse_books        = {}
+      @discourse_books_mutex  = Mutex.new
+      @published              = load_manifest
     end
 
     def run(discourses:, books:)
@@ -96,7 +98,7 @@ module Audiobook::Ewprs
 
       published.fetch(entry_key(entry))
       result = @regenerate ? generate_entry(entry, force: true) : existing_entry(entry)
-      result.merge(audio_sha256: audio_sha256(entry, result[:audio]))
+      result.merge(audio_sha256: audio_sha256(result[:audio]))
     end
 
     def generate_entry(entry, force: false)
@@ -122,7 +124,7 @@ module Audiobook::Ewprs
       return audio if !force && File.size?(audio)
 
       options = catalog.parse_options(entry)
-      book    = Audiobook::Book.from_input(entry.path, opts: options)
+      book    = discourse_book(entry, options)
       raise "no speakable content: #{entry.path}" if book.items.empty?
 
       book.write("#{base}.yml")
@@ -130,15 +132,37 @@ module Audiobook::Ewprs
     end
 
     def generate_book(entry, force: false)
-      audio    = audio_path(entry)
-      chapters = catalog.chapter_discourses(entry)
-      raise 'no mapped discourse chapters' if chapters.empty?
+      audio             = audio_path(entry)
+      chapter_entries   = catalog.chapter_discourses(entry)
+      raise 'no mapped discourse chapters' if chapter_entries.empty?
 
       if force || !File.size?(audio)
-        inputs = chapters.map { |chapter| generate_discourse(chapter) }
-        Zipper.concat_audio(inputs, audio)
+        chapters = chapter_entries.map { |chapter| audiobook_chapter(chapter) }
+        amplitude = catalog.parse_options(entry).audio_floor_amplitude
+        Audiobook::Chapter.join(chapters, audio, pause_amplitude: amplitude)
       end
-      [audio, chapters.size]
+      [audio, chapter_entries.size]
+    end
+
+    def audiobook_chapter(entry)
+      audio = generate_discourse(entry)
+      book  = cached_discourse_book(entry) || discourse_book(entry, catalog.parse_options(entry))
+      Audiobook::Chapter.new(
+        title: entry.title,
+        audio: audio,
+        sections: book.items.grep(Audiobook::Section)
+      )
+    end
+
+    def discourse_book(entry, options)
+      cached_discourse_book(entry) || begin
+        book = Audiobook::Book.from_input(entry.path, opts: options)
+        @discourse_books_mutex.synchronize { @discourse_books[entry_key(entry)] ||= book }
+      end
+    end
+
+    def cached_discourse_book(entry)
+      @discourse_books_mutex.synchronize { @discourse_books[entry_key(entry)] }
     end
 
     def upload_entry(entry, audio, chapter_count, position, total)
@@ -247,12 +271,13 @@ module Audiobook::Ewprs
       return false unless @apply && published.key?(entry_key(entry))
       return true unless @edit
 
-      audio = audio_path(entry)
-      File.size?(audio) && published[entry_key(entry)][:audio_sha256] == audio_sha256(entry, audio)
+      expected = published[entry_key(entry)][:audio_sha256]
+      audio    = audio_path(entry)
+      expected.present? && File.size?(audio) && expected == audio_sha256(audio)
     end
 
-    def audio_sha256(entry, audio)
-      @audio_hashes[entry_key(entry)] ||= Digest::SHA256.file(audio).hexdigest
+    def audio_sha256(audio)
+      Digest::SHA256.file(audio).hexdigest
     end
 
     def entry_key(entry)

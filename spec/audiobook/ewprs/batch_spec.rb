@@ -84,23 +84,28 @@ RSpec.describe Audiobook::Ewprs::Batch do
   end
 
   it 'regenerates audio before editing when requested' do
+    audio = File.join(output, 'first.m4a')
+    File.write(audio, 'old audio')
+    allow(Prober).to receive(:for).with(audio).and_return(double(format: double(duration: 12.4)))
+    manager = double
+    expect(manager).to receive(:edit_generated_message).and_return(
+      message_id: 123, remote_id: 'replacement-remote'
+    )
     batch = described_class.new(
-      catalog: catalog, output: output, jobs: 1, manager: double, chat_id: -100123,
+      catalog: catalog, output: output, jobs: 1, manager: manager, chat_id: -100123,
       topic: topic, apply: true, edit: true, regenerate: true, stdout: StringIO.new, stderr: StringIO.new
     )
     batch.record(entries.first, message_id: 123)
-    expect(batch).to receive(:generate_entry).with(entries.first, force: true).and_return(
-      audio: File.join(output, 'first.m4a'), chapter_count: nil
-    )
-    allow(batch).to receive(:audio_sha256).and_return('new-hash')
-    expect(batch).to receive(:edit_entry).with(
-      entries.first,
-      {audio: File.join(output, 'first.m4a'), chapter_count: nil, audio_sha256: 'new-hash'},
-      1,
-      1
-    )
+    expect(batch).to receive(:generate_entry).with(entries.first, force: true) do
+      File.write(audio, 'regenerated audio')
+      {audio: audio, chapter_count: nil}
+    end
 
     batch.run(discourses: [entries.first], books: [])
+
+    expect(batch.published.fetch('discourse:first')[:audio_sha256]).to eq(
+      Digest::SHA256.file(audio).hexdigest
+    )
   end
 
   it 'does not publish entries after a failed catalog position' do
@@ -166,5 +171,43 @@ RSpec.describe Audiobook::Ewprs::Batch do
     expect(File).not_to exist(File.join(upload_dir, 'first.m4a'))
   ensure
     FileUtils.remove_entry(upload_dir) if upload_dir && Dir.exist?(upload_dir)
+  end
+
+  it 'joins discourse chapters with the configured audiobook boundary' do
+    book_entry = Entry.new(
+      kind: :book, title: 'Collected Discourses', path: 'book', info: nil,
+      sources: [], chapters: []
+    )
+    chapter_entries = entries.first(2)
+    chapters = chapter_entries.map do |entry|
+      Audiobook::Chapter.new(title: entry.title, audio: File.join(output, "#{entry.slug}.m4a"))
+    end
+    allow(catalog).to receive(:chapter_discourses).with(book_entry).and_return(chapter_entries)
+    allow(catalog).to receive(:parse_options).with(book_entry).and_return(
+      SymMash.new(audio_floor_amplitude: 0.001)
+    )
+    batch = described_class.new(catalog: catalog, output: output)
+    allow(batch).to receive(:audiobook_chapter).and_return(*chapters)
+    output_audio = File.join(output, 'book-collected_discourses.m4a')
+    expect(Audiobook::Chapter).to receive(:join).with(
+      chapters, output_audio, pause_amplitude: 0.001
+    )
+
+    expect(batch.send(:generate_book, book_entry, force: true)).to eq([output_audio, 2])
+  end
+
+  it 'nests parsed EWPRS sections in their discourse chapter' do
+    section = Audiobook::Section.new('Subheading', level: 2)
+    book = instance_double(Audiobook::Book, items: [Audiobook::Heading.new('Title'), section])
+    batch = described_class.new(catalog: catalog, output: output)
+    allow(batch).to receive(:generate_discourse).with(entries.first).and_return(
+      File.join(output, 'first.m4a')
+    )
+    allow(batch).to receive(:cached_discourse_book).with(entries.first).and_return(book)
+
+    chapter = batch.send(:audiobook_chapter, entries.first)
+
+    expect(chapter.title).to eq('First')
+    expect(chapter.sections).to eq([section])
   end
 end

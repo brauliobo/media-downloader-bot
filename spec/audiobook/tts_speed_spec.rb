@@ -235,7 +235,7 @@ RSpec.describe 'Audiobook TTS speed' do
 
     Dir.mktmpdir do |dir|
       expect(Zipper).to receive(:get_pause_file).with(
-        0.1,
+        Audiobook::Pauses::PARAGRAPH,
         dir,
         sample_rate: TTS.output_sample_rate
       ).and_return(nil)

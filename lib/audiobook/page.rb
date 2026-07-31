@@ -5,8 +5,6 @@ require_relative 'image'
 
 module Audiobook
   class Page
-    PAUSE = 0
-
     attr_reader :number, :items
 
     def initialize(number, items = [])

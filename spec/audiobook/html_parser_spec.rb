@@ -51,6 +51,35 @@ RSpec.describe Audiobook::Parsers::Html do
     end
   end
 
+  it 'preserves major and minor EWPRS subheadings as sections' do
+    html = <<~HTML
+      <div class="discourse_title">Discourse</div>
+      <p class="Para_Major_Heading"><!-- block type=paragraph -->A Major Section Heading With More Than Ten Words That Remains Structural<!-- /block --></p>
+      <p class="plain"><!-- block type=paragraph -->Section body.<!-- /block --></p>
+      <p class="Para_Minor_Heading"><!-- block type=paragraph -->Minor Section<!-- /block --></p>
+      <p class="plain"><!-- block type=paragraph -->More body.<!-- /block --></p>
+    HTML
+    opts = SymMash.new(
+      html_title_selector: '.discourse_title', html_block_comments: true,
+      html_language: 'en'
+    )
+
+    with_html(html) do |path|
+      book = Audiobook::Book.from_input(path, opts: opts)
+      sections = book.items.grep(Audiobook::Section)
+
+      expect(sections.map { |section| [section.text, section.level] }).to eq([
+        ['A Major Section Heading With More Than Ten Words That Remains Structural', 1],
+        ['Minor Section', 2],
+      ])
+
+      yaml = File.join(File.dirname(path), 'book.yml')
+      book.write(yaml)
+      restored = Audiobook::Book.from_input(yaml, opts: opts)
+      expect(restored.items.grep(Audiobook::Section).map(&:level)).to eq([1, 2])
+    end
+  end
+
   it 'falls back to Windows-1252 and normalizes legacy punctuation' do
     with_html("<p>It\x92s readable.</p>".b, encoding: Encoding::ASCII_8BIT) do |path|
       data = described_class.extract_data(path)

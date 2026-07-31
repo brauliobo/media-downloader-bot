@@ -3,9 +3,11 @@ require_relative '../text_helpers'
 module Audiobook
   # Represents a line of text extracted from a document with optional formatting metadata
   class Line
-    attr_reader :text, :font_size, :y_position, :page_number, :x_position, :top_spacing, :bottom_spacing
+    attr_reader :text, :font_size, :y_position, :page_number, :x_position, :top_spacing, :bottom_spacing,
+                :section_level
 
-    def initialize(text, font_size: nil, y_position: nil, page_number: nil, x_position: nil, top_spacing: nil, bottom_spacing: nil)
+    def initialize(text, font_size: nil, y_position: nil, page_number: nil, x_position: nil, top_spacing: nil,
+                   bottom_spacing: nil, section_level: nil)
       @text = text.to_s.strip
       @font_size = font_size
       @y_position = y_position
@@ -13,6 +15,7 @@ module Audiobook
       @x_position = x_position
       @top_spacing = top_spacing
       @bottom_spacing = bottom_spacing
+      @section_level = section_level&.to_i
     end
 
     def empty?
@@ -43,6 +46,10 @@ module Audiobook
       
       # Title case without sentence-ending punctuation
       words.all? { |w| w.match?(/\A[A-Z]/) } && @text !~ /[.!?]$/
+    end
+
+    def section?
+      section_level.to_i.positive?
     end
 
     def ends_with_punctuation?

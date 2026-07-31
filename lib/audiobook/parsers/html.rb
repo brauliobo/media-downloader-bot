@@ -48,7 +48,7 @@ module Audiobook
         root.css(selector).filter_map do |node|
           next if node.ancestors.any? { |ancestor| ancestor.element? && ancestor.matches?(selector) }
 
-          line(node_text(node), font_size(node))
+          line(node_text(node), font_size(node), section_level: section_level(node))
         end
       end
 
@@ -58,7 +58,11 @@ module Audiobook
           match = Regexp.last_match
           fragment = Nokogiri::HTML5.fragment(match[1])
           classes = html[[match.begin(0) - 300, 0].max...match.begin(0)].scan(/<p\b[^>]*class=["']?([^\s>"']+)/mi).last&.first
-          lines << line(node_text(fragment), font_size_for_classes(classes))
+          lines << line(
+            node_text(fragment),
+            font_size_for_classes(classes),
+            section_level: section_level_for_classes(classes)
+          )
         end
         root.css('.Para_Footnote').each { |node| lines << line(node_text(node), 10) }
         lines.compact
@@ -111,9 +115,20 @@ module Audiobook
         12
       end
 
-      def self.line(text, font_size)
+      def self.section_level(node)
+        section_level_for_classes(node['class'])
+      end
+
+      def self.section_level_for_classes(classes)
+        return 1 if classes.to_s.match?(/Major_Heading/i)
+        return 2 if classes.to_s.match?(/Minor_Heading/i)
+      end
+
+      def self.line(text, font_size, section_level: nil)
         text = normalize(text)
-        SymMash.new(text: text, font_size: font_size, y: nil, page: 1) unless text.empty?
+        SymMash.new(
+          text: text, font_size: font_size, section_level: section_level, y: nil, page: 1
+        ).compact unless text.empty?
       end
 
       def self.paginate(lines, words_per_page)

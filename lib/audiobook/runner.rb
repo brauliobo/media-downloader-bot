@@ -1,5 +1,6 @@
 require 'tmpdir'
 require_relative 'audio_files'
+require_relative 'pauses'
 require_relative '../zipper'
 require_relative '../tts/options'
 require_relative '../language'
@@ -99,7 +100,7 @@ module Audiobook
 
     def create_silent_wav(dir)
       silent_wav = File.join(dir, 'silent.wav')
-      AudioFiles.silence(silent_wav, 1)
+      AudioFiles.silence(silent_wav, Pauses::EMPTY_BOOK)
     end
 
     def encode_audio_file(input_wav, out_audio)

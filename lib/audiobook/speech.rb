@@ -1,5 +1,6 @@
 require_relative '../utils/sh'
 require_relative 'audio_files'
+require_relative 'pauses'
 
 module Audiobook
   # Base speech unit for audio synthesis, path generation, YAML serialization.

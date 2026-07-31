@@ -7,7 +7,7 @@ module Audiobook
   # Represents a sentence of text to speak.
   class Sentence < Speech
 
-    PAUSE = 0.10
+    PAUSE = Pauses::SENTENCE
     PUNCTUATION_ONLY = /\A[\p{P}\p{S}\s]+\z/u
 
     attr_reader :text

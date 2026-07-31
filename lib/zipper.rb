@@ -100,22 +100,32 @@ class Zipper
   self.pause_cache       = {}
   self.pause_cache_mutex = Mutex.new
 
-  def self.silence_file(path, seconds, sample_rate: 22_050)
-    cmd = "#{FFMPEG} -f lavfi -i anullsrc=channel_layout=mono:sample_rate=#{sample_rate.to_i} -t #{seconds} #{Sh.escape(path)}"
+  def self.silence_file(path, seconds, sample_rate: 22_050, amplitude: nil)
+    source = if amplitude.to_f.positive?
+      "anoisesrc=color=white:amplitude=#{amplitude.to_f}:sample_rate=#{sample_rate.to_i}"
+    else
+      "anullsrc=channel_layout=mono:sample_rate=#{sample_rate.to_i}"
+    end
+    filter = amplitude.to_f.positive? ? ' -af lowpass=f=6000' : ''
+    cmd = "#{FFMPEG} -f lavfi -i #{source}#{filter} -t #{seconds} #{Sh.escape(path)}"
     _, err, status = Sh.run cmd
     Sh.assert_success!('Failed to create silent audio file', err, status: status, output: path)
     path
   end
 
-  def self.get_pause_file seconds, dir, sample_rate: nil
+  def self.get_pause_file seconds, dir, sample_rate: nil, extension: '.wav', amplitude: nil
     return nil if seconds.to_f <= 0
     key = seconds.to_f.round(3)
     sample_rate = (sample_rate || 22_050).to_i
 
-    cache_key = "#{dir}:#{key}:#{sample_rate}"
-    pause_file = File.join(dir, "pause_#{key.to_s.gsub('.', '_')}_#{sample_rate}.wav")
+    extension = ".#{extension}" unless extension.start_with?('.')
+    raise ArgumentError, "invalid audio extension: #{extension}" unless extension.match?(/\A\.[a-z0-9]+\z/i)
+
+    amplitude_key = amplitude.to_f.positive? ? "_#{amplitude.to_f.to_s.tr('.', '_')}" : ''
+    cache_key = "#{dir}:#{key}:#{sample_rate}:#{extension}:#{amplitude_key}"
+    pause_file = File.join(dir, "pause_#{key.to_s.gsub('.', '_')}_#{sample_rate}#{amplitude_key}#{extension}")
     cached_pause_file(cache_key, pause_file) do
-      silence_file(pause_file, key, sample_rate: sample_rate)
+      silence_file(pause_file, key, sample_rate: sample_rate, amplitude: amplitude)
     end
   end
 

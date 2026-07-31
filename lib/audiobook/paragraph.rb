@@ -7,7 +7,7 @@ require_relative '../zipper'
 module Audiobook
   class Paragraph
 
-    PAUSE = 0.20
+    PAUSE = Pauses::PARAGRAPH
 
     attr_reader :sentences
     attr_accessor :para_idx, :para_total, :page_num, :item_idx, :item_total, :lang, :stl, :dir,
@@ -53,12 +53,12 @@ module Audiobook
         
         stl&.update status_line
         main_wav = sent.to_wav(dir, "#{idx}_#{sidx}", lang: lang || 'en', tts_options: speech_options)
-        pause_file = sent.pause_file(dir)
+        pause_file = sidx.zero? ? AudioFiles.pause(PAUSE, dir) : sent.pause_file(dir)
         ref_wavs = (sent.references || []).each_with_index.flat_map do |ref, ridx|
           stl&.update "Processing reference #{ref.id} for sentence #{sidx+1}/#{sentences.size}"
           ref.sentences.each_with_index.flat_map do |rs, j|
             wav_path = rs.to_wav(dir, "#{idx}_#{sidx}_r#{ridx}_#{j}", lang: lang || 'en', tts_options: speech_options)
-            ref_pause = AudioFiles.pause(0.15, dir) if ridx == 0 && j == 0
+            ref_pause = AudioFiles.pause(Pauses::REFERENCE, dir) if ridx == 0 && j == 0
             rs_pause = rs.pause_file(dir)
             [j == 0 ? ref_pause : nil, rs_pause, wav_path].compact
           end

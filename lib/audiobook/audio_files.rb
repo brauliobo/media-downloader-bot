@@ -5,8 +5,11 @@ module Audiobook
   module AudioFiles
     module_function
 
-    def pause(seconds, dir)
-      Zipper.get_pause_file(seconds, dir, sample_rate: sample_rate)
+    def pause(seconds, dir, sample_rate: self.sample_rate, extension: '.wav', amplitude: nil)
+      options = {sample_rate: sample_rate}
+      options[:extension] = extension unless extension == '.wav'
+      options[:amplitude] = amplitude if amplitude.to_f.positive?
+      Zipper.get_pause_file(seconds, dir, **options)
     end
 
     def silence(path, seconds)

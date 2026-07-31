@@ -5,7 +5,7 @@ module Audiobook
   # Represents a heading - single sentence with extra pause
   class Heading < Sentence
 
-    PAUSE = 0.5
+    PAUSE = Pauses::HEADING
 
     def initialize(text)
       if text.is_a?(Sentence)

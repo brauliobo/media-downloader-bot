@@ -307,6 +307,28 @@ RSpec.describe Zipper do
     end
   end
 
+  it 'creates floor-matched pauses in the chapter audio format' do
+    Dir.mktmpdir('chapter-pause-spec-') do |dir|
+      allow(Sh).to receive(:run) do |command|
+        File.write(command.split.last, 'aac')
+        ['', '', double(success?: true)]
+      end
+
+      path = described_class.get_pause_file(
+        3.5,
+        dir,
+        sample_rate: 24_000,
+        extension: '.m4a',
+        amplitude: 0.001
+      )
+
+      expect(path).to end_with('pause_3_5_24000_0_001.m4a')
+      expect(Sh).to have_received(:run).with(
+        include('anoisesrc=color=white:amplitude=0.001:sample_rate=24000', '-af lowpass=f=6000')
+      )
+    end
+  end
+
   it 'adds a calibrated continuous floor without lowering speech' do
     Dir.mktmpdir('audio-floor-spec-') do |dir|
       source = File.join(dir, 'speech.wav')

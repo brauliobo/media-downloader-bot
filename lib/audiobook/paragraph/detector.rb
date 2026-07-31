@@ -38,7 +38,8 @@ module Audiobook
                 page_number: prev_line.page_number,
                 x_position: prev_line.x_position,
                 top_spacing: prev_line.top_spacing,
-                bottom_spacing: prev_line.bottom_spacing
+                bottom_spacing: prev_line.bottom_spacing,
+                section_level: prev_line.section_level
               )
               prev_line = buf.last
               next

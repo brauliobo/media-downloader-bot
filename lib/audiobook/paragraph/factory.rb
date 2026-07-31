@@ -1,6 +1,7 @@
 require_relative '../sentence'
 require_relative '../paragraph'
 require_relative '../heading'
+require_relative '../section'
 require_relative '../../text_helpers'
 
 module Audiobook
@@ -23,6 +24,10 @@ module Audiobook
 
           normalized = normalize_group_text(group)
           next if normalized.empty?
+
+          if group.first.section?
+            next item_data(group.first, create_section(group.first, normalized))
+          end
 
           sentences = create_sentences(normalized)
           next if sentences.empty?
@@ -69,12 +74,15 @@ module Audiobook
           create_paragraph(first_line, sentences)
         end
 
-        { item: item, page: @start_page, font_size: first_line.font_size }
+        item_data(first_line, item)
       end
 
       def create_heading(first_line, sentence)
-        sentence.font_size = first_line.font_size if sentence.respond_to?(:font_size=)
-        Heading.new(sentence)
+        with_font_size(Heading.new(sentence), first_line)
+      end
+
+      def create_section(first_line, text)
+        with_font_size(Section.new(text, level: first_line.section_level), first_line)
       end
 
       def create_paragraph(first_line, sentences)
@@ -83,6 +91,15 @@ module Audiobook
           para.sentences.each { |s| s.font_size = first_line.font_size if s.respond_to?(:font_size=) }
         end
         para
+      end
+
+      def with_font_size(item, first_line)
+        item.font_size = first_line.font_size if item.respond_to?(:font_size=)
+        item
+      end
+
+      def item_data(first_line, item)
+        {item: item, page: @start_page, font_size: first_line.font_size}
       end
 
       def self.heading_like?(text)

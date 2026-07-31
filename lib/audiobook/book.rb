@@ -16,6 +16,7 @@ require_relative 'sentence'
 require_relative 'paragraph'
 require_relative 'reference'
 require_relative 'heading'
+require_relative 'section'
 require_relative 'image'
 require_relative 'ocr_text'
 require_relative 'page'
@@ -176,6 +177,9 @@ module Audiobook
       # Item is a hash with single key indicating type
       if item.heading
         Heading.new(item.heading.text) if Sentence.speakable_text?(item.heading.text)
+      elsif item.section
+        section = item.section
+        Section.new(section.text, level: section.level || 1) if Sentence.speakable_text?(section.text)
       elsif item.reference
         ref_info = item.reference
         sentences = Sentence.build_all(ref_info.sentences)
@@ -383,7 +387,8 @@ module Audiobook
           page_number: l.page,
           x_position: l.x,
           top_spacing: l.top_spacing,
-          bottom_spacing: l.bottom_spacing
+          bottom_spacing: l.bottom_spacing,
+          section_level: l.section_level
         )
       end.reject(&:empty?)
       
