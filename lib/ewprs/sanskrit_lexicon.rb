@@ -8,15 +8,19 @@ module Ewprs
 
     DEFAULT_TERMS = [
       'Yoga Darshana',
+      'Bhagavat Dharma',
+      'sumum bonum',
+      'summum bonum',
       *%w[
         Brahma Shiva Shakti Prakrti Purusa Purusottama Japa Khotta Saptasindhu Shaorasenii
-        Demi-Shaorasenii Ardha Vaedika agni ajja ajjii arya bauls dharma kula Tantra yoga
-        sadhana samadhi mantra kiirtana tattva vrtti pravrtti nivrtti samskara
+        Demi-Shaorasenii Ardha Vaedika agni ajja ajjii arya bauls devatva dharma kula Tantra yoga
+        sadhana samadhi mantra kiirtana rasa tadsthiti tattva vipras vrtti pravrtti nivrtti samskara
         amrta caetanya hasant madhyama mudra nrtya pratibha sarjana sargam srjanii
         Shivatattva utsarjana vilambita visarjana
         pra karoti iti
       ]
     ].freeze
+    TRANSLATABLE_TERMS = %w[linseed].to_h { |term| [term, true] }.freeze
 
     attr_reader :gloss_pattern, :inline_gloss_pattern, :parenthetical_gloss_pattern
 
@@ -28,7 +32,10 @@ module Ewprs
       document = Nokogiri::HTML5.parse(html)
       @terms = document.css('b').flat_map { |node| variants(node.text) }
       @terms.concat(DEFAULT_TERMS)
-      @terms = @terms.map(&:strip).reject { |term| term.length < 3 }.uniq.sort_by { |term| -term.length }
+      @terms = @terms.map(&:strip).reject do |term|
+        term.length < 3 || TRANSLATABLE_TERMS.key?(term.downcase)
+      end.uniq.sort_by { |term| -term.length }
+      @term_values = @terms.to_h { |term| [term.downcase, true] }
       patterns = @terms.map do |term|
         pattern = term.split(/\s+/).map { |word| Regexp.escape(word) }.join('\\s+')
         term.match?(/\A[A-Z][a-z]{0,2}\z/) ? "(?-i:#{pattern})" : pattern
@@ -64,6 +71,10 @@ module Ewprs
         tokens[marker] = match
         marker
       end
+    end
+
+    def term?(value)
+      @term_values.key?(value.to_s.strip.downcase)
     end
 
     private

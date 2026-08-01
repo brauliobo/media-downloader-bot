@@ -2,6 +2,7 @@ require 'fileutils'
 require 'time'
 
 require_relative '../jsonl_store'
+require_relative '../job_pool'
 require_relative 'sentence_splitter'
 require_relative 'sanskrit_lexicon'
 require_relative 'translator'
@@ -123,8 +124,10 @@ module Ewprs
           raise "translation count mismatch: expected #{batch.size}, got #{outputs.size}"
         end
 
-        batch.zip(outputs).each do |unit, output|
-          translation = restore_tokens_with_retries(unit, output)
+        restored = JobPool.new(jobs: translator.jobs).ordered_map(batch.zip(outputs)) do |unit, output|
+          [unit, restore_tokens_with_retries(unit, output)]
+        end
+        restored.each do |unit, translation|
           translations[unit.key] = translation
           cached_translations[unit.key] = translation
           store.append(key: unit.key, translation: translation, at: Time.now.utc.iso8601)

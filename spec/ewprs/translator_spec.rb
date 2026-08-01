@@ -30,13 +30,14 @@ RSpec.describe Ewprs::Translator do
         'Brazilian Portuguese',
         'Preserve every sentence and line break',
         'Choose one direct translation; do not output alternatives, annotations, or parenthetical variants.',
-        'including unmatched delimiters: "("=0, ")"=0, "["=0, "]"=0, "{"=2, "}"=2',
+        'Translate prose inside quotation marks too; quotation marks do not denote protected text.',
+        'including unmatched delimiters: "("=0, ")"=0, "["=0, "]"=0, "{"=0, "}"=0',
         'Preserve exactly these placeholder occurrences, including every repeated entry, without translating or ' \
-        'renumbering them: {{EWPRS_P1}}. Do not append this list to the translation.',
-        '{{EWPRS_P1}}'
+        'renumbering them: ZXQEWPRSP1ZXQ. Do not append this list to the translation.',
+        'ZXQEWPRSP1ZXQ'
       )
       Struct.new(:body).new(
-        {choices: [{message: {content: "  A palavra {{EWPRS_P1}} significa felicidade.\n"}}]}.to_json
+        {choices: [{message: {content: "  A palavra ZXQEWPRSP1ZXQ significa felicidade.\n"}}]}.to_json
       )
     end
 
@@ -45,8 +46,122 @@ RSpec.describe Ewprs::Translator do
     )
   end
 
+  it 'provides source-language meaning for rare English terms' do
+    expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
+      prompt = JSON.parse(body).dig('messages', 0, 'content')
+      expect(prompt).to include('Interpret the English adjective "trifarious" as "threefold".')
+      Struct.new(:body).new(
+        {choices: [{message: {content: 'Dreifache Ausdrucksweise'}}]}.to_json
+      )
+    end
+
+    expect(translator.translate_markup('Trifarious Expression', to: 'de')).to eq('Dreifache Ausdrucksweise')
+  end
+
+  it 'provides semantic paraphrases for model code-switch triggers' do
+    expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
+      prompt = JSON.parse(body).dig('messages', 0, 'content')
+      expect(prompt).to include(
+        'Interpret the phrase "all of North Bengal" to mean every part of the geographic region North Bengal.',
+        'Interpret the English adjective "illustrative" as "serving as examples".',
+        'Interpret the English word "definition" as "statement of meaning".',
+        'Interpret the English noun "feeder" as "one who nourishes or supplies".',
+        'Interpret the English adjective "descended" as "derived from an earlier language".',
+        'Interpret the English adjective "illiterate" as "unable to read or write".',
+        'Interpret the English noun "linseed" as "flax seed".',
+        'Interpret the English adverb "respectively" as "in the same order".',
+        'This phrase introduces a list of examples. Translate every word of the phrase.'
+      )
+      Struct.new(:body).new(
+        {choices: [{message: {content: 'In der gesamten Region Nordbengalen gibt es anschauliche Beispiele.'}}]}.to_json
+      )
+    end
+
+    source = 'All of North Bengal has illustrative examples by definition for each feeder. Some examples are ' \
+             'illiterate, respectively descended, and contain linseed.'
+    expect(translator.translate_markup(source, to: 'de')).to eq(
+      'In der gesamten Region Nordbengalen gibt es anschauliche Beispiele.'
+    )
+  end
+
   it 'uses explicit jobs as distributed request concurrency' do
     expect(described_class.new(jobs: '40').jobs).to eq(40)
+  end
+
+  it 'limits concurrent requests across overlapping translation calls' do
+    translator = described_class.new(jobs: 2)
+    active = 0
+    maximum = 0
+    mutex = Mutex.new
+    allow(Utils::HTTP).to receive(:post) do
+      mutex.synchronize do
+        active += 1
+        maximum = [maximum, active].max
+      end
+      sleep 0.05
+      Struct.new(:body).new({choices: [{message: {content: 'Übersetzt'}}]}.to_json)
+    ensure
+      mutex.synchronize { active -= 1 }
+    end
+
+    2.times.map do
+      Thread.new { translator.translate_markup(%w[First Second], to: 'de') }
+    end.each(&:value)
+
+    expect(maximum).to eq(2)
+  end
+
+  it 'retries brief transport interruptions' do
+    calls = 0
+    allow(Utils::HTTP).to receive(:post) do
+      calls += 1
+      raise EOFError if calls <= 3
+
+      Struct.new(:body).new({choices: [{message: {content: 'Übersetzt'}}]}.to_json)
+    end
+    expect(translator).to receive(:sleep).with(2).exactly(3).times
+
+    expect(translator.translate_markup('Translated', to: 'de')).to eq('Übersetzt')
+    expect(calls).to eq(4)
+  end
+
+  it 'retries transient gateway responses' do
+    calls = 0
+    gateway_error = Mechanize::ResponseCodeError.new(Struct.new(:code).new('502'))
+    allow(Utils::HTTP).to receive(:post) do
+      calls += 1
+      raise gateway_error if calls <= 2
+
+      Struct.new(:body).new({choices: [{message: {content: 'Übersetzt'}}]}.to_json)
+    end
+    expect(translator).to receive(:sleep).with(2).twice
+
+    expect(translator.translate_markup('Translated', to: 'de')).to eq('Übersetzt')
+    expect(calls).to eq(3)
+  end
+
+  it 'limits transport retries' do
+    expect(Utils::HTTP).to receive(:post).exactly(4).times.and_raise(Errno::ECONNRESET)
+    expect(translator).to receive(:sleep).with(2).exactly(3).times
+
+    expect { translator.translate_markup('Translated', to: 'de') }.to raise_error(Errno::ECONNRESET)
+  end
+
+  it 'removes an exact echoed source line before the translation' do
+    expect(Utils::HTTP).to receive(:post).and_return(
+      Struct.new(:body).new(
+        {
+          choices: [
+            {message: {content: "By nature the human mind is liberated.  \n" \
+                                'Der menschliche Verstand ist von Natur aus befreit.'}}
+          ]
+        }.to_json
+      )
+    )
+
+    expect(translator.translate_markup('By nature the human mind is liberated.', to: 'de')).to eq(
+      'Der menschliche Verstand ist von Natur aus befreit.'
+    )
   end
 
   it 'enumerates every placeholder occurrence' do
@@ -54,11 +169,11 @@ RSpec.describe Ewprs::Translator do
       prompt = JSON.parse(body).dig('messages', 0, 'content')
       expect(prompt).to include(
         'Preserve exactly these placeholder occurrences, including every repeated entry, without translating or ' \
-        'renumbering them: {{EWPRS_P2}}, {{EWPRS_P1}}, {{EWPRS_P2}}. ' \
+        'renumbering them: ZXQEWPRSP2ZXQ, ZXQEWPRSP1ZXQ, ZXQEWPRSP2ZXQ. ' \
         'Do not append this list to the translation.'
       )
       Struct.new(:body).new(
-        {choices: [{message: {content: '{{EWPRS_P2}} Buda {{EWPRS_P1}} {{EWPRS_P2}}'}}]}.to_json
+        {choices: [{message: {content: 'ZXQEWPRSP2ZXQ Buda ZXQEWPRSP1ZXQ ZXQEWPRSP2ZXQ'}}]}.to_json
       )
     end
 
@@ -71,14 +186,21 @@ RSpec.describe Ewprs::Translator do
     expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
       prompt = JSON.parse(body).dig('messages', 0, 'content')
       expect(prompt).to include(
-        '{{EWPRS_E1}}The word{{EWPRS_E2}} {{EWPRS_E3}} another word {{EWPRS_E4}}:',
-        '{{EWPRS_E1}}, {{EWPRS_E2}}, {{EWPRS_E3}}, {{EWPRS_E4}}'
+        '<ewprs-quote-open id="1"/>The word<ewprs-quote-close id="2"/> ' \
+        'ZXQEWPRSE3ZXQ another word ZXQEWPRSE4ZXQ:',
+        'ZXQEWPRSE3ZXQ, ZXQEWPRSE4ZXQ',
+        '<ewprs-quote-open id="1"/>, <ewprs-quote-close id="2"/>'
       )
       expect(prompt).not_to include('&ldquo;', '&rdquo;', '&ndash;', '&nbsp')
       Struct.new(:body).new(
         {
           choices: [
-            {message: {content: '{{EWPRS_E1}}A palavra{{EWPRS_E2}} {{EWPRS_E3}} outra palavra {{EWPRS_E4}}:'}}
+            {
+              message: {
+                content: '<ewprs-quote-open id="1"/>A palavra<ewprs-quote-close id="2"/> ' \
+                         'ZXQEWPRSE3ZXQ outra palavra ZXQEWPRSE4ZXQ:'
+              }
+            }
           ]
         }.to_json
       )
@@ -93,13 +215,20 @@ RSpec.describe Ewprs::Translator do
     expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
       prompt = JSON.parse(body).dig('messages', 0, 'content')
       expect(prompt).to include(
-        '{{EWPRS_E1}}One{{EWPRS_E2}} and {{EWPRS_E3}}two{{EWPRS_E4}}',
-        '{{EWPRS_E1}}, {{EWPRS_E2}}, {{EWPRS_E3}}, {{EWPRS_E4}}'
+        '<ewprs-quote-open id="1"/>One<ewprs-quote-close id="2"/> and ' \
+        '<ewprs-quote-open id="3"/>two<ewprs-quote-close id="4"/>',
+        '<ewprs-quote-open id="1"/>, <ewprs-quote-close id="2"/>, ' \
+        '<ewprs-quote-open id="3"/>, <ewprs-quote-close id="4"/>'
       )
       Struct.new(:body).new(
         {
           choices: [
-            {message: {content: '{{EWPRS_E1}}Um{{EWPRS_E2}} e {{EWPRS_E3}}dois{{EWPRS_E4}}'}}
+            {
+              message: {
+                content: '<ewprs-quote-open id="1"/>Um<ewprs-quote-close id="2"/> e ' \
+                         '<ewprs-quote-open id="3"/>dois<ewprs-quote-close id="4"/>'
+              }
+            }
           ]
         }.to_json
       )
@@ -122,6 +251,160 @@ RSpec.describe Ewprs::Translator do
       )
     ).to eq(
       '<span data-ewprs="11">A afirmação</span> &ldquo;O &lsquo;comitê de seleção&rsquo; parou.&rdquo;'
+    )
+  end
+
+  it 'uses mandatory XML tags as an alternate protected-placeholder channel' do
+    expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
+      prompt = JSON.parse(body).dig('messages', 0, 'content')
+      expect(prompt).to include(
+        'Preserve this exact HTML tag sequence without adding, omitting, changing, or reordering tags: ' \
+        '<ewprs-p id="1"/>.',
+        'The natural <ewprs-p id="1"/> remains.'
+      )
+      Struct.new(:body).new(
+        {choices: [{message: {content: 'Das natürliche <ewprs-p id="1"/> bleibt bestehen.'}}]}.to_json
+      )
+    end
+
+    expect(
+      translator.translate_preserving_placeholders('The natural __P0001__ remains.', to: 'de')
+    ).to eq('Das natürliche __P0001__ bleibt bestehen.')
+  end
+
+  it 'exposes protected values inside semantic XML tags' do
+    expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
+      prompt = JSON.parse(body).dig('messages', 0, 'content')
+      expect(prompt).to include('<ewprs-p id="1">Prakrti</ewprs-p> is named.')
+      Struct.new(:body).new(
+        {choices: [{message: {content: '<ewprs-p id="1">Prakrti</ewprs-p> wird benannt.'}}]}.to_json
+      )
+    end
+
+    expect(
+      translator.translate_preserving_placeholders(
+        '__P0001__ is named.', values: {'__P0001__' => 'Prakrti'}, to: 'de'
+      )
+    ).to eq('__P0001__ wird benannt.')
+  end
+
+  it 'retranslates clauses when a full XML translation drops placeholders' do
+    allow(Utils::HTTP).to receive(:post) do |_url, body, _headers|
+      prompt = JSON.parse(body).dig('messages', 0, 'content')
+      content = if prompt.include?('The <ewprs-p id="1"/> improves, while <ewprs-p id="2"/> grows.')
+                  'Der <ewprs-p id="1"/> verbessert sich.'
+                elsif prompt.include?('The <ewprs-p id="1"/> improves')
+                  'Der <ewprs-p id="1"/> verbessert sich'
+                elsif prompt.include?('while <ewprs-p id="2"/> grows.')
+                  'während <ewprs-p id="2"/> wächst.'
+                end
+      Struct.new(:body).new({choices: [{message: {content: content}}]}.to_json)
+    end
+
+    expect(
+      translator.translate_preserving_placeholders(
+        'The __P0001__ improves, while __P0002__ grows.', to: 'de'
+      )
+    ).to eq('Der __P0001__ verbessert sich, während __P0002__ wächst.')
+  end
+
+  it 'retries an echoed XML translation with natural protected values and punctuation' do
+    source = '__P0001__ &ndash; in this __P0002__ the body even the knowledge of ' \
+             '&ldquo;I&rdquo; is not much in evidence.'
+    allow(Utils::HTTP).to receive(:post) do |_url, body, _headers|
+      prompt = JSON.parse(body).dig('messages', 0, 'content')
+      content = if prompt.include?('<ewprs-p id="1">Hirańmaya Kośa</ewprs-p>')
+                  '<ewprs-p id="1">Hirańmaya Kośa</ewprs-p> ZXQEWPRSE1ZXQ in this ' \
+                    '<ewprs-p id="2">kośa</ewprs-p> the body even the knowledge of ' \
+                    '<ewprs-quote-open id="2"/>I<ewprs-quote-close id="3"/> is not much in evidence.'
+                else
+                  expect(prompt).to include(
+                    'Hiranmaya Kosa – in this kosa the body even the knowledge of “I” is not much in evidence.'
+                  )
+                  'Hiranmaya Kosa – in dieser Kosa ist der Körper sowie das Wissen vom „Ich“ kaum erkennbar.'
+                end
+      Struct.new(:body).new({choices: [{message: {content: content}}]}.to_json)
+    end
+
+    expect(
+      translator.translate_preserving_placeholders(
+        source,
+        values: {'__P0001__' => 'Hiran&#x301;maya Kos&#x301;a', '__P0002__' => 'kos&#x301;a'},
+        to: 'de'
+      )
+    ).to eq(
+      '__P0001__ &ndash; in dieser __P0002__ ist der Körper sowie das Wissen vom ' \
+      '&ldquo;Ich&rdquo; kaum erkennbar.'
+    )
+  end
+
+  it 'translates prose between placeholders when semantic and natural translations are echoed' do
+    source = '__P0001__ in __P0002__ Bengali, rather than __P0003__'
+    allow(Utils::HTTP).to receive(:post) do |_url, body, _headers|
+      prompt = JSON.parse(body).dig('messages', 0, 'content')
+      content = if prompt.include?('<ewprs-p id="1">mohará</ewprs-p>')
+                  '<ewprs-p id="1">mohará</ewprs-p> in <ewprs-p id="2">Ráŕhii</ewprs-p> Bengali, ' \
+                    'rather than <ewprs-p id="3">mukhośa</ewprs-p>'
+                elsif prompt.include?('mohara in Rarhii Bengali, rather than mukhosa')
+                  'mohara in Rarhii Bengali, rather than mukhosa'
+                elsif prompt.match?(/\n\nin\z/)
+                  'in'
+                elsif prompt.include?("\n\nBengali, rather than")
+                  'Bengalisch, anstatt'
+                end
+      Struct.new(:body).new({choices: [{message: {content: content}}]}.to_json)
+    end
+
+    expect(
+      translator.translate_preserving_placeholders(
+        source,
+        values: {
+          '__P0001__' => 'mohara&#x301;',
+          '__P0002__' => 'Ra&#x301;r&#x301;hii',
+          '__P0003__' => 'mukhos&#x301;a'
+        },
+        to: 'de'
+      )
+    ).to eq('__P0001__ in __P0002__ Bengalisch, anstatt __P0003__')
+  end
+
+  it 'translates entity-heavy prose with natural punctuation and restores its references' do
+    source = 'I offer flowers &ndash; all were created by you.'
+    expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
+      prompt = JSON.parse(body).dig('messages', 0, 'content')
+      expect(prompt).to include('I offer flowers – all were created by you.')
+      expect(prompt).not_to include('ZXQEWPRSE')
+      Struct.new(:body).new(
+        {choices: [{message: {content: 'Ich biete Blumen an – alle wurden von dir erschaffen.'}}]}.to_json
+      )
+    end
+
+    expect(translator.translate_preserving_character_references(source, to: 'de')).to eq(
+      'Ich biete Blumen an &ndash; alle wurden von dir erschaffen.'
+    )
+  end
+
+  it 'retranslates echoed comma-separated prose as smaller fragments' do
+    source = 'So in that first figure, in that first geometrical figure, at the dawn of creation, ' \
+             'there may be more than one line,'
+    expect(translator).to receive(:translate_markup).with(
+      [
+        'So in that first figure', 'in that first geometrical figure',
+        'at the dawn of creation', 'there may be more than one line'
+      ], from: 'en', to: 'de'
+    ).and_return(
+      [
+        'So in that first figure', 'in dieser ersten geometrischen Figur',
+        'zu Beginn der Schöpfung', 'Es kann mehr als eine Zeile geben.'
+      ]
+    )
+    expect(translator).to receive(:translate_markup).with(
+      ['So', 'in that first figure'], from: 'en', to: 'de'
+    ).and_return(['So', 'in jener ersten Figur'])
+
+    expect(translator.translate_by_clauses(source, to: 'de')).to eq(
+      'So in jener ersten Figur, in dieser ersten geometrischen Figur, zu Beginn der Schöpfung, ' \
+      'es kann mehr als eine Zeile geben,'
     )
   end
 
@@ -168,16 +451,16 @@ RSpec.describe Ewprs::Translator do
     expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
       prompt = JSON.parse(body).dig('messages', 0, 'content')
       expect(prompt).to include(
-        source.gsub('__P0002__', '{{EWPRS_P2}}').gsub('__P0003__', '{{EWPRS_P3}}')
-          .gsub('__P0004__', '{{EWPRS_P4}}'),
-        invalid.gsub('__P0002__', '{{EWPRS_P2}}').gsub('__P0003__', '{{EWPRS_P3}}')
-          .gsub('__P0004__', '{{EWPRS_P4}}'), issue,
+        source.gsub('__P0002__', 'ZXQEWPRSP2ZXQ').gsub('__P0003__', 'ZXQEWPRSP3ZXQ')
+          .gsub('__P0004__', 'ZXQEWPRSP4ZXQ'),
+        invalid.gsub('__P0002__', 'ZXQEWPRSP2ZXQ').gsub('__P0003__', 'ZXQEWPRSP3ZXQ')
+          .gsub('__P0004__', 'ZXQEWPRSP4ZXQ'), issue,
         'Translate every English prose word outside placeholders; do not copy source-language prose.',
         'Copy every placeholder literally; never replace it with its meaning.',
-        '{{EWPRS_P2}} = Tamoguna', '{{EWPRS_P3}} = Rajoguna', '{{EWPRS_P4}} = sattvaguna'
+        'ZXQEWPRSP2ZXQ = Tamoguna', 'ZXQEWPRSP3ZXQ = Rajoguna', 'ZXQEWPRSP4ZXQ = sattvaguna'
       )
-      encoded = corrected.gsub('__P0002__', '{{EWPRS_P2}}').gsub('__P0003__', '{{EWPRS_P3}}')
-        .gsub('__P0004__', '{{EWPRS_P4}}')
+      encoded = corrected.gsub('__P0002__', 'ZXQEWPRSP2ZXQ').gsub('__P0003__', 'ZXQEWPRSP3ZXQ')
+        .gsub('__P0004__', 'ZXQEWPRSP4ZXQ')
       Struct.new(:body).new({choices: [{message: {content: encoded}}]}.to_json)
     end
 
@@ -196,11 +479,11 @@ RSpec.describe Ewprs::Translator do
         'Preserve every sentence and line break',
         'including unmatched delimiters',
         'Preserve exactly these placeholder occurrences, including every repeated entry',
-        source.gsub('__P0001__', '{{EWPRS_P1}}')
+        source.gsub('__P0001__', 'ZXQEWPRSP1ZXQ')
       )
       expect(prompt).not_to include('Invalid translation to correct:')
       Struct.new(:body).new(
-        {choices: [{message: {content: 'Borrifar água como uma fonte também se chama {{EWPRS_P1}}.'}}]}.to_json
+        {choices: [{message: {content: 'Borrifar água como uma fonte também se chama ZXQEWPRSP1ZXQ.'}}]}.to_json
       )
     end
 
@@ -210,5 +493,51 @@ RSpec.describe Ewprs::Translator do
         tokens: {'__P0001__' => 'karapatrika'}, to: 'pt'
       )
     ).to eq('Borrifar água como uma fonte também se chama __P0001__.')
+  end
+
+  it 'retranslates foreign-script failures from source without repeating the invalid output' do
+    source = 'It is to inject the spirit of movement from the lowermost point.'
+    invalid = 'Es soll den Geist der Bewegung 注入.'
+    expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
+      prompt = JSON.parse(body).dig('messages', 0, 'content')
+      expect(prompt).to include(
+        'Translate this English sentence completely into German.',
+        'Interpret the English verb "inject" as "introduce or instill".',
+        source
+      )
+      expect(prompt).not_to include(invalid, 'Invalid translation to correct:')
+      Struct.new(:body).new(
+        {choices: [{message: {content: 'Es soll den Geist der Bewegung einflößen.'}}]}.to_json
+      )
+    end
+
+    expect(
+      translator.repair_markup(
+        source, invalid: invalid, issue: 'translation introduced foreign-script character: 注', tokens: {}, to: 'de'
+      )
+    ).to eq('Es soll den Geist der Bewegung einflößen.')
+  end
+
+  it 'removes an exact echoed source line from a repair response' do
+    source = 'Emancipation in this case is liberation of permanent nature.'
+    expect(Utils::HTTP).to receive(:post).and_return(
+      Struct.new(:body).new(
+        {
+          choices: [
+            {
+              message: {
+                content: "#{source}  \nEmanzipation in diesem Fall ist die Befreiung von dauerhafter Natur."
+              }
+            }
+          ]
+        }.to_json
+      )
+    )
+
+    expect(
+      translator.repair_markup(
+        source, invalid: source, issue: 'translation left source prose unchanged', tokens: {}, to: 'de'
+      )
+    ).to eq('Emanzipation in diesem Fall ist die Befreiung von dauerhafter Natur.')
   end
 end

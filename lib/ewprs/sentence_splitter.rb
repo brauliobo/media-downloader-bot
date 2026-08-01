@@ -6,6 +6,7 @@ module Ewprs
     PAIRED_COORDINATION = /\bboth\b[^.!?]*,\s+[^.!?]*,\s+and\b[^.!?]*,/i
     COMMA_BOUNDARY = /(?<=,)\s+/
     OPENING_QUOTE = /(?:&(?:ldquo|lsquo|quot);|["“‘])/
+    HONORIFIC_ABBREVIATION = /\b(?:Dr|Mr|Mrs|Ms|Prof)\z/i
 
     module_function
 
@@ -17,7 +18,13 @@ module Ewprs
       }ux
       sentences = Array(text).join
         .gsub(/(?<=&#8230;)\s+/i, "\n")
-        .gsub(boundary, "\\1\\2\\3\n")
+        .gsub(boundary) do |match|
+          if Regexp.last_match.pre_match.match?(HONORIFIC_ABBREVIATION)
+            match
+          else
+            "#{Regexp.last_match(1)}#{Regexp.last_match(2)}#{Regexp.last_match(3)}\n"
+          end
+        end
         .split(/\n+/)
         .map(&:strip)
         .reject(&:empty?)

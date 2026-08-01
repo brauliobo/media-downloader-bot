@@ -29,8 +29,9 @@ module Ewprs
               )
             end
 
-            validate_restored_translation!(unit, translation)
+            translation = validate_restored_translation!(unit, translation)
             values[key] = translation
+            cached_translations[key] = translation
           rescue TranslationValidator::Error => error
             stdout.puts "discarding invalid cached translation #{key}: #{error.message}"
           end

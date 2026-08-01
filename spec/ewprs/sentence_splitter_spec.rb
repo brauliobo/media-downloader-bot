@@ -42,6 +42,14 @@ RSpec.describe Ewprs::SentenceSplitter do
     )
   end
 
+  it 'keeps an honorific and name in the same sentence' do
+    text = 'Hypnotism was used to cure disease by Dr. James Braid. This method spread.'
+
+    expect(described_class.split(text, boundary_tokens: /__P\d{4}__/, max_chars: 800)).to eq(
+      ['Hypnotism was used to cure disease by Dr. James Braid.', 'This method spread.']
+    )
+  end
+
   it 'splits excerpts after an HTML omission marker' do
     text = 'First excerpt.&#8230; to [[vest]] an incompetent person with power.'
 

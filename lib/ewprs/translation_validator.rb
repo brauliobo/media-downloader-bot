@@ -13,6 +13,7 @@ module Ewprs
 
     MARKUP = /<!--.*?-->|<[^>]+>/m
     MARKER = /__P\d{4}__|⟦[UP][^⟧]*⟧/
+    INTERNAL_TRANSPORT_MARKER = /ZXQEWPRS|(?:<|&lt;)ewprs-|&lt;span\b[^>]*(?:data-ewprs|data=&quot;ewprs)/i
     ESCAPED_CHARACTER_REFERENCE = /&amp;(?=(?:#\d+|#x[\da-f]+|[a-z][\w]+))/i
     WORD = /\p{L}[\p{L}\p{M}]*(?:[-'’]\p{L}[\p{L}\p{M}]*)*/u
     FORMULA_EXPRESSION = %r{
@@ -34,12 +35,39 @@ module Ewprs
       'en' => /(?:able|hood|ible|ise|ised|ises|ising|ity|ive|less|ly|ment|ness|ous|ship|sion|tion|ward|wise|ize|ized|izes|izing)\z/
     }.freeze
     RETAINED_SOURCE_WORDS = {
+      'de' => %w[
+        although because called can cases chapter conceived could each edition further however
+        descended encourage example examples feeder hence illiterate informing linseed means originally otherwise publication
+        published second secondly section should similarly so-called states therefore these those
+        throughout translation respectively used whereas which within without would
+      ].to_h { |word| [word, true] }.freeze,
       'fr' => %w[further nucleus salvation stamina].to_h { |word| [word, true] }.freeze
+    }.freeze
+    RETAINED_HYPHEN_COMPONENTS = {
+      'de' => %w[descended those].to_h { |word| [word, true] }.freeze
+    }.freeze
+    RETAINED_ATTACHED_COMPONENTS = {
+      'de' => %w[respectively].to_h { |word| [word, true] }.freeze
+    }.freeze
+    SOURCE_PROSE_ANCHORS = {
+      'de' => %w[definition plus].to_h { |word| [word, true] }.freeze
+    }.freeze
+    PROTECTED_CONNECTORS = {
+      'de' => %w[and are is or].to_h { |word| [word, true] }.freeze
     }.freeze
     TARGET_SHARED_WORDS = {
       'es' => %w[no oh].to_h { |word| [word, true] }.freeze
     }.freeze
+    TARGET_SHARED_PHRASES = {
+      'de' => [%w[negative evolution].freeze].freeze
+    }.freeze
     TARGET_INVALID_PHRASES = {
+      'de' => {
+        /\bdefinition of\b/i => 'retained English definition prose',
+        /\bin English in the\b/i => 'retained English publication prose',
+        /\bof the cosmic mind\b/i => 'retained English phrase',
+        /\bsome examples are\b/i => 'retained English example prose',
+      }.freeze,
       'fr' => {
         /\blorsque (?:un|une)\b/i => 'invalid French elision',
         /\bce univers\b/i          => 'invalid French demonstrative',
@@ -48,11 +76,10 @@ module Ewprs
     DELIMITER_PAIRS = {'(' => ')', '[' => ']', '{' => '}'}.freeze
     DELIMITER = /[()\[\]{}]/
     EDITORIAL_BRACKET = /\[\[?|\]\]?/
-    DOUBLE_SMART_QUOTE = /&(?:l|r)dquo;|[“”«»]/i
+    DOUBLE_SMART_QUOTE = /&(?:l|r)dquo;|[“”„«»]/i
     EMPTY_SMART_QUOTES = /(?:&ldquo;\s*&rdquo;|&lsquo;\s*&rsquo;|“\s*”|‘\s*’|«\s*»)/i
-    REVERSED_SMART_QUOTES = /(?:&rdquo;\s*&ldquo;|&rsquo;\s*&lsquo;|”\s*“|’\s*‘|»\s*«)/i
     NON_LATIN_ARTIFACT = /[\p{Han}\p{Cyrillic}\uFF00-\uFFEF]/u
-    LATIN_TARGETS = %w[en es fr pt].to_h { |language| [language, true] }.freeze
+    LATIN_TARGETS = %w[de en es fr pt].to_h { |language| [language, true] }.freeze
 
     attr_reader :source_language, :target_language
 
@@ -61,21 +88,26 @@ module Ewprs
       @target_language = target_language.to_s.downcase
     end
 
-    def valid?(source:, translated:, protected_values: [])
-      validate!(source: source, translated: translated, protected_values: protected_values)
+    def valid?(source:, translated:, protected_values: [], protected_connectors: [])
+      validate!(
+        source: source, translated: translated, protected_values: protected_values,
+        protected_connectors: protected_connectors
+      )
       true
     rescue Error
       false
     end
 
-    def validate!(source:, translated:, protected_values: [])
+    def validate!(source:, translated:, protected_values: [], protected_connectors: [])
       validate_line_breaks!(source, translated)
       validate_delimiters!(source, translated)
       validate_escaped_character_references!(source, translated)
       validate_smart_quotes!(source, translated)
+      validate_internal_transport_markers!(source, translated)
       validate_introduced_scripts!(source, translated)
       validate_protected!(source: source, translated: translated, protected_values: protected_values)
       unless source_language == target_language
+        validate_retained_protected_connectors!(source, translated, protected_connectors)
         counts = protected_value_counts(source, protected_values)
         unprotected_source = without_protected_values(source, counts)
         unprotected_translation = without_protected_values(translated, counts)
@@ -105,6 +137,7 @@ module Ewprs
     def protected_source_fragment?(source)
       words = normalized_words(source)
       return false if words.size < 4
+      return false if source_prose_anchor?(words)
 
       source_word_ratio = source_words(words).fdiv(words.size)
       return false if source_word_ratio > 0.2
@@ -115,9 +148,25 @@ module Ewprs
 
     def protected_inline_fragment?(source)
       words = normalized_words(source)
-      return true if words.one? && visible_text(source).match?(/\A\p{L}\p{M}*[,;]?\z/u)
+      return false if source_prose_anchor?(words)
+
+      single_word = visible_text(source).match?(/\A(?:\p{L}\p{M}*)+[,;]?\z/u)
+      return true if words.one? && (
+        visible_text(source).match?(/\A\p{L}\p{M}*[,;]?\z/u) ||
+        (single_word && marked_word_count(source).positive?)
+      )
 
       words.size >= 2 && source_words(words).zero? && marked_word_count(source).positive?
+    end
+
+    def source_prose_word?(value)
+      words = normalized_words(value)
+      dictionary = SOURCE_WORDS.fetch(source_language, {})
+      anchors = RETAINED_SOURCE_WORDS.fetch(target_language, {}).merge(
+        SOURCE_PROSE_ANCHORS.fetch(target_language, {}),
+        PROTECTED_CONNECTORS.fetch(target_language, {})
+      )
+      words.any? { |word| dictionary.key?(word) || anchors.key?(word) }
     end
 
     private
@@ -164,20 +213,24 @@ module Ewprs
       if balanced_double_quotes?(source) && !balanced_double_quotes?(translated)
         raise Error.new(:quotes, 'translation reversed smart quotes')
       end
-      if translated.to_s.scan(REVERSED_SMART_QUOTES).size > source.to_s.scan(REVERSED_SMART_QUOTES).size
-        raise Error.new(:quotes, 'translation introduced reversed smart quotes')
-      end
       return if translated.to_s.scan(EMPTY_SMART_QUOTES).size <= source.to_s.scan(EMPTY_SMART_QUOTES).size
 
       raise Error.new(:quotes, 'translation introduced empty smart quotes')
     end
 
     def balanced_double_quotes?(value)
-      balance = 0
+      openings = []
       value.to_s.scan(DOUBLE_SMART_QUOTE).all? do |quote|
-        balance += quote.match?(/&ldquo;|[“«]/i) ? 1 : -1
-        balance >= 0
-      end && balance.zero?
+        if quote == '“' && openings.last == :german
+          openings.pop
+        elsif quote.match?(/&ldquo;|[“«]/i)
+          openings << :standard
+        elsif quote == '„'
+          openings << :german
+        else
+          openings.pop || false
+        end
+      end && openings.empty?
     end
 
     def validate_introduced_scripts!(source, translated)
@@ -194,10 +247,23 @@ module Ewprs
       raise Error.new(:script, "translation introduced foreign-script character: #{introduced}")
     end
 
+    def validate_internal_transport_markers!(source, translated)
+      return if translated.to_s.scan(INTERNAL_TRANSPORT_MARKER).size <=
+                source.to_s.scan(INTERNAL_TRANSPORT_MARKER).size
+
+      raise Error.new(:markers, 'translation leaked an internal transport marker')
+    end
+
     def validate_translation_progress!(source, translated)
       source_words = normalized_words(source)
       target_words = normalized_words(translated)
-      return if source_words.empty? || target_words.empty?
+      return if source_words.empty?
+      if target_words.empty?
+        return if protected_source_fragment?(source) || formula_or_reference?(source)
+
+        excerpt = visible_text(source)[0, 80]
+        raise Error.new(:untranslated, "translation omitted source prose: #{excerpt}")
+      end
 
       if source_words == target_words && untranslated_prose?(source, source_words) &&
          !shared_target_phrase?(source_words)
@@ -213,7 +279,7 @@ module Ewprs
       return if max_span < 5
 
       retained = max_span.downto(5).any? do |span|
-        required_common = [8, (span * 0.6).ceil].min
+        required_common = [[4, (span * 0.6).ceil].max, 8].min
         retained_source_span?(source_words, target_words, span, required_common)
       end
       return unless retained
@@ -225,9 +291,9 @@ module Ewprs
       forbidden = RETAINED_SOURCE_WORDS.fetch(target_language, {})
       return if forbidden.empty?
 
-      source_counts = normalized_words(source).tally
-      retained = normalized_words(translated).find do |word|
-        next false unless forbidden.key?(word) && source_counts[word].positive?
+      source_counts = retained_word_candidates(source).tally
+      retained = retained_word_candidates(translated).find do |word|
+        next false unless forbidden.key?(word) && source_counts.fetch(word, 0).positive?
         next false if word == 'salvation' && visible_text(translated).match?(/\bterme anglais\b.*\bsalvation\b/i)
 
         source_counts[word] -= 1
@@ -236,6 +302,27 @@ module Ewprs
       return unless retained
 
       raise Error.new(:untranslated, "translation retained source-language word: #{retained}")
+    end
+
+    def validate_retained_protected_connectors!(source, translated, protected_connectors)
+      connectors = PROTECTED_CONNECTORS.fetch(target_language, {})
+      return if connectors.empty?
+
+      pattern = /(?<left>#{MARKER})(?<punctuation>[.,;]*)\s+(?<connector>#{Regexp.union(connectors.keys)})\s+(?<right>#{MARKER})/i
+      retained = source.to_s.scan(pattern).find do |left, punctuation, connector, right|
+        translated.to_s.match?(
+          /#{Regexp.escape(left)}#{Regexp.escape(punctuation)}\s+#{Regexp.escape(connector)}\s+#{Regexp.escape(right)}/i
+        )
+      end
+      retained ||= protected_connectors.find do |left, punctuation, connector, right|
+        next false unless connectors.key?(connector.downcase)
+
+        pair = /#{Regexp.escape(left)}#{Regexp.escape(punctuation)}\s+#{Regexp.escape(connector)}\s+#{Regexp.escape(right)}/i
+        source.to_s.match?(pair) && translated.to_s.match?(pair)
+      end
+      return unless retained
+
+      raise Error.new(:untranslated, "translation retained source-language word: #{retained[2].downcase}")
     end
 
     def validate_target_language!(translated)
@@ -308,7 +395,16 @@ module Ewprs
 
     def shared_target_phrase?(words)
       shared = TARGET_SHARED_WORDS.fetch(target_language, {})
-      words.all? { |word| shared.key?(word) }
+      words.all? { |word| shared.key?(word) } ||
+        TARGET_SHARED_PHRASES.fetch(target_language, []).include?(words)
+    end
+
+    def source_prose_anchor?(words)
+      anchors = RETAINED_SOURCE_WORDS.fetch(target_language, {}).merge(
+        SOURCE_PROSE_ANCHORS.fetch(target_language, {}),
+        PROTECTED_CONNECTORS.fetch(target_language, {})
+      )
+      words.any? { |word| anchors.key?(word) }
     end
 
     def marked_word_count(value)
@@ -318,6 +414,18 @@ module Ewprs
 
     def normalized_words(value)
       visible_text(value).unicode_normalize(:nfc).downcase.scan(WORD)
+    end
+
+    def retained_word_candidates(value)
+      components = RETAINED_HYPHEN_COMPONENTS.fetch(target_language, {})
+      attached   = RETAINED_ATTACHED_COMPONENTS.fetch(target_language, {})
+      normalized_words(value).flat_map do |word|
+        suffixes = attached.keys.select do |suffix|
+          prefix = word.delete_suffix(suffix)
+          prefix != word && prefix.unicode_normalize(:nfd).match?(/\p{M}/u)
+        end
+        [word, *word.split('-').select { |component| components.key?(component) }, *suffixes]
+      end
     end
 
     def visible_text(value)

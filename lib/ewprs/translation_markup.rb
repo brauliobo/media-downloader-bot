@@ -47,6 +47,10 @@ module Ewprs
       (?<term><(?<tag>i|em)\b[^>]*>(?=[^<]*[A-Za-z])[^<]*</\k<tag>>)(?<spacing>\s*)
       (?<opening>\[\[?)(?<gloss>[^\[\]\r\n]+)(?<closing>\]\]?)
     }ix
+    MARKED_PARENTHETICAL_GLOSS = %r{
+      (?<term>#{MARKED_WORD})(?<spacing>\s*)
+      (?<opening>\()(?<gloss>[^()\r\n]+)(?<closing>\))
+    }ix
     INLINE_PARENTHETICAL_GLOSS = %r{
       (?<term><(?<tag>i|em)\b[^>]*>(?<content>[^<]+)</\k<tag>>)(?<spacing>\s*)
       \((?<gloss>[^()\r\n]+)\)
@@ -116,6 +120,10 @@ module Ewprs
     EDITORIAL_TAG = %r{<span data-ewprs="[12][12]">|</span>}i
     PAIRED_DELIMITER  = /[()\[\]{}]/
     PARENTHETICAL_CONTENT = /\((?<content>[^()\r\n]+)\)/
+    PARENTHETICAL_FOREIGN_EQUIVALENT = %r{
+      (?<term>(?<![A-Za-z])[A-Za-z][A-Za-z'’-]*(?:\s+[A-Za-z][A-Za-z'’-]*){0,2})(?<spacing>\s*)
+      \((?<equivalent>#{MARKED_WORD})\)
+    }ix
     INLINE_ORIGINAL  = %r{
       (?:
         (?<=,\s)
@@ -139,6 +147,7 @@ module Ewprs
     DATED_PUBLICATION_TITLE = %r{
       (?<=\bpublication\sin\s)[A-Z][^,.\r\n]+(?=,\s*\d{4}\b)
     }ix
+    TITLE_CAPITALIZED_WORD = /[A-Z](?:&(?:\#x[\dA-Fa-f]+|\#\d+|[A-Za-z]+);|[A-Za-z'’-])*/
     NUMBERED_SERIES_TITLE = %r{
       (?<=\bin\s)[A-Z][A-Za-z'’-]*(?:\s+(?:[a-z]{1,4}|[A-Z][A-Za-z'’-]*)){2,}
       (?=\s+\d+,\s*\d{4}\b)
@@ -156,11 +165,29 @@ module Ewprs
       (?=,\s*\d{4}\b)
     }x
     NUMBERED_PUBLICATION_CITATION_TITLE = %r{
-      [A-Z][A-Za-z'’-]*
-      (?:\s+(?:a|an|and|for|from|in|of|on|or|the|to|with|[A-Z][A-Za-z'’-]*)){1,}
+      #{TITLE_CAPITALIZED_WORD}
+      (?:\s+(?:a|an|and|for|from|in|of|on|or|the|to|with|#{TITLE_CAPITALIZED_WORD})){1,}
       \s+(?:Part|Volume)\s+\d+
       (?=,\s*\d{4}\b)
     }x
+    UNDATED_NUMBERED_PUBLICATION_TITLE = %r{
+      (?<=\bin\s)
+      #{TITLE_CAPITALIZED_WORD}
+      (?:\s+(?:a|an|and|for|from|in|of|on|or|the|to|with|#{TITLE_CAPITALIZED_WORD})){1,}
+      \s+(?:Part|Volume)\s+\d+
+      (?=[.,;]|\z)
+    }x
+    RELATIVE_DATED_PUBLICATION_TITLE = %r{
+      (?<=\bappeared\sin\s)
+      #{TITLE_CAPITALIZED_WORD}
+      (?:\s+(?:a|an|and|for|from|in|of|on|or|the|to|with|#{TITLE_CAPITALIZED_WORD})){2,}
+      (?=\s+earlier\s+this\s+year\b)
+    }ix
+    STANDALONE_NUMBERED_TITLE = %r{
+      \A#{TITLE_CAPITALIZED_WORD}
+      (?:\s+(?:a|an|and|for|from|in|of|on|or|the|to|with|#{TITLE_CAPITALIZED_WORD})){2,}
+      \s+\d+\z
+    }ix
     ITALIC_EDITION_TITLE = %r{
       (?<=\bEdition\sof\s)<(?<tag>i|em)\b[^>]*>[^<>]+</\k<tag>\s*>
     }ix
@@ -177,31 +204,47 @@ module Ewprs
     EDITIONED_TITLE = %r{
       (?<=\bin\s)[A-Z][A-Za-z'’-]*
       (?:\s+(?:a|an|and|for|from|in|of|on|or|the|to|[A-Z][A-Za-z'’-]*)){2,}
+      (?:\s+(?:Part|Volume)\s+\d+)?
       (?=,\s*\d+(?:st|nd|rd|th)\s+edition\b)
     }x
     PRINTED_EDITION_TITLE = %r{
       (?<=\bprinted\s)[A-Z][A-Za-z'’-]*
       (?:\s+(?:a|an|and|for|from|in|of|on|or|the|to|[A-Z][A-Za-z'’-]*)){2,}
+      (?:\s+(?:Part|Volume)\s+\d+)?
       (?=,\s*\d+(?:st|nd|rd|th)\s+edition\b)
     }x
     VOLUME_CITATION_TITLE = %r{
-      (?<=\bin\s)[A-Z](?:&(?:\#x[\dA-Fa-f]+|\#\d+|[A-Za-z]+);|[^,.;\r\n])+
+      (?:(?<=\bin\s)(?!English\b)|(?<=\b\d{4}\s))
+      [A-Z](?:&(?:\#x[\dA-Fa-f]+|\#\d+|[A-Za-z]+);|[^,.;\r\n])+
       (?=\s+(?i:Vol(?:ume)?\.?)\s*\d+\b)
     }x
     PUBLICATION_LIST = /(?<=\bworks\ssuch\sas\s)[^.\r\n]+(?=\.)/i
     MAGAZINE_LIST = /(?<=\bmagazines:\s)[^\r\n]+?(?=\s+and\s+others\b)/i
     QUOTED_PUBLICATION_TITLE = %r{
       (?<prefix>
-        \b(?:(?:published|appeared|publication)[^.!?\r\n]{0,120}\bas(?:\s+parts?\s+of)?|titled|entitled)\s
+        \b(?:(?:published|appeared|publication)[^.!?\r\n]{0,120}?\bas(?:\s+parts?\s+of)?|titled|entitled)\s
       )
       (?<title>&ldquo;.*?&rdquo;)
+    }ix
+    QUOTED_PUBLICATION_ALIAS = %r{
+      (?<original>&ldquo;(?:(?!&rdquo;).)*&rdquo;)
+      (?<connector>\s+as\s+)
+      (?<title>&ldquo;(?:(?!&rdquo;).)*&rdquo;)
     }ix
     QUOTED_CITED_TITLE = %r{
       &ldquo;.*?&rdquo;
       (?=
-        \s+in\s+[A-Z]
+        ,?\s+in\s+[A-Z]
         (?:&(?:\#x[\dA-Fa-f]+|\#\d+|[A-Za-z]+);|[^.;\r\n])+?
         ,\s*\d{4}\b
+      )
+    }ix
+    QUOTED_NUMBERED_CITED_TITLE = %r{
+      (?:&ldquo;(?:(?!&ldquo;|&rdquo;).)*&rdquo;|"[^"\r\n]+")
+      (?=
+        \s+in\s+#{TITLE_CAPITALIZED_WORD}
+        (?:\s+(?:a|an|and|for|from|in|of|on|or|the|to|with|#{TITLE_CAPITALIZED_WORD})){1,}
+        \s+(?:Part|Volume)\s+\d+\b
       )
     }ix
     QUOTED_LANGUAGE_EXAMPLE = %r{
@@ -214,6 +257,29 @@ module Ewprs
       (?<=\bincluded\sin\s)
       [A-Z][A-Za-z'’-]*(?:\s+(?:[a-z]{1,4}|[A-Z][A-Za-z'’-]*)){2,}
       (?=\s+in\s+which\b)
+    }x
+    PAIRED_TRANSLATION_PUBLICATIONS = %r{
+      (?<prefix>\bin\s+both\s+)
+      (?<first>#{TITLE_CAPITALIZED_WORD}(?:\s+#{TITLE_CAPITALIZED_WORD})+)
+      (?<connector>\s+and\s+)
+      (?<second>
+        #{TITLE_CAPITALIZED_WORD}
+        (?:\s+(?:a|an|and|for|from|in|of|on|or|the|to|with|#{TITLE_CAPITALIZED_WORD})){1,}
+      )
+      (?=\s+and\s+the\s+(?:later|second)\b)
+    }ix
+    LATER_TRANSLATION_PUBLICATION = %r{
+      (?<prefix>\b(?:later|second)\s+of\s+the\s+two\s+in\s+)
+      (?<title>
+        #{TITLE_CAPITALIZED_WORD}
+        (?:\s+(?:a|an|and|for|from|in|of|on|or|the|to|with|#{TITLE_CAPITALIZED_WORD})){1,}
+      )
+      (?=[.,;]|\z)
+    }ix
+    CHAPTER_SOURCE_PUBLICATION = %r{
+      (?<prefix>\b(?i:chapter\s+of|from)\s+)
+      (?<title>#{TITLE_CAPITALIZED_WORD}[^,;&\r\n]*?)
+      (?=;)
     }x
     QUOTED_TITLE = /&ldquo;.*?&rdquo;/i
     TITLE_CONNECTORS = %w[a an and for from in of on or the to with].freeze

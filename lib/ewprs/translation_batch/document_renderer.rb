@@ -8,7 +8,7 @@ module Ewprs
       def render(document, translations)
         rendered = document.template
         rendered = rendered.gsub(UNIT_MARKER) { translations.fetch(Regexp.last_match(1)) } while rendered.match?(UNIT_MARKER)
-        rendered
+        normalize_duplicate_dashes(rendered)
       end
 
       def validate_structure!(source, translated)

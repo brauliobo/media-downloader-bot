@@ -13,6 +13,11 @@ module Ewprs
       }mix
       TABLE_CELL = %r{(<td\b[^>]*>)(.*?)(</td\s*>)}mi
       TABLE_HEADER_CLASS = /\bclass\s*=\s*["']?[^"'>\s]*Hdr\b/i
+      GRAMMAR_WORD_LIST = %r{
+        (<b\b[^>]*>)
+        ([A-Za-z][A-Za-z'’-]*(?:,\s*[A-Za-z][A-Za-z'’-]*){2,}:)
+        (</b\s*>)
+      }ix
       LIST_ITEM_PREFIX = /\A(?<prefix>(?:[A-Za-z]|\d{1,3})\)\s+)(?<content>.+)\z/m
 
       private
@@ -21,7 +26,10 @@ module Ewprs
         @document_protected = {}
         template = protect_english_grammar_examples(html)
         template = template.gsub(PROTECTED_ELEMENT) { |value| protect_content(value) }
-        template = template.gsub(INLINE_ORIGINAL) { |value| protect_content(value) }
+        template = template.gsub(INLINE_ORIGINAL) do |value|
+          foreign = validator.protected_source_fragment?(value) || validator.protected_inline_fragment?(value)
+          foreign ? protect_content(value) : value
+        end
         template = template.gsub(BLOCK_CONTENT) do
           opening, content, closing = Regexp.last_match.captures
           force_translation = opening.match?(/\btype=title\b/i)
@@ -49,7 +57,7 @@ module Ewprs
       def protect_english_grammar_examples(html)
         return html unless html.match?(ENGLISH_GRAMMAR_DOCUMENT)
 
-        html.gsub(INSTRUCTIONAL_TABLE) do
+        protected = html.gsub(INSTRUCTIONAL_TABLE) do
           opening, rows, closing = Regexp.last_match.captures
           protected_rows = rows.gsub(TABLE_CELL) do
             cell_opening, content, cell_closing = Regexp.last_match.captures
@@ -57,6 +65,10 @@ module Ewprs
             "#{cell_opening}#{protected}#{cell_closing}"
           end
           "#{opening}#{protected_rows}#{closing}"
+        end
+        protected.gsub(GRAMMAR_WORD_LIST) do
+          opening, words, closing = Regexp.last_match.captures
+          "#{opening}#{protect_content(words)}#{closing}"
         end
       end
 
@@ -124,7 +136,8 @@ module Ewprs
           index = masked.index(sentence, cursor)
           raise 'sentence splitter changed source content' unless index
 
-          template << restore_split_markup(masked[cursor...index], tags)
+          gap = restore_split_markup(masked[cursor...index], tags)
+          template << register_split_gap(gap, force_translation: force_translation)
           value = restore_split_markup(sentence, tags)
             translated = if translatable?(value, force_translation: force_translation)
               register_sentence_unit(value)
@@ -133,7 +146,13 @@ module Ewprs
             end
             template << translated
           cursor = index + sentence.length
-        end << restore_split_markup(masked[cursor..], tags)
+        end << register_split_gap(
+          restore_split_markup(masked[cursor..], tags), force_translation: force_translation
+        )
+      end
+
+      def register_split_gap(value, force_translation: false)
+        translatable?(value, force_translation: force_translation) ? register_unit(value) : value
       end
 
       def mask_editorial_boundaries(source, tags)

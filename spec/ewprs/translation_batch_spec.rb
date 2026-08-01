@@ -3,9 +3,10 @@ require_relative '../../lib/ewprs'
 
 RSpec.describe Ewprs::TranslationBatch do
   class FakeMarkupTranslator
-    attr_reader :calls, :repair_calls
+    attr_reader :calls, :jobs, :repair_calls
 
-    def initialize(&transform)
+    def initialize(jobs: 1, &transform)
+      @jobs = jobs
       @transform = transform || lambda do |text|
         text.gsub('English', 'Português').gsub('Translate me', 'Traduza-me').gsub(/\band\b/, 'e')
       end
@@ -23,6 +24,14 @@ RSpec.describe Ewprs::TranslationBatch do
         source: source, invalid: invalid, issue: issue, tokens: tokens, from: from, to: to
       }
       @transform.call(source)
+    end
+
+    def translate_preserving_placeholders(text, values: {}, from: 'en', to:)
+      @transform.call(text)
+    end
+
+    def translate_preserving_editorial_tags(text, from: 'en', to:)
+      @transform.call(text)
     end
   end
 
@@ -85,6 +94,13 @@ RSpec.describe Ewprs::TranslationBatch do
     expect(template).to match(/⟦U[0-9a-f]{64}⟧/)
   end
 
+  it 'normalizes duplicate dashes after nested units are composed' do
+    key = 'a' * 64
+    document = described_class::Document.new(template: "Text &ndash; ⟦U#{key}⟧")
+
+    expect(batch.send(:render, document, key => '– continuation')).to eq('Text &ndash; continuation')
+  end
+
   it 'translates English connectors in Sanskrit-heavy titles' do
     title = 'Abhedajin&#x32D;a&#x301;na and Daeshika Vyavadha&#x301;na Vilopa'
     source = '<div class=discourse_box_title_ref><!-- block a=title type=title -->' \
@@ -94,6 +110,16 @@ RSpec.describe Ewprs::TranslationBatch do
     rendered = batch.send(:render, described_class::Document.new(template: template), translations)
 
     expect(rendered.scan('Abhedajin&#x32D;a&#x301;na e Daeshika Vyavadha&#x301;na Vilopa').size).to eq(2)
+  end
+
+  it 'does not protect English prose inside a marked Sanskrit definition' do
+    unit = batch.send(
+      :prepare_unit, 'marked-definition-prose',
+      'pa&#x301;na&#x301; means sarvat [a sweet drink made from syrup].'
+    )
+
+    expect(unit.prepared).to include('means')
+    expect(unit.tokens.values).not_to include(a_string_matching(/means/))
   end
 
   it 'normalizes deterministic French elisions before validation' do
@@ -110,6 +136,18 @@ RSpec.describe Ewprs::TranslationBatch do
       'Lorsqu’un être contemple Cet univers, lorsqu’une idée surgit, lorsqu’ils arrivent? ' \
       'Ce noyau subit une grossification supplémentaire vers le salut. ' \
       'L’Entité suprême est un flux continu de cognition. Le terme anglais est salvation.'
+    )
+  end
+
+  it 'normalizes fullwidth punctuation before target-script validation' do
+    expect(batch.send(:normalize_target_language, 'Beispiel，Fortsetzung？')).to eq('Beispiel,Fortsetzung?')
+
+    unit = described_class::Unit.new(
+      key: 'fullwidth-punctuation', source: 'Example, continuation?', prepared: 'Example, continuation?',
+      tokens: {}, leading: '', trailing: ''
+    )
+    expect(batch.send(:validate_restored_translation!, unit, 'Beispiel， Fortsetzung？')).to eq(
+      'Beispiel, Fortsetzung?'
     )
   end
 
@@ -165,6 +203,13 @@ RSpec.describe Ewprs::TranslationBatch do
     expect(translator.calls).not_to include(a_string_including('English plain sentence. <b>'))
   end
 
+  it 'unitizes source-language text left between sentence-splitter boundaries' do
+    marker = batch.send(:register_split_gap, ', and ')
+
+    expect(marker).to match(described_class::UNIT_MARKER)
+    expect(batch.instance_variable_get(:@units).values.map(&:source)).to include(', and ')
+  end
+
   it 'splits structural content while preserving non-English original verses' do
     document, translations = prepare_translation(batch)
     rendered = batch.send(:render, document, translations)
@@ -186,6 +231,7 @@ RSpec.describe Ewprs::TranslationBatch do
       <TR><TD class="BcolHdr">SINGULAR</TD><TD class="BcolHdr">PLURAL</TD></TR>
       <TR><TD>life</TD><TD>lives</TD></TR>
       </TABLE>
+      <p><b>In, into, unto:</b> English explanation.</p>
       <table><tr><td>English contents entry</td></tr></table>
       </body></html>
     HTML
@@ -194,8 +240,11 @@ RSpec.describe Ewprs::TranslationBatch do
     rendered = batch.send(:render, described_class::Document.new(template: template), translations)
 
     expect(translator.calls).to include('SINGULAR', 'PLURAL', 'English contents entry')
-    expect(translator.calls).not_to include('life', 'lives')
-    expect(rendered).to include('<TD>life</TD><TD>lives</TD>', '<td>Português contents entry</td>')
+    expect(translator.calls).not_to include('life', 'lives', 'In, into, unto:')
+    expect(rendered).to include(
+      '<TD>life</TD><TD>lives</TD>', '<b>In, into, unto:</b> Português explanation.',
+      '<td>Português contents entry</td>'
+    )
   end
 
   it 'preserves an inline non-English original before its translated rendering' do
@@ -212,6 +261,20 @@ RSpec.describe Ewprs::TranslationBatch do
       'Português introduction, Eso A&#x301;y bet&#x301;a&#x301; toke dekhe noba. ' \
       '[&ldquo;Português rendering! Português second rendering!&rdquo;] Português after.'
     )
+  end
+
+  it 'does not protect English prose around marked terms as an inline original' do
+    batch.send(
+      :unitize,
+      '<p>Prakrti [Operative Principle], with Her inherent binding principles, binds ' \
+      'Purus&#x301;a, of course with the due permission of Purus&#x301;a, and as a result ' \
+      'the Cosmic Mahat [&ldquo;I exist&rdquo;] comes into being.</p>'
+    )
+    units = batch.instance_variable_get(:@units).values
+    outer = units.find { |unit| unit.source.start_with?('Prakrti') }
+
+    expect(outer.tokens.values.join).not_to include('of course with the due permission')
+    expect(units.map(&:source)).to include('binds')
   end
 
   it 'preserves a coordinated inline original before an unquoted rendering' do
@@ -248,6 +311,19 @@ RSpec.describe Ewprs::TranslationBatch do
 
     expect(prose.prepared).to eq('The jackals sat down.')
     expect(term.tokens.values).to include('Sat')
+  end
+
+  it 'keeps translatable glossary words and attached source prose visible' do
+    linseed = batch.send(:prepare_unit, 'english-glossary-word', 'After growing linseed, sow dhainca.')
+    attached = batch.send(
+      :prepare_unit, 'attached-source-prose',
+      'Paesha&#x301;cii Pra&#x301;krta-descended and avadhu&#x301;tika&#x301;respectively.'
+    )
+
+    expect(linseed.prepared).to include('linseed')
+    expect(linseed.tokens.values).not_to include('linseed')
+    expect(attached.prepared).to match(/__P0001__ descended and __P0002__ respectively\./)
+    expect(attached.tokens.values.join).not_to include('descended', 'respectively')
   end
 
   it 'does not treat comma-separated glossary entries as an inline original' do
@@ -402,6 +478,28 @@ RSpec.describe Ewprs::TranslationBatch do
     expect(unit.tokens.values).to eq(['<I>a,</I>', '<I>a&#x301;</I>', '<I>a</I>'])
   end
 
+  it 'protects a fixed Latin expression as one inline token' do
+    unit = batch.send(
+      :prepare_unit, 'latin-inline-expression',
+      'The <I>sumum bonum</I> of human life lies hidden.'
+    )
+
+    expect(unit.prepared).to eq('The __P0001__ of human life lies hidden.')
+    expect(unit.tokens).to eq('__P0001__' => '<I>sumum bonum</I>')
+  end
+
+  it 'keeps inline punctuation attached to its preceding protected term' do
+    unit = batch.send(
+      :prepare_unit, 'misplaced-inline-punctuation',
+      'Spiritual sadhana<I>,</I> it is called <I>vaekharii</I> <I>siddhi</I>.'
+    )
+
+    expect(unit.prepared).to eq(
+      'Spiritual __P0001__ it is called __P0002__vaekharii__P0003__ __P0004__siddhi__P0005__.'
+    )
+    expect(unit.tokens.fetch('__P0001__')).to eq('sadhana<I>,</I>')
+  end
+
   it 'keeps a capitalized name attached to the foreign term it qualifies' do
     unit = batch.send(
       :prepare_unit, 'qualified-name-gloss',
@@ -465,6 +563,20 @@ RSpec.describe Ewprs::TranslationBatch do
     expect(batch.instance_variable_get(:@units).values.map(&:source)).to include('emblem')
   end
 
+  it 'keeps a known Sanskrit term attached to its nested gloss' do
+    unit = batch.send(
+      :prepare_unit, 'known-bracketed-gloss',
+      'To merge in Brahmatva [Cosmic Consciousness], after first elevating themselves to ' \
+      'devatva [god-hood], was their sa&#x301;dhana&#x301;.'
+    )
+
+    expect(unit.prepared).to eq(
+      'To merge in __P0001__, after first elevating themselves to __P0002__, was their __P0003__.'
+    )
+    expect(unit.tokens.fetch('__P0002__')).to match(/\Adevatva \[⟦U[0-9a-f]{64}⟧\]\z/)
+    expect(batch.instance_variable_get(:@units).values.map(&:source)).to include('god-hood')
+  end
+
   it 'translates a parenthetical gloss for an ASCII-transliterated phrase' do
     unit = batch.send(:prepare_unit, 'ascii-phrase-gloss', 'A videhii mana (bodiless mind) cannot function.')
 
@@ -473,6 +585,30 @@ RSpec.describe Ewprs::TranslationBatch do
       /\Avidehii mana \(⟦U[0-9a-f]{64}⟧\)\z/
     )
     expect(batch.instance_variable_get(:@units).values.map(&:source)).to include('bodiless mind')
+  end
+
+  it 'does not absorb English prose after an ASCII-transliterated word' do
+    unit = batch.send(
+      :prepare_unit, 'ascii-word-before-prose',
+      'Videha liina are caused by ones bhavapratyaya (bundle of samska&#x301;ras).'
+    )
+
+    expect(unit.prepared).to eq('Videha liina are caused by ones bhavapratyaya __P0001__.')
+    expect(unit.tokens.fetch('__P0001__')).to match(/\A\(⟦U[0-9a-f]{64}⟧\)\z/)
+    expect(batch.instance_variable_get(:@units).values.map(&:source)).to include('bundle of samska&#x301;ras')
+  end
+
+  it 'keeps a marked parenthetical foreign equivalent immutable' do
+    unit = batch.send(
+      :prepare_unit, 'parenthetical-foreign-equivalent',
+      'The maternal uncle (canda&#x301;ma&#x301;ma) of all.'
+    )
+
+    expect(unit.prepared).to eq('__P0001__ of all.')
+    expect(unit.tokens.fetch('__P0001__')).to match(
+      /\A⟦U[0-9a-f]{64}⟧ \(canda&#x301;ma&#x301;ma\)\z/
+    )
+    expect(batch.instance_variable_get(:@units).values.map(&:source)).to include('The maternal uncle')
   end
 
   it 'nests a parenthetical gloss for a known Sanskrit term' do
@@ -708,15 +844,18 @@ RSpec.describe Ewprs::TranslationBatch do
     )
   end
 
-  it 'nests one shared gloss for a coordinated Sanskrit term list' do
+  it 'nests one shared gloss without hiding the coordinated Sanskrit terms' do
     source = 'The goals are dharma, artha, ka&#x301;ma and moks&#x301;a ' \
              '(psychic, physical and spiritual attainment, respectively).'
 
     outer = batch.send(:prepare_unit, 'coordinated-terms-shared-gloss', source)
 
-    expect(outer.prepared).to eq('The goals are __P0001__.')
-    expect(outer.tokens.fetch('__P0001__')).to match(
-      /\Adharma, artha, ka&#x301;ma and moks&#x301;a \(⟦U[0-9a-f]{64}⟧\)\z/
+    expect(outer.prepared).to eq(
+      'The goals are __P0001__, __P0002__, __P0003__ and __P0004__ __P0005__.'
+    )
+    expect(outer.tokens.values).to include('dharma', 'artha', 'ka&#x301;ma', 'moks&#x301;a')
+    expect(outer.tokens.fetch('__P0005__')).to match(
+      /\A\(⟦U[0-9a-f]{64}⟧\)\z/
     )
     expect(batch.instance_variable_get(:@units).values.map(&:source)).to include(
       'psychic, physical and spiritual attainment, respectively'
@@ -853,6 +992,13 @@ RSpec.describe Ewprs::TranslationBatch do
       'It was published in English in Supreme Expression I, 1990.'
     )
     expect(ordinary.tokens.values).not_to include('English in Supreme Expression I')
+
+    volume = batch.send(
+      :prepare_unit, 'dated-volume-publication-prose',
+      'The publication was in English in the August 1970 Cosmic Society Vol. 8, No. 6.'
+    )
+    expect(volume.tokens.values).to include('Cosmic Society')
+    expect(volume.tokens.values).not_to include('English in the August 1970 Cosmic Society')
   end
 
   it 'protects an official quoted publication title' do
@@ -897,6 +1043,134 @@ RSpec.describe Ewprs::TranslationBatch do
       '__P0002__' => '&ldquo;He Thinks and We Perceive&rdquo;'
     )
     expect(ordinary.tokens.values).not_to include('&ldquo;parents or guardians should attend&rdquo;')
+  end
+
+  it 'protects an ASCII-quoted cited title and its marked numbered publication' do
+    unit = batch.send(
+      :prepare_unit, 'ascii-quoted-numbered-citation',
+      'See "Ta&#x301;n&#x301;d&#x301;ava Dance &ndash; What and Why?" in ' \
+      'A&#x301;nanda Vacana&#x301;mrtam Part 10. &ndash;Trans.'
+    )
+
+    expect(unit.prepared).to eq('See __P0001__ in __P0002__. &ndash;Trans.')
+    expect(unit.tokens).to eq(
+      '__P0001__' => '"Ta&#x301;n&#x301;d&#x301;ava Dance &ndash; What and Why?"',
+      '__P0002__' => 'A&#x301;nanda Vacana&#x301;mrtam Part 10'
+    )
+  end
+
+  it 'does not span prose between quoted titles in a numbered citation' do
+    second = '&ldquo;Dialogues of Shiva and Pa&#x301;rvatii&rdquo;'
+    unit = batch.send(
+      :prepare_unit, 'separated-numbered-citation',
+      'The discourse &ldquo;The Dialogues of Shiva and Pa&#x301;rvatii &ndash; 5&rdquo; would have been ' \
+      "published together with the other 1967 #{second} in A&#x301;nanda Vacana&#x301;mrtam Part 23."
+    )
+
+    expect(unit.prepared).to include('would have been published together with the other 1967')
+    expect(unit.tokens.values).to include(second, 'A&#x301;nanda Vacana&#x301;mrtam Part 23')
+    expect(unit.tokens.values.join).not_to include('would have been published')
+  end
+
+  it 'protects comma-separated quoted and container titles in a dated footnote citation' do
+    unit = batch.send(
+      :prepare_unit, 'comma-separated-dated-citation',
+      '<a name="24.fn1"></a>(<b><a href="#Ref.24.fn1">1</a></b>)  ' \
+      '&ldquo;Timesweep&rdquo;, in Honey and Salt, 1963. &ndash;Eds.'
+    )
+
+    expect(unit.prepared).to eq(
+      '__P0001____P0002____P0003__  __P0004__, in __P0005__, 1963. &ndash;Eds.'
+    )
+    expect(unit.tokens.values_at('__P0004__', '__P0005__')).to eq(
+      ['&ldquo;Timesweep&rdquo;', 'Honey and Salt']
+    )
+  end
+
+  it 'protects quoted and container titles in relative publication context' do
+    unit = batch.send(
+      :prepare_unit, 'relative-publication-context',
+      'None has previously been published except &ldquo;Blind Mind and Conscience&rdquo;, which appeared in ' \
+      'Discourses on Krs&#x301;n&#x301;a and the Giita&#x301; earlier this year.'
+    )
+
+    expect(unit.prepared).to eq(
+      'None has previously been published except __P0001__, which appeared in __P0002__ earlier this year.'
+    )
+    expect(unit.tokens).to eq(
+      '__P0001__' => '&ldquo;Blind Mind and Conscience&rdquo;',
+      '__P0002__' => 'Discourses on Krs&#x301;n&#x301;a and the Giita&#x301;'
+    )
+  end
+
+  it 'protects every title in a list of previous publication aliases' do
+    unit = batch.send(
+      :prepare_unit, 'publication-alias-list',
+      'To summarize: the discourse &ldquo;Are Sam&#x301;giita and Supra-Aesthetic Science Inseparable?&rdquo; ' \
+      'has appeared previously as &ldquo;Supra-Aesthetic Science and Music&rdquo;, ' \
+      '&ldquo;What I Said in Switzerland&rdquo; as &ldquo;Dance, Mudra&#x301; and Tantra&rdquo;.'
+    )
+
+    expect(unit.prepared).to eq(
+      'To summarize: the discourse __P0001__ has appeared previously as __P0002__, __P0003__ as __P0004__.'
+    )
+    expect(unit.tokens.values).to eq(
+      [
+        '&ldquo;Are Sam&#x301;giita and Supra-Aesthetic Science Inseparable?&rdquo;',
+        '&ldquo;Supra-Aesthetic Science and Music&rdquo;',
+        '&ldquo;What I Said in Switzerland&rdquo;',
+        '&ldquo;Dance, Mudra&#x301; and Tantra&rdquo;'
+      ]
+    )
+  end
+
+  it 'protects publication titles containing existing translations' do
+    unit = batch.send(
+      :prepare_unit, 'translation-publications',
+      'Two translations were found, the earlier of the two in both Cosmic Society and Education and Culture ' \
+      'and the later of the two in Bodhi Kalpa.'
+    )
+
+    expect(unit.prepared).to eq(
+      'Two translations were found, the earlier of the two in both __P0001__ and __P0002__ ' \
+      'and the later of the two in __P0003__.'
+    )
+    expect(unit.tokens.values).to eq(['Cosmic Society', 'Education and Culture', 'Bodhi Kalpa'])
+  end
+
+  it 'protects book titles cited as chapter sources' do
+    unit = batch.send(
+      :prepare_unit, 'chapter-source-publications',
+      'Chapter one is taken from the first chapter of Ananda Marga: Elementary Philosophy; ' \
+      'chapters six and seventeen from Idea and Ideology; chapters eleven and fourteen from ' \
+      'Abhimata: The Opinion; chapters four and eight from The Human Society Part I; chapter eighteen ' \
+      'from The Human Society Part II; and chapter twenty is from A&#x301;nanda Su&#x301;tram.'
+    )
+
+    expect(unit.tokens.values).to include(
+      'Ananda Marga: Elementary Philosophy', 'Idea and Ideology', 'Abhimata: The Opinion',
+      'The Human Society Part I', 'The Human Society Part II'
+    )
+    expect(unit.prepared).to include(
+      'chapter of __P0001__;', 'from __P0002__;', 'from __P0003__;',
+      'from __P0004__;', 'from __P0005__;'
+    )
+
+    ordinary = batch.send(
+      :prepare_unit, 'ordinary-semicolon-locations',
+      'Limestone from Purulia district can be used for cement; the tabla came from Persia but this is false; ' \
+      'You are separate from You because You are composite; then continue.'
+    )
+    expect(ordinary.tokens.values.join).not_to include(
+      'Purulia district can be used for cement', 'Persia but this is false', 'You because You are composite'
+    )
+  end
+
+  it 'protects a standalone numbered publication title' do
+    unit = batch.send(:prepare_unit, 'standalone-numbered-title', 'Prout in a Nutshell 21')
+
+    expect(unit.prepared).to eq('__P0001__')
+    expect(unit.tokens).to eq('__P0001__' => 'Prout in a Nutshell 21')
   end
 
   it 'protects a quoted work introduced as a title' do
@@ -960,11 +1234,16 @@ RSpec.describe Ewprs::TranslationBatch do
       :prepare_unit, 'numbered-series-title',
       'Published as part of &ldquo;How to Unite Human Society&rdquo; in Prout in a Nutshell 21, 1991.'
     )
+    undated = batch.send(
+      :prepare_unit, 'undated-numbered-series-title',
+      'This discourse was formerly in Prout in a Nutshell Part 10.'
+    )
 
     expect(parted.tokens.values).to include('Ananda Marga Ideology and Way of Life in a Nutshell')
     expect(volume.tokens.values).to include(
       '&ldquo;How to Unite Human Society&rdquo;', 'Prout in a Nutshell 21'
     )
+    expect(undated.tokens.values).to include('Prout in a Nutshell Part 10')
   end
 
   it 'protects a dated publication title and subtitle' do
@@ -1033,10 +1312,18 @@ RSpec.describe Ewprs::TranslationBatch do
       :prepare_unit, 'printed-edition-title',
       'This version is the printed A Guide to Human Conduct, 4th edition, 5th printing.'
     )
+    numbered = batch.send(
+      :prepare_unit, 'printed-numbered-edition-title',
+      'This version is the printed Ananda Marga Ideology and Way of Life in a Nutshell Part 1, ' \
+      '1st edition, version.'
+    )
 
     expect(year.tokens.values).to include('A Guide to Human Conduct')
     expect(edition.tokens.values).to include('A Guide to Human Conduct')
     expect(printed.tokens.values).to include('A Guide to Human Conduct')
+    expect(numbered.tokens.values).to include(
+      'Ananda Marga Ideology and Way of Life in a Nutshell Part 1'
+    )
   end
 
   it 'protects an unquoted title before a numbered volume citation' do
@@ -1102,6 +1389,64 @@ RSpec.describe Ewprs::TranslationBatch do
 
     expect(unit.prepared).to eq('__P0001__ supports __P0002__.')
     expect(unit.tokens).to eq('__P0001__' => 'Dharma', '__P0002__' => 'Dharma')
+  end
+
+  it 'nests modifiers of repeated protected classification terms' do
+    unit = batch.send(
+      :prepare_unit, 'repeated-classification-term',
+      'Thus, there are three dharmas &ndash; plant dharma, animal dharma and human dharma.'
+    )
+
+    expect(unit.prepared).to eq(
+      'Thus, there are three dharmas &ndash; __P0001__, __P0002__ and __P0003__.'
+    )
+    expect(unit.tokens.values).to all(match(/\A⟦U[0-9a-f]{64}⟧ dharma\z/))
+    expect(batch.instance_variable_get(:@units).values.map(&:source)).to include('plant', 'animal', 'human')
+  end
+
+  it 'does not treat an encoded possessive suffix as a protected-term modifier' do
+    unit = batch.send(
+      :prepare_unit, 'possessive-protected-term',
+      'The author&#146;s Ra&#x301;r&#x301;h: The Cradle of Civilization discusses Ra&#x301;r&#x301;h.'
+    )
+
+    expect(unit.prepared).to match(/The author's __P\d{4}__: The Cradle of Civilization/)
+    expect(unit.tokens.values).to include('Ra&#x301;r&#x301;h')
+    expect(unit.tokens.values).not_to include(a_string_matching(/⟦U[0-9a-f]{64}⟧ Ra&#x301;r&#x301;h/))
+  end
+
+  it 'nests definitions of coordinated protected terms' do
+    unit = batch.send(
+      :prepare_unit, 'coordinated-term-definitions',
+      'Bhagavat Dharma has four aspects &ndash; vista&#x301;ra or expansion, rasa or flow, ' \
+      'seva&#x301; or service and tadsthiti or attainment of the supreme stance.'
+    )
+
+    expect(unit.prepared).to eq(
+      '__P0001__ has four aspects &ndash; __P0002__, __P0003__, __P0004__ and __P0005__.'
+    )
+    expect(unit.tokens.values_at('__P0002__', '__P0003__', '__P0004__', '__P0005__')).to all(
+      match(/\A.+ ⟦U[0-9a-f]{64}⟧\z/)
+    )
+    expect(batch.instance_variable_get(:@units).values.map(&:source)).to include(
+      'or expansion', 'or flow', 'or service', 'or attainment of the supreme stance'
+    )
+  end
+
+  it 'nests parenthetical definitions of standalone foreign terms' do
+    unit = batch.send(
+      :prepare_unit, 'foreign-caste-definitions',
+      'In ancient Bengal there were only two varn&#x301;as or castes: the vipras (intellectuals) ' \
+      'and the shu&#x301;dras (labourers).'
+    )
+
+    expect(unit.prepared).to eq(
+      'In ancient Bengal there were only two __P0001__: the __P0002__ and the __P0003__.'
+    )
+    expect(unit.tokens.values).to all(match(/⟦U[0-9a-f]{64}⟧/))
+    expect(batch.instance_variable_get(:@units).values.map(&:source)).to include(
+      'or castes', 'intellectuals', 'labourers'
+    )
   end
 
   it 'resolves a protected gloss nested inside a larger protected inline token' do
@@ -1321,6 +1666,31 @@ RSpec.describe Ewprs::TranslationBatch do
     expect(translator.repair_calls).to be_empty
   end
 
+  it 'retranslates editorial segments when phrase projection cannot align them' do
+    unit = described_class::Unit.new(
+      key: 'editorial-segment-projection',
+      source: 'The Sanskrit dhya&#x301;na became c&#146;han [in Chinese], then chen [in Korean].',
+      prepared: 'The Sanskrit __P0001__ became c\'han <span data-ewprs="11">in Chinese</span>, ' \
+                'then chen <span data-ewprs="11">in Korean</span>.',
+      tokens: {'__P0001__' => 'dhya&#x301;na'}, leading: '', trailing: ''
+    )
+    malformed = 'Das Sanskrit __P0001__ wurde im Chinesischen zu c\'han ' \
+                '<span data-ewprs="11">, dann im Koreanischen zu chen <span data-ewprs="11">.</span>'
+    projected = 'Das Sanskrit __P0001__ wurde c\'han <span data-ewprs="11">auf Chinesisch</span>, ' \
+                'dann chen <span data-ewprs="11">auf Koreanisch</span>.'
+    translator = instance_double(Ewprs::Translator)
+    allow(translator).to receive(:translate_markup).with(['in Chinese'], from: 'en', to: 'de')
+      .and_return(['auf Chinesisch'])
+    expect(translator).to receive(:translate_preserving_editorial_tags).with(
+      unit.prepared, from: 'en', to: 'de'
+    ).and_return(projected)
+    batch = described_class.new(root: root, target: 'de', cache: cache, translator: translator)
+
+    expect(batch.send(:restore_tokens_with_retries, unit, malformed)).to eq(
+      'Das Sanskrit dhya&#x301;na wurde c&#39;han [auf Chinesisch], dann chen [auf Koreanisch].'
+    )
+  end
+
   it 'falls back to bounded repair when editorial projection remains invalid' do
     unit = described_class::Unit.new(
       key: 'editorial-projection-scope', source: 'Music [the seven notes] <i>term</i>.',
@@ -1456,14 +1826,332 @@ RSpec.describe Ewprs::TranslationBatch do
       text.gsub('English', 'Português').gsub('Translate me', 'Traduza-me').gsub(/\band\b/, 'e')
         .sub(/__P\d{4}__/, '')
     end
-    invalid = described_class.new(root: root, cache: cache, translator: broken, stdout: StringIO.new)
+    output = StringIO.new
+    invalid = described_class.new(root: root, cache: cache, translator: broken, stdout: output)
     entry = described_class::Entry.new(kind: :discourse, path: File.join(root, 'HTML/Discourses/Complete.html'))
     invalid.send(:prepare_documents, [entry])
 
     expect { invalid.send(:translate_units) }.to raise_error(/changed protected tokens.*missing:/)
+    expect(output.string).to include(
+      'failed invalid translation', 'source: ', 'prepared: ', 'output: '
+    )
   end
 
-  it 'retries repeated transient protected-token corruption serially' do
+  it 'removes surplus protected-token occurrences without model repair' do
+    unit = described_class::Unit.new(
+      key: 'duplicated-token', source: 'English term and prose.',
+      prepared: 'English __P0001__ and prose.', tokens: {'__P0001__' => 'term'},
+      leading: '', trailing: ''
+    )
+
+    expect(
+      batch.send(
+        :restore_tokens_with_retries, unit,
+        'Português __P0001__ e __P0001__ prosa.'
+      )
+    ).to eq('Português term e prosa.')
+    expect(translator.repair_calls).to be_empty
+  end
+
+  it 'restores a uniquely transliterated protected term to its exact source form' do
+    unit = described_class::Unit.new(
+      key: 'transliterated-token', source: 'The natural Pra&#x301;n&#x301;a Dharma remains.',
+      prepared: 'The natural __P0001__ remains.',
+      tokens: {'__P0001__' => 'Pra&#x301;n&#x301;a Dharma'}, leading: '', trailing: ''
+    )
+
+    expect(
+      batch.send(
+        :restore_tokens_with_retries, unit,
+        'Das natürliche Prana Dharma bleibt bestehen.'
+      )
+    ).to eq('Das natürliche Pra&#x301;n&#x301;a Dharma bleibt bestehen.')
+    expect(translator.repair_calls).to be_empty
+  end
+
+  it 'reprojects exact protected values expanded by the model' do
+    unit = described_class::Unit.new(
+      key: 'expanded-values',
+      source: 'The word is very [[close]] to the English word &ldquo;near&rdquo;.',
+      prepared: 'The word is very __P0001__ to the English word __P0002__.',
+      tokens: {'__P0001__' => '[[close]]', '__P0002__' => '&ldquo;near&rdquo;'},
+      leading: '', trailing: ''
+    )
+
+    expect(
+      batch.send(
+        :restore_tokens_with_retries, unit,
+        'Das Wort ist sehr [[close]] zum englischen Wort &ldquo;near&rdquo;.'
+      )
+    ).to eq('Das Wort ist sehr [[close]] zum englischen Wort &ldquo;near&rdquo;.')
+    expect(translator.repair_calls).to be_empty
+  end
+
+  it 'uses XML placeholder projection when placeholder-heavy output is untranslated' do
+    unit = described_class::Unit.new(
+      key: 'untranslated-placeholders',
+      source: 'Karana Brahma in Tantric scriptures by all the svaravarna sounds taken together.',
+      prepared: '__P0001__ __P0002__ in Tantric scriptures by all the __P0003__ sounds taken together.',
+      tokens: {'__P0001__' => 'Karana', '__P0002__' => 'Brahma', '__P0003__' => 'svaravarna'},
+      leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).to receive(:translate_preserving_placeholders).with(
+      unit.prepared,
+      values: {'__P0001__' => 'Karana', '__P0002__' => 'Brahma', '__P0003__' => 'svaravarna'},
+      from: 'en', to: 'de'
+    ).and_return('__P0001__ __P0002__ in tantrischen Schriften durch alle __P0003__ Klänge zusammen.')
+    batch = described_class.new(root: root, target: 'de', cache: cache, translator: translator)
+
+    expect(
+      batch.send(:restore_tokens_with_retries, unit, unit.prepared)
+    ).to eq('Karana Brahma in tantrischen Schriften durch alle svaravarna Klänge zusammen.')
+  end
+
+  it 'restores a natural-text projection when XML transport leaves entity-heavy prose untranslated' do
+    unit = described_class::Unit.new(
+      key: 'natural-placeholder-projection',
+      source: 'Hiran&#x301;maya Kos&#x301;a &ndash; in this kos&#x301;a the body even the knowledge of ' \
+              '&ldquo;I&rdquo; is not much in evidence.',
+      prepared: '__P0001__ &ndash; in this __P0002__ the body even the knowledge of ' \
+                '&ldquo;I&rdquo; is not much in evidence.',
+      tokens: {'__P0001__' => 'Hiran&#x301;maya Kos&#x301;a', '__P0002__' => 'kos&#x301;a'},
+      leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).to receive(:translate_preserving_placeholders).with(
+      unit.prepared,
+      values: {'__P0001__' => 'Hiran&#x301;maya Kos&#x301;a', '__P0002__' => 'kos&#x301;a'},
+      from: 'en', to: 'de'
+    ).and_return(
+      '__P0001__ &ndash; in dieser __P0002__ sind der Körper und das Wissen vom ' \
+      '&ldquo;Ich&rdquo; kaum erkennbar.'
+    )
+    batch = described_class.new(root: root, target: 'de', cache: cache, translator: translator)
+
+    expect(
+      batch.send(:restore_tokens_with_retries, unit, unit.prepared)
+    ).to eq(
+      'Hiran&#x301;maya Kos&#x301;a &ndash; in dieser kos&#x301;a sind der Körper und das Wissen vom ' \
+      '&ldquo;Ich&rdquo; kaum erkennbar.'
+    )
+  end
+
+  it 'retranslates quote-separated clauses when one drops a protected token' do
+    unit = described_class::Unit.new(
+      key: 'quoted-token', source: 'Go to Kashi.&rdquo; And &ldquo;Return to Kashi.',
+      prepared: 'Go to __P0001__.&rdquo; And &ldquo;Return to __P0002__.',
+      tokens: {'__P0001__' => 'Kashi', '__P0002__' => 'Kashi'}, leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).to receive(:translate_preserving_smart_quotes).and_return(
+      'Geh nach __P0001__.&rdquo; Und &ldquo;Kehre nach __P0002__ zurück.'
+    )
+    batch = described_class.new(root: root, target: 'de', cache: cache, translator: translator)
+
+    expect(
+      batch.send(
+        :restore_tokens_with_retries, unit,
+        'Geh nach __P0001__.&rdquo; Und &ldquo;Kehre zurück.'
+      )
+    ).to eq('Geh nach Kashi.&rdquo; Und &ldquo;Kehre nach Kashi zurück.')
+  end
+
+  it 'retranslates quoted segments when an entity-heavy title is left untranslated' do
+    source = 'EE7.5 - &ldquo;Caraeveti Caraeveti&rdquo; &ndash; &ldquo;Move On, Move On&rdquo;'
+    prepared = '__P0001__ - &ldquo;Caraeveti Caraeveti&rdquo; &ndash; &ldquo;Move On, Move On&rdquo;'
+    unit = described_class::Unit.new(
+      key: 'untranslated-quoted-title', source: source, prepared: prepared,
+      tokens: {'__P0001__' => 'EE7.5'}, leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).to receive(:translate_preserving_placeholders).with(
+      prepared, values: {'__P0001__' => 'EE7.5'}, from: 'en', to: 'de'
+    ).and_return(prepared)
+    expect(translator).to receive(:translate_preserving_smart_quotes).with(
+      prepared, from: 'en', to: 'de'
+    ).and_return(
+      '__P0001__ - &ldquo;Caraeveti Caraeveti&rdquo; &ndash; &ldquo;Mach weiter, mach weiter&rdquo;'
+    )
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'de', cache: cache, translator: translator)
+
+    expect(batch.send(:restore_tokens_with_retries, unit, prepared)).to eq(
+      'EE7.5 - &ldquo;Caraeveti Caraeveti&rdquo; &ndash; &ldquo;Mach weiter, mach weiter&rdquo;'
+    )
+  end
+
+  it 'allows adjacent quoted terms after restoring a protected quotation' do
+    unit = described_class::Unit.new(
+      key: 'adjacent-restored-quotes',
+      source: 'The word &ldquo;Ra&#x301;ma&rdquo; is &ldquo;the attractive faculty&rdquo;.',
+      prepared: 'The word __P0001__ is &ldquo;the attractive faculty&rdquo;.',
+      tokens: {'__P0001__' => '&ldquo;Ra&#x301;ma&rdquo;'}, leading: '', trailing: ''
+    )
+    batch = described_class.new(root: root, target: 'de', cache: cache, translator: translator)
+
+    expect(
+      batch.send(
+        :restore_tokens_with_retries, unit,
+        'Die Bedeutung ist beim Wort __P0001__ &ldquo;die anziehende Fähigkeit&rdquo;.'
+      )
+    ).to eq(
+      'Die Bedeutung ist beim Wort &ldquo;Ra&#x301;ma&rdquo; &ldquo;die anziehende Fähigkeit&rdquo;.'
+    )
+  end
+
+  it 'retranslates partially translated entity-heavy prose with natural punctuation' do
+    source = 'And whatever I would offer, such as flowers, garlands, sandal paste, whatever I want to offer ' \
+             'you &ndash; all of those things have been created by you.'
+    unit = described_class::Unit.new(
+      key: 'partial-entity-translation', source: source, prepared: source,
+      tokens: {}, leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).to receive(:translate_preserving_character_references).with(
+      source, from: 'en', to: 'de'
+    ).and_return(
+      'Und alles, was ich anbieten würde, wie Blumen, Kränze und Sandelpaste &ndash; all diese Dinge wurden ' \
+      'von dir geschaffen.'
+    )
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'de', cache: cache, translator: translator)
+
+    expect(
+      batch.send(
+        :restore_tokens_with_retries, unit,
+        'Und whatever I would offer, such as flowers, garlands, sandal paste, whatever I want to offer you ' \
+        '&ndash; all of those things have been created by you.'
+      )
+    ).to eq(
+      'Und alles, was ich anbieten würde, wie Blumen, Kränze und Sandelpaste &ndash; all diese Dinge wurden ' \
+      'von dir geschaffen.'
+    )
+  end
+
+  it 'retranslates an echoed comma-dense fragment by clauses' do
+    source = 'So in that first figure, in that first geometrical figure, at the dawn of creation, ' \
+             'there may be more than one line,'
+    unit = described_class::Unit.new(
+      key: 'comma-dense-fragment', source: source, prepared: source,
+      tokens: {}, leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).to receive(:translate_by_clauses).with(
+      source, from: 'en', to: 'de'
+    ).and_return(
+      'So in jener ersten Figur, in dieser ersten geometrischen Figur, zu Beginn der Schöpfung, ' \
+      'es kann mehr als eine Zeile geben,'
+    )
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'de', cache: cache, translator: translator)
+
+    expect(batch.send(:restore_tokens_with_retries, unit, source)).to eq(
+      'So in jener ersten Figur, in dieser ersten geometrischen Figur, zu Beginn der Schöpfung, ' \
+      'es kann mehr als eine Zeile geben,'
+    )
+  end
+
+  it 'retranslates retained bibliographic words by clauses around placeholders' do
+    prepared = 'Third publication as __P0001__, Third Edition, 1987.'
+    unit = described_class::Unit.new(
+      key: 'bibliographic-clauses', source: 'Third publication as a title, Third Edition, 1987.',
+      prepared: prepared, tokens: {'__P0001__' => 'a title'}, leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).to receive(:translate_by_clauses).with(
+      prepared, from: 'en', to: 'de'
+    ).and_return('Dritte Veröffentlichung als __P0001__, Dritte Auflage, 1987.')
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'de', cache: cache, translator: translator)
+
+    expect(
+      batch.send(
+        :restore_tokens_with_retries, unit,
+        'Dritte Veröffentlichung als __P0001__, Third Edition, 1987.'
+      )
+    ).to eq('Dritte Veröffentlichung als a title, Dritte Auflage, 1987.')
+  end
+
+  it 'reprojects delimiter-bearing placeholders when translation changes their order' do
+    unit = described_class::Unit.new(
+      key: 'delimiter-placeholder-order',
+      source: 'Besides, sauna [a note], a man who (through death or divorce) lost his wife lives in Rarh.',
+      prepared: 'Besides, __P0001__, a man who __P0002__ lost his wife lives in __P0003__.',
+      tokens: {
+        '__P0001__' => 'sauna [a note]', '__P0002__' => '(through death or divorce)', '__P0003__' => 'Rarh'
+      },
+      leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).to receive(:translate_preserving_placeholders).with(
+      unit.prepared, values: unit.tokens, from: 'en', to: 'de'
+    ).and_return(
+      'Außerdem lebt __P0001__, ein Mann, der __P0002__ seine Frau verloren hat, in __P0003__.'
+    )
+    batch = described_class.new(root: root, target: 'de', cache: cache, translator: translator)
+
+    expect(
+      batch.send(
+        :restore_tokens_with_retries, unit,
+        'Außerdem lebt in __P0003__ ein Mann, der __P0002__ seine Frau verloren hat, ebenso wie __P0001__.'
+      )
+    ).to eq(
+      'Außerdem lebt sauna [a note], ein Mann, der (through death or divorce) seine Frau verloren hat, in Rarh.'
+    )
+  end
+
+  it 'attempts smart-quote projection only once before bounded repair' do
+    unit = described_class::Unit.new(
+      key: 'quoted-loop', source: 'English &ldquo;quotation&rdquo;.',
+      prepared: 'English &ldquo;quotation&rdquo;.', tokens: {}, leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    allow(translator).to receive(:translate_preserving_smart_quotes).and_return('Deutsches &ldquo;Zitat&rdquo;.')
+    allow(translator).to receive(:repair_markup).and_return('Weiterhin ungültig.')
+    batch = described_class.new(root: root, target: 'de', cache: cache, translator: translator, stdout: StringIO.new)
+    allow(batch.validator).to receive(:validate!).and_raise(
+      Ewprs::TranslationValidator::Error.new(:quotes, 'translation changed smart quotes')
+    )
+
+    expect do
+      batch.send(:restore_tokens_with_retries, unit, 'Ungültige &ldquo;Übersetzung&rdquo;.')
+    end.to raise_error(Ewprs::TranslationValidator::Error, /changed smart quotes/)
+    expect(translator).to have_received(:translate_preserving_smart_quotes).once
+    expect(translator).to have_received(:repair_markup).exactly(described_class::TOKEN_RETRIES).times
+  end
+
+  it 'restores batch translations concurrently up to translator jobs' do
+    translator = instance_double(Ewprs::Translator, jobs: 2)
+    allow(translator).to receive(:translate_markup) { |texts, **| texts.map { |text| "translated #{text}" } }
+    batch = described_class.new(root: root, target: 'de', cache: cache, translator: translator, stdout: StringIO.new)
+    units = %w[first second].to_h do |key|
+      [key, described_class::Unit.new(key: key, source: key, prepared: key, tokens: {}, leading: '', trailing: '')]
+    end
+    batch.instance_variable_set(:@units, units)
+    allow(batch).to receive(:validated_cached_translations).and_return({})
+    allow(batch).to receive(:cached_translations).and_return({})
+    active = 0
+    maximum = 0
+    mutex = Mutex.new
+    allow(batch).to receive(:restore_tokens_with_retries) do |unit, output|
+      mutex.synchronize do
+        active += 1
+        maximum = [maximum, active].max
+      end
+      sleep 0.05
+      "#{output} restored"
+    ensure
+      mutex.synchronize { active -= 1 }
+    end
+
+    expect(batch.send(:translate_units).values).to contain_exactly(
+      'translated first restored', 'translated second restored'
+    )
+    expect(maximum).to eq(2)
+  end
+
+  it 'recovers from repeated transient protected-token corruption' do
     corruptions = 0
     flaky = FakeMarkupTranslator.new do |text|
       if corruptions < 3 && text.match?(/__P\d{4}__/)
@@ -1477,7 +2165,6 @@ RSpec.describe Ewprs::TranslationBatch do
 
     expect { prepare_translation(retried) }.not_to raise_error
     expect(corruptions).to eq(3)
-    expect(flaky.repair_calls.size).to be >= 3
   end
 
   it 'includes nested source text in repair token meanings' do
@@ -1620,6 +2307,26 @@ RSpec.describe Ewprs::TranslationBatch do
     end.to raise_error(/changed editorial tags/)
   end
 
+  it 'allows a nested parenthetical to move around an editorial citation' do
+    nested = batch.send(:register_unit, 'not more than two tolas')
+    unit = described_class::Unit.new(
+      key: 'movable-parenthetical-citation',
+      prepared: 'aged tamarind <span data-ewprs="11">__P0001__Tamarindus indica Linn.__P0002__</span> ' \
+                'in very small quantity __P0003__ with the meal',
+      tokens: {
+        '__P0001__' => '<i>', '__P0002__' => '</i>', '__P0003__' => "(#{nested})"
+      },
+      leading: '', trailing: ''
+    )
+    translated = 'in sehr geringer Menge __P0003__ gereifter Tamarinde ' \
+                 '<span data-ewprs="11">__P0001__Tamarindus indica Linn.__P0002__</span> zur Mahlzeit'
+
+    expect(batch.send(:valid_editorial_structure?, unit, translated)).to be(true)
+    restored = batch.send(:restore_editorial_tags, translated)
+      .gsub(described_class::PLACEHOLDER) { |marker| unit.tokens.fetch(marker) }
+    expect(batch.send(:validate_restored_translation!, unit, restored)).to eq(restored)
+  end
+
   it 'rejects restored translations that retain source prose before caching' do
     unit = described_class::Unit.new(
       key: 'restored-source-prose',
@@ -1630,6 +2337,17 @@ RSpec.describe Ewprs::TranslationBatch do
 
     expect { batch.send(:restore_tokens, unit, unit.prepared) }
       .to raise_error(Ewprs::TranslationValidator::Error, /source prose unchanged/)
+  end
+
+  it 'removes natural dashes duplicated beside preserved character references' do
+    unit = described_class::Unit.new(
+      key: 'duplicated-dash', source: 'One &ndash; two.', prepared: 'One &ndash; two.',
+      tokens: {}, leading: '', trailing: ''
+    )
+
+    expect(batch.send(:validate_restored_translation!, unit, 'Um &ndash; – dois.')).to eq(
+      'Um &ndash; dois.'
+    )
   end
 
   it 'validates nested child prose independently from its parent unit' do
@@ -1647,6 +2365,27 @@ RSpec.describe Ewprs::TranslationBatch do
     ).to eq("[[#{child_marker}]] Revisão em inglês por ACAA.")
   end
 
+  it 'excludes a protected title around nested child prose from outer progress validation' do
+    unit = batch.send(
+      :prepare_unit, 'nested-protected-title',
+      'The subject of today&#146;s discourse is &ldquo;Human Life and Its [[Goal]]&rdquo;.'
+    )
+    title = unit.tokens.fetch('__P0001__')
+
+    expect(
+      batch.send(
+        :validate_restored_translation!, unit,
+        "Das Thema der heutigen Diskussion ist #{title}."
+      )
+    ).to eq("Das Thema der heutigen Diskussion ist #{title}.")
+    expect do
+      batch.send(
+        :validate_restored_translation!, unit,
+        "The subject of today's discourse is #{title}."
+      )
+    end.to raise_error(Ewprs::TranslationValidator::Error, /source prose unchanged/)
+  end
+
   it 'projects nested units from the prepared layout when editorial scope was normalized' do
     child_marker = batch.send(:register_unit, 'nerve-cells come into play')
     unit = described_class::Unit.new(
@@ -1658,6 +2397,25 @@ RSpec.describe Ewprs::TranslationBatch do
     expect(
       batch.send(:validate_restored_translation!, unit, "[#{child_marker}]")
     ).to eq("[#{child_marker}]")
+  end
+
+  it 'projects nested gloss delimiters from protected values during editorial validation' do
+    child_marker = batch.send(:register_unit, 'Orissa')
+    unit = described_class::Unit.new(
+      key: 'protected-nested-editorial',
+      source: 'Kaliun&#x32D;ga [Orissa], Mithila and Magadha [Bihar] as parts of their A&#x301;ryavartta.',
+      prepared: '__P0001__, Mithila and Magadha <span data-ewprs="11">Bihar</span> as parts of their __P0002__.',
+      tokens: {
+        '__P0001__' => "Kaliun&#x32D;ga [#{child_marker}]", '__P0002__' => 'A&#x301;ryavartta'
+      },
+      leading: '', trailing: ''
+    )
+    translated = '__P0001__, Mithila e Magadha <span data-ewprs="11">Bihar</span> ' \
+                 'como partes de seu __P0002__.'
+
+    expect(batch.send(:restore_tokens, unit, translated)).to eq(
+      "Kaliun&#x32D;ga [#{child_marker}], Mithila e Magadha [Bihar] como partes de seu A&#x301;ryavartta."
+    )
   end
 
   it 'masks orphan double editorial brackets as one structural token' do

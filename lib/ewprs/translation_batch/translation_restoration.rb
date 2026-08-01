@@ -9,17 +9,50 @@ module Ewprs
 
       def restore_tokens_with_retries(unit, output)
         retries = 0
+        attempted_projections = {}
         begin
           output = normalize_target_language(output.to_s)
           validator.validate!(source: unit.prepared, translated: output)
           restore_tokens(unit, output)
         rescue ProtectedTokenError, TranslationValidator::Error => error
-          projected = project_missing_editorial_tags(unit, output) if error.message.match?(/changed editorial tags/)
+          projected = nil
+          projected = remove_duplicated_placeholders(unit, output) if error.message.match?(/unexpected:/)
           if projected && projected != output
             output = projected
             retry
           end
-          if error.respond_to?(:code) && error.code == :quotes
+          projected = project_missing_token_values(unit, output)
+          if projected != output
+            output = projected
+            retry
+          end
+          projected = project_missing_transliterated_tokens(unit, output) if error.message.match?(/missing:/)
+          if projected && projected != output
+            output = projected
+            retry
+          end
+          project_editorial = error.message.match?(/changed editorial tags/)
+          project_editorial ||= error.is_a?(ProtectedTokenError) && unit.prepared.match?(EDITORIAL_TAG)
+          project_editorial &&= !attempted_projections[:editorial]
+          if project_editorial
+            attempted_projections[:editorial] = true
+            projected = project_missing_editorial_tags(unit, output)
+            projected ||= translator.translate_preserving_editorial_tags(
+              unit.prepared, from: source_language, to: target
+            )
+          end
+          if projected && projected != output
+            output = projected
+            retry
+          end
+          quote_projection = error.respond_to?(:code) && error.code == :quotes
+          quote_projection ||= error.respond_to?(:code) && error.code == :markers &&
+                               unit.prepared.match?(Translator::SMART_QUOTE)
+          quote_projection ||= error.respond_to?(:code) && error.code == :untranslated &&
+                               !unit.prepared.match?(PLACEHOLDER) && unit.prepared.match?(Translator::SMART_QUOTE)
+          quote_projection ||= error.is_a?(ProtectedTokenError) && unit.prepared.match?(Translator::SMART_QUOTE)
+          if quote_projection && !attempted_projections[:smart_quotes]
+            attempted_projections[:smart_quotes] = true
             projected = translator.translate_preserving_smart_quotes(
               unit.prepared, from: source_language, to: target
             )
@@ -28,7 +61,67 @@ module Ewprs
               retry
             end
           end
-          raise if retries >= TOKEN_RETRIES
+          entity_projection = error.respond_to?(:code) && error.code == :untranslated &&
+                              !unit.prepared.match?(PLACEHOLDER) &&
+                              unit.prepared.match?(Translator::CHARACTER_REFERENCE)
+          if entity_projection && !attempted_projections[:character_references]
+            attempted_projections[:character_references] = true
+            projected = translator.translate_preserving_character_references(
+              unit.prepared, from: source_language, to: target
+            )
+            if projected != output
+              output = projected
+              retry
+            end
+          end
+          clause_projection = error.respond_to?(:code) && error.code == :untranslated && unit.prepared.match?(/[,;]/)
+          clause_projection &&= !unit.prepared.match?(PLACEHOLDER) ||
+                                error.message.match?(/source-language word|retained English phrase/)
+          if clause_projection && !attempted_projections[:clauses]
+            attempted_projections[:clauses] = true
+            projected = translator.translate_by_clauses(
+              unit.prepared, from: source_language, to: target
+            )
+            if projected != output
+              output = projected
+              retry
+            end
+          end
+          project_placeholders = error.is_a?(ProtectedTokenError) && error.message.match?(/missing:/)
+          project_placeholders ||= error.respond_to?(:code) && error.code == :untranslated &&
+                                  unit.prepared.match?(PLACEHOLDER)
+          project_placeholders ||= error.respond_to?(:code) && error.code == :delimiters &&
+                                  unit.prepared.match?(PLACEHOLDER)
+          if project_placeholders && !attempted_projections[:placeholders]
+            attempted_projections[:placeholders] = true
+            projected = translator.translate_preserving_placeholders(
+              unit.prepared, values: repair_token_values(unit.tokens), from: source_language, to: target
+            )
+            if projected != output
+              output = projected
+              retry
+            end
+          end
+          quote_projection = error.respond_to?(:code) && error.code == :untranslated &&
+                             unit.prepared.match?(PLACEHOLDER) && unit.prepared.match?(Translator::SMART_QUOTE)
+          if quote_projection && !attempted_projections[:smart_quotes]
+            attempted_projections[:smart_quotes] = true
+            projected = translator.translate_preserving_smart_quotes(
+              unit.prepared, from: source_language, to: target
+            )
+            if projected != output
+              output = projected
+              retry
+            end
+          end
+          if retries >= TOKEN_RETRIES
+            stdout.puts "failed invalid translation #{unit.key}: #{error.message}"
+            stdout.puts "source: #{unit.source.inspect}"
+            stdout.puts "prepared: #{unit.prepared.inspect}"
+            stdout.puts "tokens: #{unit.tokens.inspect}"
+            stdout.puts "output: #{output.inspect}"
+            raise
+          end
 
           retries += 1
           stdout.puts "retrying invalid translation #{unit.key} (#{retries}/#{TOKEN_RETRIES}): #{error.message}"
@@ -40,7 +133,52 @@ module Ewprs
         end
       end
 
+      def remove_duplicated_placeholders(unit, output)
+        expected = unit.prepared.scan(PLACEHOLDER).tally
+        seen = Hash.new(0)
+        output.to_s.gsub(PLACEHOLDER) do |marker|
+          seen[marker] += 1
+          seen[marker] > expected.fetch(marker, 0) ? '' : marker
+        end.gsub(/(?<=\S)[ \t]{2,}(?=\S)/, ' ')
+      end
+
+      def project_missing_transliterated_tokens(unit, output)
+        expected = unit.prepared.scan(PLACEHOLDER).tally
+        actual = output.to_s.scan(PLACEHOLDER).tally
+        projected = output.to_s.dup
+        unit.tokens.each do |marker, value|
+          missing = expected.fetch(marker, 0) - actual.fetch(marker, 0)
+          next unless missing.positive? && !value.match?(/[<>⟦⟧\[\]{}]/)
+
+          visible = CGI.unescapeHTML(value).unicode_normalize(:nfd)
+          next unless visible.match?(/\p{M}/u)
+
+          plain = visible.gsub(/\p{M}/u, '')
+          pattern = exact_phrase_pattern(plain)
+          next unless projected.scan(pattern).size == missing
+
+          missing.times { projected.sub!(pattern, marker) }
+        end
+        projected
+      end
+
+      def project_missing_token_values(unit, output)
+        expected = unit.prepared.scan(PLACEHOLDER).tally
+        actual = output.to_s.scan(PLACEHOLDER).tally
+        values = repair_token_values(unit.tokens)
+        unit.tokens.each_with_object(output.to_s.dup) do |(marker, _value), projected|
+          missing = expected.fetch(marker, 0) - actual.fetch(marker, 0)
+          next unless missing.positive?
+
+          pattern = exact_phrase_pattern(values.fetch(marker))
+          next unless projected.scan(pattern).size == missing
+
+          missing.times { projected.sub!(pattern, marker) }
+        end
+      end
+
       def normalize_target_language(value)
+        value = value.tr('，？！：；．', ',?!:;.')
         return value unless target == 'fr'
 
         value = value.gsub('整个系统违背了人类心理，因此产量永远不会增加。',
@@ -228,7 +366,8 @@ module Ewprs
         value.to_s.scan(/#{PLACEHOLDER}|#{EDITORIAL_TAG}/).select do |part|
           part.match?(EDITORIAL_TAG) || begin
             protected = tokens.fetch(part)
-            structural_token?(protected) || protected.match?(PAIRED_DELIMITER)
+            structural_token?(protected) ||
+              (protected.match?(PAIRED_DELIMITER) && !protected.match?(UNIT_MARKER))
           end
         end
       end
@@ -252,21 +391,56 @@ module Ewprs
       end
 
       def validate_restored_translation!(unit, translation)
+        translation = normalize_target_language(translation)
+        translation = normalize_duplicate_dashes(translation)
         validation_source, validation_translation = project_nested_values(unit, translation)
         if unit.source && validation_source.scan(HTML_STRUCTURE) != validation_translation.scan(HTML_STRUCTURE)
           raise TranslationValidator::Error.new(:markup, 'translation changed HTML tag sequence')
         end
 
         protected_values = protected_value_counts(unit)
-        progress_values = protected_values.reject { |value, _count| value.match?(UNIT_MARKER) }
+        progress_values = progress_protected_value_counts(
+          protected_values, strip_nested_delimiters: unit.prepared.match?(EDITORIAL_TAG)
+        )
         validator.validate!(
           source: validation_source, translated: validation_translation,
-          protected_values: progress_values
+          protected_values: progress_values, protected_connectors: protected_connector_values(unit)
         )
         validator.validate_protected!(
           source: unit.source, translated: translation, protected_values: protected_values
         )
         translation
+      end
+
+      def normalize_duplicate_dashes(value)
+        value.to_s.gsub(/(?:&ndash;[ \t]*[–—]|[–—][ \t]*&ndash;)/, '&ndash;')
+          .gsub(/(?:&mdash;[ \t]*[–—]|[–—][ \t]*&mdash;)/, '&mdash;')
+      end
+
+      def progress_protected_value_counts(protected_values, strip_nested_delimiters: false)
+        protected_values.each_with_object(Hash.new(0)) do |(value, count), projected|
+          fragments = if value.match?(UNIT_MARKER)
+            progress_value = if strip_nested_delimiters
+              value.gsub(/(?:\((⟦U[0-9a-f]{64}⟧)\)|\[{1,2}(⟦U[0-9a-f]{64}⟧)\]{1,2}|\{(⟦U[0-9a-f]{64}⟧)\})/) do
+                Regexp.last_match.captures.compact.first
+              end
+            else
+              value
+            end
+            progress_value.split(/⟦U[0-9a-f]{64}⟧/, -1).reject(&:empty?)
+          else
+            [value]
+          end
+          fragments.each { |fragment| projected[fragment] += count }
+        end
+      end
+
+      def protected_connector_values(unit)
+        values = repair_token_values(unit.tokens)
+        pattern = /(?<left>#{PLACEHOLDER})(?<punctuation>[.,;]*)\s+(?<connector>[A-Za-z]+)\s+(?<right>#{PLACEHOLDER})/
+        unit.prepared.scan(pattern).map do |left, punctuation, connector, right|
+          [values.fetch(left), punctuation, connector, values.fetch(right)]
+        end
       end
 
       def project_nested_values(unit, translation)
@@ -286,6 +460,11 @@ module Ewprs
               :nested_units, "translation changed nested token structure for #{unit.key}"
             )
           end
+        end
+        if unit.prepared.match?(EDITORIAL_TAG)
+          nested_delimiters = /(?:\((__P9\d{3}__)\)|\[{1,2}(__P9\d{3}__)\]{1,2}|\{(__P9\d{3}__)\})/
+          source.gsub!(nested_delimiters) { Regexp.last_match.captures.compact.first }
+          translated.gsub!(nested_delimiters) { Regexp.last_match.captures.compact.first }
         end
         [source, translated]
       end

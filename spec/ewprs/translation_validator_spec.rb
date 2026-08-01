@@ -30,6 +30,14 @@ RSpec.describe Ewprs::TranslationValidator do
     end.to raise_error(described_class::Error, /left source prose unchanged/)
   end
 
+  it 'rejects omitted source prose' do
+    expect do
+      validator.validate!(
+        source: 'The Supreme alone knows its trade secrets.', translated: ''
+      )
+    end.to raise_error(described_class::Error, /omitted source prose/)
+  end
+
   it 'does not reject unchanged formulas, citations, or scientific names' do
     expect(validator.valid?(source: 'A + u + m = Om.', translated: 'A + u + m = Om.')).to be(true)
     expect(
@@ -91,6 +99,14 @@ RSpec.describe Ewprs::TranslationValidator do
     end.to raise_error(described_class::Error, /retained a long source-language span/)
   end
 
+  it 'allows retained prepositions around foreign examples and language names' do
+    german = described_class.new(source_language: 'en', target_language: 'de')
+    source = 'One example is __P0001__ in Angika, ham __P0002__ in Maethilii, __P0003__ in Bengali.'
+    translated = 'Ein Beispiel ist __P0001__ in Angika, ham __P0002__ in Maethilii, __P0003__ in Bengali.'
+
+    expect(german.valid?(source: source, translated: translated)).to be(true)
+  end
+
   it 'rejects changed line breaks' do
     expect do
       validator.validate!(source: "First line.\r\nSecond line.", translated: 'Primeira linha. Segunda linha.')
@@ -143,6 +159,18 @@ RSpec.describe Ewprs::TranslationValidator do
         translated: 'Le mot &ldquo;&rdquo; a un sens.'
       )
     end.to raise_error(described_class::Error, /introduced empty smart quotes/)
+
+    expect(
+      french.valid?(
+        source: 'The word &ldquo;dharma&rdquo; means &ldquo;duty&rdquo;.',
+        translated: 'Le mot &ldquo;dharma&rdquo; &ldquo;devoir&rdquo;.'
+      )
+    ).to be(true)
+
+    german = described_class.new(source_language: 'en', target_language: 'de')
+    expect(
+      german.valid?(source: 'The word "dharma" has a meaning.', translated: 'Das Wort „dharma“ hat eine Bedeutung.')
+    ).to be(true)
   end
 
   it 'rejects foreign-script characters introduced into Latin translations' do
@@ -161,6 +189,11 @@ RSpec.describe Ewprs::TranslationValidator do
         translated: 'En hindi, में indique le cas locatif.'
       )
     ).to be(true)
+
+    german = described_class.new(source_language: 'en', target_language: 'de')
+    expect do
+      german.validate!(source: 'They direct their desires toward Him.', translated: 'Sie richten他们 Wünsche auf Ihn.')
+    end.to raise_error(described_class::Error, /introduced foreign-script character/)
   end
 
   it 'rejects narrow high-confidence retained English words in French translations' do
@@ -180,6 +213,167 @@ RSpec.describe Ewprs::TranslationValidator do
         protected_values: {'The Great Universe' => 1}
       )
     ).to be(true)
+  end
+
+  it 'accepts an exact phrase shared by English and German' do
+    german = described_class.new(source_language: 'en', target_language: 'de')
+
+    expect(german.valid?(source: 'negative evolution', translated: 'negative Evolution')).to be(true)
+    expect(german.valid?(source: 'negative development', translated: 'negative Development')).to be(false)
+  end
+
+  it 'rejects high-confidence English residue in German translations' do
+    german = described_class.new(source_language: 'en', target_language: 'de')
+
+    expect do
+      german.validate!(
+        source: 'Limestone from Purulia can be used for making cement.',
+        translated: 'Kalkstein aus Purulia can be used for making cement.'
+      )
+    end.to raise_error(described_class::Error, /retained source-language word: can/)
+
+    expect do
+      german.validate!(
+        source: 'This body is derived from Bhuvar Loka of the cosmic mind.',
+        translated: 'Dieser Körper stammt aus Bhuvar Loka of the cosmic mind.',
+        protected_values: ['Bhuvar Loka']
+      )
+    end.to raise_error(described_class::Error, /retained English phrase/)
+
+    expect do
+      german.validate!(
+        source: 'Similarly, the word means cotton.',
+        translated: 'Similarly, das Wort means Baumwolle.'
+      )
+    end.to raise_error(described_class::Error, /retained source-language word/)
+
+    expect do
+      german.validate!(
+        source: 'Avoid the Pátakiis-those who commit Pátaka.',
+        translated: 'Meide die Pátakiis-those, die Pátaka begehen.'
+      )
+    end.to raise_error(described_class::Error, /retained source-language word: those/)
+
+    expect(
+      german.valid?(
+        source: 'He bought it from a second-hand shop.',
+        translated: 'Er kaufte es in einem Second-Hand-Laden.'
+      )
+    ).to be(true)
+
+    expect(
+      german.protected_source_fragment?(
+        'A&#x301;nanda Mitra&#x301; A&#x301;c., and A&#x301;c.'
+      )
+    ).to be(false)
+
+    expect do
+      german.validate!(
+        source: '__P0001__ and __P0002__ are coordinated.',
+        translated: '__P0001__ and __P0002__ sind koordiniert.'
+      )
+    end.to raise_error(described_class::Error, /retained source-language word: and/)
+
+    expect(
+      german.valid?(
+        source: '__P0001__ and __P0002__ are coordinated.',
+        translated: '__P0001__ und __P0002__ sind koordiniert.'
+      )
+    ).to be(true)
+
+    terms = ['Ks&#x301;ara', 'Aks&#x301;ara']
+    expect do
+      german.validate!(
+        source: 'Ks&#x301;ara and Aks&#x301;ara',
+        translated: 'Ks&#x301;ara and Aks&#x301;ara', protected_values: terms,
+        protected_connectors: [['Ks&#x301;ara', '', 'and', 'Aks&#x301;ara']]
+      )
+    end.to raise_error(described_class::Error, /retained source-language word: and/)
+
+    expect(
+      german.valid?(
+        source: 'Ks&#x301;ara and Aks&#x301;ara',
+        translated: 'Ks&#x301;ara und Aks&#x301;ara', protected_values: terms,
+        protected_connectors: [['Ks&#x301;ara', '', 'and', 'Aks&#x301;ara']]
+      )
+    ).to be(true)
+
+    expect do
+      german.validate!(
+        source: '__P0001__., and __P0002__', translated: '__P0001__., and __P0002__'
+      )
+    end.to raise_error(described_class::Error, /retained source-language word: and/)
+
+    expect(
+      german.valid?(
+        source: 'Yama and Niyama', translated: 'Yama and Niyama',
+        protected_values: ['Yama and Niyama', 'Yama', 'Niyama']
+      )
+    ).to be(true)
+
+    expect do
+      german.validate!(
+        source: 'Some examples are useful to illiterate villagers.',
+        translated: 'Some examples are für illiterate Dorfbewohner nützlich.'
+      )
+    end.to raise_error(described_class::Error, /retained source-language word|example prose/)
+
+    expect do
+      german.validate!(
+        source: 'avadhútikárespectively', translated: 'avadhútikárespectively'
+      )
+    end.to raise_error(described_class::Error, /retained source-language word: respectively/)
+
+    {
+      'Secondly, this is the next point.' => 'Secondly, dies ist der nächste Punkt.',
+      'Hence Mádhava means Parama Puruśa.' => 'Hence Mádhava bedeutet Parama Puruśa.',
+      'The history states that they descended from twelve sons.' =>
+        'Die Geschichte states, dass sie descended von zwölf Söhnen.'
+    }.each do |source, translated|
+      expect do
+        german.validate!(source: source, translated: translated)
+      end.to raise_error(described_class::Error, /retained source-language word/)
+    end
+
+    expect do
+      german.validate!(
+        source: 'These practices come within the definition of avidya.',
+        translated: 'Diese Praktiken fallen unter die definition of avidya.'
+      )
+    end.to raise_error(described_class::Error, /retained English definition prose/)
+
+    expect(
+      german.valid?(
+        source: 'This is the definition of avidya.',
+        translated: 'Dies ist die Definition von avidya.'
+      )
+    ).to be(true)
+  end
+
+  it 'ignores tracked English words that were not retained from the source' do
+    german = described_class.new(source_language: 'en', target_language: 'de')
+
+    expect(
+      german.valid?(source: 'A heading.', translated: 'Eine Überschrift means Bedeutung.')
+    ).to be(true)
+  end
+
+  it 'rejects escaped internal transport markers' do
+    german = described_class.new(source_language: 'en', target_language: 'de')
+
+    expect do
+      german.validate!(
+        source: 'The word &ldquo;good&rdquo;.',
+        translated: 'Das Wort &lt;ewprs-quote-open id=&quot;1&quot;&gt;gut&lt;/ewprs-quote-close id=&quot;2&quot;/&gt;.'
+      )
+    end.to raise_error(described_class::Error, /internal transport marker/)
+
+    expect do
+      german.validate!(
+        source: 'The word &ldquo;good&rdquo;.',
+        translated: 'Das Wort &lt;span data=&quot;ewprs=&quot;11&quot;&gt;gut.'
+      )
+    end.to raise_error(described_class::Error, /internal transport marker/)
   end
 
   it 'rejects invalid unprotected French elisions' do
@@ -285,8 +479,23 @@ RSpec.describe Ewprs::TranslationValidator do
     expect(validator.protected_source_fragment?('Sa no buddhya shubhayá saḿyunaktu')).to be(true)
   end
 
+  it 'does not protect mixed foreign text containing source-language prose anchors' do
+    german = described_class.new(source_language: 'en', target_language: 'de')
+
+    expect(
+      german.protected_source_fragment?(
+        'Kr + pás = karpás. Karpás means &ldquo;cotton&rdquo;.'
+      )
+    ).to be(false)
+    expect(
+      german.protected_source_fragment?('Pápa plus Pratyaváya is Pátaka.')
+    ).to be(false)
+    expect(german.protected_inline_fragment?('so-called ahiḿsá')).to be(false)
+  end
+
   it 'identifies a foreign inline phrase without treating source prose as foreign' do
     expect(validator.protected_inline_fragment?('praka&#x301;ram&#x301; karoti iti')).to be(true)
+    expect(validator.protected_inline_fragment?('canda&#x301;ma&#x301;ma')).to be(true)
     expect(validator.protected_inline_fragment?('a,')).to be(true)
     expect(validator.protected_inline_fragment?('bauls')).to be(false)
     expect(validator.protected_inline_fragment?('the Supreme Entity')).to be(false)

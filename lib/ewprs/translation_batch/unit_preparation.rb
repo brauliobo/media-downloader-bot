@@ -4,13 +4,19 @@ module Ewprs
     module UnitPreparation
       include TranslationMarkup
 
+      ATTACHED_SOURCE_WORD = %r{
+        (?<term>(?<![A-Za-z])[A-Za-z][A-Za-z'’-]*
+        (?:(?:&\#x(?:301|32D);)[A-Za-z'’-]*)+?)-?
+        (?<word>descended|respectively|those)(?![A-Za-z])
+      }ix
+
       private
 
       def english_function_word?(word)
         %w[
           a an and are as at be been but by can did do does for from had has have he her him
-          his i if in is it its my not of on or our she that the their them they this to was we
-          were what when which who will with would you your
+           his i if in is it its my not of on or our she that the their them they this to was we
+           were what when which who will with would you your means
         ].include?(word.downcase)
       end
 
@@ -19,7 +25,9 @@ module Ewprs
         trailing = source[/\s*\z/m]
         core = source[leading.length, source.length - leading.length - trailing.length]
         tokens = {}
-        prepared = mask_dense_parentheticals(core)
+        prepared = separate_attached_source_words(core)
+        prepared = mask_parenthetical_foreign_equivalents(prepared)
+        prepared = mask_dense_parentheticals(prepared)
         prepared = mask_sanskrit_glosses(prepared)
         prepared = mask_parenthetical_clauses(prepared)
         prepared = tag_editorial_content(prepared, tokens)
@@ -31,7 +39,11 @@ module Ewprs
         prepared = mask(prepared, PARTED_PUBLICATION_TITLE, tokens)
         prepared = mask(prepared, DATED_PUBLICATION_TITLE, tokens)
         prepared = mask(prepared, QUOTED_CITED_TITLE, tokens)
+        prepared = mask(prepared, QUOTED_NUMBERED_CITED_TITLE, tokens)
         prepared = mask(prepared, NUMBERED_PUBLICATION_CITATION_TITLE, tokens)
+        prepared = mask(prepared, UNDATED_NUMBERED_PUBLICATION_TITLE, tokens)
+        prepared = mask(prepared, RELATIVE_DATED_PUBLICATION_TITLE, tokens)
+        prepared = mask(prepared, STANDALONE_NUMBERED_TITLE, tokens)
         prepared = mask_in_dated_citation_titles(prepared, tokens)
         prepared = mask(prepared, NUMBERED_SERIES_TITLE, tokens)
         prepared = mask(prepared, ITALIC_PART_TITLE, tokens)
@@ -50,7 +62,10 @@ module Ewprs
         prepared = mask(prepared, BIBLIOGRAPHIC_TITLE, tokens)
         prepared = mask(prepared, AUTHORED_CITATION_TITLE, tokens)
         prepared = mask(prepared, UNQUOTED_PUBLICATION_TITLE, tokens)
+        prepared = mask_chapter_source_publications(prepared, tokens)
+        prepared = mask_translation_publications(prepared, tokens)
         prepared = mask_quoted_publication_titles(prepared, tokens)
+        prepared = mask_quoted_publication_aliases(prepared, tokens)
         prepared = mask_quoted_language_examples(prepared, tokens)
         prepared = mask_title_case_quotes(prepared, tokens)
         prepared = mask(prepared, MARKUP, tokens)
@@ -61,11 +76,14 @@ module Ewprs
         prepared = mask(prepared, TECHNICAL_VALUE, tokens)
         prepared = mask(prepared, INDIC_SCRIPT, tokens)
         prepared = @lexicon.mask(prepared, tokens)
+        prepared = coalesce_inline_punctuation(prepared, tokens)
         prepared = coalesce_adjacent_terms(prepared, tokens)
         prepared = prepared.gsub(COORDINATED_PLACEHOLDER) do
           match = Regexp.last_match
           "#{match[:first]} #{match[:term]} and #{match[:second]} ones"
         end
+        prepared = nest_coordinated_term_definitions(prepared, tokens)
+        prepared = nest_repeated_term_modifiers(prepared, tokens)
         tokens.transform_values! do |value|
           restore_token_editorial_markers(resolve_document_protected_value(value))
         end
@@ -86,6 +104,13 @@ module Ewprs
           @units.fetch(Regexp.last_match(1)).source
         end
         restore_token_editorial_markers(resolved)
+      end
+
+      def separate_attached_source_words(source)
+        source.gsub(ATTACHED_SOURCE_WORD) do
+          captures = Regexp.last_match
+          "#{captures[:term].delete_suffix('-')} #{captures[:word]}"
+        end
       end
 
       def canonicalize_placeholders(source, tokens)
@@ -150,6 +175,56 @@ module Ewprs
         end
       end
 
+      def coalesce_inline_punctuation(source, tokens)
+        pattern = /(?<term>#{PLACEHOLDER})(?<opening>#{PLACEHOLDER})(?<punctuation>[,;:])(?<closing>#{PLACEHOLDER})/
+        source.gsub(pattern) do |match|
+          captures = Regexp.last_match
+          term, opening, closing = captures.values_at(:term, :opening, :closing)
+          opening_tag = tokens.fetch(opening)[/\A<(i|em)\b[^>]*>\z/i, 1]
+          closing_tag = tokens.fetch(closing)[/\A<\/(i|em)\s*>\z/i, 1]
+          next match unless plain_protected_term?(tokens.fetch(term)) && opening_tag&.casecmp?(closing_tag)
+
+          tokens[term] = "#{tokens.fetch(term)}#{tokens.delete(opening)}" \
+                         "#{captures[:punctuation]}#{tokens.delete(closing)}"
+          term
+        end
+      end
+
+      def nest_repeated_term_modifiers(source, tokens)
+        repeated_values = tokens.values.tally.select do |value, count|
+          count > 1 && plain_protected_term?(value)
+        end.keys.to_h { |value| [value, true] }
+        modifier_pattern = /(?<![;'’])\b(?<modifier>[A-Za-z][A-Za-z'’-]*)\s+(?<marker>#{PLACEHOLDER})/
+        matches = source.to_enum(:scan, modifier_pattern)
+          .map { Regexp.last_match.named_captures }
+        matched_markers = matches.group_by { |match| tokens.fetch(match.fetch('marker')) }
+        eligible = repeated_values.select do |value, _present|
+          markers = tokens.select { |_marker, token| token == value }.keys
+          matched = matched_markers.fetch(value, []).map { |match| match.fetch('marker') }
+          matched.sort == markers.sort
+        end
+        return source if eligible.empty?
+
+        source.gsub(modifier_pattern) do |match|
+          captures = Regexp.last_match
+          marker = captures[:marker]
+          next match unless eligible.key?(tokens.fetch(marker)) && !english_function_word?(captures[:modifier])
+
+          tokens[marker] = "#{register_unit(captures[:modifier])} #{tokens.fetch(marker)}"
+          marker
+        end
+      end
+
+      def nest_coordinated_term_definitions(source, tokens)
+        pattern = /(?<marker>#{PLACEHOLDER})\s+or\s+(?<gloss>[A-Za-z][A-Za-z'’ -]*?)(?=\s*(?:,|\band\b|[:.;]|\z))/
+        source.gsub(pattern) do
+          captures = Regexp.last_match
+          marker = captures[:marker]
+          tokens[marker] = "#{tokens.fetch(marker)} #{register_unit("or #{captures[:gloss].strip}")}"
+          marker
+        end
+      end
+
       def plain_protected_term?(value)
         !value.match?(/[<>⟦⟧()\[\]{}]/)
       end
@@ -163,6 +238,7 @@ module Ewprs
         masked = mask_coordinated_parenthetical_glosses(masked)
         masked = mask_glosses(masked, @lexicon.inline_gloss_pattern)
         masked = mask_glosses(masked, MARKED_INLINE_GLOSS)
+        masked = mask_glosses(masked, MARKED_PARENTHETICAL_GLOSS)
         masked = mask_glosses(masked, MARKED_PHRASE_GLOSS)
         masked = mask_glosses(masked, DEFINED_TERM_GLOSS)
         masked = mask_glosses(masked, HYPHENATED_TERM_GLOSS)
@@ -239,9 +315,18 @@ module Ewprs
           next match unless captures[:terms].match?(MARKED_WORD) && translatable?(captures[:gloss])
           next match if captures.post_match.match?(/\A\s+#{MARKED_WORD}/)
 
-          protect_content(
-            "#{captures[:terms]}#{captures[:spacing]}(#{register_unit(captures[:gloss])})"
-          )
+          separator = /(\s*,\s*|\s+(?:and|or)\s+)/i
+          parts     = captures[:terms].split(separator)
+          foreign   = parts.each_slice(2).map(&:first).all? do |term|
+            term.match?(MARKED_WORD) || @lexicon.term?(term) || !validator.source_prose_word?(term)
+          end
+          next match unless foreign
+
+          terms = parts.map.with_index do |part, index|
+            index.even? ? protect_content(part) : part
+          end.join
+          gloss = protect_content("(#{register_unit(captures[:gloss])})")
+          "#{terms}#{captures[:spacing]}#{gloss}"
         end
       end
 
@@ -261,10 +346,23 @@ module Ewprs
         end
       end
 
+      def mask_parenthetical_foreign_equivalents(source)
+        source.gsub(PARENTHETICAL_FOREIGN_EQUIVALENT) do |match|
+          captures = Regexp.last_match
+          next match unless validator.protected_inline_fragment?(captures[:equivalent])
+
+          protect_content(
+            "#{register_unit(captures[:term])}#{captures[:spacing]}(#{captures[:equivalent]})"
+          )
+        end
+      end
+
       def mask_parenthetical_clauses(source)
         source.gsub(PARENTHETICAL_CONTENT) do |match|
           captures = Regexp.last_match
           content = captures[:content]
+          next protect_content(match) if validator.protected_inline_fragment?(content)
+
           words = CGI.unescapeHTML(content).scan(/[A-Za-z][A-Za-z'’-]*/)
           quantified_term = /\b#{QUANTIFIER}\s+[A-Za-z-]+\s+[A-Za-z'’-]+\s*\z/
           next match if words.empty? || (words.one? && words.first.length == 1)
@@ -308,6 +406,47 @@ module Ewprs
         end
       end
 
+      def mask_translation_publications(source, tokens)
+        masked = source.gsub(PAIRED_TRANSLATION_PUBLICATIONS) do
+          prefix, first, connector, second = Regexp.last_match.values_at(:prefix, :first, :connector, :second)
+          first_marker = format('__P%04d__', tokens.size + 1)
+          tokens[first_marker] = first
+          second_marker = format('__P%04d__', tokens.size + 1)
+          tokens[second_marker] = second
+          "#{prefix}#{first_marker}#{connector}#{second_marker}"
+        end
+        masked.gsub(LATER_TRANSLATION_PUBLICATION) do
+          prefix, title = Regexp.last_match.values_at(:prefix, :title)
+          marker = format('__P%04d__', tokens.size + 1)
+          tokens[marker] = title
+          "#{prefix}#{marker}"
+        end
+      end
+
+      def mask_chapter_source_publications(source, tokens)
+        source.gsub(CHAPTER_SOURCE_PUBLICATION) do
+          prefix, title = Regexp.last_match.values_at(:prefix, :title)
+          chapter_context = prefix.match?(/\Achapter/i) ||
+                            Regexp.last_match.pre_match.match?(/\bchapters?\b[^.;]{0,80}\z/i)
+          next Regexp.last_match[0] unless chapter_context
+
+          marker = format('__P%04d__', tokens.size + 1)
+          tokens[marker] = title
+          "#{prefix}#{marker}"
+        end
+      end
+
+      def mask_quoted_publication_aliases(source, tokens)
+        source.gsub(QUOTED_PUBLICATION_ALIAS) do
+          original, connector, title = Regexp.last_match.values_at(:original, :connector, :title)
+          original_marker = format('__P%04d__', tokens.size + 1)
+          tokens[original_marker] = original
+          title_marker = format('__P%04d__', tokens.size + 1)
+          tokens[title_marker] = title
+          "#{original_marker}#{connector}#{title_marker}"
+        end
+      end
+
       def mask_quoted_language_examples(source, tokens)
         source.gsub(QUOTED_LANGUAGE_EXAMPLE) do
           match = Regexp.last_match
@@ -332,7 +471,7 @@ module Ewprs
           provenance = following.match?(
             /\A\s+(?:(?:comes?|came)\s+from|is\s+thought\s+to\s+(?:be|have\s+come)\s+from)\b/i
           ) || (preceding.match?(/,\s+and\s+\z/i) && following.match?(/\A\s+from\b/i))
-          publication_context = preceding.match?(/\b(?:discourses?|title)\b[^.!?]{0,500}\z/i) ||
+          publication_context = preceding.match?(/\b(?:discourses?|published|title)\b[^.!?]{0,500}\z/i) ||
             following.match?(/\A\s+had\s+appeared\b/i)
           next match unless provenance || publication_context
 
@@ -353,7 +492,7 @@ module Ewprs
 
       def mask_in_dated_citation_titles(source, tokens)
         source.gsub(IN_DATED_CITATION_TITLE) do |match|
-          next match unless Regexp.last_match.pre_match.match?(/__P\d{4}__\s+in\s+\z/)
+          next match unless Regexp.last_match.pre_match.match?(/__P\d{4}__,?\s+in\s+\z/)
 
           marker = format('__P%04d__', tokens.size + 1)
           tokens[marker] = match
@@ -373,7 +512,7 @@ module Ewprs
             quantified = /\b#{QUANTIFIER}\s+[A-Za-z-]+\s+\z/
             next match if captures.pre_match.match?(quantified)
           end
-          if pattern == MARKED_PHRASE_GLOSS
+          if pattern == MARKED_PHRASE_GLOSS || pattern == ASCII_PHRASE_PARENTHETICAL_GLOSS
             words = CGI.unescapeHTML(term).scan(/[A-Za-z][A-Za-z'’-]*/)
             next match if words.any? { |word| english_function_word?(word) }
           end
