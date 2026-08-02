@@ -12,9 +12,9 @@ module Audiobook
 
     attr_reader :text
     attr_writer :references
-    attr_accessor :source_sentence, :font_size
+    attr_accessor :source_sentence, :font_size, :language
 
-    def initialize(text)
+    def initialize(text, language: nil)
       super()
       @text = text.to_s
         .gsub(/[\u0000-\u001F\u007F-\u009F]/, '') # control chars
@@ -24,6 +24,7 @@ module Audiobook
       @references = []
       @font_size = nil
       @source_sentence = nil
+      @language = language.to_s.strip.presence
     end
 
     def references
@@ -75,6 +76,7 @@ module Audiobook
 
     def extra_hash
       h = { 'text' => text }
+      h['language'] = language if language
       h['references'] = references.map(&:to_h) if references.any?
       h
     end
@@ -89,7 +91,7 @@ module Audiobook
     end
 
     def self.build(text)
-      new(text_value(text)).then { |sentence| sentence if sentence.speakable? }
+      new(text_value(text), language: language_value(text)).then { |sentence| sentence if sentence.speakable? }
     end
 
     def self.build_all(texts)
@@ -99,6 +101,11 @@ module Audiobook
     def self.text_value(value)
       value = SymMash.new(value) if value.is_a?(Hash)
       value.respond_to?(:text) ? value.text : value
+    end
+
+    def self.language_value(value)
+      value = SymMash.new(value) if value.is_a?(Hash)
+      value.language if value.respond_to?(:language)
     end
   end
 end

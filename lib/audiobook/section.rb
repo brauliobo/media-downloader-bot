@@ -7,15 +7,17 @@ module Audiobook
 
     attr_reader :level
 
-    def initialize(text, level: 1)
-      super(text)
+    def initialize(text, level: 1, language: nil)
+      super(text, language: language)
       @level = [level.to_i, 1].max
     end
 
     def title = text
 
     def to_h
-      { 'section' => { 'text' => text, 'level' => level } }
+      data = { 'text' => text, 'level' => level }
+      data['language'] = language if language
+      { 'section' => data }
     end
   end
 end

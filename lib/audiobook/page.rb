@@ -46,7 +46,13 @@ module Audiobook
           status_line = "Processing #{status_parts.join(', ')}"
           status_line << " (OCR)" if is_ocr_book
           stl&.update status_line
-          wav = item.to_wav(dir, "#{idx}_#{iidx}", lang: lang, stl: stl, tts_options: tts_options)
+          wav = item.to_wav(
+            dir,
+            "#{idx}_#{iidx}",
+            lang: item.language || lang,
+            stl: stl,
+            tts_options: tts_options
+          )
           heading_pause = item.pause_file(dir) if item.respond_to?(:pause_file)
           [heading_pause, wav].compact
         end
@@ -137,7 +143,7 @@ module Audiobook
       return if File.exist?(out_path)
 
       text = sentence.spoken_text
-      { text: text, lang: lang, out_path: out_path, status: status } unless text.empty?
+      { text: text, lang: sentence.language || lang, out_path: out_path, status: status } unless text.empty?
     end
 
     # Extract all sentences from all items for translation

@@ -51,6 +51,44 @@ RSpec.describe Audiobook::Parsers::Html do
     end
   end
 
+  it 'preserves a block language on complete sentences and in serialized books' do
+    html = <<~HTML
+      <div class="discourse_title">Language metadata</div>
+      <p class="plain"><!-- block type=paragraph -->This ordinary English line deliberately contains enough words to remain a paragraph<!-- /block --></p>
+      <p class="Para_Sloka" lang="sa"><!-- block type=paragraph -->Svabhávameka kavayo vadanti kálam tathánye parimuhyamána Devasyaeva mahimá tu loke yenedaḿ bhrámyate Brahma cakram<!-- /block --></p>
+    HTML
+    opts = SymMash.new(
+      html_title_selector: '.discourse_title', html_block_comments: true,
+      html_language: 'en'
+    )
+
+    with_html(html) do |path|
+      data = described_class.extract_data(path, opts: opts)
+      expect(data.content.lines.map(&:language)).to eq([nil, nil, 'sa'])
+
+      book = Audiobook::Book.from_input(path, opts: opts)
+      sentences = book.items.grep(Audiobook::Paragraph).flat_map(&:sentences)
+      expect(sentences.map { |sentence| [sentence.text, sentence.language] }).to eq([
+        ['This ordinary English line deliberately contains enough words to remain a paragraph', nil],
+        ['Svabhávameka kavayo vadanti kálam tathánye parimuhyamána Devasyaeva mahimá tu loke yenedaḿ bhrámyate Brahma cakram', 'sa'],
+      ])
+
+      yaml = File.join(File.dirname(path), 'book.yml')
+      book.write(yaml)
+      restored = Audiobook::Book.from_input(yaml, opts: opts)
+      restored_sentences = restored.items.grep(Audiobook::Paragraph).flat_map(&:sentences)
+      expect(restored_sentences.map(&:language)).to eq([nil, 'sa'])
+    end
+  end
+
+  it 'inherits semantic HTML language metadata from an ancestor' do
+    with_html('<main lang="hi"><p>A complete Hindi sentence.</p></main>') do |path|
+      data = described_class.extract_data(path)
+
+      expect(data.content.lines.first.language).to eq('hi')
+    end
+  end
+
   it 'preserves major and minor EWPRS subheadings as sections' do
     html = <<~HTML
       <div class="discourse_title">Discourse</div>

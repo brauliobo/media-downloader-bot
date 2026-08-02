@@ -265,12 +265,37 @@ RSpec.describe 'Audiobook TTS speed' do
     end
   end
 
+  it 'uses a sentence language instead of the book language for synthesis' do
+    page = Audiobook::Page.new(1, [
+      Audiobook::Paragraph.new([
+        Audiobook::Sentence.new('Svabhávameka kavayo vadanti.', language: 'sa')
+      ])
+    ])
+
+    Dir.mktmpdir do |dir|
+      allow(Zipper).to receive(:get_pause_file).and_return(nil)
+      allow(Zipper).to receive(:concat_audio) do |_inputs, outfile, **_kwargs|
+        File.write(outfile, 'combined')
+        outfile
+      end
+      expect(TTS).to receive(:synthesize).with(
+        text: 'Svabhávameka kavayo vadanti.',
+        lang: 'sa',
+        out_path: kind_of(String)
+      ) do |out_path:, **_kwargs|
+        File.write(out_path, 'wav')
+      end
+
+      page.to_wav(dir, '0001', lang: 'en')
+    end
+  end
+
   it 'pre-synthesizes audiobook sentences through the concurrent batch path' do
     page = Audiobook::Page.new(1, [
       Audiobook::Heading.new('Chapter One.'),
       Audiobook::Paragraph.new([
         Audiobook::Sentence.new('Hello world.'),
-        Audiobook::Sentence.new('Second sentence!')
+        Audiobook::Sentence.new('Second sentence!', language: 'sa')
       ])
     ])
     book = instance_double(Audiobook::Book, metadata: {}, pages: [page])
@@ -288,6 +313,7 @@ RSpec.describe 'Audiobook TTS speed' do
           'Hello world.',
           'Second sentence!',
         ])
+        expect(items.map { |item| item[:lang] }).to eq(['en', 'en', 'sa'])
         on_batch.call(items.first(2))
         on_batch.call(items.last(1))
       end

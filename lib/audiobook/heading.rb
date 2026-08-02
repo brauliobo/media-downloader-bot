@@ -7,18 +7,20 @@ module Audiobook
 
     PAUSE = Pauses::HEADING
 
-    def initialize(text)
+    def initialize(text, language: nil)
       if text.is_a?(Sentence)
-        super(text.text)
+        super(text.text, language: language || text.language)
         @font_size = text.font_size if text.respond_to?(:font_size)
         @source_sentence = text.source_sentence if text.respond_to?(:source_sentence)
       else
-        super
+        super(text, language: language)
       end
     end
 
     def to_h
-      { 'heading' => { 'text' => text } }
+      data = { 'text' => text }
+      data['language'] = language if language
+      { 'heading' => data }
     end
   end
 end

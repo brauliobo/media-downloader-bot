@@ -39,7 +39,8 @@ module Audiobook
                 x_position: prev_line.x_position,
                 top_spacing: prev_line.top_spacing,
                 bottom_spacing: prev_line.bottom_spacing,
-                section_level: prev_line.section_level
+                section_level: prev_line.section_level,
+                language: prev_line.language
               )
               prev_line = buf.last
               next
@@ -103,6 +104,7 @@ module Audiobook
         font_changed = line.font_changed?(prev_line)
         page_changed = line.page_number != prev_line.page_number
         is_only_numbers = line.text.match?(/^\d+$/)
+        language_changed = line.language != prev_line.language
 
         spacing_break = detect_spacing_break(prev_line, line, spacing_threshold)
         indent_break = detect_indent_break(prev_line, line, indent_threshold)
@@ -110,7 +112,7 @@ module Audiobook
         buffer_text = buf.map(&:text).join(' ').strip
         sentence_finished = Sentence.ends_with_punctuation?(buffer_text)
 
-        should_break = is_only_numbers || font_changed || (sentence_finished && line.starts_with_capital?)
+        should_break = language_changed || is_only_numbers || font_changed || (sentence_finished && line.starts_with_capital?)
         should_break = true if (spacing_break || indent_break) && sentence_finished
 
         if should_break

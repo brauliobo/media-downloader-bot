@@ -29,7 +29,7 @@ module Audiobook
             next item_data(group.first, create_section(group.first, normalized))
           end
 
-          sentences = create_sentences(normalized)
+          sentences = create_sentences(normalized, group.first.language)
           next if sentences.empty?
 
           create_item(group.first, sentences)
@@ -61,8 +61,10 @@ module Audiobook
         normalized.gsub(/\bN\s*\.\s*T\./i, 'N.T.')
       end
 
-      def create_sentences(normalized)
-        Sentence.build_all(TextHelpers.split_sentences(normalized))
+      def create_sentences(normalized, language)
+        Sentence.build_all(TextHelpers.split_sentences(normalized)).each do |sentence|
+          sentence.language = language
+        end
       end
 
       def create_item(first_line, sentences)
@@ -82,7 +84,7 @@ module Audiobook
       end
 
       def create_section(first_line, text)
-        with_font_size(Section.new(text, level: first_line.section_level), first_line)
+        with_font_size(Section.new(text, level: first_line.section_level, language: first_line.language), first_line)
       end
 
       def create_paragraph(first_line, sentences)

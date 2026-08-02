@@ -176,10 +176,10 @@ module Audiobook
       item = SymMash.new(item) unless item.is_a?(SymMash)
       # Item is a hash with single key indicating type
       if item.heading
-        Heading.new(item.heading.text) if Sentence.speakable_text?(item.heading.text)
+        Heading.new(item.heading.text, language: item.heading.language) if Sentence.speakable_text?(item.heading.text)
       elsif item.section
         section = item.section
-        Section.new(section.text, level: section.level || 1) if Sentence.speakable_text?(section.text)
+        Section.new(section.text, level: section.level || 1, language: section.language) if Sentence.speakable_text?(section.text)
       elsif item.reference
         ref_info = item.reference
         sentences = Sentence.build_all(ref_info.sentences)
@@ -193,7 +193,7 @@ module Audiobook
       elsif item.paragraph
         sentences = (item.paragraph.sentences || []).map do |s|
           s = SymMash.new(s) unless s.is_a?(SymMash)
-          sent = Sentence.build(s.text)
+          sent = Sentence.build(s)
           next unless sent
           if s.references
             sent.references = s.references.map do |r|
@@ -211,7 +211,7 @@ module Audiobook
         type = item.type
         case type
         when 'Heading'
-          Heading.new(item.text)
+          Heading.new(item.text, language: item.language)
         when 'Image'
           img = Image.allocate
           img.instance_variable_set(:@path, item.path || '')
@@ -388,7 +388,8 @@ module Audiobook
           x_position: l.x,
           top_spacing: l.top_spacing,
           bottom_spacing: l.bottom_spacing,
-          section_level: l.section_level
+          section_level: l.section_level,
+          language: l.language
         )
       end.reject(&:empty?)
       
@@ -564,7 +565,8 @@ module Audiobook
           if prev_item.is_a?(Paragraph)
             page_changed = entry.page > prev_entry.page
             font_close = entry.font_size && prev_entry.font_size ? (entry.font_size - prev_entry.font_size).abs < 0.6 : true
-            if font_close
+            same_language = prev_item.sentences.last&.language == item.sentences.first&.language
+            if font_close && same_language
               last_text = prev_item.sentences.last&.text.to_s.strip
               first_text = item.sentences.first&.text.to_s.strip
               looks_unfinished = last_text !~ /[.!?…]"?\)?$/
@@ -786,6 +788,7 @@ module Audiobook
           @stl&.update "Translating page #{pidx+1}/#{@pages.size} sentence #{sidx+1}"
           sent_text = Translator.translate(sent.text, from: @lang, to: @opts.slang)
           sent.instance_variable_set(:@text, sent_text)
+          sent.language = @opts.slang.to_s
         end
       end
       @lang = @opts.slang.to_s

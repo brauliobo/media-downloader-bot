@@ -48,7 +48,12 @@ module Audiobook
         root.css(selector).filter_map do |node|
           next if node.ancestors.any? { |ancestor| ancestor.element? && ancestor.matches?(selector) }
 
-          line(node_text(node), font_size(node), section_level: section_level(node))
+          line(
+            node_text(node),
+            font_size(node),
+            section_level: section_level(node),
+            language: node_language(node)
+          )
         end
       end
 
@@ -57,11 +62,14 @@ module Audiobook
         html.to_enum(:scan, /<!--\s*block\b[^>]*\btype=paragraph\b[^>]*-->(.*?)<!--\s*\/block\s*-->/mi).each do
           match = Regexp.last_match
           fragment = Nokogiri::HTML5.fragment(match[1])
-          classes = html[[match.begin(0) - 300, 0].max...match.begin(0)].scan(/<p\b[^>]*class=["']?([^\s>"']+)/mi).last&.first
+          opening_tag = html[[match.begin(0) - 300, 0].max...match.begin(0)].scan(/<p\b[^>]*>/mi).last
+          paragraph = Nokogiri::HTML5.fragment(opening_tag.to_s).at_css('p')
+          classes = paragraph&.[]('class')
           lines << line(
             node_text(fragment),
             font_size_for_classes(classes),
-            section_level: section_level_for_classes(classes)
+            section_level: section_level_for_classes(classes),
+            language: paragraph&.[]('lang')
           )
         end
         root.css('.Para_Footnote').each { |node| lines << line(node_text(node), 10) }
@@ -124,10 +132,15 @@ module Audiobook
         return 2 if classes.to_s.match?(/Minor_Heading/i)
       end
 
-      def self.line(text, font_size, section_level: nil)
+      def self.node_language(node)
+        [node, *node.ancestors].filter_map { |element| element['lang'].to_s.strip.presence }.first
+      end
+
+      def self.line(text, font_size, section_level: nil, language: nil)
         text = normalize(text)
         SymMash.new(
-          text: text, font_size: font_size, section_level: section_level, y: nil, page: 1
+          text: text, font_size: font_size, section_level: section_level,
+          language: language.to_s.strip.presence, y: nil, page: 1
         ).compact unless text.empty?
       end
 

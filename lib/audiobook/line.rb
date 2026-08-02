@@ -4,10 +4,10 @@ module Audiobook
   # Represents a line of text extracted from a document with optional formatting metadata
   class Line
     attr_reader :text, :font_size, :y_position, :page_number, :x_position, :top_spacing, :bottom_spacing,
-                :section_level
+                :section_level, :language
 
     def initialize(text, font_size: nil, y_position: nil, page_number: nil, x_position: nil, top_spacing: nil,
-                   bottom_spacing: nil, section_level: nil)
+                   bottom_spacing: nil, section_level: nil, language: nil)
       @text = text.to_s.strip
       @font_size = font_size
       @y_position = y_position
@@ -16,6 +16,7 @@ module Audiobook
       @top_spacing = top_spacing
       @bottom_spacing = bottom_spacing
       @section_level = section_level&.to_i
+      @language = language.to_s.strip.presence
     end
 
     def empty?
