@@ -3,6 +3,7 @@ module TextHelpers
   EOS_PUNCT_FULL = /[\.!?¡¿；。？！]"?$/
   CLOSERS_ONLY   = /\A["')\]]+\z/
   EOS_WITH_CLOSE = /[.!?…]["')\]]*$/
+  TITLE_ABBREVIATION = /\A(?:Mr|Mrs|Ms|Dr|Prof|Sr|Sra|St)\.\z/i
 
   def self.normalize_text(str)
     clean = str.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
@@ -122,7 +123,7 @@ module TextHelpers
         end
       end
       cur_words << w
-      eos_pending = true if eos_punct?(raw)
+      eos_pending = true if eos_punct?(raw) && !title_abbreviation?(raw)
     end
     flush_sentence!(sentences, cur_words)
     sentences
@@ -151,6 +152,10 @@ module TextHelpers
 
   def self.eos_punct?(raw)
     raw.strip.match?(EOS_PUNCT)
+  end
+
+  def self.title_abbreviation?(raw)
+    raw.strip.match?(TITLE_ABBREVIATION)
   end
 
   def self.ends_with_punctuation?(text)

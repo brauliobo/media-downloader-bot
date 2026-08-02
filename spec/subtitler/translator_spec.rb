@@ -318,6 +318,23 @@ RSpec.describe Subtitler::Translator do
       expect(got).to eq(expected_timings[i].first(got.size))
     end
   end
-end
 
+  it 'keeps honorific abbreviations attached to the following name' do
+    segments = [
+      SymMash.new(words: [
+        SymMash.new(word('You', 0.0, 0.2)),
+        SymMash.new(word('must', 0.2, 0.4)),
+        SymMash.new(word('be', 0.4, 0.5)),
+        SymMash.new(word('Mr.', 0.5, 0.7)),
+        SymMash.new(word('Wang.', 0.7, 1.0)),
+        SymMash.new(word('Welcome.', 1.2, 1.8)),
+      ])
+    ]
+
+    sentences = described_class.sentences_for(segments)
+
+    expect(sentences.map(&:text)).to eq(['You must be Mr. Wang.', 'Welcome.'])
+    expect(sentences.first.end).to eq(1.0)
+  end
+end
 
