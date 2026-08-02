@@ -1,0 +1,19 @@
+#!/usr/bin/env ruby
+
+require 'json'
+require 'optparse'
+require_relative '../lib/ewprs/sloka_languages'
+
+options = {
+  manifest: File.expand_path('../config/ewprs_sloka_languages.json', __dir__),
+  write: true
+}
+OptionParser.new do |parser|
+  parser.on('--check') { options[:write] = false }
+  parser.on('--manifest PATH') { |path| options[:manifest] = File.expand_path(path) }
+end.parse!
+
+root = ARGV.first || raise(ArgumentError, 'missing EWPRS HTML root')
+stats = Ewprs::SlokaLanguages.new(manifest: options[:manifest]).annotate_tree(root, write: options[:write])
+puts JSON.pretty_generate(stats)
+exit 1 if !options[:write] && stats[:changed_files].positive?
