@@ -40,6 +40,26 @@ RSpec.describe Zipper do
     expect(Sh).to have_received(:run).with(include('-cq 33'))
   end
 
+  it 'stream-copies replaced dub audio through the final video transcode' do
+    probe = SymMash.new(
+      format: SymMash.new(duration: 60),
+      streams: [SymMash.new(codec_type: 'video', width: 1920, height: 1080)],
+    )
+    opts = SymMash.new(
+      dub:      1,
+      format:   Zipper::Types.video.h264,
+      acodec:   'aac',
+      metadata: {},
+    )
+
+    allow(Sh).to receive(:run)
+
+    described_class.new('/tmp/dubbed.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
+
+    expect(Sh).to have_received(:run).with(include('-c:a copy'))
+    expect(Sh).not_to have_received(:run).with(include('-profile:a aac_he'))
+  end
+
   it 'caps computed video maxrate for very short videos' do
     begin
       Zipper.size_mb_limit = 2_000

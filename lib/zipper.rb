@@ -322,6 +322,7 @@ class Zipper
 
   def video_audio_codec
     return '-an' if opts.noaudio || opts.no_audio
+    return '-c:a copy' if opts.dub
 
     aenc = AUDIO_ENC[opts.acodec&.to_sym] || AUDIO_ENC.opus
     opts.abrate ||= opts.format&.opts&.abrate || 64
