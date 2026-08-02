@@ -3,12 +3,10 @@ require_relative '../../../lib/audiobook/ewprs'
 
 RSpec.describe Audiobook::Ewprs::Catalog do
   around do |example|
-    original    = ENV.delete('EWPRS_VOICE_REFERENCE')
-    temperature = ENV.delete('EWPRS_POSITION_TEMPERATURE')
+    original = ENV.delete('EWPRS_VOICE_REFERENCE')
     example.run
   ensure
     original ? ENV['EWPRS_VOICE_REFERENCE'] = original : ENV.delete('EWPRS_VOICE_REFERENCE')
-    temperature ? ENV['EWPRS_POSITION_TEMPERATURE'] = temperature : ENV.delete('EWPRS_POSITION_TEMPERATURE')
   end
 
   it 'uses the recorded reference and neutral English instruction when configured' do
@@ -24,7 +22,7 @@ RSpec.describe Audiobook::Ewprs::Catalog do
       expect(options.instruct).to eq('male, middle-aged, moderate pitch, neutral English accent')
       expect(options.speaker_wav).to eq(reference)
       expect(options.ref_text).to eq('An exact recorded reference sentence.')
-      expect(options.position_temperature).to eq(0.0)
+      expect(options.position_temperature).to be_nil
     end
   end
 

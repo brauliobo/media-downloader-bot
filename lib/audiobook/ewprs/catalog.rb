@@ -97,9 +97,6 @@ module Audiobook::Ewprs
       if ENV['EWPRS_VOICE_REFERENCE'].present?
         options.speaker_wav = File.expand_path(ENV['EWPRS_VOICE_REFERENCE'])
         options.ref_text    = File.read(options.speaker_wav.sub(/\.[^.]+\z/, '.txt')).strip
-        if language == 'en'
-          options.position_temperature = ENV.fetch('EWPRS_POSITION_TEMPERATURE', '0').to_f
-        end
       end
       options
     end
