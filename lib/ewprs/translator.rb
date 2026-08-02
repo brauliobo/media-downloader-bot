@@ -8,7 +8,7 @@ module Ewprs
     HEADERS  = {'Content-Type' => 'application/json'}.freeze
     INTERNAL_PLACEHOLDER = /__P\d{4}__/
     CHARACTER_REFERENCE = /&(?:#\d+|#x[\da-f]+|[a-z][\w]+);?/i
-    WIRE_PLACEHOLDER     = /ZXQEWPRS[PE]\d+ZXQ/
+    WIRE_PLACEHOLDER     = /ZXQEWPRS[PE]\d+(?:ZXQ)?/
     XML_PLACEHOLDER      = %r{<ewprs-p id="(\d+)"\s*/>|<ewprs-p id="(\d+)"\s*>.*?</ewprs-p>}im
     XML_QUOTE_PLACEHOLDER = /<ewprs-(?:single-)?quote-(?:open|close) id="\d+"\s*\/>/i
     EDITORIAL_TAG         = %r{<span data-ewprs="[12][12]">|</span>}i
@@ -54,7 +54,7 @@ module Ewprs
       'trifarious'             => 'Interpret the English adjective "trifarious" as "threefold".'
     }.freeze
     TRANSPORT_ERRORS      = [EOFError, Errno::ECONNRESET, Errno::ECONNREFUSED].freeze
-    RETRYABLE_HTTP_STATUS = [502, 503, 504].freeze
+    RETRYABLE_HTTP_STATUS = [500, 502, 503, 504].freeze
     TRANSPORT_RETRIES     = 3
     TRANSPORT_RETRY_DELAY = 2
 
@@ -146,11 +146,12 @@ module Ewprs
       end
 
       clauses = text.to_s.split(/([,;][ \t]*)/)
-      return output if clauses.one?
-
-      clauses.each_with_index.map do |clause, index|
+      projected = clauses.each_with_index.map do |clause, index|
         index.odd? ? clause : translate_with_xml_placeholders(clause, values: values, from: from, to: to)
       end.join
+      return projected if projected.scan(INTERNAL_PLACEHOLDER).tally == expected
+
+      translate_between_placeholders(text, from: from, to: to)
     end
 
     def translate_preserving_character_references(text, from: 'en', to:)
@@ -180,6 +181,10 @@ module Ewprs
         parts[indexes[index]] = parts[indexes[index]].sub(parts[indexes[index]].strip, translated)
       end
       parts.join
+    end
+
+    def translate_preserving_placeholder_order(text, from: 'en', to:)
+      translate_between_placeholders(text, from: from, to: to)
     end
 
     private
@@ -271,6 +276,10 @@ module Ewprs
       output = complete(prompt(encoded, from: from, to: to))
       output = remove_echoed_source(output, encoded)
       restore_encoded_placeholders(output, placeholders)
+    rescue Mechanize::ResponseCodeError => error
+      raise unless error.response_code.to_i == 500 && text.to_s.scan(SMART_QUOTE).size.odd?
+
+      translate_preserving_smart_quotes(text, from: from, to: to)
     end
 
     def remove_echoed_source(output, source)
@@ -300,7 +309,7 @@ module Ewprs
 
     def restore_encoded_placeholders(text, replacements)
       text.to_s.gsub(/#{WIRE_PLACEHOLDER}|#{XML_QUOTE_PLACEHOLDER}/) do |marker|
-        replacements.fetch(marker, marker)
+        replacements.fetch(complete_wire_placeholder(marker), marker)
       end
     end
 
@@ -323,8 +332,12 @@ module Ewprs
     def restore_placeholders(text, placeholders)
       internal = placeholders.invert
       text.to_s.gsub(/#{WIRE_PLACEHOLDER}|#{XML_QUOTE_PLACEHOLDER}/) do |marker|
-        internal.fetch(marker, marker)
+        internal.fetch(complete_wire_placeholder(marker), marker)
       end
+    end
+
+    def complete_wire_placeholder(marker)
+      marker.start_with?('ZXQEWPRS') && !marker.end_with?('ZXQ') ? "#{marker}ZXQ" : marker
     end
 
     def encoded_character_reference(reference, index)

@@ -125,12 +125,12 @@ RSpec.describe Ewprs::Translator do
     expect(calls).to eq(4)
   end
 
-  it 'retries transient gateway responses' do
+  it 'retries transient model server responses' do
     calls = 0
-    gateway_error = Mechanize::ResponseCodeError.new(Struct.new(:code).new('502'))
+    server_error = Mechanize::ResponseCodeError.new(Struct.new(:code).new('500'))
     allow(Utils::HTTP).to receive(:post) do
       calls += 1
-      raise gateway_error if calls <= 2
+      raise server_error if calls <= 2
 
       Struct.new(:body).new({choices: [{message: {content: 'Übersetzt'}}]}.to_json)
     end
@@ -138,6 +138,22 @@ RSpec.describe Ewprs::Translator do
 
     expect(translator.translate_markup('Translated', to: 'de')).to eq('Übersetzt')
     expect(calls).to eq(3)
+  end
+
+  it 'translates unmatched smart-quote prose separately after repeated model format failures' do
+    calls = 0
+    server_error = Mechanize::ResponseCodeError.new(Struct.new(:code).new('500'))
+    allow(Utils::HTTP).to receive(:post) do |_url, body, _headers|
+      calls += 1
+      prompt = JSON.parse(body).dig('messages', 0, 'content')
+      raise server_error if prompt.include?('<ewprs-quote-open')
+
+      Struct.new(:body).new({choices: [{message: {content: '我的主啊。'}}]}.to_json)
+    end
+    expect(translator).to receive(:sleep).with(2).exactly(3).times
+
+    expect(translator.translate_markup('&ldquo;Oh my Lord.', to: 'zh')).to eq('&ldquo;我的主啊。')
+    expect(calls).to eq(5)
   end
 
   it 'limits transport retries' do
@@ -179,6 +195,18 @@ RSpec.describe Ewprs::Translator do
 
     expect(translator.translate_markup('__P0002__ Buddha __P0001__ __P0002__', to: 'pt')).to eq(
       '__P0002__ Buda __P0001__ __P0002__'
+    )
+  end
+
+  it 'restores a wire placeholder whose suffix was truncated' do
+    expect(Utils::HTTP).to receive(:post).and_return(
+      Struct.new(:body).new(
+        {choices: [{message: {content: '芒果ZXQEWPRSP17品种'}}]}.to_json
+      )
+    )
+
+    expect(translator.translate_markup('Mango __P0017__ variety', to: 'zh')).to eq(
+      '芒果__P0017__品种'
     )
   end
 
@@ -306,6 +334,50 @@ RSpec.describe Ewprs::Translator do
         'The __P0001__ improves, while __P0002__ grows.', to: 'de'
       )
     ).to eq('Der __P0001__ verbessert sich, während __P0002__ wächst.')
+  end
+
+  it 'translates between placeholders when XML clause retries still drop one' do
+    allow(Utils::HTTP).to receive(:post) do |_url, body, _headers|
+      prompt = JSON.parse(body).dig('messages', 0, 'content')
+      content = if prompt.include?('<ewprs-p')
+                  if prompt.include?('Before <ewprs-p id="1"/>, between <ewprs-p id="2"/>, after.')
+                    '之前<ewprs-p id="1"/>,之后。'
+                  elsif prompt.include?('Before <ewprs-p id="1"/>')
+                    '之前<ewprs-p id="1"/>'
+                  elsif prompt.include?('between <ewprs-p id="2"/>')
+                    '之间'
+                  else
+                    '之后。'
+                  end
+                elsif prompt.match?(/\n\nBefore\z/)
+                  '之前'
+                elsif prompt.match?(/\n\n, between\z/)
+                  '，之间'
+                elsif prompt.match?(/\n\nafter\.\z/)
+                  '之后。'
+                elsif prompt.match?(/\n\n, after\.\z/)
+                  '，之后。'
+                end
+      Struct.new(:body).new({choices: [{message: {content: content}}]}.to_json)
+    end
+
+    expect(
+      translator.translate_preserving_placeholders(
+        'Before __P0001__, between __P0002__, after.', to: 'zh'
+      )
+    ).to eq('之前 __P0001__，之间 __P0002__，之后。')
+  end
+
+  it 'preserves placeholder order while translating intervening prose' do
+    allow(translator).to receive(:translate_markup).with(
+      ['Before', 'between', 'after.'], from: 'en', to: 'zh'
+    ).and_return(['之前', '之间', '之后。'])
+
+    expect(
+      translator.translate_preserving_placeholder_order(
+        'Before __P0001__ between __P0002__ after.', to: 'zh'
+      )
+    ).to eq('之前 __P0001__ 之间 __P0002__ 之后。')
   end
 
   it 'retries an echoed XML translation with natural protected values and punctuation' do

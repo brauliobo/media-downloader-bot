@@ -30,6 +30,10 @@ RSpec.describe Ewprs::TranslationBatch do
       @transform.call(text)
     end
 
+    def translate_preserving_placeholder_order(text, from: 'en', to:)
+      @transform.call(text)
+    end
+
     def translate_preserving_editorial_tags(text, from: 'en', to:)
       @transform.call(text)
     end
@@ -2176,6 +2180,64 @@ RSpec.describe Ewprs::TranslationBatch do
     )
   end
 
+  it 'keeps nested unit meanings out of protected placeholder projections' do
+    nested_marker = batch.send(:register_unit, 'Horse Sacrifice')
+    tokens = {
+      '__P0001__' => "(#{nested_marker})",
+      '__P0002__' => "Yajin&#x32D;a [#{nested_marker}]",
+      '__P0003__' => 'Ra&#x301;jasu&#x301;ya'
+    }
+
+    expect(batch.send(:placeholder_projection_values, tokens)).to eq(
+      '__P0001__' => '',
+      '__P0002__' => 'Yajin&#x32D;a []',
+      '__P0003__' => 'Ra&#x301;jasu&#x301;ya'
+    )
+  end
+
+  it 'reprojects a transliterated outer term that carries a nested gloss' do
+    chinese = described_class.new(
+      root: root, target: 'zh', cache: cache, translator: translator, stdout: StringIO.new
+    )
+    nested_marker = chinese.send(:register_unit, 'mental reactive momenta')
+    unit = described_class::Unit.new(
+      key: 'nested-transliterated-token', prepared: 'its __P0001__',
+      tokens: {'__P0001__' => "sam&#x301;ska&#x301;ras [#{nested_marker}]"}
+    )
+
+    expect(chinese.send(:project_missing_transliterated_tokens, unit, '自身的samskaras')).to eq(
+      '自身的__P0001__'
+    )
+  end
+
+  it 'distinguishes structural nested editorials from movable parentheticals' do
+    nested_marker = batch.send(:register_unit, 'not')
+
+    expect(batch.send(:structural_token?, "[[#{nested_marker}]]")).to be(true)
+    expect(batch.send(:structural_token?, "(#{nested_marker})")).to be(false)
+  end
+
+  it 'uses ordered projection when a nested editorial moves past a parenthetical' do
+    nested_marker = batch.send(:register_unit, 'not')
+    unit = described_class::Unit.new(
+      key: 'nested-editorial-order', source: 'It is [[not]] beyond time (Kalatiita).',
+      prepared: 'It is __P0001__ beyond time __P0002__.',
+      tokens: {'__P0001__' => "[[#{nested_marker}]]", '__P0002__' => '(Kalatiita)'},
+      leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).to receive(:translate_preserving_placeholder_order).with(
+      unit.prepared, from: 'en', to: 'zh'
+    ).and_return('它__P0001__超越时间__P0002__。')
+    chinese = described_class.new(root: root, target: 'zh', cache: cache, translator: translator)
+    chinese.instance_variable_get(:@units)[nested_marker[/[0-9a-f]{64}/]] =
+      batch.instance_variable_get(:@units).fetch(nested_marker[/[0-9a-f]{64}/])
+
+    expect(
+      chinese.send(:restore_tokens_with_retries, unit, '它超越时间__P0002__。__P0001__')
+    ).to eq("它[[#{nested_marker}]]超越时间(Kalatiita)。")
+  end
+
   it 'allows protected terms to follow target-language grammar' do
     unit = described_class::Unit.new(
       key: 'terms', prepared: '__P0001__ __P0002__',
@@ -2197,6 +2259,18 @@ RSpec.describe Ewprs::TranslationBatch do
 
     expect(batch.send(:restore_tokens, unit, '__P0001__nasceram')).to eq(
       'ks&#x301;atriyas nasceram'
+    )
+  end
+
+  it 'restores source spacing dropped between adjacent protected terms' do
+    unit = described_class::Unit.new(
+      key: 'adjacent-term-boundary', prepared: '__P0001__ __P0002__',
+      tokens: {'__P0001__' => 'Ra&#x301;jasu&#x301;ya', '__P0002__' => 'Yajin&#x32D;a'},
+      leading: '', trailing: ''
+    )
+
+    expect(batch.send(:normalize_protected_boundaries, unit, '__P0001____P0002__')).to eq(
+      '__P0001__ __P0002__'
     )
   end
 

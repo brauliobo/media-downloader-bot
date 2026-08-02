@@ -92,11 +92,22 @@ module Ewprs
                                   unit.prepared.match?(PLACEHOLDER)
           project_placeholders ||= error.respond_to?(:code) && error.code == :delimiters &&
                                   unit.prepared.match?(PLACEHOLDER)
-          if project_placeholders && !attempted_projections[:placeholders]
-            attempted_projections[:placeholders] = true
-            projected = translator.translate_preserving_placeholders(
-              unit.prepared, values: repair_token_values(unit.tokens), from: source_language, to: target
-            )
+          project_order = error.is_a?(ProtectedTokenError) && error.message.match?(/reordered structural tokens/)
+          project_order ||= error.respond_to?(:code) && error.code == :delimiters &&
+                            unit.tokens.any? { |_marker, value| nested_editorial_token?(value) }
+          project_placeholders ||= project_order
+          projection_key = project_order ? :placeholder_order : :placeholders
+          if project_placeholders && !attempted_projections[projection_key]
+            attempted_projections[projection_key] = true
+            projected = if project_order
+              translator.translate_preserving_placeholder_order(
+                unit.prepared, from: source_language, to: target
+              )
+            else
+              translator.translate_preserving_placeholders(
+                unit.prepared, values: placeholder_projection_values(unit.tokens), from: source_language, to: target
+              )
+            end
             if projected != output
               output = projected
               retry
@@ -148,9 +159,12 @@ module Ewprs
         projected = output.to_s.dup
         unit.tokens.each do |marker, value|
           missing = expected.fetch(marker, 0) - actual.fetch(marker, 0)
-          next unless missing.positive? && !value.match?(/[<>⟦⟧\[\]{}]/)
+          next unless missing.positive?
 
-          visible = CGI.unescapeHTML(value).unicode_normalize(:nfd)
+          projectable = value.gsub(UNIT_MARKER, ' ').gsub(/[\[\]{}()]/, ' ').strip
+          next if projectable.empty? || projectable.match?(/[<>⟦⟧]/)
+
+          visible = CGI.unescapeHTML(projectable).unicode_normalize(:nfd)
           next unless visible.match?(/\p{M}/u)
 
           plain = visible.gsub(/\p{M}/u, '')
@@ -250,14 +264,26 @@ module Ewprs
       end
 
       def exact_phrase_pattern(value)
-        opening = value.match?(/\A[\p{L}\p{M}]/u) ? '(?<![\p{L}\p{M}])' : ''
-        closing = value.match?(/[\p{L}\p{M}]\z/u) ? '(?![\p{L}\p{M}])' : ''
+        boundary = target == 'zh' ? '\p{Latin}\p{M}' : '\p{L}\p{M}'
+        opening = value.match?(/\A[\p{L}\p{M}]/u) ? "(?<![#{boundary}])" : ''
+        closing = value.match?(/[\p{L}\p{M}]\z/u) ? "(?![#{boundary}])" : ''
         Regexp.new("#{opening}#{Regexp.escape(value)}#{closing}", Regexp::IGNORECASE)
       end
 
       def repair_token_values(tokens)
         tokens.transform_values do |value|
           value.gsub(UNIT_MARKER) { @units.fetch(Regexp.last_match(1)).source }
+        end
+      end
+
+      def placeholder_projection_values(tokens)
+        expanded = repair_token_values(tokens)
+        tokens.to_h do |marker, value|
+          next [marker, expanded.fetch(marker)] unless value.match?(UNIT_MARKER)
+
+          outer = value.gsub(UNIT_MARKER, '')
+          visible = CGI.unescapeHTML(outer.gsub(MARKUP, ' '))
+          [marker, visible.match?(/[\p{L}\p{N}]/u) ? outer : '']
         end
       end
 
@@ -299,14 +325,22 @@ module Ewprs
       end
 
       def normalize_protected_boundaries(unit, output)
-        unit.tokens.each_with_object(output.dup) do |(marker, value), normalized|
+        normalized = unit.tokens.each_with_object(output.dup) do |(marker, value), result|
           visible = CGI.unescapeHTML(value.gsub(MARKUP, ' ').gsub(UNIT_MARKER, ' ')).strip
-          normalized.gsub!(/(?<=\p{Latin})#{Regexp.escape(marker)}/u, " #{marker}") if visible.match?(/\A\p{L}/u)
-          normalized.gsub!(/#{Regexp.escape(marker)}(?=\p{Latin})/u, "#{marker} ") if visible.match?(/\p{L}\z/u)
+          result.gsub!(/(?<=\p{Latin})#{Regexp.escape(marker)}/u, " #{marker}") if visible.match?(/\A\p{L}/u)
+          result.gsub!(/#{Regexp.escape(marker)}(?=\p{Latin})/u, "#{marker} ") if visible.match?(/\p{L}\z/u)
           if (punctuation = visible[/[,.!?;:]\z/])
-            normalized.gsub!(/#{Regexp.escape(marker)}#{Regexp.escape(punctuation)}/, marker)
+            result.gsub!(/#{Regexp.escape(marker)}#{Regexp.escape(punctuation)}/, marker)
           end
         end
+        unit.prepared.scan(/(#{PLACEHOLDER})([ \t]+)(#{PLACEHOLDER})/).each do |left, spacing, right|
+          left_visible  = CGI.unescapeHTML(unit.tokens.fetch(left).gsub(MARKUP, ' ').gsub(UNIT_MARKER, ' ')).strip
+          right_visible = CGI.unescapeHTML(unit.tokens.fetch(right).gsub(MARKUP, ' ').gsub(UNIT_MARKER, ' ')).strip
+          next unless left_visible.match?(/\p{L}\z/u) && right_visible.match?(/\A\p{L}/u)
+
+          normalized.gsub!(/#{Regexp.escape(left)}#{Regexp.escape(right)}/, "#{left}#{spacing}#{right}")
+        end
+        normalized
       end
 
       def restore_editorial_tags(value)
@@ -329,6 +363,14 @@ module Ewprs
       end
 
       def valid_structural_order?(unit, expected, actual)
+        expected_editorials = expected.each_with_index.filter_map do |marker, index|
+          [marker, index] if nested_editorial_token?(unit.tokens.fetch(marker))
+        end
+        actual_editorials = actual.each_with_index.filter_map do |marker, index|
+          [marker, index] if nested_editorial_token?(unit.tokens.fetch(marker))
+        end
+        return false unless actual_editorials == expected_editorials
+
         expected_structure = expected.select { |token| structural_token?(unit.tokens.fetch(token)) }
         actual_structure   = actual.select { |token| structural_token?(unit.tokens.fetch(token)) }
         return true if actual_structure == expected_structure
@@ -387,7 +429,12 @@ module Ewprs
       end
 
       def structural_token?(value)
-        value.match?(STANDALONE_MARKUP) || value.match?(/\A(?:#{EDITORIAL_BRACKET}|#{PAIRED_DELIMITER})\z/)
+        value.match?(STANDALONE_MARKUP) || value.match?(/\A(?:#{EDITORIAL_BRACKET}|#{PAIRED_DELIMITER})\z/) ||
+          nested_editorial_token?(value)
+      end
+
+      def nested_editorial_token?(value)
+        value.match?(/\A\[\[#{UNIT_MARKER}\]\]\z/)
       end
 
       def validate_restored_translation!(unit, translation)
