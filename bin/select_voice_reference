@@ -23,7 +23,7 @@ end
 transcriber = VoiceReference::Transcriber.new(cache_dir: opts[:cache])
 strict      = opts.fetch(:strict, '1').to_s != '0'
 selector    = VoiceReference::Selector.new(language: opts[:language] || 'en', strict: strict)
-builder     = VoiceReference::Builder.new(transcriber: transcriber, selector: selector)
+builder     = VoiceReference::Builder.new(transcriber: transcriber, selector: selector, language: opts[:language] || 'en')
 
 candidate = builder.build(audio_files: audio_files, output: output)
 puts JSON.pretty_generate(candidate.to_h)

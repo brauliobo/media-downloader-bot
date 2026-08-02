@@ -10,10 +10,11 @@ class VoiceReference
     MIN_AVERAGE_PROBABILITY   = 0.85
     MIN_P10_PROBABILITY       = 0.75
 
-    def initialize(transcriber: Transcriber.new, selector: Selector.new, analyzer: AudioAnalyzer.new)
+    def initialize(transcriber: Transcriber.new, selector: Selector.new, analyzer: AudioAnalyzer.new, language: 'en')
       @transcriber = transcriber
       @selector    = selector
       @analyzer    = analyzer
+      @language    = language
     end
 
     def build(audio_files:, output:)
@@ -37,7 +38,7 @@ class VoiceReference
 
     private
 
-    attr_reader :transcriber, :selector, :analyzer
+    attr_reader :transcriber, :selector, :analyzer, :language
 
     def sidecar(output, extension)
       output.sub(/\.[^.]+\z/, extension)
@@ -76,7 +77,7 @@ class VoiceReference
       p10           = probabilities.empty? ? 0 : probabilities.sort[(probabilities.size * 0.1).floor]
       observed      = segments.map { |segment| segment.fetch(:text) }.join(' ')
       similarity    = word_similarity(expected, observed)
-      transcript_ok = transcript.fetch(:language) == 'en' &&
+      transcript_ok = transcript.fetch(:language) == language &&
         average >= MIN_AVERAGE_PROBABILITY && p10 >= MIN_P10_PROBABILITY &&
         similarity >= MIN_TRANSCRIPT_SIMILARITY
       {

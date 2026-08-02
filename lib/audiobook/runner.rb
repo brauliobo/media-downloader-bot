@@ -4,6 +4,7 @@ require_relative 'pauses'
 require_relative '../zipper'
 require_relative '../tts/options'
 require_relative '../language'
+require_relative '../voice_reference'
 
 module Audiobook
   class Runner
@@ -125,13 +126,21 @@ module Audiobook
     end
 
     def tts_options(dir)
-      options = TTS::Options.for(@opts, lang: @lang)
+      options = TTS::Options.for(tts_config, lang: @lang)
       if @opts&.position_temperature.present?
         options[:position_temperature] = @opts.position_temperature.to_f
       end
       options[:audio_speed] = audio_speed if audio_speed
       options[:instruct] ||= detected_voice_instruct if stable_voice_reference?
       return options unless stable_voice_reference?
+
+      if voice_url
+        ref_path  = File.join(dir, 'audiobook_voice_reference.wav')
+        reference = ::VoiceReference.from_url(
+          url: voice_url, output: ref_path, language: @lang
+        )
+        return options.merge(speaker_wav: ref_path, ref_text: reference.text)
+      end
 
       if @opts&.speaker_wav.present?
         return options.merge(speaker_wav: File.expand_path(@opts.speaker_wav), ref_text: @opts.ref_text.to_s.strip)
@@ -239,7 +248,18 @@ module Audiobook
     end
 
     def voice_instruct
-      TTS::Options.for(@opts, lang: @lang)[:instruct].to_s
+      TTS::Options.for(tts_config, lang: @lang)[:instruct].to_s
+    end
+
+    def voice_url
+      value = @opts&.voice.to_s.strip
+      value if value.match?(%r{\Ahttps?://}i)
+    end
+
+    def tts_config
+      return @opts unless voice_url
+
+      SymMash.new(@opts).tap { |options| options.delete(:voice) }
     end
   end
 end

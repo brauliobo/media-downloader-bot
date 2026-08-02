@@ -42,4 +42,41 @@ RSpec.describe VoiceReference::Builder do
       expect(candidate.artifacts.dig(:audio, :sha256)).to match(/\A[0-9a-f]{64}\z/)
     end
   end
+
+  it 'builds the best clear reference from a downloaded URL' do
+    Dir.mktmpdir('voice-reference-url-') do |dir|
+      output     = File.join(dir, 'reference.wav')
+      source     = File.join(dir, 'source.webm')
+      candidate  = VoiceReference::Candidate.new(text: 'The selected clear passage.')
+      downloader = double(call: source)
+      selector   = instance_double(VoiceReference::Selector)
+      builder    = instance_double(described_class, build: candidate)
+      allow(VoiceReference::Selector).to receive(:new).with(language: 'pt').and_return(selector)
+      allow(described_class).to receive(:new).with(selector: selector, language: 'pt').and_return(builder)
+
+      result = VoiceReference.from_url(
+        url: 'https://example.com/voice', output: output, language: 'pt', downloader: downloader
+      )
+
+      expect(result).to eq(candidate)
+      expect(downloader).to have_received(:call).with('https://example.com/voice', dir: dir)
+      expect(builder).to have_received(:build).with(audio_files: [source], output: output)
+    end
+  end
+
+  it 'validates the extracted transcript in the configured language' do
+    builder = described_class.new(language: 'pt')
+    text    = 'Esta passagem de referência possui uma voz clara e natural.'
+    report  = builder.send(
+      :validation_report,
+      text,
+      {
+        language: 'pt',
+        segments: [{text: text, probabilities: Array.new(text.split.size, 0.95)}]
+      },
+      {accepted: true}
+    )
+
+    expect(report[:accepted]).to eq(true)
+  end
 end

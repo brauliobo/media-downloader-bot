@@ -20,7 +20,15 @@ THREADS=1 TTS=OmniVoice /home/braulio/.rvm/wrappers/ruby-3.4.4/ruby bin/zip \
   voice=male,young_adult,moderate_pitch,american_accent
 ```
 
-The `voice=` value is passed to OmniVoice as the direct voice instruction on each TTS request. Use underscores for spaces inside attributes when calling from the shell, for example `young_adult`, `moderate_pitch`, or `american_accent`.
+Non-URL `voice=` values are passed to OmniVoice as direct voice instructions. Use underscores for spaces inside attributes when calling from the shell, for example `young_adult`, `moderate_pitch`, or `american_accent`.
+
+For audiobook voice cloning, pass an HTTP(S) audio or video link. The audiobook pipeline downloads its best audio stream and reuses the voice-reference quality pipeline to extract the clearest complete passage and transcript:
+
+```bash
+THREADS=1 TTS=OmniVoice /home/braulio/.rvm/wrappers/ruby-3.4.4/ruby bin/zip \
+  1908kybalion-pages-1-10.pdf \
+  voice=https://example.com/narrator-recording
+```
 
 ## transcribe.cpp Subtitles
 

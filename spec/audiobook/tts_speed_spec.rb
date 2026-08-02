@@ -130,6 +130,32 @@ RSpec.describe 'Audiobook TTS speed' do
     end
   end
 
+  it 'downloads and extracts a clear reference from a voice link' do
+    stub_const('TTS::BACKEND', TTS::OmniVoice)
+    book = instance_double(Audiobook::Book, metadata: { language: 'pt' }, pages: [])
+    runner = Audiobook::Runner.new(
+      book, nil, SymMash.new(voice: 'https://example.com/narrator')
+    )
+
+    Dir.mktmpdir do |dir|
+      reference = VoiceReference::Candidate.new(text: 'Uma passagem clara da narradora.')
+      expect(VoiceReference).to receive(:from_url).with(
+        url: 'https://example.com/narrator',
+        output: File.join(dir, 'audiobook_voice_reference.wav'),
+        language: 'pt'
+      ).and_return(reference)
+      allow(Language).to receive(:author_gender).and_return('female')
+      expect(TTS).not_to receive(:synthesize)
+
+      options = runner.send(:tts_options, dir)
+
+      expect(options[:speaker_wav]).to eq(File.join(dir, 'audiobook_voice_reference.wav'))
+      expect(options[:ref_text]).to eq('Uma passagem clara da narradora.')
+      expect(options[:instruct]).to eq('female, middle-aged, moderate pitch')
+      expect(options[:instruct]).not_to include('https://')
+    end
+  end
+
   it 'ignores temperature when the backend does not support it' do
     book = instance_double(Audiobook::Book, metadata: {}, pages: [])
     runner = Audiobook::Runner.new(book, nil, SymMash.new(temp: '0.35'))
