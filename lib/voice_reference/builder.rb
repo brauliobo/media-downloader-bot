@@ -82,7 +82,7 @@ class VoiceReference
       {
         accepted: audio.fetch(:accepted) && transcript_ok,
         tools: Audio::Quality::TOOLS.merge(transcription: 'Subtitler::WhisperCpp'),
-        voice_quality_filter: Zipper::VOICE_QUALITY_FILTER,
+        voice_quality_filter: AudioAnalyzer::REFERENCE_FILTER,
         transcript: {
           accepted:            transcript_ok,
           language:            transcript.fetch(:language),

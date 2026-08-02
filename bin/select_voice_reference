@@ -11,9 +11,18 @@ end
 
 source      = File.expand_path(opts.fetch(:source))
 output      = File.expand_path(opts.fetch(:output))
-audio_files = Dir[File.join(source, '*.{flac,m4a,mp3,ogg,wav,webm}')]
+audio_files = if opts[:quality_report]
+  report = JSON.parse(File.read(File.expand_path(opts[:quality_report])), symbolize_names: true)
+  limit = opts.fetch(:top, report.fetch(:recordings).size).to_i
+  raise ArgumentError, 'top must be positive' unless limit.positive?
+
+  report.fetch(:recordings).first(limit).map { |recording| recording.fetch(:path) }
+else
+  Dir[File.join(source, '*.{flac,m4a,mp3,ogg,wav,webm}')]
+end
 transcriber = VoiceReference::Transcriber.new(cache_dir: opts[:cache])
-selector    = VoiceReference::Selector.new(language: opts[:language] || 'en')
+strict      = opts.fetch(:strict, '1').to_s != '0'
+selector    = VoiceReference::Selector.new(language: opts[:language] || 'en', strict: strict)
 builder     = VoiceReference::Builder.new(transcriber: transcriber, selector: selector)
 
 candidate = builder.build(audio_files: audio_files, output: output)

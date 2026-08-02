@@ -10,9 +10,10 @@ class VoiceReference
     REFINED_WORD_RANGE           = 8..35
     MAX_CANDIDATES_PER_RECORDING = 5
 
-    def initialize(language: 'en', analyzer: AudioAnalyzer.new)
+    def initialize(language: 'en', analyzer: AudioAnalyzer.new, strict: true)
       @language = language
       @analyzer = analyzer
+      @strict   = strict
     end
 
     def select(recordings)
@@ -25,13 +26,13 @@ class VoiceReference
           .sort_by { |candidate| -candidate.confidence }
           .first(MAX_CANDIDATES_PER_RECORDING)
       end
-      candidates.filter_map { |candidate| analyzer.assess(candidate) }
+      candidates.filter_map { |candidate| analyzer.public_send(strict ? :assess : :measure, candidate) }
         .sort_by { |candidate| -candidate.score }
     end
 
     private
 
-    attr_reader :language, :analyzer
+    attr_reader :language, :analyzer, :strict
 
     def transcript_candidates(audio, transcript)
       return [] unless transcript.fetch(:language) == language

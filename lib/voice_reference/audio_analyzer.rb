@@ -5,30 +5,39 @@ require_relative '../zipper'
 
 class VoiceReference
   class AudioAnalyzer
+    SILENCE_THRESHOLD_DB = Audio::Quality::DEFAULT_THRESHOLDS.fetch(:silence_threshold_db)
+    EDGE_FILTER = [
+      "silenceremove=start_periods=1:start_duration=0.1:start_threshold=#{SILENCE_THRESHOLD_DB}dB:start_silence=0.05",
+      'areverse',
+      "silenceremove=start_periods=1:start_duration=0.1:start_threshold=#{SILENCE_THRESHOLD_DB}dB:start_silence=0.05",
+      'afade=t=in:st=0:d=0.05',
+      'areverse',
+      'afade=t=in:st=0:d=0.03'
+    ].join(',').freeze
+    REFERENCE_FILTER = [Zipper::VOICE_QUALITY_FILTER, EDGE_FILTER].join(',').freeze
+
     def initialize(quality: Audio::Quality.new)
       @quality = quality
     end
 
     def assess(candidate)
+      candidate = measure(candidate)
+      candidate if quality.signal_acceptable?(candidate.metrics)
+    end
+
+    def measure(candidate)
       Dir.mktmpdir('voice-reference-') do |dir|
         clip = File.join(dir, 'candidate.wav')
         extract_raw(candidate, clip)
         metrics = quality.signal(clip)
-        return unless quality.signal_acceptable?(metrics)
-
         candidate.metrics = metrics
-        candidate.score   = signal_score(metrics) + candidate.confidence * 0.2
+        candidate.score   = Audio::ReferenceQuality.signal_score(metrics) + candidate.confidence * 0.2
         candidate
       end
     end
 
     def extract(candidate, output)
-      fade_out = [candidate.duration - 0.05, 0].max
-      filter = [
-        Zipper::VOICE_QUALITY_FILTER,
-        "afade=t=in:st=0:d=0.03,afade=t=out:st=#{fade_out}:d=0.05"
-      ].join(',')
-      command = ffmpeg_extract(candidate, output) + ['-af', filter, '-c:a', 'pcm_s16le', output]
+      command = ffmpeg_extract(candidate, output) + ['-af', REFERENCE_FILTER, '-c:a', 'pcm_s16le', output]
       run(command, 'voice reference extraction failed', output: output)
     end
 
@@ -51,10 +60,6 @@ class VoiceReference
         '-t', candidate.duration.to_s, '-i', candidate.audio, '-vn',
         '-ac', '1', '-ar', '24000'
       ]
-    end
-
-    def signal_score(metrics)
-      metrics[:entropy] - metrics[:zero_crossing_rate] * 2 - (metrics[:rms_db] + 20).abs / 20
     end
 
     def run(command, label, output: nil)

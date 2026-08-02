@@ -18,6 +18,23 @@ RSpec.describe VoiceReference::AudioAnalyzer do
     described_class.new.extract(candidate, '/tmp/reference.wav')
 
     filter  = command.fetch(command.index('-af') + 1)
-    expect(filter).to start_with(Zipper::VOICE_QUALITY_FILTER)
+    expect(filter).to eq(described_class::REFERENCE_FILTER)
+    expect(filter).to include('silenceremove=', 'areverse', 'afade=')
+  end
+
+  it 'measures candidates without applying strict signal rejection' do
+    candidate = VoiceReference::Candidate.new(
+      audio: 'source.webm', start: 10, finish: 17,
+      text: 'A measurable recorded phrase.', confidence: 0.95
+    )
+    metrics = {peak_db: 0.0, rms_db: -18.0, entropy: 0.8, zero_crossing_rate: 0.04, bit_depth: 16}
+    quality = instance_double(Audio::Quality, signal: metrics)
+    analyzer = described_class.new(quality: quality)
+    allow(analyzer).to receive(:extract_raw)
+
+    measured = analyzer.measure(candidate)
+
+    expect(measured.metrics).to equal(metrics)
+    expect(measured.score).to be_within(0.0001).of(0.81)
   end
 end
