@@ -393,10 +393,11 @@ class Zipper
     Zipper::Subtitle.sanitize_vtt vtt
   end
 
-  def self.audio_to_wav path
+  def self.audio_to_wav(path, sample_rate: nil, channels: nil)
     wpath = File.join(Dir.pwd, "audio-#{SecureRandom.hex(6)}.wav")
+    format = [("-ac #{channels.to_i}" if channels), ("-ar #{sample_rate.to_i}" if sample_rate)].compact.join(' ')
 
-    cmd = "#{FFMPEG} -i #{Sh.escape(path)} #{Sh.escape(wpath)}"
+    cmd = "#{FFMPEG} -i #{Sh.escape(path)} #{format} #{Sh.escape(wpath)}"
     _, _, st = Sh.run cmd
     raise 'ffmpeg failed' unless st.success?
 
