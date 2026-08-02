@@ -16,8 +16,28 @@ class TTS
       true
     end
 
+    def synthesize(text:, lang:, out_path:, speaker_wav: nil, ref_text: nil, **kwargs)
+      require_clone_text!(speaker_wav, ref_text)
+      super
+    end
+
+    def synthesize_batch(items:, lang: nil, speaker_wav: nil, ref_text: nil, **kwargs)
+      require_clone_text!(speaker_wav, ref_text)
+      super
+    end
+
     def self.output_sample_rate
       TTS.env_sample_rate('OMNIVOICE_SAMPLE_RATE') || 24_000
+    end
+
+    private
+
+    def require_clone_text!(speaker_wav, ref_text)
+      return unless speaker_wav || ENV['SPEAKER_WAV']
+      return unless ref_text.to_s.strip.empty?
+
+      # Without reference text OmniVoice lazily loads its internal Whisper ASR model.
+      raise ArgumentError, 'OmniVoice voice cloning requires ref_text'
     end
 
     extend self

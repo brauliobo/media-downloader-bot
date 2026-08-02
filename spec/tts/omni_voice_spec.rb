@@ -3,6 +3,17 @@ require 'timeout'
 require_relative '../../lib/tts/omni_voice'
 
 RSpec.describe TTS::OmniVoice do
+  it 'requires reference text when cloning a speaker voice' do
+    expect do
+      described_class.synthesize(
+        text: 'Hello',
+        lang: 'en',
+        out_path: '/tmp/out.wav',
+        speaker_wav: '/tmp/speaker.wav'
+      )
+    end.to raise_error(ArgumentError, 'OmniVoice voice cloning requires ref_text')
+  end
+
   it 'leaves OmniVoice generation parameters at their model defaults' do
     Dir.mktmpdir('omnivoice-spec-') do |dir|
       out_path = File.join(dir, 'out.wav')
