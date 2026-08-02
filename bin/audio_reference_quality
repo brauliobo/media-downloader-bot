@@ -1,0 +1,85 @@
+#!/usr/bin/env ruby
+
+require 'csv'
+require 'fileutils'
+require 'json'
+require 'time'
+
+require_relative '../lib/boot'
+require_relative '../lib/audio'
+require_relative '../lib/job_pool'
+require_relative '../lib/jsonl_store'
+
+opts = ARGV.to_h do |argument|
+  key, value = argument.split('=', 2)
+  [key.tr('-', '_').to_sym, value]
+end
+
+source = File.expand_path(opts.fetch(:source))
+raise ArgumentError, "audio source directory not found: #{source}" unless File.directory?(source)
+
+extensions = opts.fetch(:extensions, 'flac,m4a,mp3,ogg,opus,wav,webm').split(',').map(&:strip)
+files = extensions.flat_map { |extension| Dir[File.join(source, "*.#{extension}")] }.uniq.sort
+raise ArgumentError, "no audio files found in #{source}" if files.empty?
+
+output = File.expand_path(opts[:output] || File.join(source, 'reference-quality.json'))
+cache = File.expand_path(opts[:cache] || output.sub(/\.json\z/, '.jsonl'))
+jobs = opts.fetch(:jobs, 4).to_i
+raise ArgumentError, 'jobs must be positive' unless jobs.positive?
+
+FileUtils.mkdir_p(File.dirname(output))
+store = JsonlStore.new(cache)
+cached = store.each_with_object({}) do |record, index|
+  path = record.fetch(:path)
+  index[path] = record if File.size?(path) && record[:bytes] == File.size(path) && record[:mtime] == File.mtime(path).to_i
+end
+analyzer = Audio::ReferenceQuality.new
+pending = files.reject { |path| cached.key?(path) }
+
+JobPool.new(jobs: jobs).ordered_map(pending) do |path|
+  info_path = path.sub(/\.[^.]+\z/, '.info.json')
+  info = File.exist?(info_path) ? JSON.parse(File.read(info_path)) : {}
+  analyzer.report(
+    path,
+    metadata: {
+      id:    info['id'] || File.basename(path, File.extname(path)),
+      title: info['title'] || File.basename(path),
+      url:   info['webpage_url'],
+      bytes: File.size(path),
+      mtime: File.mtime(path).to_i,
+    }
+  )
+end.each do |record|
+  store.append(record)
+  cached[record.fetch(:path)] = record
+  warn format('%s score=%5.2f grade=%s', record.fetch(:id), record.fetch(:score), record.fetch(:grade))
+end
+
+ranked = files.filter_map { |path| cached[path] }
+  .sort_by { |record| [-record.fetch(:score), record.fetch(:title)] }
+  .each_with_index.map { |record, index| record.merge(rank: index + 1) }
+
+summary = {
+  generated_at: Time.now.utc.iso8601,
+  source:       source,
+  files:        ranked.size,
+  scoring:      Audio::ReferenceQuality::COMPONENT_WEIGHTS,
+  recordings:   ranked,
+}
+File.write(output, JSON.pretty_generate(summary))
+
+csv_path = output.sub(/\.json\z/, '.csv')
+CSV.open(csv_path, 'w') do |csv|
+  csv << %w[rank id title score grade accepted duration estimated_snr_db estimated_noise_floor_db silence_ratio integrated_lufs true_peak_db path url]
+  ranked.each do |record|
+    metrics = record.fetch(:metrics)
+    csv << [
+      record.fetch(:rank), record.fetch(:id), record.fetch(:title), record.fetch(:score), record.fetch(:grade),
+      record.fetch(:accepted), metrics.fetch(:duration), metrics.fetch(:estimated_snr_db),
+      metrics.fetch(:estimated_noise_floor_db), metrics.fetch(:silence_ratio), metrics.fetch(:integrated_lufs),
+      metrics.fetch(:true_peak_db), record.fetch(:path), record[:url],
+    ]
+  end
+end
+
+puts JSON.pretty_generate(output: output, csv: csv_path, cache: cache, files: ranked.size)
