@@ -183,15 +183,10 @@ RSpec.describe Audiobook::Ewprs::Batch do
       Audiobook::Chapter.new(title: entry.title, audio: File.join(output, "#{entry.slug}.m4a"))
     end
     allow(catalog).to receive(:chapter_discourses).with(book_entry).and_return(chapter_entries)
-    allow(catalog).to receive(:parse_options).with(book_entry).and_return(
-      SymMash.new(audio_floor_amplitude: 0.001)
-    )
     batch = described_class.new(catalog: catalog, output: output)
     allow(batch).to receive(:audiobook_chapter).and_return(*chapters)
     output_audio = File.join(output, 'book-collected_discourses.m4a')
-    expect(Audiobook::Chapter).to receive(:join).with(
-      chapters, output_audio, pause_amplitude: 0.001
-    )
+    expect(Audiobook::Chapter).to receive(:join).with(chapters, output_audio)
 
     expect(batch.send(:generate_book, book_entry, force: true)).to eq([output_audio, 2])
   end

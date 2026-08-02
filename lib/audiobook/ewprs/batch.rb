@@ -138,8 +138,7 @@ module Audiobook::Ewprs
 
       if force || !File.size?(audio)
         chapters = chapter_entries.map { |chapter| audiobook_chapter(chapter) }
-        amplitude = catalog.parse_options(entry).audio_floor_amplitude
-        Audiobook::Chapter.join(chapters, audio, pause_amplitude: amplitude)
+        Audiobook::Chapter.join(chapters, audio)
       end
       [audio, chapter_entries.size]
     end
