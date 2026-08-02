@@ -13,15 +13,26 @@ class Translator
       _text.is_a?(String) ? translations.first : translations
     end
 
+    def translate_for_dubbing(_text, to:, from: nil, durations:)
+      texts        = Array.wrap(_text)
+      translations = translate_concurrently(texts, to: to, durations: Array.wrap(durations))
+      _text.is_a?(String) ? translations.first : translations
+    end
+
     private
 
-    def translate_concurrently(texts, to:)
+    def translate_concurrently(texts, to:, durations: nil)
       return [] if texts.empty?
 
       executor = Concurrent::FixedThreadPool.new([llama_concurrency, texts.size].min)
-      futures  = texts.map do |text|
-        Concurrent::Promises.future_on(executor, text) do |segment|
-          chat_completion(translation_prompt(segment, to: to))
+      futures  = texts.map.with_index do |text, idx|
+        Concurrent::Promises.future_on(executor, text, durations&.fetch(idx)) do |segment, duration|
+          prompt = if duration
+            dubbing_translation_prompt(segment, to: to, duration: duration)
+          else
+            translation_prompt(segment, to: to)
+          end
+          chat_completion(prompt)
         end
       end
       Concurrent::Promises.zip(*futures).value!
@@ -44,6 +55,16 @@ class Translator
     def translation_prompt(text, to:)
       <<~PROMPT.strip
         Translate the following text into #{target_language_name(to)}. Only output the translated result without any additional explanation:
+
+        #{text}
+      PROMPT
+    end
+
+    def dubbing_translation_prompt(text, to:, duration:)
+      <<~PROMPT.strip
+        Translate the following dialogue into concise, natural spoken #{target_language_name(to)} for dubbing.
+        Preserve the complete meaning, names, and numbers, but choose brief wording that can be spoken clearly in about #{format('%.1f', duration)} seconds.
+        Only output the translated dialogue without any additional explanation:
 
         #{text}
       PROMPT

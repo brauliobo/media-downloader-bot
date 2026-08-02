@@ -38,6 +38,61 @@ RSpec.describe Dubbing::Pipeline do
     expect(pipeline.target_lang).to eq('es')
   end
 
+  it 'reuses translated sentences as generated subtitles' do
+    opts = SymMash.new(dub: 1, gensubs: 1, slang: 'pt')
+    pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)
+    pipeline.instance_variable_set(
+      :@sentences,
+      [SymMash.new(text: 'Boa tarde.', start: 0.5, end: 1.5)]
+    )
+
+    pipeline.send(:prepare_translated_subtitles)
+
+    expect(opts.sub_lang).to eq('pt')
+    expect(opts.sub_vtt).to include('00:00:00.500 --> 00:00:01.500', 'Boa tarde.')
+  end
+
+  it 'uses rendered clip timing and excludes clips beyond the video from subtitles' do
+    opts = SymMash.new(dub: 1, gensubs: 1, slang: 'pt')
+    pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)
+    pipeline.instance_variable_set(
+      :@sentences,
+      [
+        SymMash.new(text: 'Boa tarde.', start: 0.5, end: 1.5),
+        SymMash.new(text: 'Tchau.', start: 2.0, end: 3.0),
+      ]
+    )
+    clips = [
+      Dubbing::Audio::ScheduledClip.new(path: 'first.wav', start: 1.0, end: 2.5, speed: 1.0),
+      Dubbing::Audio::ScheduledClip.new(path: 'second.wav', start: 6.5, end: 7.5, speed: 1.0),
+    ]
+
+    pipeline.send(:apply_timeline, clips)
+    pipeline.send(:prepare_translated_subtitles)
+
+    expect(opts.sub_vtt).to include('00:00:01.000 --> 00:00:02.500', 'Boa tarde.')
+    expect(opts.sub_vtt).not_to include('Tchau.')
+  end
+
+  it 'coalesces contiguous sentences from the same speaker into one utterance' do
+    pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), probe: probe)
+    pipeline.instance_variable_set(
+      :@sentences,
+      [
+        SymMash.new(text: 'Prazer.', source_text: 'Pleased.', source_words: [:a], start: 0.0, end: 1.0, speaker_id: 0),
+        SymMash.new(text: 'Sou Clark.', source_text: 'I am Clark.', source_words: [:b], start: 1.1, end: 2.0, speaker_id: 0),
+        SymMash.new(text: 'Obrigado.', source_text: 'Thank you.', source_words: [:c], start: 2.1, end: 3.0, speaker_id: 1),
+      ]
+    )
+
+    pipeline.send(:merge_speaker_sentences!)
+
+    expect(pipeline.sentences.map(&:text)).to eq(['Prazer. Sou Clark.', 'Obrigado.'])
+    expect(pipeline.sentences.first.source_text).to eq('Pleased. I am Clark.')
+    expect(pipeline.sentences.first.source_words).to eq([:a, :b])
+    expect([pipeline.sentences.first.start, pipeline.sentences.first.end]).to eq([0.0, 2.0])
+  end
+
   it 'skips dubbing when source language already matches the target language' do
     allow(Subtitler).to receive(:transcribe).and_return(transcript(lang: 'pt'))
     expect(TTS).not_to receive(:synthesize)
@@ -47,76 +102,64 @@ RSpec.describe Dubbing::Pipeline do
     expect(output).to eq(input)
   end
 
-  it 'translates and synthesizes one sentence at a time with the extracted speaker reference' do
-    speaker = File.join(dir, 'speaker.wav')
-    File.write(speaker, 'speaker')
+  it 'translates and batch synthesizes with each extracted speaker reference' do
+    speaker_paths = {
+      0 => File.join(dir, 'speaker-0.wav'),
+      1 => File.join(dir, 'speaker-1.wav'),
+    }
+    speaker_paths.each_value { |path| File.write(path, 'speaker') }
+    speakers = {
+      0 => SymMash.new(path: speaker_paths.fetch(0), text: 'Hello.'),
+      1 => SymMash.new(path: speaker_paths.fetch(1), text: 'Bye.'),
+    }
+    diarization = SymMash.new(segments: [
+      SymMash.new(start: 0.0, end: 1.0, speaker_id: 0),
+      SymMash.new(start: 2.0, end: 3.0, speaker_id: 1),
+    ])
 
-    pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), stl: status, probe: probe)
+    opts = SymMash.new(dub: 1, gensubs: 1)
+    pipeline = described_class.new(input, dir: dir, opts: opts, stl: status, probe: probe)
     allow(Subtitler).to receive(:transcribe).and_return(transcript)
-    allow(::Translator).to receive(:translate).and_return(['Olá.', 'Tchau.'])
-    allow(Dubbing::VoiceReference).to receive(:extract).and_return(speaker)
-    allow(pipeline).to receive(:fit_clip) { |_raw, out, _duration| File.write(out, 'fit') }
-    allow(pipeline).to receive(:assemble_timeline).and_return(File.join(dir, 'dub.wav'))
+    allow(::Translator).to receive(:translate_for_dubbing).and_return(['Olá.', 'Tchau.'])
+    allow(Diarizer).to receive(:diarize).and_return(diarization)
+    allow(Dubbing::VoiceReference).to receive(:extract_by_speaker).and_return(speakers)
+    allow(Dubbing::Audio).to receive(:normalize) { |_raw, out| File.write(out, 'fit') }
+    allow(Dubbing::Audio).to receive(:render_timeline) do |clips, output, duration:|
+      expect(duration).to eq(6.0)
+      scheduled = [
+        Dubbing::Audio::ScheduledClip.new(path: clips.fetch(0).path, start: 0.0, end: 1.5, speed: 1.0),
+        Dubbing::Audio::ScheduledClip.new(path: clips.fetch(1).path, start: 2.0, end: 3.0, speed: 1.0),
+      ]
+      Dubbing::Audio::Timeline.new(path: output, clips: scheduled)
+    end
+    allow(Dubbing::Audio).to receive(:replace_video_audio) do |_video, _audio, out, **_|
+      File.write(out, 'video')
+    end
     allow(pipeline).to receive(:mix_video).and_return(File.join(dir, 'out.mp4'))
 
-    expect(TTS).to receive(:synthesize).with(
-      text: 'Olá.',
-      lang: 'pt',
-      out_path: kind_of(String),
-      speaker_wav: speaker
-    ) { |out_path:, **_| File.write(out_path, 'raw') }
-    expect(TTS).to receive(:synthesize).with(
-      text: 'Tchau.',
-      lang: 'pt',
-      out_path: kind_of(String),
-      speaker_wav: speaker
-    ) { |out_path:, **_| File.write(out_path, 'raw') }
+    expect(TTS).to receive(:synthesize_batch).with(
+      items: [hash_including(text: 'Olá.', lang: 'pt', out_path: kind_of(String))],
+      on_batch: kind_of(Proc),
+      speaker_wav: speaker_paths.fetch(0),
+      ref_text: 'Hello.'
+    ) { |items:, **_| items.each { |item| File.write(item.fetch(:out_path), 'raw') } }
+    expect(TTS).to receive(:synthesize_batch).with(
+      items: [hash_including(text: 'Tchau.', lang: 'pt', out_path: kind_of(String))],
+      on_batch: kind_of(Proc),
+      speaker_wav: speaker_paths.fetch(1),
+      ref_text: 'Bye.'
+    ) { |items:, **_| items.each { |item| File.write(item.fetch(:out_path), 'raw') } }
 
     pipeline.apply
 
-    expect(::Translator).to have_received(:translate).with(['Hello.', 'Bye.'], from: 'en', to: 'pt')
-    expect(Dubbing::VoiceReference).to have_received(:extract).with(input, pipeline.sentences, dir: kind_of(String))
+    expect(::Translator).to have_received(:translate_for_dubbing)
+      .with(['Hello.', 'Bye.'], from: 'en', to: 'pt', durations: [1.0, 1.0])
+    expect(Dubbing::VoiceReference).to have_received(:extract_by_speaker)
+      .with(input, diarization.segments, sentences: pipeline.sentences, dir: kind_of(String))
+    expect(pipeline.sentences.map(&:speaker_id)).to eq([0, 1])
+    expect(pipeline.sentences.map(&:source_text)).to eq(['Hello.', 'Bye.'])
+    expect(pipeline.sentences.map(&:start)).to eq([0.0, 2.0])
+    expect(opts.sub_vtt).to include('00:00:00.000 --> 00:00:03.000', 'Olá. Tchau.')
   end
 
-  it 'speeds up long synthesized speech to fit the original sentence slot' do
-    pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), probe: probe)
-    raw = File.join(dir, 'raw.wav')
-    fit = File.join(dir, 'fit.wav')
-    File.write(raw, 'raw')
-
-    allow(Prober).to receive(:for).with(raw).and_return(SymMash.new(format: SymMash.new(duration: 3.0)))
-    expect(Sh).to receive(:run) do |cmd|
-      expect(cmd).to include('atempo\\=3.0')
-      File.write(fit, 'fit')
-      ['', '', ok_status]
-    end
-
-    pipeline.send(:fit_clip, raw, fit, 1.0)
-  end
-
-  it 'ducks original audio when mixing the dubbed track into a video with audio' do
-    audio_probe = SymMash.new(
-      format: SymMash.new(duration: 6.0),
-      streams: [
-        SymMash.new(codec_type: 'video'),
-        SymMash.new(codec_type: 'audio'),
-      ]
-    )
-    pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), probe: audio_probe)
-    dub_audio = File.join(dir, 'dub.wav')
-    File.write(dub_audio, 'dub')
-
-    expect(Sh).to receive(:run) do |cmd|
-      expect(cmd).to include('sidechaincompress')
-      expect(cmd).to include('amix')
-      out = cmd.split.last
-      File.write(out, 'video')
-      ['', '', ok_status]
-    end
-
-    output = pipeline.send(:mix_video, dub_audio, dir)
-
-    expect(output).to eq(File.join(dir, 'dubbed-input.mp4'))
-    expect(File.exist?(output)).to be(true)
-  end
 end

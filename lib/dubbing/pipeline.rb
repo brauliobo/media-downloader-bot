@@ -1,20 +1,23 @@
 require 'fileutils'
 require 'tmpdir'
 
+require_relative '../diarizer'
+require_relative '../prober'
 require_relative '../subtitler'
 require_relative '../subtitler/translator'
 require_relative '../translator'
 require_relative '../tts'
 require_relative '../tts/options'
-require_relative '../utils/sh'
-require_relative '../zipper'
+require_relative 'audio'
 require_relative 'voice_reference'
 
 module Dubbing
   class Pipeline
     DEFAULT_TARGET_LANG = 'pt'.freeze
+    MAX_UTTERANCE_GAP   = 0.25
+    MAX_UTTERANCE_SPAN  = 10.0
 
-    attr_reader :source_lang, :target_lang, :speaker_wav, :sentences
+    attr_reader :source_lang, :target_lang, :speaker_references, :sentences
 
     def self.apply(input_path, dir:, opts:, stl: nil, probe: nil)
       new(input_path, dir: dir, opts: opts, stl: stl, probe: probe).apply
@@ -36,13 +39,25 @@ module Dubbing
       @source_lang = Subtitler.normalize_lang(transcript.lang)
       return @input_path if @source_lang.present? && @source_lang == target_lang
 
+      @stl&.update 'dubbing: translating'
       @sentences = translated_sentences(transcript.output)
       return @input_path if @sentences.empty?
 
       Dir.mktmpdir('dub-', @dir) do |workdir|
-        @speaker_wav = VoiceReference.extract(@input_path, @sentences, dir: workdir)
-        dub_audio = synthesize_timeline(workdir)
-        mix_video(dub_audio, workdir)
+        @stl&.update 'dubbing: diarizing'
+        diarization = Diarizer.diarize(@input_path, speakers: @opts.speakers&.to_i)
+        Diarizer.assign_speakers!(@sentences, diarization.segments)
+        merge_speaker_sentences!
+        @speaker_references = VoiceReference.extract_by_speaker(
+          @input_path,
+          diarization.segments,
+          sentences: @sentences,
+          dir:       workdir
+        )
+        timeline = synthesize_timeline(workdir)
+        apply_timeline(timeline.clips)
+        prepare_translated_subtitles
+        mix_video(timeline.path, workdir)
       end
     end
 
@@ -56,113 +71,101 @@ module Dubbing
       source = SymMash.new(verbose_json)
       sentences = Subtitler::Translator.sentences_for(Array(source.segments))
       texts = sentences.map { |sentence| sentence.text.to_s }
-      translations = Array(::Translator.translate(texts, from: source_lang, to: target_lang))
+      durations = sentences.map { |sentence| sentence.end.to_f - sentence.start.to_f }
+      translations = if ::Translator.respond_to?(:translate_for_dubbing)
+        Array(::Translator.translate_for_dubbing(texts, from: source_lang, to: target_lang, durations: durations))
+      else
+        Array(::Translator.translate(texts, from: source_lang, to: target_lang))
+      end
 
       sentences.zip(translations).filter_map do |sentence, translated|
         text = translated.to_s.strip
         next if text.empty?
 
         SymMash.new(
-          text:  text,
-          start: sentence.start.to_f,
-          end:   sentence.end.to_f
+          text:        text,
+          source_text: sentence.text.to_s.strip,
+          source_words: Array(sentence.words).map { |word| SymMash.new(word.to_h) },
+          start:       sentence.start.to_f,
+          end:         sentence.end.to_f
         )
       end
     end
 
     def synthesize_timeline(workdir)
       @stl&.update 'dubbing: synthesizing'
-      clips = @sentences.map.with_index do |sentence, idx|
-        synthesize_sentence(sentence, idx + 1, workdir)
+      clips          = Array.new(@sentences.size)
+      completed      = 0
+      progress_mutex = Mutex.new
+      on_batch       = lambda do |batch|
+        progress_mutex.synchronize do
+          completed += batch.size
+          @stl&.update "dubbing: synthesizing #{completed}/#{@sentences.size}"
+        end
+      end
+      @sentences.each_index.group_by { |idx| @sentences.fetch(idx).speaker_id }.each do |speaker_id, indices|
+        reference = @speaker_references.fetch(speaker_id)
+        options   = TTS::Options.for(@opts, speaker_wav: reference.path)
+        options[:ref_text] = reference.text
+        jobs = indices.map do |idx|
+          {
+            text:     @sentences.fetch(idx).text,
+            lang:     target_lang,
+            out_path: File.join(workdir, format('sentence-%04d.raw.wav', idx + 1))
+          }
+        end
+
+        TTS.synthesize_batch(items: jobs, on_batch: on_batch, **options)
+        jobs.zip(indices).each do |job, idx|
+          fit = File.join(workdir, format('sentence-%04d.fit.wav', idx + 1))
+          Audio.normalize(job.fetch(:out_path), fit)
+          sentence = @sentences.fetch(idx)
+          clips[idx] = Audio::Clip.new(path: fit, start: sentence.start.to_f, end: sentence.end.to_f)
+        end
       end
 
-      assemble_timeline(clips, File.join(workdir, 'dub.wav'))
+      Audio.render_timeline(clips, File.join(workdir, 'dub.wav'), duration: video_duration)
     end
 
-    def synthesize_sentence(sentence, idx, workdir)
-      raw = File.join(workdir, format('sentence-%04d.raw.wav', idx))
-      fit = File.join(workdir, format('sentence-%04d.fit.wav', idx))
-      options = TTS::Options.for(@opts, speaker_wav: @speaker_wav)
+    def prepare_translated_subtitles
+      return unless @opts.gensubs
 
-      TTS.synthesize(text: sentence.text, lang: target_lang, out_path: raw, **options)
-      fit_clip(raw, fit, sentence_duration(sentence))
-      SymMash.new(path: fit, start: sentence.start.to_f)
+      @opts.sub_vtt  = Subtitler::VTT.build(SymMash.new(segments: @sentences), word_tags: false)
+      @opts.sub_lang = target_lang
     end
 
-    def sentence_duration(sentence)
-      [sentence.end.to_f - sentence.start.to_f, 0.1].max
-    end
-
-    def fit_clip(input, output, duration)
-      speed = clip_speed(input, duration)
-      filters = []
-      filters << "atempo=#{speed}" if speed > 1.01
-      filters << 'apad'
-      filters << format('atrim=0:%<duration>.3f', duration: duration)
-
-      cmd = "#{Zipper::FFMPEG} -i #{Sh.escape(input)} -af #{Sh.escape(filters.join(','))} " \
-            "-ac 1 -ar 48000 #{Sh.escape(output)}"
-      _, stderr, status = Sh.run cmd
-      raise "dub sentence fit failed: #{stderr}" unless status.success? && File.exist?(output)
-
-      output
-    end
-
-    def clip_speed(path, slot_duration)
-      raw_duration = audio_duration(path)
-      return 1.0 if raw_duration <= slot_duration
-
-      [raw_duration / slot_duration, 100.0].min
-    end
-
-    def audio_duration(path)
-      Prober.for(path).format.duration.to_f
-    rescue
-      0.0
-    end
-
-    def assemble_timeline(clips, output)
-      return create_silence(output, video_duration) if clips.empty?
-
-      inputs = clips.map { |clip| "-i #{Sh.escape(clip.path)}" }.join(' ')
-      chains = clips.map.with_index do |clip, idx|
-        delay = (clip.start.to_f * 1000).round
-        "[#{idx}:a]adelay=#{delay}:all=1[a#{idx}]"
+    def apply_timeline(clips)
+      @sentences.zip(clips).each do |sentence, clip|
+        sentence.start = clip.start
+        sentence.end   = [clip.end, video_duration].min
       end
-      mix_inputs = clips.each_index.map { |idx| "[a#{idx}]" }.join
-      filter = "#{chains.join(';')};#{mix_inputs}amix=inputs=#{clips.size}:normalize=0,atrim=0:#{video_duration}"
-      cmd = "#{Zipper::FFMPEG} #{inputs} -filter_complex #{Sh.escape(filter)} -ac 1 -ar 48000 #{Sh.escape(output)}"
-      _, stderr, status = Sh.run cmd
-      raise "dub timeline failed: #{stderr}" unless status.success? && File.exist?(output)
-
-      output
+      @sentences.select! { |sentence| sentence.start < video_duration }
     end
 
-    def create_silence(output, duration)
-      cmd = "#{Zipper::FFMPEG} -f lavfi -i anullsrc=channel_layout=mono:sample_rate=48000 " \
-            "-t #{duration.to_f} #{Sh.escape(output)}"
-      _, stderr, status = Sh.run cmd
-      raise "dub silence failed: #{stderr}" unless status.success? && File.exist?(output)
+    def merge_speaker_sentences!
+      @sentences = @sentences.each_with_object([]) do |sentence, utterances|
+        previous = utterances.last
+        if previous && mergeable_utterance?(previous, sentence)
+          previous.text         = "#{previous.text} #{sentence.text}".strip
+          previous.source_text  = "#{previous.source_text} #{sentence.source_text}".strip
+          previous.source_words = Array(previous.source_words) + Array(sentence.source_words)
+          previous.end          = sentence.end
+        else
+          utterances << sentence
+        end
+      end
+    end
 
-      output
+    def mergeable_utterance?(previous, sentence)
+      gap  = sentence.start.to_f - previous.end.to_f
+      span = sentence.end.to_f - previous.start.to_f
+      previous.speaker_id == sentence.speaker_id && gap.between?(0, MAX_UTTERANCE_GAP) && span <= MAX_UTTERANCE_SPAN
     end
 
     def mix_video(dub_audio, workdir)
       @stl&.update 'dubbing: mixing'
       output = File.join(workdir, 'dubbed-source.mp4')
-      duration = video_duration
-      cmd = if source_audio?
-        sidechain = '[0:a][1:a]sidechaincompress=threshold=0.02:ratio=8:attack=20:release=500[ducked]'
-        filter = "#{sidechain};[ducked][1:a]amix=inputs=2:duration=first:normalize=0[aout]"
-        "#{Zipper::FFMPEG} -i #{Sh.escape(@input_path)} -i #{Sh.escape(dub_audio)} " \
-          "-filter_complex #{Sh.escape(filter)} -map 0:v:0 -map '[aout]' -t #{duration} " \
-          "-c:v copy -c:a aac -b:a 128k #{Sh.escape(output)}"
-      else
-        "#{Zipper::FFMPEG} -i #{Sh.escape(@input_path)} -i #{Sh.escape(dub_audio)} " \
-          "-map 0:v:0 -map 1:a:0 -t #{duration} -c:v copy -c:a aac -b:a 128k #{Sh.escape(output)}"
-      end
-      _, stderr, status = Sh.run cmd
-      raise "dub mix failed: #{stderr}" unless status.success? && File.exist?(output)
+      Audio.replace_video_audio(@input_path, dub_audio, output, duration: video_duration)
 
       final = File.join(@dir, "dubbed-#{File.basename(@input_path, File.extname(@input_path))}.mp4")
       FileUtils.cp(output, final)
@@ -174,11 +177,6 @@ module Dubbing
         source = @probe || Prober.for(@input_path)
         source.format.duration.to_f
       end
-    end
-
-    def source_audio?
-      source = @probe || Prober.for(@input_path)
-      Array(source.streams).any? { |stream| stream.codec_type == 'audio' }
     end
   end
 end

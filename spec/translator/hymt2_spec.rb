@@ -46,6 +46,16 @@ RSpec.describe Translator::HyMT2 do
     expect(result).to eq(['translated: first', 'translated: second'])
   end
 
+  it 'requests concise spoken translations for each dubbing interval' do
+    expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
+      prompt = JSON.parse(body).dig('messages', 0, 'content')
+      expect(prompt).to include('concise, natural spoken Brazilian Portuguese', 'about 2.5 seconds', 'Keep moving.')
+      response
+    end
+
+    backend.translate_for_dubbing('Keep moving.', from: 'en', to: 'pt', durations: 2.5)
+  end
+
   it 'uses the ISO language name for non-Portuguese targets' do
     expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
       expect(JSON.parse(body).dig('messages', 0, 'content')).to include('Spanish')
