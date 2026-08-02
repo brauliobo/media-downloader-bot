@@ -1,0 +1,12 @@
+[Unit]
+Description=sherpa-onnx diarization activation socket for GPU %i
+
+[Socket]
+ListenStream=127.0.0.1:821%i
+Service=sherpa-onnx-diarizer-proxy@%i.service
+Accept=no
+NoDelay=yes
+Backlog=128
+
+[Install]
+WantedBy=sockets.target

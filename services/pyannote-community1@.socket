@@ -1,0 +1,12 @@
+[Unit]
+Description=pyannote Community-1 activation socket for GPU %i
+
+[Socket]
+ListenStream=127.0.0.1:820%i
+Service=pyannote-community1-proxy@%i.service
+Accept=no
+NoDelay=yes
+Backlog=128
+
+[Install]
+WantedBy=sockets.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=pyannote Community-1 idle proxy for GPU %i
+BindsTo=pyannote-community1@%i.service
+After=pyannote-community1@%i.service
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd --exit-idle-time=30min 127.0.0.1:840%i
+DynamicUser=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

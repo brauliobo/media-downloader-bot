@@ -1,0 +1,13 @@
+[Unit]
+Description=whisper.cpp TinyDiarize idle proxy for GPU %i
+BindsTo=whispercpp-tinydiarize@%i.service
+After=whispercpp-tinydiarize@%i.service
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd --exit-idle-time=30min 127.0.0.1:838%i
+DynamicUser=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

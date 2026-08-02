@@ -1,0 +1,9 @@
+diff --git a/examples/server/server.cpp b/examples/server/server.cpp
+index b87ef27..6e84a99 100644
+--- a/examples/server/server.cpp
++++ b/examples/server/server.cpp
+@@ -1100,0 +1101,4 @@ int main(int argc, char ** argv) {
++                if (params.tinydiarize) {
++                    segment["speaker_turn_next"] = whisper_full_get_segment_speaker_turn_next(ctx, i);
++                }
++

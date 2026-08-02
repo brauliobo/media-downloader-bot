@@ -1,0 +1,29 @@
+[Unit]
+Description=sherpa-onnx diarization backend on GPU %i
+After=network-online.target
+Wants=network-online.target
+StopWhenUnneeded=yes
+
+[Service]
+User=braulio
+Nice=19
+UMask=0077
+
+WorkingDirectory=/srv/sherpa-onnx
+Environment=CUDA_VISIBLE_DEVICES=%i
+Environment=LD_LIBRARY_PATH=/srv/sherpa-onnx/runtime/lib/python3.10/site-packages/nvidia/cublas/lib:/srv/sherpa-onnx/runtime/lib/python3.10/site-packages/nvidia/cufft/lib:/srv/sherpa-onnx/runtime/lib/python3.10/site-packages/nvidia/cuda_runtime/lib:/srv/sherpa-onnx/runtime/lib/python3.10/site-packages/nvidia/cudnn/lib
+MemoryMax=16G
+TasksMax=64
+ExecStart=/srv/sherpa-onnx/runtime/bin/uvicorn sherpa_service:app --app-dir /srv/sherpa-onnx/service --host 127.0.0.1 --port 841%i --workers 1
+ExecStartPost=/usr/bin/curl --fail --silent --show-error --retry 120 --retry-delay 1 --retry-connrefused --retry-all-errors --retry-max-time 120 --max-time 2 http://127.0.0.1:841%i/health/ready
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=3min
+TimeoutStopSec=2min

@@ -1,0 +1,31 @@
+[Unit]
+Description=whisper.cpp TinyDiarize backend on GPU %i
+After=network-online.target
+Wants=network-online.target
+RequiresMountsFor=/srv/whisper.cpp
+StopWhenUnneeded=yes
+
+[Service]
+User=braulio
+Nice=19
+UMask=0077
+
+WorkingDirectory=/run/whispercpp-tinydiarize-%i
+RuntimeDirectory=whispercpp-tinydiarize-%i
+RuntimeDirectoryMode=0700
+Environment=LD_LIBRARY_PATH=/srv/whisper.cpp/runtime-tinydiarize
+ExecStart=/srv/whisper.cpp/runtime-tinydiarize/whisper-server \
+  --model /srv/whisper.cpp/models/ggml-small.en-tdrz.bin \
+  --host 127.0.0.1 --port 838%i --threads 16 -l en --device %i --tinydiarize --convert
+ExecStartPost=/usr/bin/curl --fail --silent --show-error --retry 90 --retry-delay 1 --retry-connrefused --retry-all-errors --retry-max-time 90 --max-time 2 http://127.0.0.1:838%i/health
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=2min
+TimeoutStopSec=2min

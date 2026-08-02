@@ -1,0 +1,32 @@
+[Unit]
+Description=pyannote Community-1 diarization backend on GPU %i
+After=network-online.target
+Wants=network-online.target
+StopWhenUnneeded=yes
+
+[Service]
+User=braulio
+Nice=19
+UMask=0077
+
+WorkingDirectory=/srv/pyannote-community1
+Environment=CUDA_VISIBLE_DEVICES=%i
+Environment=PYANNOTE_METRICS_ENABLED=0
+Environment=HF_HUB_DISABLE_TELEMETRY=1
+Environment=HF_HUB_OFFLINE=1
+Environment=PYANNOTE_MODEL=/srv/pyannote-community1/model
+MemoryMax=16G
+TasksMax=64
+ExecStart=/srv/pyannote-community1/runtime/bin/uvicorn pyannote_community1:app --app-dir /srv/pyannote-community1/service --host 127.0.0.1 --port 840%i --workers 1
+ExecStartPost=/usr/bin/curl --fail --silent --show-error --retry 120 --retry-delay 1 --retry-connrefused --retry-all-errors --retry-max-time 120 --max-time 2 http://127.0.0.1:840%i/health/ready
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=3min
+TimeoutStopSec=2min
