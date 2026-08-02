@@ -1,0 +1,13 @@
+[Unit]
+Description=Watch OmniVoice source for GPU %i
+RequiresMountsFor=/srv/OmniVoice
+
+[Path]
+PathChanged=/srv/OmniVoice/http_server.py
+PathChanged=/srv/OmniVoice/omnivoice
+PathChanged=/srv/OmniVoice/.git/refs/heads/master
+PathChanged=/srv/OmniVoice/runtime/venv/lib/python3.12/site-packages
+Unit=omnivoice-reload@%i.service
+
+[Install]
+WantedBy=multi-user.target

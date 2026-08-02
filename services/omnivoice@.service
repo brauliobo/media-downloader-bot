@@ -12,12 +12,14 @@ WorkingDirectory=/srv/OmniVoice
 
 Environment=HOST=127.0.0.1
 Environment=PORT_BASE=10550
+Environment=OMNIVOICE_PYTHON=/srv/OmniVoice/runtime/venv/bin/python
 Environment=TTS_MODEL_ID=/srv/OmniVoice/model
 Environment=OMNIVOICE_DEVICE=cuda:0
 Environment=HF_HUB_OFFLINE=1
 Environment=TRANSFORMERS_OFFLINE=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=XDG_CACHE_HOME=/var/cache/omnivoice-%i
+Environment=FLASHINFER_WORKSPACE_BASE=/var/cache/omnivoice-%i
 
 CacheDirectory=omnivoice-%i
 PrivateTmp=yes
@@ -25,9 +27,9 @@ ProtectSystem=strict
 ProtectHome=yes
 NoNewPrivileges=yes
 
-ExecStart=/bin/sh -c 'exec env CUDA_VISIBLE_DEVICES=%i PORT=$(($PORT_BASE + %i)) /srv/OmniVoice/runtime/venv/bin/python /srv/OmniVoice/http_server.py'
-ExecStartPost=/bin/sh -c 'exec /usr/bin/curl --fail --silent --show-error --retry 90 --retry-delay 1 --retry-connrefused --retry-all-errors --retry-max-time 90 --max-time 2 "http://127.0.0.1:$(($PORT_BASE + %i))/health" >/dev/null'
+ExecStart=/bin/sh -c 'exec env CUDA_VISIBLE_DEVICES=%i PORT=$(($PORT_BASE + %i)) "$OMNIVOICE_PYTHON" /srv/OmniVoice/http_server.py'
+ExecStartPost=/bin/sh -c 'exec /usr/bin/curl --fail --silent --show-error --retry 150 --retry-delay 2 --retry-connrefused --retry-all-errors --retry-max-time 300 --max-time 2 "http://127.0.0.1:$(($PORT_BASE + %i))/health" >/dev/null'
 
 Restart=on-failure
 RestartSec=10
-TimeoutStartSec=2min
+TimeoutStartSec=6min

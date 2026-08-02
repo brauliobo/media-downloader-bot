@@ -1,0 +1,39 @@
+#!/bin/sh
+set -eu
+
+instance=${1:?missing OmniVoice instance}
+root=/srv/OmniVoice
+state=/var/lib/omnivoice-reload/${instance}.fingerprint
+runtime_state=/var/lib/omnivoice-reload/${instance}.runtime
+site_packages=$(printf '%s\n' "$root"/runtime/venv/lib/python*/site-packages)
+runtime_stamp=$(stat -c '%Y:%s' "$site_packages")
+
+checksum=$(
+  {
+    git -c safe.directory="$root" -C "$root" rev-parse HEAD
+    git -c safe.directory="$root" -C "$root" diff --binary HEAD -- http_server.py omnivoice pyproject.toml uv.lock
+    printf '%s\n' "$runtime_stamp"
+  } | sha256sum
+)
+fingerprint=${checksum%% *}
+
+if [ ! -e "$state" ]; then
+  printf '%s\n' "$fingerprint" > "$state"
+  printf '%s\n' "$runtime_stamp" > "$runtime_state"
+  exit 0
+fi
+
+previous=$(sed -n '1p' "$state")
+[ "$fingerprint" = "$previous" ] && exit 0
+
+if [ -n "${OMNIVOICE_SITE_PACKAGES_MIRROR:-}" ]; then
+  previous_runtime=
+  [ ! -e "$runtime_state" ] || previous_runtime=$(sed -n '1p' "$runtime_state")
+  if [ "$runtime_stamp" != "$previous_runtime" ]; then
+    rsync -a --delete "$site_packages/" "$OMNIVOICE_SITE_PACKAGES_MIRROR/"
+  fi
+fi
+
+systemctl try-restart "omnivoice@${instance}.service"
+printf '%s\n' "$fingerprint" > "$state"
+printf '%s\n' "$runtime_stamp" > "$runtime_state"

@@ -1,0 +1,12 @@
+[Unit]
+Description=Poll OmniVoice source changes for GPU %i
+RequiresMountsFor=/srv/OmniVoice
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+AccuracySec=1s
+Unit=omnivoice-reload@%i.service
+
+[Install]
+WantedBy=timers.target
