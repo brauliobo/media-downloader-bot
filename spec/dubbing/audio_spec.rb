@@ -10,7 +10,7 @@ RSpec.describe Dubbing::Audio do
     instance_double(Process::Status, success?: true)
   end
 
-  it 'trims synthesis padding without changing speech speed' do
+  it 'preserves synthesized edge padding without changing speech speed' do
     input = File.join(dir, 'input.wav')
     output = File.join(dir, 'output.wav')
     File.write(input, 'audio')
@@ -18,7 +18,8 @@ RSpec.describe Dubbing::Audio do
     expect(Sh).to receive(:run) do |command|
       expect(command).not_to include('atempo')
       expect(command).not_to include('atrim')
-      expect(command).to include('silenceremove', 'areverse')
+      expect(command).not_to include('silenceremove', 'afade')
+      expect(command).to include('-ac 1 -ar 48000')
       File.write(output, 'normalized')
       ['', '', ok_status]
     end

@@ -5,12 +5,6 @@ module Dubbing
   module Audio
     DIALOGUE_GAP_TOLERANCE = 0.12
     MAX_SPEED              = 1.5
-    TRIM_FILTER            = [
-      'silenceremove=start_periods=1:start_duration=0.05:start_threshold=-45dB:start_silence=0.04',
-      'areverse',
-      'silenceremove=start_periods=1:start_duration=0.05:start_threshold=-45dB:start_silence=0.04',
-      'areverse'
-    ].join(',').freeze
 
     Clip          = Data.define(:path, :start, :end)
     ScheduledClip = Data.define(:path, :start, :end, :speed)
@@ -21,8 +15,7 @@ module Dubbing
     def normalize(input, output)
       run!(
         'dub audio normalization',
-        "#{Zipper::FFMPEG} -i #{Sh.escape(input)} -af #{Sh.escape(TRIM_FILTER)} " \
-          "-ac 1 -ar 48000 #{Sh.escape(output)}",
+        "#{Zipper::FFMPEG} -i #{Sh.escape(input)} -ac 1 -ar 48000 #{Sh.escape(output)}",
         output
       )
     end
