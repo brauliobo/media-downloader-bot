@@ -61,6 +61,9 @@ module Ewprs
     TARGET_SHARED_PHRASES = {
       'de' => [%w[negative evolution].freeze].freeze
     }.freeze
+    OMITTABLE_SOURCE_WORDS = {
+      'zh' => %w[a an the].to_h { |word| [word, true] }.freeze
+    }.freeze
     TARGET_INVALID_PHRASES = {
       'de' => {
         /\bdefinition of\b/i => 'retained English definition prose',
@@ -109,10 +112,11 @@ module Ewprs
       unless source_language == target_language
         validate_retained_protected_connectors!(source, translated, protected_connectors)
         counts = protected_value_counts(source, protected_values)
-        unprotected_source = without_protected_values(source, counts)
-        unprotected_translation = without_protected_values(translated, counts)
+        unprotected_source      = without_protected_values(source, counts)
+        unprotected_translation = without_protected_values(translated, counts, target_text: true)
         validate_translation_progress!(
-          unprotected_source, unprotected_translation
+          unprotected_source, unprotected_translation,
+          protected_context: counts.any? || source.to_s.match?(MARKER)
         )
         validate_retained_source_words!(unprotected_source, unprotected_translation)
         validate_target_language!(unprotected_translation)
@@ -126,7 +130,7 @@ module Ewprs
       changed = expected_values.find do |value, expected_count|
         next false if value.match?(MARKER) || !visible_text(value).match?(/\p{L}/u)
 
-        translated.scan(protected_value_pattern(value)).size < expected_count
+        translated.scan(protected_value_pattern(value, target_text: true)).size < expected_count
       end
       return true unless changed
 
@@ -179,11 +183,11 @@ module Ewprs
       end
     end
 
-    def without_protected_values(value, counts)
+    def without_protected_values(value, counts, target_text: false)
       counts.each_with_object(value.to_s.dup) do |(protected, count), text|
         next if protected.match?(MARKER)
 
-        count.times { text.sub!(protected_value_pattern(protected), ' ') }
+        count.times { text.sub!(protected_value_pattern(protected, target_text: target_text), ' ') }
       end
     end
 
@@ -196,9 +200,38 @@ module Ewprs
     def validate_delimiters!(source, translated)
       source_text = visible_text(source)
       translated_text = visible_text(translated)
-      changed = source_text.scan(DELIMITER) != translated_text.scan(DELIMITER)
+      source_profile = balanced_delimiter_profile(source_text)
+      translated_profile = balanced_delimiter_profile(translated_text)
+      changed = if target_language == 'zh' && source_profile
+        source_profile != translated_profile
+      else
+        source_text.scan(DELIMITER) != translated_text.scan(DELIMITER)
+      end
       changed ||= source_text.scan(EDITORIAL_BRACKET) != translated_text.scan(EDITORIAL_BRACKET)
       raise Error.new(:delimiters, 'translation changed paired delimiters') if changed
+    end
+
+    def balanced_delimiter_profile(value)
+      openings = DELIMITER_PAIRS.keys.to_h { |opening| [opening, true] }
+      closing_to_opening = DELIMITER_PAIRS.invert
+      roots = []
+      stack = []
+      value.scan(DELIMITER).each do |delimiter|
+        if openings.key?(delimiter)
+          stack << [delimiter, []]
+          next
+        end
+
+        opening = closing_to_opening.fetch(delimiter)
+        return unless stack.last&.first == opening
+
+        node_opening, children = stack.pop
+        signature = "#{node_opening}#{children.join}#{delimiter}"
+        stack.empty? ? roots << signature : stack.last.last << signature
+      end
+      return unless stack.empty?
+
+      roots.sort
     end
 
     def validate_escaped_character_references!(source, translated)
@@ -254,11 +287,13 @@ module Ewprs
       raise Error.new(:markers, 'translation leaked an internal transport marker')
     end
 
-    def validate_translation_progress!(source, translated)
+    def validate_translation_progress!(source, translated, protected_context: false)
       source_words = normalized_words(source)
       target_words = normalized_words(translated)
       return if source_words.empty?
       if target_words.empty?
+        omittable = OMITTABLE_SOURCE_WORDS.fetch(target_language, {})
+        return if protected_context && source_words.all? { |word| omittable.key?(word) }
         return if protected_source_fragment?(source) || formula_or_reference?(source)
 
         excerpt = visible_text(source)[0, 80]
@@ -377,10 +412,18 @@ module Ewprs
         text.match?(/\b[A-Z]\.\s*(?:[a-z]+\.)?\z/)
     end
 
-    def protected_value_pattern(value)
-      prefix = '(?<![\p{L}\p{M}])' if value.match?(/\A[\p{L}\p{M}]/u)
-      suffix = '(?![\p{L}\p{M}])' if value.match?(/[\p{L}\p{M}]\z/u)
+    def protected_value_pattern(value, target_text: false)
+      leading_letter  = value.match(/\A(\p{L})/u)&.[](1)
+      trailing_letter = value.match(/(\p{L})\p{M}*\z/u)&.[](1)
+      prefix = "(?<![#{protected_boundary_class(leading_letter, target_text: target_text)}])" if leading_letter
+      suffix = "(?![#{protected_boundary_class(trailing_letter, target_text: target_text)}])" if trailing_letter
       Regexp.new("#{prefix}#{Regexp.escape(value)}#{suffix}", Regexp::MULTILINE)
+    end
+
+    def protected_boundary_class(letter, target_text:)
+      return '\p{Latin}\p{M}' if target_text && target_language == 'zh' && letter.match?(/\p{Latin}/u)
+
+      '\p{L}\p{M}'
     end
 
     def source_words(words)

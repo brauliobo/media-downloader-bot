@@ -38,6 +38,13 @@ RSpec.describe Ewprs::TranslationValidator do
     end.to raise_error(described_class::Error, /omitted source prose/)
   end
 
+  it 'allows Chinese to omit an English article before protected content' do
+    chinese = described_class.new(source_language: 'en', target_language: 'zh')
+
+    expect(chinese.valid?(source: 'The __P0001__', translated: '__P0001__')).to be(true)
+    expect(chinese.valid?(source: 'The', translated: '')).to be(false)
+  end
+
   it 'does not reject unchanged formulas, citations, or scientific names' do
     expect(validator.valid?(source: 'A + u + m = Om.', translated: 'A + u + m = Om.')).to be(true)
     expect(
@@ -107,6 +114,21 @@ RSpec.describe Ewprs::TranslationValidator do
     expect(german.valid?(source: source, translated: translated)).to be(true)
   end
 
+  it 'allows a Latin protected term next to Chinese prose without accepting Latin extensions' do
+    chinese = described_class.new(source_language: 'en', target_language: 'zh')
+
+    expect(
+      chinese.valid?(
+        source: 'The mantra is recited.', translated: 'mantra正在被诵读。', protected_values: ['mantra']
+      )
+    ).to be(true)
+    expect do
+      chinese.validate!(
+        source: 'The mantra is recited.', translated: 'mantram正在被诵读。', protected_values: ['mantra']
+      )
+    end.to raise_error(described_class::Error, /changed protected source text: mantra/)
+  end
+
   it 'rejects changed line breaks' do
     expect do
       validator.validate!(source: "First line.\r\nSecond line.", translated: 'Primeira linha. Segunda linha.')
@@ -125,6 +147,17 @@ RSpec.describe Ewprs::TranslationValidator do
     expect do
       validator.validate!(source: 'The {mind (and body)} moves.', translated: 'A {mente) e o corpo (}se move.')
     end.to raise_error(described_class::Error, /changed paired delimiters/)
+  end
+
+  it 'allows intact balanced delimiter groups to follow target grammar' do
+    chinese = described_class.new(source_language: 'en', target_language: 'zh')
+
+    expect(
+      chinese.valid?(
+        source: 'a form (mental body) according to samskaras [mental momenta]',
+        translated: '根据samskaras [心理动量]形成一种形态(心智体)'
+      )
+    ).to be(true)
   end
 
   it 'rejects newly escaped HTML character references' do
