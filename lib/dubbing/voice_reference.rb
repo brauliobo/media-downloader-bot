@@ -49,9 +49,6 @@ module Dubbing
       end
       return [] if available.empty?
 
-      longest = available.max_by(&:duration)
-      return [longest] if longest.duration >= min_duration
-
       selected = bounded(available, max_duration)
       while selected.sum(&:duration) < min_duration
         remaining = max_duration - selected.sum(&:duration)
@@ -67,7 +64,7 @@ module Dubbing
       total = 0.0
       selections.each_with_object([]) do |selection, result|
         break result if total >= stop_at || total >= capacity
-        break result if total + selection.duration > capacity
+        next if total + selection.duration > capacity
 
         result << selection
         total += selection.duration

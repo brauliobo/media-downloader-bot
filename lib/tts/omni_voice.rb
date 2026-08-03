@@ -18,12 +18,12 @@ class TTS
 
     def synthesize(text:, lang:, out_path:, speaker_wav: nil, ref_text: nil, **kwargs)
       require_clone_text!(speaker_wav, ref_text)
-      super
+      super(text: text, lang: lang, out_path: out_path, speaker_wav: speaker_wav, normalize_text: true, **kwargs)
     end
 
     def synthesize_batch(items:, lang: nil, speaker_wav: nil, ref_text: nil, **kwargs)
       require_clone_text!(speaker_wav, ref_text)
-      super
+      super(items: items, lang: lang, speaker_wav: speaker_wav, normalize_text: true, **kwargs)
     end
 
     def self.output_sample_rate

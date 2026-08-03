@@ -69,7 +69,7 @@ RSpec.describe Dubbing::VoiceReference do
     expect(reference.tts_options).to eq(speaker_wav: '/tmp/speaker.wav', ref_text: 'Reference text.')
   end
 
-  it 'prefers a complete reference sentence over short conversational fragments' do
+  it 'combines complete reference sentences up to the cap' do
     segments = [segment(0, 1, speaker_id: 0), segment(2, 6, speaker_id: 0)]
     sentences = [
       sentence(0, 1, source_text: 'Thank you.'),
@@ -78,7 +78,21 @@ RSpec.describe Dubbing::VoiceReference do
 
     reference = described_class.extract_by_speaker(input, segments, sentences: sentences, dir: dir).fetch(0)
 
-    expect(reference.text).to eq('I worked at an accounting firm.')
+    expect(reference.text).to eq('Thank you. I worked at an accounting firm.')
+  end
+
+  it 'skips a sentence that would overflow so later complete sentences can fit' do
+    segments = [segment(0, 6), segment(7, 12), segment(13, 17)]
+    sentences = [
+      sentence(0, 6, source_text: 'First sentence.'),
+      sentence(7, 12, source_text: 'Too large to fit.'),
+      sentence(13, 17, source_text: 'Final sentence.'),
+    ]
+
+    reference = described_class.extract_by_speaker(input, segments, sentences: sentences, dir: dir).fetch(0)
+
+    expect(reference.text).to eq('First sentence. Final sentence.')
+    expect(File.readlines(reference.path).size).to eq(2)
   end
 
   it 'repeats only the same turn when a reference is shorter than three seconds' do

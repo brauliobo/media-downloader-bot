@@ -122,6 +122,7 @@ RSpec.describe TTS::OmniVoice do
         { 'text' => 'One.', 'language' => 'en' },
         { 'text' => 'Two.', 'language' => 'en' },
       ])
+      expect(captured_form['normalize_text']).to eq('true')
       expect(File.read(paths[0])).to eq('wav1')
       expect(File.read(paths[1])).to eq('wav2')
     end
