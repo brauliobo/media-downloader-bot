@@ -3,8 +3,6 @@ require_relative '../zipper'
 
 module Dubbing
   module Audio
-    MAX_SPEED = 1.5
-
     Clip          = Data.define(:path, :start, :end)
     ScheduledClip = Data.define(:path, :start, :end, :speed)
     Timeline      = Data.define(:path, :clips)
@@ -45,45 +43,24 @@ module Dubbing
     end
 
     def schedule(clips, duration:)
-      earliest_start = nil
       clips.map.with_index do |clip, idx|
-        requested_start = clip.start.to_f
-        start           = [requested_start, earliest_start || requested_start].max
-        clip_duration   = Prober.for(clip.path).format.duration.to_f
-        next_start      = clips[idx + 1]&.start&.to_f
-        natural_limit   = next_start ? next_start - start : duration.to_f - start
-        available       = natural_limit
-        required_speed  = available.positive? ? clip_duration / available : nil
-        shifted         = false
-        speed           = if clip_duration <= natural_limit
-          1.0
-        elsif required_speed && required_speed <= MAX_SPEED
-          required_speed
-        elsif next_start
-          shifted = true
-          MAX_SPEED
-        else
-          fit_speed(clip_duration, available, natural_limit, start: start)
-        end
+        start         = clip.start.to_f
+        clip_duration = Prober.for(clip.path).format.duration.to_f
+        next_start    = clips[idx + 1]&.start&.to_f
+        natural_limit = next_start ? next_start - start : duration.to_f - start
+        speed         = fit_speed(clip_duration, natural_limit, start: start)
         finish = start + clip_duration / speed
-        earliest_start = if shifted || start > requested_start
-          finish
-        end
 
         ScheduledClip.new(path: clip.path, start: start, end: finish, speed: speed)
       end
     end
 
-    def fit_speed(duration, available, natural_limit, start: nil)
+    def fit_speed(duration, natural_limit, start: nil)
       return 1.0 if duration <= natural_limit
 
-      raise 'dubbed speech has no positive source interval' unless available.positive?
+      raise 'dubbed speech has no positive source interval' unless natural_limit.positive?
 
-      speed = duration / available
-      return speed if speed <= MAX_SPEED
-
-      location = start ? " at #{format('%.3f', start)}s" : ''
-      raise "dubbed speech#{location} requires #{format('%.2f', speed)}x speed; maximum is #{MAX_SPEED}x"
+      duration / natural_limit
     end
 
     def silence(output, duration)

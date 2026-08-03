@@ -53,15 +53,15 @@ RSpec.describe Dubbing::Audio do
     expect(scheduled.first.end).to eq(1.95)
   end
 
-  it 'shifts following speech when the speed ceiling would be exceeded' do
+  it 'uses the required speed even when it exceeds the former ceiling' do
     first = described_class::Clip.new(path: File.join(dir, 'first.wav'), start: 0.0, end: 1.0)
     second = described_class::Clip.new(path: File.join(dir, 'second.wav'), start: 2.0, end: 4.0)
-    allow(Prober).to receive(:for).with(first.path).and_return(SymMash.new(format: SymMash.new(duration: 3.0)))
+    allow(Prober).to receive(:for).with(first.path).and_return(SymMash.new(format: SymMash.new(duration: 4.0)))
     allow(Prober).to receive(:for).with(second.path).and_return(SymMash.new(format: SymMash.new(duration: 2.0)))
 
     scheduled = described_class.schedule([first, second], duration: 5.0)
 
-    expect(scheduled.first.speed).to eq(1.5)
+    expect(scheduled.first.speed).to eq(2.0)
     expect(scheduled.first.end).to eq(2.0)
     expect(scheduled.last.start).to eq(2.0)
   end
