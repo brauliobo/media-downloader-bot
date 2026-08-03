@@ -18,6 +18,22 @@ lock = threading.Lock()
 pipeline = None
 
 
+def vram_usage():
+    free_bytes, total_bytes = torch.cuda.mem_get_info()
+    allocated_bytes = torch.cuda.memory_allocated()
+    reserved_bytes = torch.cuda.memory_reserved()
+    used_bytes = total_bytes - free_bytes
+    return {
+        "device": torch.cuda.get_device_name(0),
+        "allocated_bytes": allocated_bytes,
+        "reserved_bytes": reserved_bytes,
+        "used_bytes": used_bytes,
+        "free_bytes": free_bytes,
+        "total_bytes": total_bytes,
+        "used_percent": round(used_bytes * 100 / total_bytes, 2),
+    }
+
+
 @app.on_event("startup")
 def load_pipeline():
     global pipeline
@@ -36,7 +52,7 @@ def live():
 def ready():
     if pipeline is None:
         raise HTTPException(status_code=503, detail="model is not loaded")
-    return {"status": "ok", "device": torch.cuda.get_device_name(0), "model": MODEL_PATH}
+    return {"status": "ok", "device": torch.cuda.get_device_name(0), "model": MODEL_PATH, "vram": vram_usage()}
 
 
 @app.post("/v1/diarize")
@@ -69,6 +85,7 @@ def diarize(file: UploadFile = File(...), speakers: int | None = Form(None)):
         output = pipeline({"waveform": waveform, "sample_rate": sample_rate}, **options)
         torch.cuda.synchronize()
         peak_memory = torch.cuda.max_memory_allocated()
+        vram = vram_usage()
     elapsed = time.perf_counter() - started
     annotation = output.exclusive_speaker_diarization
     segments = [
@@ -83,5 +100,6 @@ def diarize(file: UploadFile = File(...), speakers: int | None = Form(None)):
         "elapsed": elapsed,
         "rtf": elapsed / duration if duration else 0.0,
         "peak_cuda_bytes": peak_memory,
+        "vram": vram,
         "backend": "pyannote-community-1",
     }

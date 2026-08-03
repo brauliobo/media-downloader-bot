@@ -12,6 +12,11 @@ speaker intervals:
 {"segments":[{"start":0.1,"end":1.2,"speaker_id":"SPEAKER_00"}]}
 ```
 
+Pyannote's `GET /health/ready` and `POST /v1/diarize` responses also include a
+`vram` object with allocated, reserved, used, free, and total CUDA memory in
+bytes, plus the device name and used percentage. Allocated and reserved values
+are process-level; used, free, and total values describe the CUDA device.
+
 ## pyannote Community-1
 
 The runtime is pinned to pyannote.audio 4.0.7 and PyTorch 2.8.0/cu128 under
