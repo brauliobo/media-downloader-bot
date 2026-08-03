@@ -362,6 +362,59 @@ RSpec.describe Zipper do
     end
   end
 
+  it 'encodes formatted pauses with the input channel and PCM parameters' do
+    Dir.mktmpdir('formatted-pause-spec-') do |dir|
+      allow(Sh).to receive(:run) do |command|
+        File.write(command.split.last, 'silence')
+        ['', '', double(success?: true)]
+      end
+      format = {
+        codec_name:      'pcm_s16le',
+        sample_fmt:      's16',
+        sample_rate:     24_000,
+        channels:        2,
+        channel_layout:  'stereo',
+        bits_per_sample: 16,
+      }
+
+      path = described_class.get_pause_file(3.5, dir, format: format, extension: '.wav')
+
+      expect(path).to match(%r{/pause_3_5_24000_[0-9a-f]{12}\.wav\z})
+      expect(Sh).to have_received(:run).with(
+        include(
+          'anullsrc=channel_layout=stereo:sample_rate=24000',
+          '-ac 2', '-channel_layout stereo', '-c:a pcm_s16le', '-sample_fmt s16'
+        )
+      )
+    end
+  end
+
+  it 'preserves a detected AAC profile when its encoder is available' do
+    Dir.mktmpdir('aac-pause-spec-') do |dir|
+      allow(Sh).to receive(:run) do |command|
+        File.write(command.split.last, 'silence')
+        ['', '', double(success?: true)]
+      end
+      format = {
+        codec_name:     'aac',
+        profile:        'HE-AAC',
+        sample_rate:    24_000,
+        channels:       2,
+        channel_layout: 'stereo',
+        bit_rate:       32_004,
+      }
+
+      described_class.get_pause_file(3.5, dir, format: format, extension: '.m4a')
+
+      expect(Sh).to have_received(:run).with(include('-ac 2', '-channel_layout stereo'))
+      if Zipper::Formats::FDK_AAC
+        expect(Sh).to have_received(:run).with(include('-c:a libfdk_aac', '-profile:a aac_he', '-b:a 32004'))
+      else
+        expect(Sh).not_to have_received(:run).with(include('-profile:a aac_he'))
+      end
+    end
+  end
+
   it 'adds a calibrated continuous floor without lowering speech' do
     Dir.mktmpdir('audio-floor-spec-') do |dir|
       source = File.join(dir, 'speech.wav')

@@ -1,6 +1,9 @@
 require 'tempfile'
 require 'securerandom'
 require 'fileutils'
+require 'digest'
+require 'json'
+require_relative 'prober'
 require_relative 'utils/safety'
 require_relative 'subtitler/ass'
 require_relative 'zipper/formats'
@@ -79,7 +82,7 @@ class Zipper
   def self.concat_audio inputs, outfile, stl: nil
     return FileUtils.cp inputs.first, outfile if inputs.size == 1
 
-    signatures = inputs.map { |input| audio_signature(input) }
+    signatures = inputs.map { |input| Prober.audio_signature(input) }
     Dir.mktmpdir do |dir|
       listfile = File.join(dir, 'concat.txt')
       File.write listfile, inputs.map { |p| Utils::Safety.concat_manifest_path(p) }.join("\n")
@@ -100,20 +103,26 @@ class Zipper
   self.pause_cache       = {}
   self.pause_cache_mutex = Mutex.new
 
-  def self.silence_file(path, seconds, sample_rate: 22_050, amplitude: nil)
+  def self.silence_file(path, seconds, sample_rate: 22_050, format: nil, amplitude: nil)
+    format = normalize_audio_format(format)
+    sample_rate = format[:sample_rate].to_i if format[:sample_rate].to_i.positive?
+    channels = format[:channels].to_i
+    layout   = format[:channel_layout].to_s
+    layout   = channel_layout_for(channels) if layout.empty?
     source = if amplitude.to_f.positive?
       "anoisesrc=color=white:amplitude=#{amplitude.to_f}:sample_rate=#{sample_rate.to_i}"
     else
-      "anullsrc=channel_layout=mono:sample_rate=#{sample_rate.to_i}"
+      "anullsrc=channel_layout=#{Sh.escape(layout)}:sample_rate=#{sample_rate.to_i}"
     end
     filter = amplitude.to_f.positive? ? ' -af lowpass=f=6000' : ''
-    cmd = "#{FFMPEG} -f lavfi -i #{source}#{filter} -t #{seconds} #{Sh.escape(path)}"
+    output = pause_output_options(format, sample_rate: sample_rate, channels: channels, layout: layout)
+    cmd = "#{FFMPEG} -f lavfi -i #{source}#{filter} -t #{seconds} #{output}#{Sh.escape(path)}"
     _, err, status = Sh.run cmd
     Sh.assert_success!('Failed to create silent audio file', err, status: status, output: path)
     path
   end
 
-  def self.get_pause_file seconds, dir, sample_rate: nil, extension: '.wav', amplitude: nil
+  def self.get_pause_file seconds, dir, sample_rate: nil, extension: '.wav', format: nil, amplitude: nil
     return nil if seconds.to_f <= 0
     key = seconds.to_f.round(3)
     sample_rate = (sample_rate || 22_050).to_i
@@ -121,12 +130,86 @@ class Zipper
     extension = ".#{extension}" unless extension.start_with?('.')
     raise ArgumentError, "invalid audio extension: #{extension}" unless extension.match?(/\A\.[a-z0-9]+\z/i)
 
+    format = normalize_audio_format(format)
+    sample_rate = format[:sample_rate].to_i if format[:sample_rate].to_i.positive?
+    format[:sample_rate] = sample_rate unless format.empty?
+    format_key = pause_format_key(format)
+    format_suffix = format_key ? "_#{format_key}" : ''
     amplitude_key = amplitude.to_f.positive? ? "_#{amplitude.to_f.to_s.tr('.', '_')}" : ''
-    cache_key = "#{dir}:#{key}:#{sample_rate}:#{extension}:#{amplitude_key}"
-    pause_file = File.join(dir, "pause_#{key.to_s.gsub('.', '_')}_#{sample_rate}#{amplitude_key}#{extension}")
+    cache_key = "#{dir}:#{key}:#{sample_rate}:#{extension}:#{format_suffix}:#{amplitude_key}"
+    pause_file = File.join(dir, "pause_#{key.to_s.gsub('.', '_')}_#{sample_rate}#{format_suffix}#{amplitude_key}#{extension}")
     cached_pause_file(cache_key, pause_file) do
-      silence_file(pause_file, key, sample_rate: sample_rate, amplitude: amplitude)
+      silence_file(pause_file, key, sample_rate: sample_rate, format: format, amplitude: amplitude)
     end
+  end
+
+  def self.normalize_audio_format(format)
+    format ? format.to_h.transform_keys(&:to_sym) : {}
+  end
+
+  def self.pause_format_key(format)
+    return if format.empty?
+
+    serialized = format.sort_by { |key, _value| key.to_s }.to_h
+    Digest::SHA256.hexdigest(JSON.generate(serialized))[0, 12]
+  end
+
+  def self.pause_output_options(format, sample_rate:, channels:, layout:)
+    return '' if format.empty?
+
+    codec = format[:codec_name].to_s
+    options = ["-ar #{sample_rate.to_i}"]
+    options << "-ac #{channels}" if channels.positive?
+    options << "-channel_layout #{Sh.escape(layout)}" unless layout.empty?
+
+    encoder = pause_encoder(format)
+    options << "-c:a #{encoder}" if encoder
+
+    profile = pause_profile(format, encoder)
+    options << "-profile:a #{profile}" if profile
+
+    bit_rate = format[:bit_rate].to_i
+    if encoder && bit_rate.positive? && !codec.start_with?('pcm_') && codec != 'flac'
+      options << "-b:a #{bit_rate}"
+    end
+
+    sample_fmt = format[:sample_fmt].to_s
+    options << "-sample_fmt #{Sh.escape(sample_fmt)}" if codec.start_with?('pcm_') && !sample_fmt.empty?
+    "#{options.join(' ')} "
+  end
+
+  def self.pause_encoder(format)
+    codec = format[:codec_name].to_s
+    return if codec.empty?
+
+    if codec == 'aac'
+      profile = format[:profile].to_s
+      return unless Formats::FDK_AAC || !profile.match?(/HE-AAC/i)
+
+      return Formats::FDK_AAC ? 'libfdk_aac' : 'aac'
+    end
+
+    mapped = {
+      'mp3'    => 'libmp3lame',
+      'opus'   => 'libopus',
+      'vorbis' => 'libvorbis',
+    }
+    return mapped[codec] if mapped.key?(codec)
+    return codec if codec.start_with?('pcm_') || codec.in?(%w[ac3 alac eac3 flac])
+  end
+
+  def self.pause_profile(format, encoder)
+    return unless format[:codec_name].to_s == 'aac' && encoder
+
+    {
+      'LC'        => 'aac_low',
+      'HE-AAC'    => 'aac_he',
+      'HE-AACV2'  => 'aac_he_v2',
+    }[format[:profile].to_s.upcase]
+  end
+
+  def self.channel_layout_for(channels)
+    {1 => 'mono', 2 => 'stereo'}[channels.to_i] || 'mono'
   end
 
   def self.cached_pause_file cache_key, path
@@ -428,19 +511,6 @@ class Zipper
 
   def self.concat_copy_safe?(signatures)
     signatures.none?(&:empty?) && signatures.uniq.one?
-  end
-
-  def self.audio_signature(input)
-    stream = Prober.for(input).streams.find { |s| s.codec_type == 'audio' }
-    return {} unless stream
-
-    {
-      codec_name:      stream.codec_name.to_s,
-      sample_rate:     stream.sample_rate.to_i,
-      channels:        stream.channels.to_i,
-      bits_per_sample: stream.bits_per_sample.to_i,
-      sample_fmt:      stream.sample_fmt.to_s,
-    }
   end
 
   def self.concat_filter_cmd(inputs, outfile, signatures)

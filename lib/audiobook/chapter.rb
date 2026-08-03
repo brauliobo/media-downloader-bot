@@ -49,12 +49,10 @@ module Audiobook
     end
 
     def self.pause_file(audio, dir, amplitude: nil)
-      stream = Prober.for(audio).streams.find { |candidate| candidate.codec_type == 'audio' }
-      rate   = stream&.sample_rate.to_i
-      rate   = AudioFiles.sample_rate unless rate.positive?
+      format = Prober.audio_format(audio)
       ext    = File.extname(audio)
       ext    = '.wav' if ext.empty?
-      AudioFiles.pause(PAUSE, dir, sample_rate: rate, extension: ext, amplitude: amplitude)
+      AudioFiles.pause(PAUSE, dir, format: format, extension: ext, amplitude: amplitude)
     end
     private_class_method :pause_file
   end

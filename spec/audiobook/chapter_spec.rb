@@ -19,13 +19,25 @@ RSpec.describe Audiobook::Chapter do
         described_class.new(title: 'First', audio: first_audio, sections: sections),
         described_class.new(title: 'Second', audio: second_audio),
       ]
-      probe = SymMash.new(streams: [SymMash.new(codec_type: 'audio', sample_rate: 24_000)])
-      allow(Prober).to receive(:for).with(first_audio).and_return(probe)
+      format = {
+        codec_name:        'aac',
+        profile:           'HE-AAC',
+        codec_tag_string:  'mp4a',
+        mime_codec_string: 'mp4a.40.5',
+        sample_fmt:        'fltp',
+        sample_rate:       24_000,
+        channels:          2,
+        channel_layout:    'stereo',
+        bits_per_sample:   0,
+        extradata_size:    4,
+        bit_rate:          32_004,
+      }
+      allow(Prober).to receive(:audio_format).with(first_audio).and_return(format)
       pause = File.join(dir, 'pause.m4a')
       expect(Audiobook::AudioFiles).to receive(:pause).with(
         Audiobook::Pauses::CHAPTER,
         kind_of(String),
-        sample_rate: 24_000,
+        format: format,
         extension: '.m4a',
         amplitude: 0.001
       ).and_return(pause)
