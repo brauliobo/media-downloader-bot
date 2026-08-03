@@ -124,6 +124,46 @@ RSpec.describe Subtitler::Translator do
     expect(mash.segments.all? { |s| Array(s.words).empty? }).to eq(true)
   end
 
+  it 'splits wordless text into timed sentences before translating' do
+    verbose_json = {
+      segments: [
+        { start: 0.0, end: 4.0, text: 'Hello. This is a second sentence.', words: nil },
+      ]
+    }
+
+    allow(::Translator).to receive(:translate).and_return(['Olá.', 'Esta é uma segunda frase.'])
+
+    mash = described_class.translate(verbose_json, from: 'en', to: 'pt')
+
+    expect(::Translator).to have_received(:translate).with(['Hello.', 'This is a second sentence.'], from: 'en', to: 'pt')
+    expect(mash.segments.map(&:text)).to eq(['Olá. Esta é uma segunda frase.'])
+    expect([mash.segments.first.start, mash.segments.last.end]).to eq([0.0, 4.0])
+  end
+
+  it 'removes a model translation label without removing legitimate dialogue' do
+    verbose_json = {
+      segments: [
+        { start: 0.0, end: 1.0, text: 'Hello.', words: nil },
+        { start: 2.2, end: 3.0, text: 'Sure.', words: nil },
+      ]
+    }
+
+    allow(::Translator).to receive(:translate).and_return(['Translation: Olá.', 'Claro.'])
+
+    mash = described_class.translate(verbose_json, from: 'en', to: 'pt')
+
+    expect(mash.segments.map(&:text)).to eq(['Olá.', 'Claro.'])
+  end
+
+  it 'keeps honorifics together when splitting wordless text into sentences' do
+    segments = [SymMash.new(start: 0.0, end: 2.0, text: 'You must be Mr. Wang. Welcome.', words: nil)]
+
+    expect(described_class.sentences_for(segments).map(&:text)).to eq([
+      'You must be Mr. Wang.',
+      'Welcome.',
+    ])
+  end
+
   it 'merges adjacent short sentences into standard-length subtitle' do
     verbose_json = {
       segments: [
@@ -337,4 +377,3 @@ RSpec.describe Subtitler::Translator do
     expect(sentences.first.end).to eq(1.0)
   end
 end
-

@@ -1,11 +1,10 @@
 require 'tempfile'
 require_relative '../utils/safety'
 require_relative 'segments'
+require_relative 'translator'
 
 class Subtitler
   class VTT
-    SKIP_TAGS = %w[NOTE STYLE REGION].freeze
-
     def self.clean(vtt)
       return vtt unless vtt
       vtt
@@ -16,25 +15,16 @@ class Subtitler
     end
 
     def self.translate(vtt, to:, from: nil)
-      lines = vtt.lines
-      indexes = []
-      originals = []
+      segments = segments_from_vtt(Subtitler.strip_word_tags(clean(vtt)))
+      return vtt if segments.empty?
 
-      lines.each_with_index do |line, idx|
-        stripped = line.strip
-        next if skip_line?(stripped, idx)
-        indexes << idx
-        originals << stripped
-      end
-
-      translations = translate_chunks(originals, from: from, to: to)
-
-      indexes.each_with_index do |line_idx, pos|
-        replacement = translations[pos] || originals[pos]
-        lines[line_idx] = lines[line_idx].sub(originals[pos], replacement.to_s)
-      end
-
-      lines.join
+      translated = Subtitler::Translator.translate(
+        {segments: segments},
+        from:           from,
+        to:             to,
+        merge_adjacent: false
+      )
+      build(translated, normalize: false, word_tags: false)
     end
 
     def self.translate_if_needed(zipper, vtt, tsp, from_lang, to_lang)
@@ -46,8 +36,13 @@ class Subtitler
       zipper&.stl&.update 'translating'
 
       if tsp
-        tsp = Subtitler::Translator.translate(tsp, from: normalized_from, to: normalized_to)
-        vtt = build(tsp, word_tags: !zipper.opts.nowords)
+        tsp = Subtitler::Translator.translate(
+          tsp,
+          from:           normalized_from,
+          to:             normalized_to,
+          merge_adjacent: false
+        )
+        vtt = build(tsp, normalize: false, word_tags: !zipper.opts.nowords)
       else
         vtt = translate(vtt, to: normalized_to, from: normalized_from)
       end
@@ -58,7 +53,10 @@ class Subtitler
     def self.build(verbose_json, normalize: true, word_tags: true, stdsub: nil)
       mash = SymMash.new(verbose_json)
       use_norm = stdsub.nil? ? normalize : stdsub
-      Segments.merge_adjacent!(mash) if use_norm
+      if use_norm
+        Subtitler::Translator.split_long_segments!(mash, max_chars: Subtitler::Translator::MAX_SUBTITLE_CHARS)
+        Segments.merge_adjacent!(mash, max_chars: Subtitler::Translator::MAX_SUBTITLE_CHARS)
+      end
 
       formatter = ->(t) { h, rem = t.divmod(3600); m, s = rem.divmod(60); format('%02d:%02d:%06.3f', h, m, s) }
 
@@ -146,18 +144,6 @@ class Subtitler
       clean(vtt)
     end
 
-    def self.translate_chunks(chunks, from:, to:)
-      return [] if chunks.empty?
-
-      chunks.each_slice(::Translator::BATCH_SIZE).flat_map do |slice|
-        Array(::Translator.translate(slice, from: from, to: to)).map(&:to_s)
-      end
-    end
-
-    def self.skip_line?(text, index)
-      text.empty? || text.include?('-->') || SKIP_TAGS.any? { |tag| text.start_with?(tag) } || (index.zero? && text.start_with?('WEBVTT'))
-    end
-
     def self.each_cue(vtt)
       return enum_for(:each_cue, vtt) unless block_given?
 
@@ -171,6 +157,24 @@ class Subtitler
         end
       end
       yield cue if cue.any?
+    end
+
+    def self.segments_from_vtt(vtt)
+      each_cue(vtt).filter_map do |cue|
+        timing_index = cue.index { |line| line.include?('-->') }
+        next unless timing_index
+
+        start_text, end_text = cue.fetch(timing_index).strip.split('-->').map(&:strip)
+        text = cue[(timing_index + 1)..].map(&:strip).reject(&:empty?).join(' ')
+        next if text.empty?
+
+        SymMash.new(
+          text:  text,
+          start: hmsms_to_s(start_text),
+          end:   hmsms_to_s(end_text),
+          words: []
+        )
+      end
     end
 
     def self.flush_buffer(out, buffer)
@@ -216,7 +220,7 @@ class Subtitler
       end.join(' ')
     end
 
-    private_class_method :translate_chunks, :skip_line?, :each_cue, :flush_buffer,
+    private_class_method :each_cue, :segments_from_vtt, :flush_buffer,
                          :hms_to_s, :hmsms_to_s, :s_to_hmsms,
                          :build_line
   end

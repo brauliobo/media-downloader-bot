@@ -8,8 +8,8 @@ RSpec.describe Dubbing::VoiceReference do
   before { File.write(input, 'video') }
   after { FileUtils.remove_entry(dir) if Dir.exist?(dir) }
 
-  def sentence(start, finish, source_text:, source_words: [])
-    SymMash.new(start: start, end: finish, source_text: source_text, source_words: source_words)
+  def sentence(start, finish, source_text:, source_words: [], speaker_id: 0)
+    SymMash.new(start: start, end: finish, source_text: source_text, source_words: source_words, speaker_id: speaker_id)
   end
 
   def segment(start, finish, speaker_id: 0)
@@ -35,16 +35,20 @@ RSpec.describe Dubbing::VoiceReference do
   it 'builds an independent reference for every detected speaker turn' do
     segments = [
       segment(0, 2, speaker_id: 0),
-      segment(3, 5, speaker_id: 1),
-      segment(6, 8, speaker_id: 0),
+      segment(3, 6, speaker_id: 1),
+      segment(7, 9, speaker_id: 0),
     ]
-    sentences = [sentence(0, 8, source_text: 'Speaker zero. Speaker one. Speaker zero again.')]
+    sentences = [
+      sentence(0, 2, source_text: 'Speaker zero.'),
+      sentence(3, 6, source_text: 'Speaker one.', speaker_id: 1),
+      sentence(7, 9, source_text: 'Speaker zero again.'),
+    ]
 
     references = described_class.extract_by_speaker(input, segments, sentences: sentences, dir: dir)
 
     expect(references.keys).to eq([0, 1])
-    expect(references.fetch(0).text).to eq("#{sentences.first.source_text} #{sentences.first.source_text}")
-    expect(references.fetch(1).text).to eq("#{sentences.first.source_text} #{sentences.first.source_text}")
+    expect(references.fetch(0).text).to eq('Speaker zero. Speaker zero again.')
+    expect(references.fetch(1).text).to eq('Speaker one.')
     expect(references.values.map { |reference| File.dirname(reference.path) }.uniq.size).to eq(2)
   end
 
@@ -52,11 +56,29 @@ RSpec.describe Dubbing::VoiceReference do
     references = described_class.extract_by_speaker(
       input,
       [segment(0, 3, speaker_id: 'SPEAKER_00')],
-      sentences: [sentence(0, 3, source_text: 'Speaker zero.')],
+      sentences: [sentence(0, 3, source_text: 'Speaker zero.', speaker_id: 'SPEAKER_00')],
       dir: dir
     )
 
     expect(references.fetch('SPEAKER_00').text).to eq('Speaker zero.')
+  end
+
+  it 'provides its own TTS voice-cloning options' do
+    reference = described_class::Reference.new(path: '/tmp/speaker.wav', text: 'Reference text.')
+
+    expect(reference.tts_options).to eq(speaker_wav: '/tmp/speaker.wav', ref_text: 'Reference text.')
+  end
+
+  it 'prefers a complete reference sentence over short conversational fragments' do
+    segments = [segment(0, 1, speaker_id: 0), segment(2, 6, speaker_id: 0)]
+    sentences = [
+      sentence(0, 1, source_text: 'Thank you.'),
+      sentence(2, 6, source_text: 'I worked at an accounting firm.', speaker_id: 0),
+    ]
+
+    reference = described_class.extract_by_speaker(input, segments, sentences: sentences, dir: dir).fetch(0)
+
+    expect(reference.text).to eq('I worked at an accounting firm.')
   end
 
   it 'repeats only the same turn when a reference is shorter than three seconds' do
@@ -77,7 +99,10 @@ RSpec.describe Dubbing::VoiceReference do
       segment(0, 6),
       segment(6, 11),
     ]
-    sentences = [sentence(0, 6, source_text: 'First.'), sentence(6, 11, source_text: 'Would exceed cap.')]
+    sentences = [
+      sentence(0, 6, source_text: 'First.'),
+      sentence(6, 11, source_text: 'Would exceed cap.'),
+    ]
 
     reference = described_class.extract_by_speaker(input, segments, sentences: sentences, dir: dir).fetch(0)
 
@@ -85,26 +110,24 @@ RSpec.describe Dubbing::VoiceReference do
     expect(File.readlines(reference.path).size).to eq(1)
   end
 
-  it 'uses word timestamps to match text to exact speaker intervals' do
-    words = [
-      SymMash.new(word: 'Hello', start: 0.0, end: 0.8),
-      SymMash.new(word: 'there.', start: 0.8, end: 1.5),
-      SymMash.new(word: 'Goodbye.', start: 1.5, end: 2.5),
+  it 'uses complete sentence boundaries instead of fragmented speaker intervals' do
+    sentences = [
+      sentence(0.0, 3.5, source_text: 'Hello there.', speaker_id: 'A'),
+      sentence(3.5, 6.5, source_text: 'Goodbye.', speaker_id: 'B'),
     ]
-    sentences = [sentence(0, 2.5, source_text: 'Hello there. Goodbye.', source_words: words)]
-    segments = [segment(0, 1.5, speaker_id: 'A'), segment(1.5, 2.5, speaker_id: 'B')]
+    segments = [segment(0.5, 1.5, speaker_id: 'A'), segment(4.0, 5.0, speaker_id: 'B')]
 
     references = described_class.extract_by_speaker(input, segments, sentences: sentences, dir: dir)
 
-    expect(references.fetch('A').text).to eq('Hello there. Hello there.')
-    expect(references.fetch('B').text).to eq('Goodbye. Goodbye. Goodbye.')
+    expect(references.fetch('A').text).to eq('Hello there.')
+    expect(references.fetch('B').text).to eq('Goodbye.')
   end
 
   it 'cleans source noise before using a speaker interval as an OmniVoice reference' do
     allow(described_class).to receive(:extract_span).and_call_original
     selection = described_class::Selection.new(start: 1.0, duration: 4.0, text: 'Clean phrase.')
     expect(Sh).to receive(:run) do |command|
-      expect(command).to include('afftdn', 'highpass', 'lowpass', 'silenceremove', 'loudnorm')
+      expect(command).to include('afftdn', 'highpass', 'lowpass', 'silenceremove', 'loudnorm', 'apad')
       output = File.join(dir, 'speaker-0001.wav')
       File.write(output, 'clean reference')
       ['', '', ok_status]

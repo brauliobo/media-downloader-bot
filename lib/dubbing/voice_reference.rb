@@ -8,17 +8,22 @@ module Dubbing
   module VoiceReference
     MIN_DURATION = 3.0
     MAX_DURATION = 10.0
-    Reference = Data.define(:path, :text)
+    REFERENCE_GAP = 0.15
+    Reference = Data.define(:path, :text) do
+      def tts_options
+        {speaker_wav: path, ref_text: text}
+      end
+    end
     Selection = Data.define(:start, :duration, :text)
 
     module_function
 
     def extract_by_speaker(input_path, segments, sentences:, dir:, min_duration: MIN_DURATION, max_duration: MAX_DURATION)
-      words = Array(sentences).flat_map { |sentence| Array(sentence.source_words) }
-      Array(segments).group_by(&:speaker_id).each_with_index.to_h do |(speaker_id, speaker_segments), index|
+      Array(segments).group_by(&:speaker_id).each_with_index.to_h do |(speaker_id, _speaker_segments), index|
         speaker_dir = File.join(dir, format('speaker-%04d', index))
         FileUtils.mkdir_p(speaker_dir)
-        selections = select(speaker_segments, sentences, words, min_duration, max_duration)
+        speaker_sentences = Array(sentences).select { |sentence| sentence.speaker_id == speaker_id }
+        selections = select(speaker_sentences, min_duration, max_duration)
         raise "speaker #{speaker_id} has no usable reference" if selections.empty?
 
         clips = selections.map.with_index do |selection, idx|
@@ -33,19 +38,19 @@ module Dubbing
       end
     end
 
-    def select(segments, sentences, words, min_duration, max_duration)
-      available = Array(segments).filter_map do |segment|
-        start = segment.start.to_f
-        duration = [segment.end.to_f - start, max_duration].min
-        next unless duration.positive?
+    def select(sentences, min_duration, max_duration)
+      available = Array(sentences).filter_map do |sentence|
+        text = sentence.source_text.to_s.strip
+        start = sentence.start.to_f
+        finish = sentence.end.to_f
+        next if text.empty? || finish <= start || finish - start > max_duration
 
-        Selection.new(
-          start:    start,
-          duration: duration,
-          text:     reference_text(start, start + duration, sentences, words)
-        )
+        Selection.new(start: start, duration: finish - start, text: text)
       end
       return [] if available.empty?
+
+      longest = available.max_by(&:duration)
+      return [longest] if longest.duration >= min_duration
 
       selected = bounded(available, max_duration)
       while selected.sum(&:duration) < min_duration
@@ -58,24 +63,11 @@ module Dubbing
       selected
     end
 
-    def reference_text(start, finish, sentences, words)
-      matched_words = Array(words).select { |word| overlap(start, finish, word.start, word.end).positive? }
-      return matched_words.map { |word| word.word.to_s.strip }.reject(&:empty?).join(' ') if matched_words.any?
-
-      Array(sentences).select do |sentence|
-        overlap(start, finish, sentence.start, sentence.end).positive?
-      end.map(&:source_text).map(&:to_s).map(&:strip).reject(&:empty?).join(' ')
-    end
-
-    def overlap(left_start, left_end, right_start, right_end)
-      [[left_end.to_f, right_end.to_f].min - [left_start.to_f, right_start.to_f].max, 0.0].max
-    end
-
     def bounded(selections, capacity, stop_at: capacity)
       total = 0.0
       selections.each_with_object([]) do |selection, result|
         break result if total >= stop_at || total >= capacity
-        next if total + selection.duration > capacity
+        break result if total + selection.duration > capacity
 
         result << selection
         total += selection.duration
@@ -85,7 +77,7 @@ module Dubbing
     def extract_span(input_path, span, dir, idx)
       out = File.join(dir, format('speaker-%04d.wav', idx))
       cmd = "#{Zipper::FFMPEG} -ss #{span.start} -t #{span.duration} -i #{Sh.escape(input_path)} " \
-            "-vn -af #{Sh.escape(::VoiceReference::AudioAnalyzer::REFERENCE_FILTER)} " \
+            "-vn -af #{Sh.escape("#{::VoiceReference::AudioAnalyzer::REFERENCE_FILTER},apad=pad_dur=#{REFERENCE_GAP}")} " \
             "-ac 1 -ar 22050 #{Sh.escape(out)}"
       _, stderr, status = Sh.run cmd
       raise "speaker reference extraction failed: #{stderr}" unless status.success? && File.exist?(out)

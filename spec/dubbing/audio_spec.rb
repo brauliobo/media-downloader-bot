@@ -36,12 +36,12 @@ RSpec.describe Dubbing::Audio do
     scheduled = described_class.schedule([first, second], duration: 5.0)
 
     expect(scheduled.map(&:start)).to eq([0.0, 2.0])
-    expect(scheduled.first.end).to be_within(0.001).of(1.88)
-    expect(scheduled.first.speed).to be_within(0.001).of(2.4 / 1.88)
+    expect(scheduled.first.end).to eq(2.0)
+    expect(scheduled.first.speed).to be_within(0.001).of(2.4 / 2.0)
     expect(scheduled.last.speed).to eq(1.0)
   end
 
-  it 'uses the dialogue-gap tolerance before accelerating speech' do
+  it 'uses the full interval before accelerating speech' do
     first = described_class::Clip.new(path: File.join(dir, 'first.wav'), start: 0.0, end: 1.5)
     second = described_class::Clip.new(path: File.join(dir, 'second.wav'), start: 2.0, end: 4.0)
     allow(Prober).to receive(:for).with(first.path).and_return(SymMash.new(format: SymMash.new(duration: 1.95)))
@@ -53,14 +53,17 @@ RSpec.describe Dubbing::Audio do
     expect(scheduled.first.end).to eq(1.95)
   end
 
-  it 'rejects speech that cannot fit at a professional speed' do
+  it 'shifts following speech when the speed ceiling would be exceeded' do
     first = described_class::Clip.new(path: File.join(dir, 'first.wav'), start: 0.0, end: 1.0)
     second = described_class::Clip.new(path: File.join(dir, 'second.wav'), start: 2.0, end: 4.0)
     allow(Prober).to receive(:for).with(first.path).and_return(SymMash.new(format: SymMash.new(duration: 3.0)))
+    allow(Prober).to receive(:for).with(second.path).and_return(SymMash.new(format: SymMash.new(duration: 2.0)))
 
-    expect {
-      described_class.schedule([first, second], duration: 5.0)
-    }.to raise_error(RuntimeError, /at 0\.000s requires 1\.60x speed; maximum is 1\.5x/)
+    scheduled = described_class.schedule([first, second], duration: 5.0)
+
+    expect(scheduled.first.speed).to eq(1.5)
+    expect(scheduled.first.end).to eq(2.0)
+    expect(scheduled.last.start).to eq(2.0)
   end
 
   it 'normalizes the rendered dialogue mix to broadcast speech loudness' do

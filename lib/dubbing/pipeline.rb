@@ -47,13 +47,13 @@ module Dubbing
         @stl&.update 'dubbing: diarizing'
         diarization = Diarizer.diarize(@input_path, speakers: @opts.speakers&.to_i)
         Diarizer.assign_speakers!(@sentences, diarization.segments)
-        merge_speaker_sentences!
         @speaker_references = VoiceReference.extract_by_speaker(
           @input_path,
           diarization.segments,
           sentences: @sentences,
           dir:       workdir
         )
+        merge_speaker_sentences!
         timeline = synthesize_timeline(workdir)
         apply_timeline(timeline.clips)
         prepare_translated_subtitles
@@ -79,7 +79,7 @@ module Dubbing
       end
 
       sentences.zip(translations).filter_map do |sentence, translated|
-        text = translated.to_s.strip
+        text = Subtitler::Translator.clean_translation(translated)
         next if text.empty?
 
         SymMash.new(
@@ -105,8 +105,7 @@ module Dubbing
       end
       @sentences.each_index.group_by { |idx| @sentences.fetch(idx).speaker_id }.each do |speaker_id, indices|
         reference = @speaker_references.fetch(speaker_id)
-        options   = TTS::Options.for(@opts, speaker_wav: reference.path)
-        options[:ref_text] = reference.text
+        options   = TTS::Options.for(@opts).merge(reference.tts_options)
         jobs = indices.map do |idx|
           {
             text:     @sentences.fetch(idx).text,

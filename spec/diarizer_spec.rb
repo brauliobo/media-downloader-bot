@@ -2,6 +2,10 @@ require 'spec_helper'
 require_relative '../lib/diarizer'
 
 RSpec.describe Diarizer do
+  it 'defaults to the pyannote Community-1 backend' do
+    expect(described_class::BACKEND).to eq(Diarizer::PyannoteCommunity1)
+  end
+
   it 'assigns each sentence to the speaker segment with the greatest overlap' do
     sentences = [
       SymMash.new(start: 0.0, end: 2.0),

@@ -15,20 +15,25 @@ class Translator
 
     def translate_for_dubbing(_text, to:, from: nil, durations:)
       texts        = Array.wrap(_text)
-      translations = translate_concurrently(texts, to: to, durations: Array.wrap(durations))
+      translations = translate_concurrently(
+        texts,
+        to:        to,
+        durations: Array.wrap(durations),
+        context:   texts
+      )
       _text.is_a?(String) ? translations.first : translations
     end
 
     private
 
-    def translate_concurrently(texts, to:, durations: nil)
+    def translate_concurrently(texts, to:, durations: nil, context: nil)
       return [] if texts.empty?
 
       executor = Concurrent::FixedThreadPool.new([llama_concurrency, texts.size].min)
       futures  = texts.map.with_index do |text, idx|
-        Concurrent::Promises.future_on(executor, text, durations&.fetch(idx)) do |segment, duration|
+        Concurrent::Promises.future_on(executor, text, durations&.fetch(idx), context && context_for(context, idx)) do |segment, duration, nearby|
           prompt = if duration
-            dubbing_translation_prompt(segment, to: to, duration: duration)
+            dubbing_translation_prompt(segment, to: to, duration: duration, context: nearby)
           else
             translation_prompt(segment, to: to)
           end
@@ -39,6 +44,13 @@ class Translator
     ensure
       executor&.shutdown
       executor&.wait_for_termination
+    end
+
+    def context_for(texts, index)
+      nearby = []
+      nearby << "Previous: #{texts[index - 1]}" if index.positive?
+      nearby << "Next: #{texts[index + 1]}" if index < texts.length - 1
+      nearby.join("\n").presence
     end
 
     def chat_completion(prompt)
@@ -54,18 +66,20 @@ class Translator
 
     def translation_prompt(text, to:)
       <<~PROMPT.strip
-        Translate the following text into #{target_language_name(to)}. Only output the translated result without any additional explanation:
+        Translate the following text into #{target_language_name(to)} by meaning and context, not word-for-word. Use the natural target-language sense and avoid false cognates or unrelated meanings. Output only the translated text itself; do not add a label, acknowledgement, quotation, or explanation:
 
         #{text}
       PROMPT
     end
 
-    def dubbing_translation_prompt(text, to:, duration:)
+    def dubbing_translation_prompt(text, to:, duration:, context: nil)
       <<~PROMPT.strip
-        Translate the following dialogue into concise, natural spoken #{target_language_name(to)} for dubbing.
+        Translate the following dialogue into concise, natural spoken #{target_language_name(to)} for dubbing by meaning and context, not word-for-word. Avoid false cognates or unrelated meanings.
+        Resolve ambiguous words using the main dialogue and nearby dialogue when provided. Translate only the main dialogue, not the context.
         Preserve the complete meaning, names, and numbers, but choose brief wording that can be spoken clearly in about #{format('%.1f', duration)} seconds.
-        Only output the translated dialogue without any additional explanation:
+        Output only the translated dialogue itself; do not add a label, acknowledgement, quotation, or explanation:
 
+        #{context ? "Nearby dialogue for context:\n#{context}\n\n" : ''}Main dialogue:
         #{text}
       PROMPT
     end

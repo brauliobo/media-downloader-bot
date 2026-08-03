@@ -66,11 +66,19 @@ module TextHelpers
   end
 
   def self.split_sentences(text)
-    Array(text).join
+    parts = Array(text).join
       .gsub(/([.!?…]"?)(\s*\d{1,3})?\s+(?=\p{Lu})/u, "\\1\\2\n")
       .split(/\n+/)
       .map { |s| s.strip }
       .reject(&:empty?)
+
+    parts.each_with_object([]) do |part, result|
+      if result.any? && result.last.match?(/\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Sra|St)\.$/i)
+        result[-1] = "#{result[-1]} #{part}"
+      else
+        result << part
+      end
+    end
   end
 
   def self.heading_line?(text)

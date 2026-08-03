@@ -442,7 +442,7 @@ class Zipper
     filter = "#{labels}concat=n=#{inputs.size}:v=0:a=1"
     filter << ",aresample=#{sample_rate}" if sample_rate.positive?
     filter << '[a]'
-    "#{FFMPEG} #{input_args} -filter_complex \"#{filter}\" -map \"[a]\" -c:a pcm_s16le #{Sh.escape(outfile)}"
+    "#{FFMPEG} #{input_args} -filter_complex \"#{filter}\" -map \"[a]\" #{Sh.escape(outfile)}"
   end
 
   attr_reader :audio_filters

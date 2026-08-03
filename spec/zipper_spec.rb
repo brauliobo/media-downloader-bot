@@ -414,6 +414,28 @@ RSpec.describe Zipper do
     )
   end
 
+  it 'lets the output container select the codec when re-encoding M4A audio' do
+    allow(Prober).to receive(:for) do |path|
+      rate = path.include?('pause') ? 22_050 : 24_000
+      SymMash.new(streams: [SymMash.new(
+        codec_type:      'audio',
+        codec_name:      'aac',
+        sample_rate:     rate,
+        channels:        2,
+        bits_per_sample: 0,
+        sample_fmt:      'fltp',
+      )])
+    end
+    allow(Sh).to receive(:run).and_return(['', '', double(success?: true)])
+
+    described_class.concat_audio(['/tmp/pause.m4a', '/tmp/speech.m4a'], '/tmp/out.m4a')
+
+    expect(Sh).to have_received(:run).with(
+      include('-filter_complex', '-map "[a]"', '/tmp/out.m4a')
+    )
+    expect(Sh).not_to have_received(:run).with(include('-c:a pcm_s16le'))
+  end
+
   it 'uses rubberband for speech speed files' do
     allow(FileUtils).to receive(:mv)
     allow(File).to receive(:exist?).and_call_original

@@ -3,7 +3,7 @@ require_relative 'diarizer/sherpa_onnx'
 require_relative 'diarizer/tiny_diarize'
 
 class Diarizer
-  BACKEND = const_get(ENV['DIARIZER'] || 'SherpaOnnx')
+  BACKEND = const_get(ENV['DIARIZER'] || 'PyannoteCommunity1')
 
   def self.diarize(path, speakers: nil)
     BACKEND.diarize(path, speakers: speakers)

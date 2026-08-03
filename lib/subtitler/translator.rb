@@ -5,8 +5,13 @@ class Subtitler
   class Translator
 
     MAX_SUBTITLE_CHARS = 84
+    TRANSLATION_PREFIX = /\A(?:translation|translated(?:\s+text)?|answer|response)\s*:\s*/i
 
-    def self.translate(verbose_json, from:, to:)
+    def self.clean_translation(text)
+      text.to_s.strip.sub(TRANSLATION_PREFIX, '').strip
+    end
+
+    def self.translate(verbose_json, from:, to:, merge_adjacent: true)
       mash       = SymMash.new(verbose_json)
       sentences  = sentences_for(mash.segments || [])
       texts      = sentences.map(&:text)
@@ -14,7 +19,7 @@ class Subtitler
       apply_translations!(sentences, tl_texts)
       mash.segments = rebuild_segments(sentences)
       split_long_segments!(mash, max_chars: MAX_SUBTITLE_CHARS)
-      Segments.merge_adjacent!(mash, max_chars: MAX_SUBTITLE_CHARS)
+      Segments.merge_adjacent!(mash, max_chars: MAX_SUBTITLE_CHARS) if merge_adjacent
       mash
     end
 
@@ -25,16 +30,18 @@ class Subtitler
     def self.sentences_for(segs)
       return [] if segs.nil?
       return TextHelpers.sentences_from_segments(segs) if segs.any? { |s| Array(s.words).any? }
-      segs.map { |s| SymMash.new(text: s.text.to_s, start: s.start, end: s.end, words: Array(s.words)) }
+      segs.flat_map { |segment| text_sentences_for(segment) }
     end
 
     def self.batch_translate_texts(texts, from:, to:)
-      texts.each_slice(batch_size).flat_map { |slice| Array(::Translator.translate(slice, from: from, to: to)) }
+      texts.each_slice(batch_size).flat_map do |slice|
+        Array(::Translator.translate(slice, from: from, to: to)).map { |text| clean_translation(text) }
+      end
     end
 
     def self.apply_translations!(sentences, tl_texts)
       sentences.zip(tl_texts).each do |sent, ttext|
-        sent.text = ttext.to_s
+        sent.text = clean_translation(ttext)
         next if Array(sent.words).empty?
         assign_tokens_to_words!(sent, tokenize_text(sent.text))
       end
@@ -58,52 +65,8 @@ class Subtitler
       return [seg] if text.length <= max_chars
       words = Array(seg.words).reject { |w| w.word.to_s.strip.empty? }
       return split_segment_without_words(seg, max_chars) if words.empty?
-      min_next_size = (max_chars * 0.35).to_i
-      buckets = []
-      buffer = []
-      remaining = words.dup
-      words.each_with_index do |word, idx|
-        sample = (buffer + [word]).map { |w| w.word.to_s.strip }.join(' ').strip
-        if sample.length > max_chars && buffer.any?
-          next_words = remaining[idx..-1] || []
-          next_text = next_words.map { |w| w.word.to_s.strip }.join(' ').strip
-          if next_text.length < min_next_size && buffer.size > 1
-            split_idx = find_balanced_split(buffer, max_chars, min_next_size, next_text.length)
-            if split_idx && split_idx < buffer.size - 1
-              buckets << buffer[0..split_idx]
-              buffer = buffer[(split_idx + 1)..-1] + [word]
-            else
-              buckets << buffer
-              buffer = [word]
-            end
-          else
-            buckets << buffer
-            buffer = [word]
-          end
-        else
-          buffer << word
-        end
-      end
-      buckets << buffer if buffer.any?
-      buckets.map { |chunk| build_segment(seg, chunk) }
-    end
-
-    def self.find_balanced_split(buffer, max_chars, min_next_size, next_remaining)
-      return nil if buffer.size <= 1
-      best_idx = nil
-      best_score = Float::INFINITY
-      (0..buffer.size - 2).each do |idx|
-        first_text = buffer[0..idx].map { |w| w.word.to_s.strip }.join(' ').strip
-        next_text = buffer[(idx + 1)..-1].map { |w| w.word.to_s.strip }.join(' ').strip
-        next_total = next_text.length + next_remaining
-        next if first_text.length > max_chars || next_total < min_next_size
-        score = (max_chars - first_text.length).abs + (min_next_size - next_total).abs
-        if score < best_score
-          best_score = score
-          best_idx = idx
-        end
-      end
-      best_idx
+      split_items(words, max_chars) { |word| word.word.to_s.strip }
+        .map { |chunk| build_segment(seg, chunk) }
     end
 
     def self.build_segment(source, words)
@@ -121,56 +84,47 @@ class Subtitler
       text = seg.text.to_s.strip
       return [seg] if text.length <= max_chars
       tokens = text.split(/\s+/)
-      min_next_size = (max_chars * 0.35).to_i
-      parts  = []
-      bucket = []
-      remaining = tokens.dup
-      tokens.each_with_index do |tok, idx|
-        sample = ([*bucket, tok].join(' ')).strip
-        if sample.length > max_chars && bucket.any?
-          next_tokens = remaining[idx..-1] || []
-          next_text = next_tokens.join(' ').strip
-          if next_text.length < min_next_size && bucket.size > 1
-            split_idx = find_balanced_split_tokens(bucket, max_chars, min_next_size, next_text.length)
-            if split_idx && split_idx < bucket.size - 1
-              parts << bucket[0..split_idx].join(' ')
-              bucket = bucket[(split_idx + 1)..-1] + [tok]
-            else
-              parts << bucket.join(' ')
-              bucket = [tok]
-            end
-          else
-            parts << bucket.join(' ')
-            bucket = [tok]
-          end
-        else
-          bucket << tok
-        end
-      end
-      parts << bucket.join(' ') if bucket.any?
+      parts = split_items(tokens, max_chars) { |token| token }
       return [seg] if parts.size <= 1
-      total    = parts.sum(&:length)
-      duration = [seg.end.to_f - seg.start.to_f, 0].max
-      cursor   = seg.start.to_f
-      parts.map.with_index do |part, idx|
-        span = total.zero? ? 0 : duration * part.length.to_f / total
-        dup  = SymMash.new(seg.to_h)
-        dup.text  = part
-        dup.words = []
-        dup.start = cursor
-        cursor   += span
-        dup.end   = idx == parts.length - 1 ? seg.end : cursor
-        dup
-      end
+      build_text_segments(seg, parts.map { |part| part.join(' ') })
     end
 
-    def self.find_balanced_split_tokens(bucket, max_chars, min_next_size, next_remaining)
-      return nil if bucket.size <= 1
+    def self.split_items(items, max_chars, &item_text)
+      min_next_size = (max_chars * 0.35).to_i
+      buckets = []
+      buffer = []
+      items.each_with_index do |item, idx|
+        sample = join_items(buffer + [item], item_text)
+        if sample.length > max_chars && buffer.any?
+          next_text = join_items(items[idx..] || [], item_text)
+          if next_text.length < min_next_size && buffer.size > 1
+            split_idx = find_balanced_split(buffer, max_chars, min_next_size, next_text.length, &item_text)
+            if split_idx && split_idx < buffer.size - 1
+              buckets << buffer[0..split_idx]
+              buffer = buffer[(split_idx + 1)..] + [item]
+            else
+              buckets << buffer
+              buffer = [item]
+            end
+          else
+            buckets << buffer
+            buffer = [item]
+          end
+        else
+          buffer << item
+        end
+      end
+      buckets << buffer if buffer.any?
+      buckets
+    end
+
+    def self.find_balanced_split(buffer, max_chars, min_next_size, next_remaining, &item_text)
+      return nil if buffer.size <= 1
       best_idx = nil
       best_score = Float::INFINITY
-      (0..bucket.size - 2).each do |idx|
-        first_text = bucket[0..idx].join(' ').strip
-        next_text = bucket[(idx + 1)..-1].join(' ').strip
+      (0..buffer.size - 2).each do |idx|
+        first_text = join_items(buffer[0..idx], item_text)
+        next_text = join_items(buffer[(idx + 1)..], item_text)
         next_total = next_text.length + next_remaining
         next if first_text.length > max_chars || next_total < min_next_size
         score = (max_chars - first_text.length).abs + (min_next_size - next_total).abs
@@ -180,6 +134,38 @@ class Subtitler
         end
       end
       best_idx
+    end
+
+    def self.join_items(items, item_text)
+      items.map { |item| item_text.call(item) }.join(' ').strip
+    end
+
+    def self.text_sentences_for(segment)
+      text = segment.text.to_s.strip
+      return [] if text.empty?
+
+      parts = TextHelpers.split_sentences(text)
+      return [SymMash.new(segment.to_h.merge(words: []))] if parts.size <= 1
+
+      build_text_segments(segment, parts)
+    end
+
+    def self.build_text_segments(source, texts)
+      total    = texts.sum(&:length)
+      duration = [source.end.to_f - source.start.to_f, 0].max
+      cursor   = source.start.to_f
+
+      texts.map.with_index do |text, idx|
+        span = total.zero? ? 0 : duration * text.length.to_f / total
+        finish = idx == texts.length - 1 ? source.end : cursor + span
+        segment = SymMash.new(source.to_h)
+        segment.text  = text
+        segment.words = []
+        segment.start = cursor
+        segment.end   = finish
+        cursor        = finish
+        segment
+      end
     end
 
     def self.tokenize_text(text)

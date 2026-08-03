@@ -1,8 +1,8 @@
 require 'spec_helper'
 
 RSpec.describe Subtitler::Segments do
-  def segment(text, start, finish, words: [])
-    SymMash.new(text: text, start: start, end: finish, words: words)
+  def segment(text, start, finish, words: [], speaker_id: nil)
+    SymMash.new(text: text, start: start, end: finish, words: words, speaker_id: speaker_id)
   end
 
   it 'merges adjacent segments and their word timings' do
@@ -26,5 +26,16 @@ RSpec.describe Subtitler::Segments do
 
     expect(distant.segments.size).to eq(2)
     expect(long.segments.size).to eq(2)
+  end
+
+  it 'keeps adjacent segments from different speakers separate' do
+    mash = SymMash.new(segments: [
+      segment('Hello', 0.0, 0.8, speaker_id: 0),
+      segment('world', 1.0, 1.6, speaker_id: 1),
+    ])
+
+    described_class.merge_adjacent!(mash)
+
+    expect(mash.segments.map(&:text)).to eq(%w[Hello world])
   end
 end

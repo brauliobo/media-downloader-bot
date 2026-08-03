@@ -56,6 +56,32 @@ RSpec.describe Translator::HyMT2 do
     backend.translate_for_dubbing('Keep moving.', from: 'en', to: 'pt', durations: 2.5)
   end
 
+  it 'provides adjacent dialogue to disambiguate dubbing translations' do
+    prompts = []
+    allow(Utils::HTTP).to receive(:post) do |_url, body, _headers|
+      prompts << JSON.parse(body).dig('messages', 0, 'content')
+      response
+    end
+
+    backend.translate_for_dubbing(
+      [
+        'My main objective is to gain more experience.',
+        'I think those goals were very smart.',
+        'I hope to earn between 35,000 and 38,000 a year.',
+      ],
+      from:      'en',
+      to:        'pt',
+      durations: [2.0, 2.5, 2.0]
+    )
+
+    prompt = prompts.find { |value| value.include?("Main dialogue:\nI think those goals were very smart.") }
+    expect(prompt).to include(
+      'Previous: My main objective is to gain more experience.',
+      'Next: I hope to earn between 35,000 and 38,000 a year.',
+      'Translate only the main dialogue, not the context.'
+    )
+  end
+
   it 'uses the ISO language name for non-Portuguese targets' do
     expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
       expect(JSON.parse(body).dig('messages', 0, 'content')).to include('Spanish')

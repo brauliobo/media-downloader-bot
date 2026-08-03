@@ -15,6 +15,7 @@ Environment=PYANNOTE_METRICS_ENABLED=0
 Environment=HF_HUB_DISABLE_TELEMETRY=1
 Environment=HF_HUB_OFFLINE=1
 Environment=PYANNOTE_MODEL=/srv/pyannote-community1/model
+Environment=MPLCONFIGDIR=/tmp/pyannote-community1-matplotlib
 MemoryMax=16G
 TasksMax=64
 ExecStart=/srv/pyannote-community1/runtime/bin/uvicorn pyannote_community1:app --app-dir /srv/pyannote-community1/service --host 127.0.0.1 --port 840%i --workers 1
@@ -23,7 +24,7 @@ ExecStartPost=/usr/bin/curl --fail --silent --show-error --retry 120 --retry-del
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
-ProtectHome=yes
+ProtectHome=read-only
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
 Restart=on-failure

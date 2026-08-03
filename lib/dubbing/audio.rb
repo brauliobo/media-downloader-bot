@@ -3,8 +3,7 @@ require_relative '../zipper'
 
 module Dubbing
   module Audio
-    DIALOGUE_GAP_TOLERANCE = 0.12
-    MAX_SPEED              = 1.5
+    MAX_SPEED = 1.5
 
     Clip          = Data.define(:path, :start, :end)
     ScheduledClip = Data.define(:path, :start, :end, :speed)
@@ -46,15 +45,30 @@ module Dubbing
     end
 
     def schedule(clips, duration:)
+      earliest_start = nil
       clips.map.with_index do |clip, idx|
-        start         = clip.start.to_f
-        clip_duration = Prober.for(clip.path).format.duration.to_f
-        next_start    = clips[idx + 1]&.start&.to_f
-        deadline      = next_start ? next_start - DIALOGUE_GAP_TOLERANCE : duration.to_f
-        natural_end   = next_start || duration.to_f
-        available     = deadline - start
-        speed         = fit_speed(clip_duration, available, natural_end - start, start: start)
-        finish        = start + clip_duration / speed
+        requested_start = clip.start.to_f
+        start           = [requested_start, earliest_start || requested_start].max
+        clip_duration   = Prober.for(clip.path).format.duration.to_f
+        next_start      = clips[idx + 1]&.start&.to_f
+        natural_limit   = next_start ? next_start - start : duration.to_f - start
+        available       = natural_limit
+        required_speed  = available.positive? ? clip_duration / available : nil
+        shifted         = false
+        speed           = if clip_duration <= natural_limit
+          1.0
+        elsif required_speed && required_speed <= MAX_SPEED
+          required_speed
+        elsif next_start
+          shifted = true
+          MAX_SPEED
+        else
+          fit_speed(clip_duration, available, natural_limit, start: start)
+        end
+        finish = start + clip_duration / speed
+        earliest_start = if shifted || start > requested_start
+          finish
+        end
 
         ScheduledClip.new(path: clip.path, start: start, end: finish, speed: speed)
       end

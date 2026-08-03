@@ -1,8 +1,8 @@
 # CUDA diarization services
 
-The application selects a backend with `DIARIZER=PyannoteCommunity1` or
-`DIARIZER=SherpaOnnx`. Their default endpoints are `http://127.0.0.1:8082`
-and `http://127.0.0.1:8083`, respectively.
+The application defaults to `PyannoteCommunity1`. Set `DIARIZER=SherpaOnnx` to
+select the sherpa-onnx backend explicitly. Their default endpoints are
+`http://127.0.0.1:8082` and `http://127.0.0.1:8083`, respectively.
 
 Both services accept `POST /v1/diarize` multipart requests with a `file` field
 and an optional positive integer `speakers` field. They return backend-neutral

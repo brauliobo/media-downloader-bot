@@ -1,5 +1,6 @@
 [Unit]
 Description=pyannote Community-1 idle proxy for GPU %i
+Requires=pyannote-community1@%i.service
 BindsTo=pyannote-community1@%i.service
 After=pyannote-community1@%i.service
 
