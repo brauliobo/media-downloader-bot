@@ -52,7 +52,9 @@ RSpec.describe VoiceReference::Builder do
       selector   = instance_double(VoiceReference::Selector)
       builder    = instance_double(described_class, build: candidate)
       allow(VoiceReference::Selector).to receive(:new).with(language: 'pt').and_return(selector)
-      allow(described_class).to receive(:new).with(selector: selector, language: 'pt').and_return(builder)
+      allow(described_class).to receive(:new).with(
+        selector: selector, language: 'pt', reference_filter: :raw
+      ).and_return(builder)
 
       result = VoiceReference.from_url(
         url: 'https://example.com/voice', output: output, language: 'pt', downloader: downloader

@@ -1,12 +1,13 @@
 class VoiceReference
   class Selector
-    DURATION_RANGE               = 8.0..20.0
+    DURATION_RANGE               = 4.0..14.0
     WORD_RANGE                   = 10..35
     MIN_RECORDING_UNIQUE_RATIO   = 0.85
     MIN_AVERAGE_PROBABILITY      = 0.85
     MIN_P10_PROBABILITY          = 0.75
     MIN_EDGE_P10_PROBABILITY     = 0.6
-    REFINED_DURATION_RANGE       = 6.0..14.0
+    MAX_REFERENCE_DURATION        = 8.0
+    REFINED_DURATION_RANGE       = 4.0..MAX_REFERENCE_DURATION
     REFINED_WORD_RANGE           = 8..35
     MAX_CANDIDATES_PER_RECORDING = 5
 

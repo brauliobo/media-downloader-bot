@@ -151,8 +151,28 @@ RSpec.describe 'Audiobook TTS speed' do
 
       expect(options[:speaker_wav]).to eq(File.join(dir, 'audiobook_voice_reference.wav'))
       expect(options[:ref_text]).to eq('Uma passagem clara da narradora.')
-      expect(options[:instruct]).to eq('female, middle-aged, moderate pitch')
-      expect(options[:instruct]).not_to include('https://')
+      expect(options).not_to have_key(:instruct)
+    end
+  end
+
+  it 'preserves explicit voice instructions for a recorded reference' do
+    stub_const('TTS::BACKEND', TTS::OmniVoice)
+    book = instance_double(Audiobook::Book, metadata: {language: 'en'}, pages: [])
+
+    Dir.mktmpdir do |dir|
+      reference = File.join(dir, 'speaker.wav')
+      File.write(reference, 'wav')
+      runner = Audiobook::Runner.new(
+        book, nil, SymMash.new(
+          speaker_wav: reference,
+          ref_text: 'Recorded reference text.',
+          instruct: 'female, calm'
+        )
+      )
+
+      options = runner.send(:tts_options, dir)
+
+      expect(options[:instruct]).to eq('female, calm')
     end
   end
 

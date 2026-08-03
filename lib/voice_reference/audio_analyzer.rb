@@ -15,6 +15,16 @@ class VoiceReference
       'afade=t=in:st=0:d=0.03'
     ].join(',').freeze
     REFERENCE_FILTER = [Zipper::VOICE_QUALITY_FILTER, EDGE_FILTER].join(',').freeze
+    CLONE_REFERENCE_FILTER = [
+      'highpass=f=80',
+      'afftdn=nf=-25',
+      'loudnorm=I=-16:TP=-1.5:LRA=11'
+    ].join(',').freeze
+    FILTERS = {
+      raw:     nil,
+      clone:   CLONE_REFERENCE_FILTER,
+      quality: REFERENCE_FILTER,
+    }.freeze
 
     def initialize(quality: Audio::Quality.new)
       @quality = quality
@@ -36,19 +46,21 @@ class VoiceReference
       end
     end
 
-    def extract(candidate, output)
+    def extract(candidate, output, filter: :raw)
       extract_span(
         audio:    candidate.audio,
         start:    candidate.start,
         duration: candidate.duration,
-        output:   output
+        output:   output,
+        filter:   filter
       )
     end
 
-    def extract_span(audio:, start:, duration:, output:, sample_rate: 24_000, pad_duration: nil)
-      filter = pad_duration ? "#{REFERENCE_FILTER},apad=pad_dur=#{pad_duration}" : REFERENCE_FILTER
+    def extract_span(audio:, start:, duration:, output:, sample_rate: 24_000, pad_duration: nil, filter: :raw)
+      filter_chain = [resolve_filter(filter), ("apad=pad_dur=#{pad_duration}" if pad_duration)].compact.join(',')
       command = ffmpeg_extract(audio, start, duration) + [
-        '-af', filter, '-ac', '1', '-ar', sample_rate.to_i.to_s, '-c:a', 'pcm_s16le', output
+        *(['-af', filter_chain] unless filter_chain.empty?),
+        '-ac', '1', '-ar', sample_rate.to_i.to_s, '-c:a', 'pcm_s16le', output
       ]
       run(command, 'voice reference extraction failed', output: output)
     end
@@ -73,6 +85,10 @@ class VoiceReference
         'ffmpeg', '-loglevel', 'error', '-y', '-ss', start.to_s,
         '-t', duration.to_s, '-i', audio, '-vn'
       ]
+    end
+
+    def resolve_filter(filter)
+      filter.is_a?(Symbol) ? FILTERS.fetch(filter) : filter
     end
 
     def run(command, label, output: nil)

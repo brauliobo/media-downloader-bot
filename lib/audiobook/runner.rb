@@ -131,7 +131,6 @@ module Audiobook
         options[:position_temperature] = @opts.position_temperature.to_f
       end
       options[:audio_speed] = audio_speed if audio_speed
-      options[:instruct] ||= detected_voice_instruct if stable_voice_reference?
       return options unless stable_voice_reference?
 
       if voice_url
@@ -146,6 +145,7 @@ module Audiobook
         return options.merge(speaker_wav: File.expand_path(@opts.speaker_wav), ref_text: @opts.ref_text.to_s.strip)
       end
 
+      options[:instruct] ||= detected_voice_instruct
       ref_path = File.join(dir, 'audiobook_voice_reference.wav')
       reference_options = options.except(:audio_speed)
       unless File.exist?(ref_path) && File.size?(ref_path)

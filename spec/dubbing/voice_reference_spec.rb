@@ -82,9 +82,9 @@ RSpec.describe Dubbing::VoiceReference do
   end
 
   it 'skips a sentence that would overflow so later complete sentences can fit' do
-    segments = [segment(0, 6), segment(7, 12), segment(13, 17)]
+    segments = [segment(0, 4), segment(7, 12), segment(13, 17)]
     sentences = [
-      sentence(0, 6, source_text: 'First sentence.'),
+      sentence(0, 4, source_text: 'First sentence.'),
       sentence(7, 12, source_text: 'Too large to fit.'),
       sentence(13, 17, source_text: 'Final sentence.'),
     ]
@@ -95,7 +95,7 @@ RSpec.describe Dubbing::VoiceReference do
     expect(File.readlines(reference.path).size).to eq(2)
   end
 
-  it 'repeats only the same turn when a reference is shorter than three seconds' do
+  it 'keeps a short reference instead of repeating the same turn' do
     references = described_class.extract_by_speaker(
       input,
       [segment(4, 4.5)],
@@ -104,11 +104,11 @@ RSpec.describe Dubbing::VoiceReference do
     )
 
     reference = references.fetch(0)
-    expect(reference.text).to eq(Array.new(6, 'Brief.').join(' '))
-    expect(File.readlines(reference.path).size).to eq(6)
+    expect(reference.text).to eq('Brief.')
+    expect(File.readlines(reference.path).size).to eq(1)
   end
 
-  it 'uses only complete segments within the ten-second reference cap' do
+  it 'uses only complete segments within the eight-second reference cap' do
     segments = [
       segment(0, 6),
       segment(6, 11),
@@ -137,18 +137,36 @@ RSpec.describe Dubbing::VoiceReference do
     expect(references.fetch('B').text).to eq('Goodbye.')
   end
 
-  it 'cleans source noise before using a speaker interval as an OmniVoice reference' do
+  it 'keeps raw source audio by default for an OmniVoice reference' do
     allow(described_class).to receive(:extract_span).and_call_original
     selection = described_class::Selection.new(start: 1.0, duration: 4.0, text: 'Clean phrase.')
     expect(Sh).to receive(:run) do |command|
       command = command.join(' ')
-      expect(command).to include('afftdn', 'highpass', 'lowpass', 'silenceremove', 'loudnorm', 'apad')
+      expect(command).not_to include('-af', 'afftdn', 'highpass', 'loudnorm', 'apad')
       output = File.join(dir, 'speaker-0001.wav')
       File.write(output, 'clean reference')
       ['', '', ok_status]
     end
 
     output = described_class.extract_span(input, selection, dir, 1)
+
+    expect(output).to eq(File.join(dir, 'speaker-0001.wav'))
+  end
+
+  it 'allows the full quality filter and reference padding as explicit options' do
+    allow(described_class).to receive(:extract_span).and_call_original
+    selection = described_class::Selection.new(start: 1.0, duration: 4.0, text: 'Quality phrase.')
+    expect(Sh).to receive(:run) do |command|
+      command = command.join(' ')
+      expect(command).to include('lowpass', 'silenceremove', 'loudnorm', 'apad=pad_dur=0.15')
+      output = File.join(dir, 'speaker-0001.wav')
+      File.write(output, 'quality reference')
+      ['', '', ok_status]
+    end
+
+    output = described_class.extract_span(
+      input, selection, dir, 1, filter: :quality, pad_duration: described_class::REFERENCE_GAP
+    )
 
     expect(output).to eq(File.join(dir, 'speaker-0001.wav'))
   end

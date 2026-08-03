@@ -5,8 +5,8 @@ require_relative '../zipper'
 
 module Dubbing
   module VoiceReference
-    MIN_DURATION = 3.0
-    MAX_DURATION = 10.0
+    MIN_DURATION = 4.0
+    MAX_DURATION = 8.0
     REFERENCE_GAP = 0.15
     Reference = Data.define(:path, :text) do
       def tts_options
@@ -17,7 +17,7 @@ module Dubbing
 
     module_function
 
-    def extract_by_speaker(input_path, segments, sentences:, dir:, min_duration: MIN_DURATION, max_duration: MAX_DURATION)
+    def extract_by_speaker(input_path, segments, sentences:, dir:, min_duration: MIN_DURATION, max_duration: MAX_DURATION, filter: :raw, pad_duration: nil)
       Array(segments).group_by(&:speaker_id).each_with_index.to_h do |(speaker_id, _speaker_segments), index|
         speaker_dir = File.join(dir, format('speaker-%04d', index))
         FileUtils.mkdir_p(speaker_dir)
@@ -26,7 +26,7 @@ module Dubbing
         raise "speaker #{speaker_id} has no usable reference" if selections.empty?
 
         clips = selections.map.with_index do |selection, idx|
-          extract_span(input_path, selection, speaker_dir, idx + 1)
+          extract_span(input_path, selection, speaker_dir, idx + 1, filter: filter, pad_duration: pad_duration)
         end
         path = File.join(speaker_dir, 'speaker.wav')
         Zipper.concat_audio(clips, path)
@@ -51,7 +51,9 @@ module Dubbing
       selected = bounded(available, max_duration)
       while selected.sum(&:duration) < min_duration
         remaining = max_duration - selected.sum(&:duration)
-        candidate = available.find { |selection| selection.duration <= remaining }
+        candidate = available.find do |selection|
+          !selected.include?(selection) && selection.duration <= remaining
+        end
         break unless candidate
 
         selected << candidate
@@ -70,7 +72,7 @@ module Dubbing
       end
     end
 
-    def extract_span(input_path, span, dir, idx)
+    def extract_span(input_path, span, dir, idx, filter: :raw, pad_duration: nil)
       out = File.join(dir, format('speaker-%04d.wav', idx))
       ::VoiceReference::AudioAnalyzer.new.extract_span(
         audio:        input_path,
@@ -78,7 +80,8 @@ module Dubbing
         duration:     span.duration,
         output:       out,
         sample_rate:  22_050,
-        pad_duration: REFERENCE_GAP
+        filter:       filter,
+        pad_duration: pad_duration,
       )
 
       out

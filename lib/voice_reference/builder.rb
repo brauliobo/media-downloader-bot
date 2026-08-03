@@ -10,11 +10,12 @@ class VoiceReference
     MIN_AVERAGE_PROBABILITY   = 0.85
     MIN_P10_PROBABILITY       = 0.75
 
-    def initialize(transcriber: Transcriber.new, selector: Selector.new, analyzer: AudioAnalyzer.new, language: 'en')
-      @transcriber = transcriber
-      @selector    = selector
-      @analyzer    = analyzer
-      @language    = language
+    def initialize(transcriber: Transcriber.new, selector: Selector.new, analyzer: AudioAnalyzer.new, language: 'en', reference_filter: :raw)
+      @transcriber      = transcriber
+      @selector         = selector
+      @analyzer         = analyzer
+      @language         = language
+      @reference_filter = reference_filter
     end
 
     def build(audio_files:, output:)
@@ -38,7 +39,7 @@ class VoiceReference
 
     private
 
-    attr_reader :transcriber, :selector, :analyzer, :language
+    attr_reader :transcriber, :selector, :analyzer, :language, :reference_filter
 
     def sidecar(output, extension)
       output.sub(/\.[^.]+\z/, extension)
@@ -48,8 +49,10 @@ class VoiceReference
       Dir.mktmpdir('voice-reference-validation-') do |dir|
         Array(candidates).first(MAX_VALIDATION_CANDIDATES).each_with_index do |candidate, index|
           path = File.join(dir, "#{candidate_key(candidate)}.wav")
-          analyzer.extract(candidate, path)
-          validation = validation_report(candidate.text, transcriber.call(path), analyzer.report(path))
+          analyzer.extract(candidate, path, filter: reference_filter)
+          validation = validation_report(
+            candidate.text, transcriber.call(path), analyzer.report(path), reference_filter: reference_filter
+          )
           next unless validation.fetch(:accepted)
 
           validation[:selection] = {rank: index + 1, rejected_candidates: index}
@@ -70,7 +73,7 @@ class VoiceReference
       {path: path, bytes: File.size(path), sha256: Digest::SHA256.file(path).hexdigest}
     end
 
-    def validation_report(expected, transcript, audio)
+    def validation_report(expected, transcript, audio, reference_filter: :clone)
       segments      = transcript.fetch(:segments)
       probabilities = segments.flat_map { |segment| segment.fetch(:probabilities) }
       average       = probabilities.empty? ? 0 : probabilities.sum.fdiv(probabilities.size)
@@ -83,7 +86,7 @@ class VoiceReference
       {
         accepted: audio.fetch(:accepted) && transcript_ok,
         tools: Audio::Quality::TOOLS.merge(transcription: 'Subtitler::WhisperCpp'),
-        voice_quality_filter: AudioAnalyzer::REFERENCE_FILTER,
+        voice_quality_filter: AudioAnalyzer::FILTERS.fetch(reference_filter),
         transcript: {
           accepted:            transcript_ok,
           language:            transcript.fetch(:language),

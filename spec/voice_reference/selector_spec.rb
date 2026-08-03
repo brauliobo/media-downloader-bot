@@ -39,18 +39,18 @@ RSpec.describe VoiceReference::Selector do
     transcript = {
       language: 'en',
       segments: [
-        segment(0, 6, 'The supreme goal is the hub of the universe that controls'),
-        segment(6, 12, 'everything and is above the world of movements.'),
-        segment(12, 30, 'This segment falls beyond the maximum reference duration and must not be included.')
+        segment(0, 4, 'The supreme goal is the hub of the universe'),
+        segment(4, 8, 'that controls everything and is above movements.'),
+        segment(8, 30, 'This segment falls beyond the maximum reference duration and must not be included.')
       ]
     }
 
     selected = selector.select([{audio: 'clean.webm', transcript: transcript}])
 
     expect(selected.start).to eq(0)
-    expect(selected.finish).to eq(12)
+    expect(selected.finish).to eq(8)
     expect(selected.text).to eq(
-      'The supreme goal is the hub of the universe that controls everything and is above the world of movements.'
+      'The supreme goal is the hub of the universe that controls everything and is above movements.'
     )
   end
 
@@ -59,22 +59,32 @@ RSpec.describe VoiceReference::Selector do
     transcript = {
       language: 'en',
       segments: [
-        segment(0, 6, 'This clean reference sentence begins with enough distinct words'),
-        segment(6, 10, 'and reaches a natural ending.'),
-        segment(10, 14, 'Unrelated closing words follow immediately afterward.')
+        segment(0, 4, 'This clean reference sentence begins with enough distinct words'),
+        segment(4, 8, 'and reaches a natural ending.'),
+        segment(8, 10, 'Unrelated closing words follow immediately afterward.')
       ]
     }
 
     selected = selector.select([{audio: 'clean.webm', transcript: transcript}])
 
-    expect(selected.finish).to eq(10)
+    expect(selected.finish).to eq(8)
     expect(selected.text).not_to include('Unrelated')
+  end
+
+  it 'caps selected passages at eight seconds' do
+    selector = described_class.new(analyzer: analyzer)
+    transcript = {
+      language: 'en',
+      segments: [segment(0, 9, 'This passage is clear but exceeds the maximum reference duration.')]
+    }
+
+    expect(selector.select([{audio: 'clean.webm', transcript: transcript}])).to be_nil
   end
 
   it 'compares complete passages from each recording instead of global confidence leaders' do
     selector = described_class.new(analyzer: analyzer)
     noisy_segments = 6.times.map do |index|
-      segment(index * 13, index * 13 + 12, "Sentence #{index} has enough distinct English words for candidate selection.")
+      segment(index * 9, index * 9 + 8, "Sentence #{index} has enough distinct English words for candidate selection.")
     end
     noisy_segments.each { |segment| segment[:probabilities] = Array.new(12, 0.99) }
 
@@ -135,14 +145,14 @@ RSpec.describe VoiceReference::Selector do
   end
 
   def recording(audio, language: 'en', probability:, text: nil)
-    text ||= 'This clear English reference passage contains enough distinct words for reliable selection and later reuse.'
+    text ||= 'This clear English reference passage contains enough distinct words for reliable reuse.'
     {
       audio: audio,
       transcript: {
         language: language,
         segments: [{
           start: 0,
-          finish: 12,
+          finish: 8,
           text: text,
           probabilities: Array.new(text.split.size, probability)
         }]
