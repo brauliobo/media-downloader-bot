@@ -21,7 +21,7 @@ module TDBot
           message_id:            message_id,
           reply_markup:          nil,
           input_message_content: content
-        ).value!(120)
+        ).value!(timeout)
         dlog "[TD_EDIT_GENERATED] chat=#{chat_id} id=#{message_id} type=#{media_type} result=#{result&.class}"
         message   = wait_uploaded_message(chat_id, result&.id || message_id, timeout: timeout)
         remote_id = message_remote_file_id(message)
