@@ -8,6 +8,8 @@ require_relative '../context'
 module Processors
   class Base
     BLOCKED_DOMAINS = ENV.fetch('BLOCKED_DOMAINS', '').split.map { |host| host.downcase.delete_prefix('.') }.freeze
+    DUB_FLAGS       = %w[1 true].freeze
+    SUBTITLE_MODES  = %w[none source both].freeze
 
     attr_reader :ctx
     delegate :msg, :st, :dir, :tmp, :url, :opts, :session, :service, to: :ctx
@@ -42,7 +44,7 @@ module Processors
       end
 
       @ctx.opts = SymMash.new(parsed.opts.merge(session: @ctx.session))
-      self.class.expand_lang_opt @ctx.opts
+      self.class.normalize_options @ctx.opts
       self.class.apply_process_opts @ctx.opts
       @args = [] # Deprecated but kept for safety if child classes use it
     end
@@ -73,6 +75,7 @@ module Processors
     # Supports:
     # - flags: "audio" => opts.audio = 1
     # - key/values: "lang=pt" => opts.lang = "pt"
+    # - shorthand: "dub=pt" => full dubbing with target-language subtitles
     # - metadata: "meta.artist=Foo" / "metadata.title=Bar" / "artist=Foo" (common tags)
     def self.add_opt(opts, raw)
       return opts unless opts && raw
@@ -98,15 +101,56 @@ module Processors
         opts[key.to_sym] = v
       end
 
-      expand_lang_opt opts if key == 'lang'
+      if key == 'lang'
+        opts.delete(:slang)
+        opts.delete(:alang)
+      end
+      normalize_options opts
       apply_process_opts opts if key == 'nice'
       opts
     end
 
+    def self.normalize_options(opts)
+      normalize_dub_opt opts
+      normalize_sub_opt opts
+      expand_lang_opt opts
+    end
+
+    def self.normalize_dub_opt(opts)
+      value = opts[:dub].to_s.strip.downcase
+      return opts if value.empty? || DUB_FLAGS.include?(value)
+
+      opts.dub = 1
+      opts.lang ||= value
+      opts.sub  ||= value
+      opts
+    end
+
+    def self.normalize_sub_opt(opts)
+      value = opts[:sub].to_s.strip.downcase
+      return opts if value.empty?
+
+      if SUBTITLE_MODES.include?(value)
+        opts.sub_mode = value
+        opts.delete(:sub_lang)
+      else
+        opts.sub_mode = 'language'
+        opts.sub_lang = value
+      end
+      opts
+    end
+
     def self.expand_lang_opt(opts)
-      return unless (lang = opts.delete(:lang))
+      lang = opts[:lang]
+      if lang.to_s.strip.empty? && opts[:slang].to_s.strip.empty? && opts[:alang].to_s.strip.empty? && opts[:sub_mode] == 'language'
+        lang = opts[:sub_lang]
+      end
+      return opts unless lang.present?
+
+      opts.delete(:lang)
       opts.slang ||= lang
       opts.alang ||= lang
+      opts
     end
 
     def self.apply_process_opts(opts)

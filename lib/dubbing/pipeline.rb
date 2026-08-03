@@ -36,6 +36,7 @@ module Dubbing
     def apply
       @stl&.update 'dubbing: transcribing'
       transcript = Subtitler.transcribe(@input_path)
+      @transcript_output = transcript.output
       @source_lang = Subtitler.normalize_lang(transcript.lang)
       return @input_path if @source_lang.present? && @source_lang == target_lang
 
@@ -127,10 +128,48 @@ module Dubbing
     end
 
     def prepare_translated_subtitles
-      return unless @opts.gensubs
+      mode = @opts.sub_mode.to_s
+      return if mode == 'none'
+      return unless @opts.gensubs || mode.present?
 
-      @opts.sub_vtt  = Subtitler::VTT.build(SymMash.new(segments: @sentences), word_tags: false)
-      @opts.sub_lang = target_lang
+      case mode
+      when 'source'
+        @opts.sub_vtt  = source_subtitle_vtt
+        @opts.sub_lang = source_lang
+      when 'both'
+        @opts.sub_vtt  = bilingual_subtitle_vtt
+        @opts.sub_lang = 'mul'
+      when 'language'
+        @opts.sub_vtt  = subtitle_target_lang == target_lang ? translated_subtitle_vtt : translated_source_subtitle_vtt
+        @opts.sub_lang = subtitle_target_lang
+      else
+        @opts.sub_vtt  = translated_subtitle_vtt
+        @opts.sub_lang = target_lang
+      end
+    end
+
+    def translated_subtitle_vtt
+      Subtitler::VTT.build(SymMash.new(segments: @sentences), word_tags: false)
+    end
+
+    def source_subtitle_vtt
+      Subtitler::VTT.build(@transcript_output || SymMash.new(segments: []), normalize: false, word_tags: false)
+    end
+
+    def translated_source_subtitle_vtt
+      Subtitler::VTT.translate(source_subtitle_vtt, from: source_lang, to: subtitle_target_lang)
+    end
+
+    def bilingual_subtitle_vtt
+      segments = @sentences.map do |sentence|
+        texts = [sentence.source_text, sentence.text].map { |text| text.to_s.strip }.reject(&:empty?).uniq
+        SymMash.new(text: texts.join("\n"), start: sentence.start, end: sentence.end, words: [])
+      end
+      Subtitler::VTT.build(SymMash.new(segments: segments), normalize: false, word_tags: false)
+    end
+
+    def subtitle_target_lang
+      @opts.sub_lang.presence || target_lang
     end
 
     def apply_timeline(clips)

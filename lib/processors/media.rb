@@ -149,11 +149,18 @@ module Processors
     end
 
     def consume_dub_language!(opts)
-      return if opts.subs || opts.gensubs || opts.onlysrt || opts.sub_vtt
+      return if subtitle_options_requested?(opts)
 
       opts.delete(:lang)
       opts.delete(:slang)
       opts.delete(:alang)
+    end
+
+    def subtitle_options_requested?(opts)
+      mode = opts.sub_mode.to_s
+      return false if mode == 'none'
+
+      opts.sub_mode.present? || opts.sub.present? || opts.subs || opts.gensubs || opts.onlysrt || opts.sub_vtt
     end
 
   end

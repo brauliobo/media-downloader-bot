@@ -140,6 +140,24 @@ RSpec.describe Processors::Media do
       expect(opts.alang).to eq('pt')
     end
 
+    it 'keeps dub language options for a language-valued sub option' do
+      opts = SymMash.new(dub: 1, slang: 'pt', alang: 'pt', sub: 'pt', sub_mode: 'language', sub_lang: 'pt')
+
+      processor.send(:consume_dub_language!, opts)
+
+      expect(opts.slang).to eq('pt')
+      expect(opts.alang).to eq('pt')
+    end
+
+    it 'does not keep dub language options for sub=none' do
+      opts = SymMash.new(dub: 1, slang: 'pt', alang: 'pt', sub: 'none', sub_mode: 'none')
+
+      processor.send(:consume_dub_language!, opts)
+
+      expect(opts.slang).to be_nil
+      expect(opts.alang).to be_nil
+    end
+
     it 'does not dub audio inputs' do
       i.type = SymMash.new(name: :audio)
       i.opts = SymMash.new(dub: 1)

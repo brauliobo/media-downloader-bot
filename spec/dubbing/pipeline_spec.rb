@@ -52,6 +52,49 @@ RSpec.describe Dubbing::Pipeline do
     expect(opts.sub_vtt).to include('00:00:00.500 --> 00:00:01.500', 'Boa tarde.')
   end
 
+  it 'generates target subtitles without gensubs for dub language shorthand' do
+    opts = SymMash.new(dub: 1, slang: 'pt', sub: 'pt', sub_mode: 'language', sub_lang: 'pt')
+    pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)
+    pipeline.instance_variable_set(
+      :@sentences,
+      [SymMash.new(text: 'Boa tarde.', start: 0.5, end: 1.5)]
+    )
+
+    pipeline.send(:prepare_translated_subtitles)
+
+    expect(opts.sub_lang).to eq('pt')
+    expect(opts.sub_vtt).to include('00:00:00.500 --> 00:00:01.500', 'Boa tarde.')
+  end
+
+  it 'reuses source sentences for sub=source' do
+    opts = SymMash.new(dub: 1, sub: 'source', sub_mode: 'source')
+    pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)
+    pipeline.instance_variable_set(
+      :@transcript_output,
+      SymMash.new(segments: [SymMash.new(text: 'Hello.', start: 0.0, end: 1.0, words: [])])
+    )
+    pipeline.instance_variable_set(:@source_lang, 'en')
+
+    pipeline.send(:prepare_translated_subtitles)
+
+    expect(opts.sub_lang).to eq('en')
+    expect(opts.sub_vtt).to include('00:00:00.000 --> 00:00:01.000', 'Hello.')
+  end
+
+  it 'builds bilingual subtitles for sub=both' do
+    opts = SymMash.new(dub: 1, sub: 'both', sub_mode: 'both')
+    pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)
+    pipeline.instance_variable_set(
+      :@sentences,
+      [SymMash.new(source_text: 'Hello.', text: 'Olá.', start: 0.0, end: 1.0)]
+    )
+
+    pipeline.send(:prepare_translated_subtitles)
+
+    expect(opts.sub_lang).to eq('mul')
+    expect(opts.sub_vtt).to include('Hello.', 'Olá.')
+  end
+
   it 'uses rendered clip timing and excludes clips beyond the video from subtitles' do
     opts = SymMash.new(dub: 1, gensubs: 1, slang: 'pt')
     pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)

@@ -29,5 +29,70 @@ RSpec.describe Processors::Base do
       expect(opts.nice).to eq('19')
       expect(Process).to have_received(:setpriority).with(Process::PRIO_PROCESS, 0, 19)
     end
+
+    it 'uses a language-valued subtitle option as the dub language fallback' do
+      opts = SymMash.new
+
+      described_class.add_opt(opts, 'sub=pt')
+
+      expect(opts.sub_mode).to eq('language')
+      expect(opts.sub_lang).to eq('pt')
+      expect(opts.slang).to eq('pt')
+      expect(opts.alang).to eq('pt')
+    end
+
+    it 'expands a language-valued dub option into dubbing and subtitles' do
+      opts = SymMash.new
+
+      described_class.add_opt(opts, 'dub=pt')
+
+      expect(opts.dub).to eq(1)
+      expect(opts.slang).to eq('pt')
+      expect(opts.alang).to eq('pt')
+      expect(opts.sub_mode).to eq('language')
+      expect(opts.sub_lang).to eq('pt')
+    end
+
+    it 'keeps an explicit language ahead of the dub shorthand language' do
+      opts = SymMash.new
+
+      described_class.add_opt(opts, 'lang=es')
+      described_class.add_opt(opts, 'dub=pt')
+
+      expect(opts.slang).to eq('es')
+      expect(opts.alang).to eq('es')
+      expect(opts.sub_lang).to eq('pt')
+    end
+
+    it 'keeps bare dub audio-only' do
+      opts = SymMash.new
+
+      described_class.add_opt(opts, 'dub')
+
+      expect(opts.dub).to eq(1)
+      expect(opts.sub_mode).to be_nil
+      expect(opts.sub_lang).to be_nil
+    end
+
+    it 'keeps an explicit dub language ahead of the subtitle language' do
+      opts = SymMash.new
+
+      described_class.add_opt(opts, 'lang=es')
+      described_class.add_opt(opts, 'sub=pt')
+
+      expect(opts.slang).to eq('es')
+      expect(opts.alang).to eq('es')
+      expect(opts.sub_lang).to eq('pt')
+    end
+
+    it 'does not use subtitle modes as dub language fallbacks' do
+      opts = SymMash.new
+
+      described_class.add_opt(opts, 'sub=source')
+
+      expect(opts.sub_mode).to eq('source')
+      expect(opts.slang).to be_nil
+      expect(opts.alang).to be_nil
+    end
   end
 end

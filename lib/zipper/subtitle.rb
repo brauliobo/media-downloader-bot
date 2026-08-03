@@ -18,7 +18,7 @@ class Zipper
     def apply(zipper)
       return unless subtitles_requested?(zipper.opts)
 
-      vtt, lng, tsp = source_vtt(zipper, translate_to: zipper.opts.slang)
+      vtt, lng, tsp = source_vtt(zipper, translate_to: subtitle_translation_target(zipper.opts))
       vtt = Subtitler::VTT.clean(vtt)
       zipper.stl&.update 'transcoding'
 
@@ -63,7 +63,7 @@ class Zipper
 
     def prepare_subtitle(infile, info:, probe:, stl:, opts:)
       zipper = Zipper.new(infile, nil, info: info, probe: probe, stl: stl, opts: opts)
-      prepare(zipper, translate_to: opts&.lang)
+      prepare(zipper, translate_to: subtitle_translation_target(opts))
     end
 
     def generate_srt(infile, dir:, info:, probe:, stl:, opts:)
@@ -97,12 +97,30 @@ class Zipper
     end
 
     def subtitles_requested?(opts)
-      opts.slang || opts.subs || opts.gensubs || opts.onlysrt || opts.sub_vtt
+      return false if subtitle_mode(opts) == 'none'
+
+      opts.slang || opts.sub_mode.present? || opts.sub.present? || opts.subs || opts.gensubs || opts.onlysrt || opts.sub_vtt
+    end
+
+    def subtitle_mode(opts)
+      return opts.sub_mode.to_s if opts.sub_mode.present?
+      return 'language' if opts.sub.present?
+
+      ''
+    end
+
+    def subtitle_translation_target(opts)
+      mode = subtitle_mode(opts)
+      return nil if %w[none source both].include?(mode)
+
+      opts.sub_lang.presence || opts.slang
     end
 
     def source_vtt(zipper, translate_to:)
       if (provided = zipper.opts.sub_vtt).present?
         initial = Subtitler::VTT.clean(provided.to_s)
+        return [initial, zipper.opts.sub_lang.presence || 'mul', nil] if subtitle_mode(zipper.opts) == 'both'
+
         Subtitler::VTT.translate_if_needed(zipper, initial, nil, zipper.opts.sub_lang || zipper.opts.slang, translate_to)
       else
         prepare(zipper, translate_to: translate_to)
