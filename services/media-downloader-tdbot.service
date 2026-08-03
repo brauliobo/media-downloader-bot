@@ -35,7 +35,7 @@ Environment=THREADS=10
 Environment=DB=1
 Environment=TDLOG=1
 Environment=TD_BOT=1
-Environment=BLOCKED_USERS=REDACTED_USER_ID,REDACTED_USER_ID,REDACTED_USER_ID,REDACTED_USER_ID
+# Set BLOCKED_USERS in a private environment file.
 
 Restart=always
 RestartSec=1

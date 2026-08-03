@@ -34,7 +34,7 @@ Environment=THREADS=10
 #Environment=CUDA_VISIBLE_DEVICES=1
 #Environment=DEBUG=1
 Environment=DB=1
-Environment=BLOCKED_USERS=REDACTED_USER_ID,REDACTED_USER_ID,REDACTED_USER_ID,REDACTED_USER_ID
+# Set BLOCKED_USERS in a private environment file.
 
 Restart=always
 RestartSec=1

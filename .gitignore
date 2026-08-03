@@ -1,7 +1,12 @@
 # private
 .bundle
+.env
 .env.local
 .env.user
+services/nodes/
+services/omnivoice-haproxy.cfg
+services/inference.exports
+services/*.mount
 .tdlib/db
 .tdlib/files
 /logs/
