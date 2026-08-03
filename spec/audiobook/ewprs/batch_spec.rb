@@ -79,6 +79,8 @@ RSpec.describe Audiobook::Ewprs::Batch do
       catalog: catalog, output: output, jobs: 1, manager: manager, chat_id: -100123,
       topic: topic, apply: true, edit: true, regenerate: true, stdout: StringIO.new, stderr: StringIO.new
     )
+    File.write(audio, 'regenerated audio')
+    expect(resumed).not_to receive(:generate_entry)
     expect(manager).not_to receive(:edit_generated_message)
     expect(resumed.run(discourses: [entries.first], books: [])[:edited]).to eq(0)
   end

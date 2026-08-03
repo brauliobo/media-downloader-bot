@@ -268,9 +268,11 @@ module Audiobook::Ewprs
 
     def checkpointed?(entry)
       return false unless @apply && published.key?(entry_key(entry))
+      previous = published[entry_key(entry)]
       return true unless @edit
+      return true if previous[:operation] == 'edit'
 
-      expected = published[entry_key(entry)][:audio_sha256]
+      expected = previous[:audio_sha256]
       audio    = audio_path(entry)
       expected.present? && File.size?(audio) && expected == audio_sha256(audio)
     end
