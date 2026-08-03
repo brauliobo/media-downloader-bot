@@ -45,7 +45,6 @@ module Ewprs
       'inject'                 => 'Interpret the English verb "inject" as "introduce or instill".',
       'linseed'                => 'Interpret the English noun "linseed" as "flax seed".',
       'literally'              => 'Interpret the English adverb "literally" as "in the literal sense".',
-      'means'                  => 'Interpret the English verb "means" as "has the meaning".',
       'respectively'           => 'Interpret the English adverb "respectively" as "in the same order".',
       'similarly'              => 'Interpret the English adverb "similarly" as "in the same way".',
       'some examples are'      => 'This phrase introduces a list of examples. Translate every word of the phrase.',

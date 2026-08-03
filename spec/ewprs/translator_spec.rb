@@ -26,7 +26,8 @@ RSpec.describe Ewprs::Translator do
       expect(payload['model']).to eq('Hy-MT2-7B-Q4_K_M.gguf')
       expect(payload['temperature']).to eq(0)
       expect(payload['max_tokens']).to eq(2048)
-      expect(payload.dig('messages', 0, 'content')).to include(
+      prompt = payload.dig('messages', 0, 'content')
+      expect(prompt).to include(
         'Brazilian Portuguese',
         'Preserve every sentence and line break',
         'Choose one direct translation; do not output alternatives, annotations, or parenthetical variants.',
@@ -36,6 +37,7 @@ RSpec.describe Ewprs::Translator do
         'renumbering them: ZXQEWPRSP1ZXQ. Do not append this list to the translation.',
         'ZXQEWPRSP1ZXQ'
       )
+      expect(prompt).not_to include('Interpret the English verb "means"')
       Struct.new(:body).new(
         {choices: [{message: {content: "  A palavra ZXQEWPRSP1ZXQ significa felicidade.\n"}}]}.to_json
       )

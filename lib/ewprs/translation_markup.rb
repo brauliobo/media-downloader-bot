@@ -299,5 +299,43 @@ module Ewprs
     DOCUMENT_MARKER  = /#{PROTECTED_MARKER}|#{UNIT_MARKER}/
     ESCAPED_ENTITY   = /&amp;(?=(?:#\d+|#x[\da-f]+|[a-z][\w]+);)/i
     HTML_STRUCTURE   = /<!--.*?-->|<[^>]+>/m
+
+    def html_structure_compatible?(source, translated)
+      source_structure = source.to_s.scan(HTML_STRUCTURE)
+      translated_structure = translated.to_s.scan(HTML_STRUCTURE)
+      return true if translated_structure == source_structure
+
+      inline = ->(tag) { tag.match?(/\A<\/?(?:i|em)\b[^>]*>\z/i) }
+      return false unless source_structure.reject(&inline) == translated_structure.reject(&inline)
+      source_inline = source_structure.select(&inline)
+      translated_inline = translated_structure.select(&inline)
+      return false unless source_inline.tally == translated_inline.tally
+
+      return source_inline == translated_inline if source_inline.length <= 2
+      return true unless inline_tags_balanced?(source_inline)
+
+      inline_tags_balanced?(translated_inline) &&
+        inline_tag_shape(source_inline) == inline_tag_shape(translated_inline)
+    end
+
+    def inline_tags_balanced?(tags)
+      stack = []
+      tags.each do |tag|
+        match = tag.match(/\A<(\/)?(i|em)\b[^>]*>\z/i)
+        next unless match
+
+        if match[1]
+          return false unless stack.pop&.casecmp?(match[2])
+        else
+          stack << match[2]
+        end
+      end
+      stack.empty?
+    end
+
+    def inline_tag_shape(tags)
+      tags.map { |tag| tag.match?(%r{\A</}) ? :close : :open }
+    end
+    private :html_structure_compatible?, :inline_tags_balanced?, :inline_tag_shape
   end
 end

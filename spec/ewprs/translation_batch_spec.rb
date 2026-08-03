@@ -1797,6 +1797,29 @@ RSpec.describe Ewprs::TranslationBatch do
     end.to raise_error(Ewprs::TranslationValidator::Error, /changed HTML tag sequence/)
   end
 
+  it 'allows balanced reordering of inline emphasis tags' do
+    source = '<p><i>first</i> and <i>second</i></p>'
+    translated = '<p><i>second</i> e <i>first</i></p>'
+
+    expect { batch.send(:validate_structure!, source, translated) }.not_to raise_error
+  end
+
+  it 'rejects unbalanced inline tags when the source markup is balanced' do
+    source = '<p><i>first</i> and <i>second</i></p>'
+    translated = '<p></i>second<i> e <i>first</i></p>'
+
+    expect { batch.send(:validate_structure!, source, translated) }
+      .to raise_error(/HTML structure changed/)
+  end
+
+  it 'rejects changed nesting of balanced inline tags' do
+    source = '<p><i>first</i> and <i>second</i> and <i>third</i></p>'
+    translated = '<p><i>first <i>second</i> and third</i></p>'
+
+    expect { batch.send(:validate_structure!, source, translated) }
+      .to raise_error(/HTML structure changed/)
+  end
+
   it 'preserves the source file mode when writing a translated document' do
     path = File.join(root, 'HTML/Discourses/Mode.html')
     File.binwrite(path, 'source')
@@ -1809,6 +1832,22 @@ RSpec.describe Ewprs::TranslationBatch do
     batch.send(:write_document, document, 'translated')
 
     expect(File.stat(path).mode & 0o7777).to eq(0o755)
+  end
+
+  it 'promotes legacy output encoding when target text is not representable' do
+    path = File.join(root, 'HTML/Discourses/Chinese.html')
+    File.binwrite(path, 'source')
+    document = described_class::Document.new(
+      entry: described_class::Entry.new(kind: :discourse, path: path),
+      encoding: Encoding::Windows_1252,
+      mode: 0o644
+    )
+
+    batch.send(:write_document, document, '<p>中文</p>')
+
+    output = File.binread(path).force_encoding(Encoding::UTF_8)
+    expect(output.valid_encoding?).to be(true)
+    expect(output).to include('中文')
   end
 
   it 'protects a foreign inline phrase as one immutable token' do
@@ -2379,6 +2418,62 @@ RSpec.describe Ewprs::TranslationBatch do
         'Música <span data-ewprs="11">as sete notas __P0001____P0002__</span>'
       )
     end.to raise_error(/changed editorial tags/)
+  end
+
+  it 'allows a complete inline pair to move around an editorial citation' do
+    unit = described_class::Unit.new(
+      key: 'movable-inline-citation',
+      prepared: 'agent <span data-ewprs="11">acidic coagulator</span> like ' \
+                '__P0001__dadhyamla__P0002__',
+      tokens: {'__P0001__' => '<I>', '__P0002__' => '</I>'}
+    )
+    translated = 'like __P0001__dadhyamla__P0002__这样的特定试剂<span data-ewprs="11">酸性凝固剂</span>'
+
+    expect(batch.send(:valid_editorial_structure?, unit, translated)).to be(true)
+  end
+
+  it 'allows nested editorial units to reorder around an editorial citation' do
+    first = batch.send(:register_unit, 'offered')
+    second = batch.send(:register_unit, 'at the altar')
+    unit = described_class::Unit.new(
+      key: 'movable-nested-editorial-citation',
+      prepared: '__P0001__ before __P0002__ <span data-ewprs="22">editorial note</span>',
+      tokens: {
+        '__P0001__' => "[[#{first}]]", '__P0002__' => "[[#{second}]]"
+      }
+    )
+    translated = '__P0002__ 在 __P0001__ 之前<span data-ewprs="22">编辑说明</span>'
+
+    expect(batch.send(:valid_editorial_structure?, unit, translated)).to be(true)
+  end
+
+  it 'rejects editorial boundaries moved across protected nested editorial values' do
+    nested = batch.send(:register_unit, 'unit cognition')
+    unit = described_class::Unit.new(
+      key: 'nested-editorial-scope',
+      prepared: 'plate <span data-ewprs="11">within the unit</span> is __P0001__',
+      tokens: {'__P0001__' => "a&#x301;tma&#x301; [#{nested}]"}
+    )
+    translated = 'plate <span data-ewprs="11">within the unit is __P0001__</span>'
+
+    expect(batch.send(:valid_editorial_structure?, unit, translated)).to be(false)
+  end
+
+  it 'rejects cached translations with nested editorial bracket scope changes' do
+    nested = batch.send(:register_unit, 'unit cognition')
+    unit = described_class::Unit.new(
+      key: 'cached-nested-editorial-scope',
+      source: 'plate [within the unit] is a&#x301;tma&#x301; [unit cognition].',
+      prepared: 'plate <span data-ewprs="11">within the unit</span> is __P0001__.',
+      tokens: {'__P0001__' => "a&#x301;tma&#x301; [#{nested}]"}
+    )
+
+    expect do
+      batch.send(
+        :validate_restored_translation!, unit,
+        "板块[在单元内是a&#x301;tma&#x301; [#{nested}]。]"
+      )
+    end.to raise_error(Ewprs::TranslationValidator::Error, /changed editorial brackets/)
   end
 
   it 'allows a nested parenthetical to move around an editorial citation' do

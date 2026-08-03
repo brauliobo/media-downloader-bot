@@ -60,7 +60,11 @@ module Ewprs
       end
 
       def write_document(document, rendered)
-        bytes = rendered.encode(document.encoding)
+        bytes = begin
+          rendered.encode(document.encoding)
+        rescue Encoding::UndefinedConversionError
+          rendered.encode(Encoding::UTF_8)
+        end
         temp  = "#{document.entry.path}.translation.tmp"
         File.binwrite(temp, bytes)
         File.chmod(document.mode, temp)

@@ -12,9 +12,7 @@ module Ewprs
       end
 
       def validate_structure!(source, translated)
-        source_structure = source.scan(HTML_STRUCTURE)
-        translated_structure = translated.scan(HTML_STRUCTURE)
-        raise 'HTML structure changed during translation' unless translated_structure == source_structure
+        raise 'HTML structure changed during translation' unless html_structure_compatible?(source, translated)
 
         source_slokas = matches(source, PROTECTED_ELEMENT).select { |value| value.match?(/Para_Sloka/) }
         translated_slokas = matches(translated, PROTECTED_ELEMENT).select { |value| value.match?(/Para_Sloka/) }

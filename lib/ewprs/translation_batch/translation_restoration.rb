@@ -10,10 +10,11 @@ module Ewprs
       def restore_tokens_with_retries(unit, output)
         retries = 0
         attempted_projections = {}
+        allow_moved_editorial = output.to_s.scan(EDITORIAL_TAG) == unit.prepared.scan(EDITORIAL_TAG)
         begin
           output = normalize_target_language(output.to_s)
           validator.validate!(source: unit.prepared, translated: output)
-          restore_tokens(unit, output)
+          restore_tokens(unit, output, allow_moved_editorial: allow_moved_editorial)
         rescue ProtectedTokenError, TranslationValidator::Error => error
           projected = nil
           projected = remove_duplicated_placeholders(unit, output) if error.message.match?(/unexpected:/)
@@ -31,7 +32,7 @@ module Ewprs
             output = projected
             retry
           end
-          project_editorial = error.message.match?(/changed editorial tags/)
+          project_editorial = error.message.match?(/changed editorial tags|changed editorial brackets/)
           project_editorial ||= error.is_a?(ProtectedTokenError) && unit.prepared.match?(EDITORIAL_TAG)
           project_editorial &&= !attempted_projections[:editorial]
           if project_editorial
@@ -287,7 +288,7 @@ module Ewprs
         end
       end
 
-      def restore_tokens(unit, output)
+      def restore_tokens(unit, output, allow_moved_editorial: true)
         output = normalize_protected_boundaries(unit, output.to_s)
         expected = unit.prepared.scan(PLACEHOLDER)
         actual   = output.scan(PLACEHOLDER)
@@ -310,7 +311,7 @@ module Ewprs
         unless output.scan(EDITORIAL_TAG) == unit.prepared.scan(EDITORIAL_TAG)
           raise ProtectedTokenError, "translation changed editorial tags for #{unit.key}"
         end
-        unless valid_editorial_structure?(unit, output)
+        unless valid_editorial_structure?(unit, output, allow_moved_parts: allow_moved_editorial)
           raise ProtectedTokenError, "translation changed editorial tags for #{unit.key}"
         end
 
@@ -398,10 +399,59 @@ module Ewprs
           structural_adjacencies(output, unit.tokens).tally
       end
 
-      def valid_editorial_structure?(unit, output)
+      def valid_editorial_structure?(unit, output, allow_moved_parts: true)
         return true unless unit.prepared.match?(EDITORIAL_TAG)
 
-        editorial_structure(unit.prepared, unit.tokens) == editorial_structure(output, unit.tokens)
+        expected = editorial_structure(unit.prepared, unit.tokens)
+        actual = editorial_structure(output, unit.tokens)
+        return true if expected == actual
+        return false unless allow_moved_parts
+
+        expected_parts = editorial_movable_parts(expected, unit.tokens)
+        actual_parts = editorial_movable_parts(actual, unit.tokens)
+        return false unless expected_parts.tally == actual_parts.tally
+
+        movable = expected_parts.flat_map { |markers, _depth| markers }
+        expected.reject { |part| movable.include?(part) } == actual.reject { |part| movable.include?(part) }
+      end
+
+      def editorial_movable_parts(structure, tokens)
+        pairs = editorial_inline_pairs(structure, tokens).map do |opening, closing, depth|
+          [[opening, closing], depth]
+        end
+        depths = editorial_depths(structure)
+        nested = structure.each_with_index.filter_map do |part, index|
+          next unless part.match?(PLACEHOLDER) && nested_editorial_token?(tokens.fetch(part))
+
+          [[part], depths[index]]
+        end
+        pairs + nested
+      end
+
+      def editorial_inline_pairs(structure, tokens)
+        depths = editorial_depths(structure)
+        structure.each_with_index.filter_map do |part, index|
+          next if part.match?(/\A<span\b/i) || part.match?(/\A<\/span\b/i)
+
+          closing = structure[index + 1]
+          next unless closing&.match?(PLACEHOLDER)
+
+          opening_tag = tokens.fetch(part)[/\A<(i|em)\b[^>]*>\z/i, 1]
+          closing_tag = tokens.fetch(closing)[/\A<\/(i|em)\s*>\z/i, 1]
+          next unless opening_tag && closing_tag&.casecmp?(opening_tag)
+
+          [part, closing, depths[index]]
+        end
+      end
+
+      def editorial_depths(structure)
+        depth = 0
+        structure.map do |part|
+          current = depth
+          depth += 1 if part.match?(/\A<span\b/i)
+          depth -= 1 if part.match?(/\A<\/span\b/i)
+          current
+        end
       end
 
       def editorial_structure(value, tokens)
@@ -434,14 +484,22 @@ module Ewprs
       end
 
       def nested_editorial_token?(value)
-        value.match?(/\A\[\[#{UNIT_MARKER}\]\]\z/)
+        value.match?(/\A\[\[#{UNIT_MARKER}\]\]\z/) ||
+          value.match?(UNIT_MARKER) && value.match?(EDITORIAL_BRACKET)
       end
 
       def validate_restored_translation!(unit, translation)
         translation = normalize_target_language(translation)
         translation = normalize_duplicate_dashes(translation)
+        source_structure = restore_editorial_tags(unit.prepared).gsub(PLACEHOLDER) do |marker|
+          unit.tokens.fetch(marker)
+        end
+        if source_structure.scan(EDITORIAL_BRACKET) != translation.scan(EDITORIAL_BRACKET)
+          raise TranslationValidator::Error.new(:markup, 'translation changed editorial brackets')
+        end
+
         validation_source, validation_translation = project_nested_values(unit, translation)
-        if unit.source && validation_source.scan(HTML_STRUCTURE) != validation_translation.scan(HTML_STRUCTURE)
+        if unit.source && !html_structure_compatible?(validation_source, validation_translation)
           raise TranslationValidator::Error.new(:markup, 'translation changed HTML tag sequence')
         end
 
