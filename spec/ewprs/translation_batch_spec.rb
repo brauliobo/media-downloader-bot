@@ -1896,6 +1896,21 @@ RSpec.describe Ewprs::TranslationBatch do
     expect(translator.repair_calls).to be_empty
   end
 
+  it 'retranslates marker failures with XML placeholder transport' do
+    unit = described_class::Unit.new(
+      key: 'transport-marker', source: 'The term appears.', prepared: 'The __P0001__ appears.',
+      tokens: {'__P0001__' => 'term'},
+      leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).to receive(:translate_preserving_placeholders).with(
+      unit.prepared, values: {'__P0001__' => 'term'}, from: 'en', to: 'pt'
+    ).and_return('O __P0001__ aparece.')
+    batch = described_class.new(root: root, target: 'pt', cache: cache, translator: translator)
+
+    expect(batch.send(:restore_tokens_with_retries, unit, 'O ZXQEWPRSP aparece.')).to eq('O term aparece.')
+  end
+
   it 'restores a uniquely transliterated protected term to its exact source form' do
     unit = described_class::Unit.new(
       key: 'transliterated-token', source: 'The natural Pra&#x301;n&#x301;a Dharma remains.',

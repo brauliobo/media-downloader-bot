@@ -62,6 +62,7 @@ module Ewprs
       'de' => [%w[negative evolution].freeze].freeze
     }.freeze
     OMITTABLE_SOURCE_WORDS = {
+      'ar' => %w[a an the].to_h { |word| [word, true] }.freeze,
       'zh' => %w[a an the].to_h { |word| [word, true] }.freeze
     }.freeze
     TARGET_INVALID_PHRASES = {

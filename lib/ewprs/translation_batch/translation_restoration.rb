@@ -92,7 +92,9 @@ module Ewprs
           project_placeholders ||= error.respond_to?(:code) && error.code == :untranslated &&
                                   unit.prepared.match?(PLACEHOLDER)
           project_placeholders ||= error.respond_to?(:code) && error.code == :delimiters &&
-                                  unit.prepared.match?(PLACEHOLDER)
+                                   unit.prepared.match?(PLACEHOLDER)
+          project_placeholders ||= error.respond_to?(:code) && error.code == :markers &&
+                                   unit.prepared.match?(PLACEHOLDER)
           project_order = error.is_a?(ProtectedTokenError) && error.message.match?(/reordered structural tokens/)
           project_order ||= error.respond_to?(:code) && error.code == :delimiters &&
                             unit.tokens.any? { |_marker, value| nested_editorial_token?(value) }

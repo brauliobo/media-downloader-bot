@@ -45,6 +45,13 @@ RSpec.describe Ewprs::TranslationValidator do
     expect(chinese.valid?(source: 'The', translated: '')).to be(false)
   end
 
+  it 'allows Arabic to omit an English article before protected content' do
+    arabic = described_class.new(source_language: 'en', target_language: 'ar')
+
+    expect(arabic.valid?(source: 'The __P0001__', translated: '__P0001__')).to be(true)
+    expect(arabic.valid?(source: 'The', translated: '')).to be(false)
+  end
+
   it 'does not reject unchanged formulas, citations, or scientific names' do
     expect(validator.valid?(source: 'A + u + m = Om.', translated: 'A + u + m = Om.')).to be(true)
     expect(
