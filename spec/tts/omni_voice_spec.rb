@@ -128,4 +128,34 @@ RSpec.describe TTS::OmniVoice do
     end
   end
 
+  it 'forwards the reference transcript when cloning a speaker voice' do
+    Dir.mktmpdir('omnivoice-spec-') do |dir|
+      paths = [File.join(dir, 'one.wav')]
+      speaker_wav = File.join(dir, 'speaker.wav')
+      File.write(speaker_wav, 'speaker')
+      agent = double
+      response = double(
+        code: '200',
+        body: JSON.dump('items' => [{ 'audio' => Base64.strict_encode64('wav') }])
+      )
+      captured_form = nil
+
+      allow(Utils::HTTP).to receive(:client).and_return(agent)
+      allow(agent).to receive(:post) do |_url, form|
+        captured_form = form
+        response
+      end
+
+      described_class.synthesize_batch(
+        items: [{ text: 'Olá.', lang: 'pt', out_path: paths[0] }],
+        speaker_wav: speaker_wav,
+        ref_text: 'Reference text.'
+      )
+
+      expect(captured_form['ref_text']).to eq('Reference text.')
+      expect(captured_form['normalize_text']).to eq('true')
+      expect(captured_form['audio']).to be_a(File)
+    end
+  end
+
 end
