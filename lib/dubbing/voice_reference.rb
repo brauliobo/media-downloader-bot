@@ -1,6 +1,5 @@
 require 'fileutils'
 
-require_relative '../utils/sh'
 require_relative '../voice_reference/audio_analyzer'
 require_relative '../zipper'
 
@@ -73,11 +72,14 @@ module Dubbing
 
     def extract_span(input_path, span, dir, idx)
       out = File.join(dir, format('speaker-%04d.wav', idx))
-      cmd = "#{Zipper::FFMPEG} -ss #{span.start} -t #{span.duration} -i #{Sh.escape(input_path)} " \
-            "-vn -af #{Sh.escape("#{::VoiceReference::AudioAnalyzer::REFERENCE_FILTER},apad=pad_dur=#{REFERENCE_GAP}")} " \
-            "-ac 1 -ar 22050 #{Sh.escape(out)}"
-      _, stderr, status = Sh.run cmd
-      raise "speaker reference extraction failed: #{stderr}" unless status.success? && File.exist?(out)
+      ::VoiceReference::AudioAnalyzer.new.extract_span(
+        audio:        input_path,
+        start:        span.start,
+        duration:     span.duration,
+        output:       out,
+        sample_rate:  22_050,
+        pad_duration: REFERENCE_GAP
+      )
 
       out
     end

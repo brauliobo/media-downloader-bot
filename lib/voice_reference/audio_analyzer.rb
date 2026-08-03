@@ -37,7 +37,19 @@ class VoiceReference
     end
 
     def extract(candidate, output)
-      command = ffmpeg_extract(candidate, output) + ['-af', REFERENCE_FILTER, '-c:a', 'pcm_s16le', output]
+      extract_span(
+        audio:    candidate.audio,
+        start:    candidate.start,
+        duration: candidate.duration,
+        output:   output
+      )
+    end
+
+    def extract_span(audio:, start:, duration:, output:, sample_rate: 24_000, pad_duration: nil)
+      filter = pad_duration ? "#{REFERENCE_FILTER},apad=pad_dur=#{pad_duration}" : REFERENCE_FILTER
+      command = ffmpeg_extract(audio, start, duration) + [
+        '-af', filter, '-ac', '1', '-ar', sample_rate.to_i.to_s, '-c:a', 'pcm_s16le', output
+      ]
       run(command, 'voice reference extraction failed', output: output)
     end
 
@@ -50,15 +62,16 @@ class VoiceReference
     attr_reader :quality
 
     def extract_raw(candidate, output)
-      command = ffmpeg_extract(candidate, output) + ['-c:a', 'pcm_s16le', output]
+      command = ffmpeg_extract(candidate.audio, candidate.start, candidate.duration) + [
+        '-ac', '1', '-ar', '24000', '-c:a', 'pcm_s16le', output
+      ]
       run(command, 'voice candidate extraction failed', output: output)
     end
 
-    def ffmpeg_extract(candidate, _output)
+    def ffmpeg_extract(audio, start, duration)
       [
-        'ffmpeg', '-loglevel', 'error', '-y', '-ss', candidate.start.to_s,
-        '-t', candidate.duration.to_s, '-i', candidate.audio, '-vn',
-        '-ac', '1', '-ar', '24000'
+        'ffmpeg', '-loglevel', 'error', '-y', '-ss', start.to_s,
+        '-t', duration.to_s, '-i', audio, '-vn'
       ]
     end
 

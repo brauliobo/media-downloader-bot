@@ -37,4 +37,23 @@ RSpec.describe VoiceReference::AudioAnalyzer do
     expect(measured.metrics).to equal(metrics)
     expect(measured.score).to be_within(0.0001).of(0.81)
   end
+
+  it 'supports padded extraction at a caller-selected sample rate' do
+    status = instance_double(Process::Status, success?: true)
+    command = nil
+    allow(Sh).to receive(:run) do |value|
+      command = value
+      ['', '', status]
+    end
+    allow(Sh).to receive(:assert_success!)
+
+    described_class.new.extract_span(
+      audio: 'source.webm', start: 10, duration: 4,
+      output: '/tmp/reference.wav', sample_rate: 22_050, pad_duration: 0.15
+    )
+
+    filter = command.fetch(command.index('-af') + 1)
+    expect(filter).to include(described_class::REFERENCE_FILTER, 'apad=pad_dur=0.15')
+    expect(command).to include('-ar', '22050')
+  end
 end

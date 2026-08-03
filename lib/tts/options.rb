@@ -5,11 +5,11 @@ class TTS
     VOICE_KEYS             = %i[voice voice_instruct instruct].freeze
     TEMP_KEYS              = %i[temp temperature].freeze
 
-    def self.for(opts = nil, speaker_wav: nil, lang: nil)
-      new(opts, speaker_wav: speaker_wav, lang: lang).to_h
+    def self.for(opts = nil, speaker_wav: nil)
+      new(opts, speaker_wav: speaker_wav).to_h
     end
 
-    def initialize(opts = nil, speaker_wav: nil, lang: nil)
+    def initialize(opts = nil, speaker_wav: nil)
       @opts        = opts || SymMash.new
       @speaker_wav = speaker_wav
     end

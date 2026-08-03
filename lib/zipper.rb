@@ -405,6 +405,14 @@ class Zipper
     wpath
   end
 
+  def self.with_audio_wav(path, sample_rate: nil, channels: nil)
+    options = {sample_rate: sample_rate, channels: channels}.compact
+    wav = audio_to_wav(path, **options)
+    File.open(wav) { |file| yield file }
+  ensure
+    File.unlink(wav) if wav && File.exist?(wav)
+  end
+
   # Public helper: prepare subtitles and return [vtt, lang, verbose_json]
   def self.prepare_subtitle(*args, **kwargs)
     Zipper::Subtitle.prepare_subtitle(*args, **kwargs)

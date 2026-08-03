@@ -141,6 +141,7 @@ RSpec.describe Dubbing::VoiceReference do
     allow(described_class).to receive(:extract_span).and_call_original
     selection = described_class::Selection.new(start: 1.0, duration: 4.0, text: 'Clean phrase.')
     expect(Sh).to receive(:run) do |command|
+      command = command.join(' ')
       expect(command).to include('afftdn', 'highpass', 'lowpass', 'silenceremove', 'loudnorm', 'apad')
       output = File.join(dir, 'speaker-0001.wav')
       File.write(output, 'clean reference')

@@ -12,29 +12,26 @@ class Diarizer
     module_function
 
     def diarize(path, speakers: nil)
-      wav  = Zipper.audio_to_wav(path)
-      file = File.open(wav)
-      response = Utils::HTTP.post(
-        "#{api.to_s.delete_suffix('/')}/inference",
-        file:            file,
-        language:        'en',
-        temperature:     '0.0',
-        response_format: 'verbose_json',
-        tinydiarize:     'true'
-      )
-      raise "diarization failed: #{response.code}" unless response.code == '200'
+      Zipper.with_audio_wav(path) do |file|
+        response = Utils::HTTP.post(
+          "#{api.to_s.delete_suffix('/')}/inference",
+          file:            file,
+          language:        'en',
+          temperature:     '0.0',
+          response_format: 'verbose_json',
+          tinydiarize:     'true'
+        )
+        raise "diarization failed: #{response.code}" unless response.code == '200'
 
-      output = SymMash.new(JSON.parse(response.body))
-      segments = Array(output.segments)
-      unless segments.all? { |segment| segment.key?(:speaker_turn_next) }
-        raise 'TinyDiarize service did not return speaker_turn_next'
+        output = SymMash.new(JSON.parse(response.body))
+        segments = Array(output.segments)
+        unless segments.all? { |segment| segment.key?(:speaker_turn_next) }
+          raise 'TinyDiarize service did not return speaker_turn_next'
+        end
+
+        assign_speaker_ids(segments, speakers)
+        output
       end
-
-      assign_speaker_ids(segments, speakers)
-      output
-    ensure
-      file&.close
-      File.unlink(wav) if wav && File.exist?(wav)
     end
 
     def assign_speaker_ids(segments, speaker_count)

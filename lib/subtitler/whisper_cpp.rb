@@ -67,20 +67,21 @@ class Subtitler
     protected
 
     def transcribe_with_params path, format:, merge_words:, language: nil, detect_lang: :simple, **extra
-      wav  = Zipper.audio_to_wav path
-      file = File.open(wav)
-      params = {
-        file:             file,
-        temperature:      '0.0',
-        response_format:  format,
-        **extra
-      }
-      params[:language] = language if language
+      out = Zipper.with_audio_wav(path) do |file|
+        params = {
+          file:             file,
+          temperature:      '0.0',
+          response_format:  format,
+          **extra
+        }
+        params[:language] = language if language
 
-      url = "#{api.scheme}://#{api.host}:#{api.port}/inference"
-      res = Utils::HTTP.post(url, params)
-      raise "TTS failed: #{res.code}" unless res.code == '200'
-      out = res.body
+        url = "#{api.scheme}://#{api.host}:#{api.port}/inference"
+        res = Utils::HTTP.post(url, params)
+        raise "TTS failed: #{res.code}" unless res.code == '200'
+
+        res.body
+      end
 
       out = SymMash.new JSON.parse(out) if format.to_s.index('json')
 
@@ -89,10 +90,6 @@ class Subtitler
       merge_split_words!(out) if merge_words && out.respond_to?(:segments)
 
       SymMash.new output: out, lang: lang
-
-    ensure
-      file&.close
-      File.unlink wav if wav && File.exist?(wav)
     end
 
     def detect_language out, mode

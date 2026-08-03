@@ -1,6 +1,19 @@
 require 'spec_helper'
 
 RSpec.describe Zipper do
+  it 'cleans a temporary wav after yielding it' do
+    Dir.mktmpdir('zipper-wav-spec-') do |dir|
+      wav = File.join(dir, 'input.wav')
+      File.write(wav, 'wav')
+      allow(described_class).to receive(:audio_to_wav).with('/tmp/input.mp4').and_return(wav)
+
+      result = described_class.with_audio_wav('/tmp/input.mp4') { |file| file.read }
+
+      expect(result).to eq('wav')
+      expect(File).not_to exist(wav)
+    end
+  end
+
   it 'uses CUDA decode and encode when cuda is enabled' do
     probe = SymMash.new(
       format: SymMash.new(duration: 60),

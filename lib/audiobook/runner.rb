@@ -126,7 +126,7 @@ module Audiobook
     end
 
     def tts_options(dir)
-      options = TTS::Options.for(tts_config, lang: @lang)
+      options = TTS::Options.for(tts_config)
       if @opts&.position_temperature.present?
         options[:position_temperature] = @opts.position_temperature.to_f
       end
@@ -248,7 +248,7 @@ module Audiobook
     end
 
     def voice_instruct
-      TTS::Options.for(tts_config, lang: @lang)[:instruct].to_s
+      TTS::Options.for(tts_config)[:instruct].to_s
     end
 
     def voice_url

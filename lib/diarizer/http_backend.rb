@@ -8,19 +8,16 @@ class Diarizer
     module_function
 
     def diarize(api, path, speakers: nil)
-      wav  = Zipper.audio_to_wav(path, sample_rate: 16_000, channels: 1)
-      file = File.open(wav)
-      params = {file: file}
-      params[:speakers] = speakers.to_i.to_s if speakers.to_i.positive?
-      response = Utils::HTTP.post("#{api.to_s.delete_suffix('/')}/v1/diarize", params)
-      raise "diarization failed: #{response.code}" unless response.code == '200'
+      Zipper.with_audio_wav(path, sample_rate: 16_000, channels: 1) do |file|
+        params = {file: file}
+        params[:speakers] = speakers.to_i.to_s if speakers.to_i.positive?
+        response = Utils::HTTP.post("#{api.to_s.delete_suffix('/')}/v1/diarize", params)
+        raise "diarization failed: #{response.code}" unless response.code == '200'
 
-      output = SymMash.new(JSON.parse(response.body))
-      validate!(output.segments)
-      output
-    ensure
-      file&.close
-      File.unlink(wav) if wav && File.exist?(wav)
+        output = SymMash.new(JSON.parse(response.body))
+        validate!(output.segments)
+        output
+      end
     end
 
     def validate!(segments)
