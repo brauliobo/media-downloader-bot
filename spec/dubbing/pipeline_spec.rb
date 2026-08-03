@@ -66,6 +66,33 @@ RSpec.describe Dubbing::Pipeline do
     expect(opts.sub_vtt).to include('00:00:00.500 --> 00:00:01.500', 'Boa tarde.')
   end
 
+  it 'keeps translated word timings unless nowords is requested' do
+    opts = SymMash.new(dub: 1, slang: 'pt', sub_mode: 'language', sub_lang: 'pt')
+    pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)
+    pipeline.instance_variable_set(:@source_lang, 'en')
+    allow(::Translator).to receive(:translate_for_dubbing).and_return(['Olá mundo.'])
+    source = SymMash.new(
+      segments: [SymMash.new(
+        text: 'Hello world.', start: 0.0, end: 2.0,
+        words: [
+          SymMash.new(word: 'Hello', start: 0.0, end: 1.0),
+          SymMash.new(word: 'world.', start: 1.0, end: 2.0)
+        ]
+      )]
+    )
+
+    sentences = pipeline.send(:translated_sentences, source)
+    pipeline.instance_variable_set(:@sentences, sentences)
+    pipeline.send(:prepare_translated_subtitles)
+
+    expect(sentences.first.words.map(&:word)).to eq(['Olá', 'mundo.'])
+    expect(opts.sub_vtt).to include('<00:00:01.000>mundo.')
+
+    opts.nowords = 1
+    pipeline.send(:prepare_translated_subtitles)
+    expect(opts.sub_vtt).not_to include('<00:00:01.000>')
+  end
+
   it 'reuses source sentences for sub=source' do
     opts = SymMash.new(dub: 1, sub: 'source', sub_mode: 'source')
     pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)

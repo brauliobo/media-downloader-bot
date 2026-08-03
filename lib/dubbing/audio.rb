@@ -24,7 +24,7 @@ module Dubbing
       inputs = clips.map { |clip| "-i #{Sh.escape(clip.path)}" }.join(' ')
       chains = clips.map.with_index do |clip, idx|
         delay = (clip.start.to_f * 1000).round
-        speed = clip.speed > 1.0 ? "atempo=#{format('%.6f', clip.speed)}," : ''
+        speed = clip.speed == 1.0 ? '' : "#{tempo_filter(clip.speed)},"
         "[#{idx}:a]#{speed}adelay=#{delay}:all=1[a#{idx}]"
       end
       mix_inputs = clips.each_index.map { |idx| "[a#{idx}]" }.join
@@ -46,21 +46,39 @@ module Dubbing
       clips.map.with_index do |clip, idx|
         start         = clip.start.to_f
         clip_duration = Prober.for(clip.path).format.duration.to_f
-        next_start    = clips[idx + 1]&.start&.to_f
-        natural_limit = next_start ? next_start - start : duration.to_f - start
-        speed         = fit_speed(clip_duration, natural_limit, start: start)
+        natural_limit = speech_limit(clip, clips[idx + 1], duration)
+        speed         = fit_speed(clip_duration, natural_limit)
         finish = start + clip_duration / speed
 
         ScheduledClip.new(path: clip.path, start: start, end: finish, speed: speed)
       end
     end
 
-    def fit_speed(duration, natural_limit, start: nil)
-      return 1.0 if duration <= natural_limit
-
+    def fit_speed(duration, natural_limit)
       raise 'dubbed speech has no positive source interval' unless natural_limit.positive?
+      return 1.0 if duration <= 0
 
       duration / natural_limit
+    end
+
+    def speech_limit(clip, next_clip, duration)
+      next_boundary = next_clip&.start&.to_f || duration.to_f
+      [clip.end.to_f, next_boundary].min - clip.start.to_f
+    end
+
+    def tempo_filter(speed)
+      remaining = speed.to_f
+      factors = []
+      while remaining < 0.5
+        factors << 0.5
+        remaining /= 0.5
+      end
+      while remaining > 2.0
+        factors << 2.0
+        remaining /= 2.0
+      end
+      factors << remaining unless remaining == 1.0
+      factors.map { |factor| "atempo=#{format('%.6f', factor)}" }.join(',')
     end
 
     def silence(output, duration)
