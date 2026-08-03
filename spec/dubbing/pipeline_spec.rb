@@ -183,12 +183,14 @@ RSpec.describe Dubbing::Pipeline do
     expect(TTS).to receive(:synthesize_batch).with(
       items: [hash_including(text: 'Olá.', lang: 'pt', out_path: kind_of(String))],
       on_batch: kind_of(Proc),
+      threads: 1,
       speaker_wav: speaker_paths.fetch(0),
       ref_text: 'Hello.'
     ) { |items:, **_| items.each { |item| File.write(item.fetch(:out_path), 'raw') } }
     expect(TTS).to receive(:synthesize_batch).with(
       items: [hash_including(text: 'Tchau.', lang: 'pt', out_path: kind_of(String))],
       on_batch: kind_of(Proc),
+      threads: 1,
       speaker_wav: speaker_paths.fetch(1),
       ref_text: 'Bye.'
     ) { |items:, **_| items.each { |item| File.write(item.fetch(:out_path), 'raw') } }

@@ -115,7 +115,7 @@ module Dubbing
           }
         end
 
-        TTS.synthesize_batch(items: jobs, on_batch: on_batch, **options)
+        TTS.synthesize_batch(items: jobs, on_batch: on_batch, threads: 1, **options)
         jobs.zip(indices).each do |job, idx|
           fit = File.join(workdir, format('sentence-%04d.fit.wav', idx + 1))
           Audio.normalize(job.fetch(:out_path), fit)
