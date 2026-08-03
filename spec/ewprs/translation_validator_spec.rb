@@ -129,6 +129,25 @@ RSpec.describe Ewprs::TranslationValidator do
     end.to raise_error(described_class::Error, /changed protected source text: mantra/)
   end
 
+  it 'allows a Latin protected term next to Arabic prose without accepting Latin extensions' do
+    arabic = described_class.new(source_language: 'en', target_language: 'ar')
+    source = 'The term is Kharos&#x301;t&#x301;hi.'
+    translated = 'هذا هو وKharos&#x301;t&#x301;hi.'
+
+    expect(
+      arabic.valid?(
+        source: source, translated: translated,
+        protected_values: {'Kharos&#x301;t&#x301;hi' => 1}
+      )
+    ).to be(true)
+    expect do
+      arabic.validate!(
+        source: source, translated: 'هذا هو وKharos&#x301;t&#x301;him.',
+        protected_values: {'Kharos&#x301;t&#x301;hi' => 1}
+      )
+    end.to raise_error(described_class::Error, /changed protected source text: Kharośt́hi/)
+  end
+
   it 'rejects changed line breaks' do
     expect do
       validator.validate!(source: "First line.\r\nSecond line.", translated: 'Primeira linha. Segunda linha.')

@@ -421,7 +421,8 @@ module Ewprs
     end
 
     def protected_boundary_class(letter, target_text:)
-      return '\p{Latin}\p{M}' if target_text && target_language == 'zh' && letter.match?(/\p{Latin}/u)
+      return '\p{Latin}\p{M}' if target_text && !LATIN_TARGETS.key?(target_language) &&
+                                      letter.match?(/\p{Latin}/u)
 
       '\p{L}\p{M}'
     end
