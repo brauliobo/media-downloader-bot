@@ -130,7 +130,7 @@ class Worker
       up_queue = inputs.size.times.to_a
       uploader = UploadCoordinator.new(self)
 
-      inputs.each.with_index.api_peach do |i, pos|
+      inputs.each.with_index.api_peach(threads: peach_threads) do |i, pos|
         output_pos = inputs.size > 1 ? pos + 1 : nil
         @st.add 'downloading', prefix: i.info.title do |stline|
           i.p = p = i.processor
@@ -192,6 +192,10 @@ class Worker
   end
 
   private
+
+  def peach_threads
+    Bot::MsgHelpers.from_admin?(msg) ? (opts.threads || 10) : 1
+  end
 
   def process_lines(lines, ctx)
     processors = Processors::Router.for_message(ctx, lines)
