@@ -96,6 +96,30 @@ RSpec.describe VoiceReference::Selector do
     expect(selected.audio).to eq('clean.webm')
   end
 
+  it 'keeps all candidate windows when quality validation is deferred' do
+    analyzer = instance_double(VoiceReference::AudioAnalyzer)
+    allow(analyzer).to receive(:measure) do |candidate|
+      candidate.score = candidate.start
+      candidate
+    end
+    selector = described_class.new(analyzer: analyzer, strict: false)
+    sentences = [
+      'Bright amber foxes explore distant valleys beyond winter mountains.',
+      'Calm bronze herons circle hidden rivers beneath early morning sunlight.',
+      'Quiet crimson boats cross narrow channels beside ancient stone villages.',
+      'Silver desert winds carry fragrant cedar pollen toward coastal gardens.',
+      'Violet lanterns illuminate winding paths through remote hillside orchards.',
+      'Golden autumn clouds gather above peaceful fields near northern forests.',
+    ]
+    segments = sentences.each_with_index.map do |text, index|
+      segment(index * 9, index * 9 + 8, text)
+    end
+
+    ranked = selector.rank([{audio: 'source.webm', transcript: {language: 'en', segments: segments}}])
+
+    expect(ranked.size).to eq(6)
+  end
+
   it 'rejects passages that start or end inside a sentence' do
     selector = described_class.new(analyzer: analyzer)
     transcript = {

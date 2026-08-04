@@ -23,9 +23,9 @@ class VoiceReference
 
     def rank(recordings)
       candidates = Array(recordings).flat_map do |recording|
-        transcript_candidates(recording.fetch(:audio), recording.fetch(:transcript))
+        candidates = transcript_candidates(recording.fetch(:audio), recording.fetch(:transcript))
           .sort_by { |candidate| -candidate.confidence }
-          .first(MAX_CANDIDATES_PER_RECORDING)
+        strict ? candidates.first(MAX_CANDIDATES_PER_RECORDING) : candidates
       end
       candidates.filter_map { |candidate| analyzer.public_send(strict ? :assess : :measure, candidate) }
         .sort_by { |candidate| -candidate.score }

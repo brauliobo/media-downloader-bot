@@ -52,3 +52,35 @@ model limit (about 400 seconds for the current v2 model), so long-form bot media
 still requires a chunking layer. Canary word timestamps do not include
 confidence scores and therefore cannot be used by the separate voice-reference
 quality selector.
+
+## Voice cloning evaluation
+
+Use `bin/voice_clone_eval` for repeatable OmniVoice clone comparisons. It uses
+the repository's `key=value` opts convention. Repeat `case=` for baseline,
+reference, and parameter-sweep cases. Each run writes generated audio,
+transcription scores, speaker-embedding cosine scores, `results.json`, and
+`summary.csv` under a temporary directory and prints the report to stdout:
+
+```bash
+VOICE_CLONE_EMBEDDING_PYTHON=/srv/sherpa-onnx/runtime/bin/python \
+WHISPER_CPP_SERVER=http://127.0.0.1:8080 \
+bundle exec ruby bin/voice_clone_eval \
+  https://example.com/narrator-recording \
+  comparison=source.wav \
+  embedding_model=/srv/sherpa-onnx/models/embedding/nemo_en_titanet_small.onnx \
+  case=baseline \
+  case=raw-default:reference \
+  case=guidance-1:reference:guidance=1 \
+  case=steps-48:reference:steps=48
+```
+
+The first argument is an HTTP(S) URL. The evaluator downloads it, uses the
+existing voice-reference transcriber to detect its language, extracts the best
+voice-reference passage, and uses that passage as the evaluation text and
+reference text. Results are printed as JSON to stdout; generated artifacts are
+kept in a temporary directory for the run. Use `reference=PATH` with `text=`
+or `text_file=` when the reference has already been extracted.
+
+The Sherpa/TitaNet cosine value is a local speaker-similarity proxy, not
+OmniVoice's official SIM-o metric. Set `embedding=false` or `transcription=false`
+when the corresponding local service is unavailable.

@@ -3,6 +3,8 @@ require 'digest'
 require 'fileutils'
 require 'tmpdir'
 
+require_relative 'transcript_quality'
+
 class VoiceReference
   class Builder
     MAX_VALIDATION_CANDIDATES = 20
@@ -18,9 +20,9 @@ class VoiceReference
       @reference_filter = reference_filter
     end
 
-    def build(audio_files:, output:)
+    def build(audio_files:, output:, transcripts: {})
       recordings = Array(audio_files).map do |audio|
-        {audio: audio, transcript: transcriber.call(audio)}
+        {audio: audio, transcript: transcripts.fetch(audio) { transcriber.call(audio) }}
       end
       candidate = validated_candidate(selector.rank(recordings), output)
       raise 'no voice reference candidate passed quality checks' unless candidate
@@ -79,7 +81,7 @@ class VoiceReference
       average       = probabilities.empty? ? 0 : probabilities.sum.fdiv(probabilities.size)
       p10           = probabilities.empty? ? 0 : probabilities.sort[(probabilities.size * 0.1).floor]
       observed      = segments.map { |segment| segment.fetch(:text) }.join(' ')
-      similarity    = word_similarity(expected, observed)
+      similarity    = VoiceReference::TranscriptQuality.word_similarity(expected, observed)
       transcript_ok = transcript.fetch(:language) == language &&
         average >= MIN_AVERAGE_PROBABILITY && p10 >= MIN_P10_PROBABILITY &&
         similarity >= MIN_TRANSCRIPT_SIMILARITY
@@ -105,24 +107,5 @@ class VoiceReference
       }
     end
 
-    def word_similarity(expected, observed)
-      left  = expected.downcase.scan(/[[:alpha:]]+/)
-      right = observed.downcase.scan(/[[:alpha:]]+/)
-      return 0 if left.empty? || right.empty?
-
-      previous = Array.new(right.size + 1, 0)
-      left.each do |word|
-        current = [0]
-        right.each_with_index do |other, index|
-          current << if word == other
-            previous[index] + 1
-          else
-            [previous[index + 1], current[index]].max
-          end
-        end
-        previous = current
-      end
-      previous.last.fdiv([left.size, right.size].max)
-    end
   end
 end

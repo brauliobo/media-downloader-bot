@@ -48,21 +48,26 @@ RSpec.describe VoiceReference::Builder do
       output     = File.join(dir, 'reference.wav')
       source     = File.join(dir, 'source.webm')
       candidate  = VoiceReference::Candidate.new(text: 'The selected clear passage.')
+      transcript = {language: 'pt', segments: []}
       downloader = double(call: source)
+      transcriber = double(call: transcript)
       selector   = instance_double(VoiceReference::Selector)
       builder    = instance_double(described_class, build: candidate)
-      allow(VoiceReference::Selector).to receive(:new).with(language: 'pt').and_return(selector)
+      allow(VoiceReference::Selector).to receive(:new).with(language: 'pt', strict: true).and_return(selector)
       allow(described_class).to receive(:new).with(
-        selector: selector, language: 'pt', reference_filter: :raw
+        transcriber: transcriber, selector: selector, language: 'pt', reference_filter: :raw
       ).and_return(builder)
 
       result = VoiceReference.from_url(
-        url: 'https://example.com/voice', output: output, language: 'pt', downloader: downloader
+        url: 'https://example.com/voice', output: output, downloader: downloader, transcriber: transcriber
       )
 
       expect(result).to eq(candidate)
       expect(downloader).to have_received(:call).with('https://example.com/voice', dir: dir)
-      expect(builder).to have_received(:build).with(audio_files: [source], output: output)
+      expect(transcriber).to have_received(:call).with(source)
+      expect(builder).to have_received(:build).with(
+        audio_files: [source], output: output, transcripts: {source => transcript}
+      )
     end
   end
 
