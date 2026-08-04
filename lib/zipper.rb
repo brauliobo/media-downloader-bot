@@ -296,8 +296,9 @@ class Zipper
     end
     @opts.reverse_merge! dopts
 
-    @fgraph        = []
-    @audio_filters = []
+    @fgraph                 = []
+    @audio_filters          = []
+    @audio_reencode_required = false
     @fgraph << Utils::Safety.safe_filter(opts.vf) if opts.vf.present?
 
     @maps = []
@@ -349,6 +350,7 @@ class Zipper
     Zipper::Subtitle.apply(self)
     apply_speed
     apply_cut
+    append_audio_filter_options
     size_opts = apply_video_size_limits
 
     acodec = video_audio_codec
@@ -405,7 +407,7 @@ class Zipper
 
   def video_audio_codec
     return '-an' if opts.noaudio || opts.no_audio
-    return '-c:a copy' if opts.dub
+    return '-c:a copy' if opts.dub && !audio_reencode_required?
 
     aenc = AUDIO_ENC[opts.acodec&.to_sym] || AUDIO_ENC.opus
     opts.abrate ||= opts.format&.opts&.abrate || 64
@@ -439,6 +441,7 @@ class Zipper
     apply_speed
     apply_audio_size_limit
     apply_cut
+    append_audio_filter_options
 
     # Encoder template defined by format spec
     acodec_tmpl = opts.format.encode
@@ -527,6 +530,19 @@ class Zipper
 
   def append_audio_filter(filter)
     audio_filters << filter
+    require_audio_reencode
+  end
+
+  def append_audio_filter_options
+    oopts << " -af #{audio_filters.join(',')}" if audio_filters.present?
+  end
+
+  def audio_reencode_required?
+    @audio_reencode_required
+  end
+
+  def require_audio_reencode
+    @audio_reencode_required = true
   end
 
   def reduce_framerate
@@ -547,12 +563,16 @@ class Zipper
   def apply_audio_rate
     return unless rate = opts.freq&.to_i || opts.ar&.to_i
     iopts << " -ar #{rate}"
+    require_audio_reencode
   end
 
   def apply_audio_channels
     # Workaround for "Channel layout change is not supported"
     # https://www.atlas-informatik.ch/multimediaXpert/Convert.en.html
-    iopts << " -ac #{opts.ac.to_i}" if opts.ac
+    return unless opts.ac
+
+    iopts << " -ac #{opts.ac.to_i}"
+    require_audio_reencode
   end
 
   def apply_audio_size_limit
@@ -568,11 +588,7 @@ class Zipper
 
     fgraph << "setpts=PTS/#{opts.speed}" if video?
     #iopts  << " -t #{duration}" # attached subtitle mess with the length of the video
-    if audio?
-      append_audio_filter "atempo=#{opts.speed}"
-    else
-      oopts << " -af atempo=#{opts.speed}"
-    end
+    append_audio_filter "atempo=#{opts.speed}"
   end
 
   def apply_voice_quality

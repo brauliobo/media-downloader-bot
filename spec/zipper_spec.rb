@@ -73,6 +73,49 @@ RSpec.describe Zipper do
     expect(Sh).not_to have_received(:run).with(include('-profile:a aac_he'))
   end
 
+  it 're-encodes replaced dub audio when an audio filter changes it' do
+    probe = SymMash.new(
+      format: SymMash.new(duration: 60),
+      streams: [SymMash.new(codec_type: 'video', width: 1920, height: 1080)],
+    )
+    opts = SymMash.new(
+      dub:      1,
+      speed:    1.2,
+      format:   Zipper::Types.video.h264,
+      acodec:   'aac',
+      metadata: {},
+    )
+
+    allow(Sh).to receive(:run)
+
+    described_class.new('/tmp/dubbed.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
+
+    expect(Sh).to have_received(:run).with(include('-af atempo=1.2'))
+    expect(Sh).to have_received(:run).with(match(/-c:a \S+/))
+    expect(Sh).not_to have_received(:run).with(include('-c:a copy'))
+  end
+
+  it 're-encodes dubbed audio when its sample rate changes' do
+    probe = SymMash.new(
+      format: SymMash.new(duration: 60),
+      streams: [SymMash.new(codec_type: 'video', width: 1920, height: 1080)],
+    )
+    opts = SymMash.new(
+      dub:      1,
+      freq:     44_100,
+      format:   Zipper::Types.video.h264,
+      acodec:   'aac',
+      metadata: {},
+    )
+
+    allow(Sh).to receive(:run)
+
+    described_class.new('/tmp/dubbed.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
+
+    expect(Sh).to have_received(:run).with(include('-ar 44100'))
+    expect(Sh).not_to have_received(:run).with(include('-c:a copy'))
+  end
+
   it 'caps computed video maxrate for very short videos' do
     begin
       Zipper.size_mb_limit = 2_000
