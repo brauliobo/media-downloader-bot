@@ -12,7 +12,7 @@ module Audiobook::Ewprs
     UNAVAILABLE_BOOK = /unpublished in English|not yet published in any language|as yet unpublished in any language/i
     ONLINE_PLACEHOLDER = /\A\[To see if this discourse is now available online,/i
     LANGUAGE_NAMES = {'en' => 'English', 'pt' => 'Portuguese'}.freeze
-    VOICE_ACCENTS  = {'en' => 'neutral English accent', 'pt' => 'portuguese accent'}.freeze
+    VOICE_ACCENTS  = {'en' => nil, 'pt' => 'portuguese accent'}.freeze
 
     Entry = Struct.new(:kind, :title, :path, :info, :sources, :book_refs, :chapters, keyword_init: true) do
       def slug = File.basename(path, File.extname(path))
@@ -92,7 +92,9 @@ module Audiobook::Ewprs
         html_title:            entry.title,
         html_language:         language,
         html_block_comments:   !entry.slug.match?(/Sarkars?_English_Grammar/),
-        instruct:              "male, middle-aged, moderate pitch, #{VOICE_ACCENTS.fetch(language, "#{language} accent")}"
+        instruct:              [
+           'male', 'middle-aged', 'moderate pitch', VOICE_ACCENTS.fetch(language, "#{language} accent")
+         ].compact.join(', ')
       )
       if ENV['EWPRS_VOICE_REFERENCE'].present?
         options.speaker_wav = File.expand_path(ENV['EWPRS_VOICE_REFERENCE'])

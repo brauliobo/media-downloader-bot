@@ -15,7 +15,7 @@ module Audiobook::Ewprs
     attr_reader :catalog, :output, :jobs, :published, :failures, :edited
 
     def initialize(catalog:, output:, jobs: 5, manifest: nil, upload_dir: nil, manager: nil, chat_id: nil, topic: nil,
-                   apply: false, edit: false, regenerate: false, stdout: $stdout, stderr: $stderr)
+                   apply: false, edit: false, regenerate: false, edit_run_id: nil, stdout: $stdout, stderr: $stderr)
       raise ArgumentError, 'jobs must be positive' unless jobs.to_i.positive?
 
       @catalog                = catalog
@@ -31,6 +31,7 @@ module Audiobook::Ewprs
       @apply                  = apply
       @edit                   = edit
       @regenerate             = regenerate
+      @edit_run_id            = edit_run_id.to_s.empty? ? nil : edit_run_id.to_s
       @stdout                 = stdout
       @stderr                 = stderr
       @failures               = []
@@ -60,7 +61,7 @@ module Audiobook::Ewprs
 
     private
 
-    attr_reader :manager, :chat_id, :topic, :stdout, :stderr, :upload_dir
+    attr_reader :manager, :chat_id, :topic, :stdout, :stderr, :upload_dir, :edit_run_id
 
     def process_stage(entries, offset:, total:)
       return if entries.empty?
@@ -217,6 +218,7 @@ module Audiobook::Ewprs
         bytes:          File.size(result[:audio]),
         audio_sha256:   result[:audio_sha256]
       )
+      record[:edit_run_id] = edit_run_id if edit_run_id
       append_record(record)
       @edited += 1
       stdout.puts JSON.generate(progress: "#{position}/#{total}", edited: record)
@@ -270,6 +272,7 @@ module Audiobook::Ewprs
       return false unless @apply && published.key?(entry_key(entry))
       previous = published[entry_key(entry)]
       return true unless @edit
+      return previous[:operation] == 'edit' && previous[:edit_run_id] == edit_run_id if edit_run_id
       return true if previous[:operation] == 'edit'
 
       expected = previous[:audio_sha256]

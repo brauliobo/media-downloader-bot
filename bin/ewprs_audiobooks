@@ -75,7 +75,8 @@ if apply
 end
 batch = Audiobook::Ewprs::Batch.new(
   catalog: catalog, output: output, jobs: opts[:jobs] || 5, manifest: opts[:manifest], upload_dir: opts[:upload_dir],
-  manager: manager, chat_id: chat_id, topic: topic, apply: apply, edit: edit, regenerate: regenerate
+  manager: manager, chat_id: chat_id, topic: topic, apply: apply, edit: edit, regenerate: regenerate,
+  edit_run_id: opts[:edit_run_id]
 )
 
 if opts[:record_message_id]

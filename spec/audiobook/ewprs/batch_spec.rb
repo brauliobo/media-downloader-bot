@@ -85,6 +85,45 @@ RSpec.describe Audiobook::Ewprs::Batch do
     expect(resumed.run(discourses: [entries.first], books: [])[:edited]).to eq(0)
   end
 
+  it 're-edits old checkpoints for a new edit run and resumes that run' do
+    audio = File.join(output, 'first.m4a')
+    File.write(audio, 'audio')
+    allow(Prober).to receive(:for).with(audio).and_return(double(format: double(duration: 12.4)))
+    manager = double
+    allow(manager).to receive(:edit_generated_message).and_return(
+      message_id: 123, remote_id: 'replacement-remote'
+    )
+
+    previous = described_class.new(
+      catalog: catalog, output: output, jobs: 1, manager: manager, chat_id: -100123,
+      topic: topic, apply: true, edit: true, edit_run_id: 'old-run', stdout: StringIO.new
+    )
+    previous.record(entries.first, message_id: 123, remote_id: 'original-remote')
+    allow(previous).to receive(:generate_entry).with(entries.first, force: true).and_return(
+      audio: audio, chapter_count: nil
+    )
+    previous.run(discourses: [entries.first], books: [])
+
+    current = described_class.new(
+      catalog: catalog, output: output, jobs: 1, manager: manager, chat_id: -100123,
+      topic: topic, apply: true, edit: true, regenerate: true, edit_run_id: 'new-run',
+      stdout: StringIO.new
+    )
+    expect(current).to receive(:generate_entry).with(entries.first, force: true).and_return(
+      audio: audio, chapter_count: nil
+    )
+    current.run(discourses: [entries.first], books: [])
+
+    resumed = described_class.new(
+      catalog: catalog, output: output, jobs: 1, manager: manager, chat_id: -100123,
+      topic: topic, apply: true, edit: true, regenerate: true, edit_run_id: 'new-run',
+      stdout: StringIO.new
+    )
+    expect(resumed).not_to receive(:generate_entry)
+    expect(manager).to have_received(:edit_generated_message).twice
+    expect(resumed.run(discourses: [entries.first], books: [])[:edited]).to eq(0)
+  end
+
   it 'regenerates audio before editing when requested' do
     audio = File.join(output, 'first.m4a')
     File.write(audio, 'old audio')

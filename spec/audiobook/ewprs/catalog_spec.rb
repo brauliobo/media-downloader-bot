@@ -19,7 +19,7 @@ RSpec.describe Audiobook::Ewprs::Catalog do
 
       options = described_class.new(root).parse_options(entry)
 
-      expect(options.instruct).to eq('male, middle-aged, moderate pitch, neutral English accent')
+      expect(options.instruct).to eq('male, middle-aged, moderate pitch')
       expect(options.speaker_wav).to eq(reference)
       expect(options.ref_text).to eq('An exact recorded reference sentence.')
       expect(options.position_temperature).to be_nil
