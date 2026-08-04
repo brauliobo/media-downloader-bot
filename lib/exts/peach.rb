@@ -4,39 +4,48 @@ Thread.report_on_exception = true
 Thread.abort_on_exception  = true
 
 module Enumerable
+  PEACH_THREADS = :peach_threads
+
+  def self.with_peach_threads(threads)
+    previous = Thread.current[PEACH_THREADS]
+    Thread.current[PEACH_THREADS] = threads
+    yield
+  ensure
+    Thread.current[PEACH_THREADS] = previous
+  end
 
   def peach method = :each, threads: nil, priority: nil, reraise: false, wait: true, &block
     block   ||= -> *args {}
-    threads ||= (ENV['THREADS'] || '10').to_i
-    threads = threads.to_i
+    context = Thread.current[PEACH_THREADS] || threads || ENV['THREADS'] || 10
+    threads = context.to_i
 
-    return send(method, &block) if threads == 1
+    if threads == 1
+      return Enumerable.with_peach_threads(context) { send(method, &block) }
+    end
 
     arguments = []
     ret = send method do |*args|
       arguments << args
     end
     JobPool.new(jobs: threads).each(arguments, priority: priority, reraise: reraise, wait: wait) do |args|
-      block.call(*args)
+      Enumerable.with_peach_threads(context) { block.call(*args) }
     end
 
     ret
   end
 
   def api_peach method = :each, threads: nil, priority: nil, &block
-    peach(method,
-      threads:  threads || ENV['API_THREADS'] || 3,
-      priority: priority,
-      &block
-    )
+    context = threads || Thread.current[PEACH_THREADS] || ENV['API_THREADS'] || 3
+    Enumerable.with_peach_threads(context) do
+      peach(method, threads: context, priority: priority, &block)
+    end
   end
 
   def cpu_peach method = :each, threads: nil, priority: nil, &block
-    peach(method,
-      threads:  threads || ENV['CPU_THREADS'],
-      priority: ENV['CPU_PRIORITY']&.to_i,
-      &block
-    )
+    context = Thread.current[PEACH_THREADS] || threads || ENV['CPU_THREADS']
+    Enumerable.with_peach_threads(context) do
+      peach(method, threads: context, priority: ENV['CPU_PRIORITY']&.to_i, &block)
+    end
   end
 
 end
