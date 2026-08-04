@@ -2,8 +2,6 @@ module TDBot
   class PostEditor
     include TD::Logging
 
-    UPLOAD_TIMEOUT = 1_800
-
     def initialize(bot)
       @bot = bot
     end
@@ -12,7 +10,6 @@ module TDBot
       media_type = (type || params[:type]).to_s
       return edit_generated_text(chat_id, message_id, text, parse_mode) if media_type.in?(%w[message text])
 
-      timeout = params[:timeout].to_i.nonzero? || UPLOAD_TIMEOUT
       content = generated_message_content(media_type, text, parse_mode, params)
       bot.send(:td_with_rate_limit, 'edit_generated_message') do
         bot.send(:throttle!)
@@ -21,9 +18,9 @@ module TDBot
           message_id:            message_id,
           reply_markup:          nil,
           input_message_content: content
-        ).value!(timeout)
+        ).value!
         dlog "[TD_EDIT_GENERATED] chat=#{chat_id} id=#{message_id} type=#{media_type} result=#{result&.class}"
-        message   = wait_uploaded_message(chat_id, result&.id || message_id, timeout: timeout)
+        message   = wait_uploaded_message(chat_id, result&.id || message_id)
         remote_id = message_remote_file_id(message)
         raise "edited #{media_type} has no remote file id" if remote_id.to_s.empty?
 
@@ -33,13 +30,12 @@ module TDBot
 
     def upload_generated_media(chat_id:, text: nil, type:, parse_mode: 'MarkdownV2', **params)
       media_type = type.to_s
-      timeout    = params[:timeout].to_i.nonzero? || UPLOAD_TIMEOUT
       forum_topic_id = params.delete(:forum_topic_id).to_i
       content    = generated_message_content(media_type, text, parse_mode, params)
       bot.send(:throttle!)
-      sent       = send_message_content(chat_id, forum_topic_id, content, timeout)
+      sent       = send_message_content(chat_id, forum_topic_id, content)
 
-      message   = wait_uploaded_message(chat_id, sent.id, timeout: timeout)
+      message   = wait_uploaded_message(chat_id, sent.id)
       remote_id = message_remote_file_id(message)
       raise "uploaded #{media_type} has no remote file id" if remote_id.to_s.empty?
 
@@ -130,7 +126,7 @@ module TDBot
       bot.edit_message(msg, message_id, text: text.to_s, parse_mode: parse_mode, force: true)
     end
 
-    def send_message_content(chat_id, forum_topic_id, content, timeout)
+    def send_message_content(chat_id, forum_topic_id, content)
       content = td_payload(content)
       topic   = TD::Types::MessageTopicForum.new(forum_topic_id: forum_topic_id) if forum_topic_id.positive?
       td.send_message(
@@ -140,7 +136,7 @@ module TDBot
         options:               nil,
         reply_markup:          nil,
         input_message_content: content
-      ).value!(timeout)
+      ).value!
     end
 
     def td_payload(value)
@@ -316,16 +312,13 @@ module TDBot
       end
     end
 
-    def wait_uploaded_message(chat_id, message_id, timeout:)
-      deadline = Time.now + timeout
-
+    def wait_uploaded_message(chat_id, message_id)
       loop do
         actual_id = message_sender.message_id_map[message_id] || message_id
         message   = td.get_message(chat_id: chat_id, message_id: actual_id).value(30) rescue nil
         remote_id = message_remote_file_id(message) if message
         return message if remote_id.present? && message_uploaded?(message)
 
-        raise "timed out waiting for uploaded media message #{message_id}" if Time.now >= deadline
         sleep 2
       end
     end

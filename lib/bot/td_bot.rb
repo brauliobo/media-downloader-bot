@@ -23,7 +23,7 @@ module Bot
     class_attribute :td
     class_attribute :message_handler, :message_sender, :file_manager, :message_send_outcomes
     TD::Client.configure_for_bot
-    self.td = TD::Client.new timeout: 1.minute
+    self.td = TD::Client.new timeout: nil
     self.message_handler = TD::MessageHandler.new(td)
     self.message_sender  = TD::MessageSender.new(td)
     self.file_manager    = TD::FileManager.new(td)

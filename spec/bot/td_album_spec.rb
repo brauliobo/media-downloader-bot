@@ -84,16 +84,16 @@ else
       allow(bot).to receive(:td).and_return(td)
       allow(bot).to receive(:td_with_rate_limit).and_yield
       allow(td).to receive(:edit_message_media).and_return(future)
-      allow(future).to receive(:value!).with(90).and_return(edited)
+      allow(future).to receive(:value!).with(no_args).and_return(edited)
       allow(bot.message_sender).to receive(:parse_markdown_text).and_return(
         '@type' => 'formattedText', 'text' => 'Caption', 'entities' => []
       )
-      allow(bot.post_editor).to receive(:wait_uploaded_message).with(123, 456, timeout: 90).and_return(uploaded)
+      allow(bot.post_editor).to receive(:wait_uploaded_message).with(123, 456).and_return(uploaded)
       allow(bot.post_editor).to receive(:message_remote_file_id).with(uploaded).and_return('remote-id')
 
       result = bot.edit_generated_message(
         chat_id: 123, message_id: 456, text: 'Caption', type: :audio,
-        audio_path: path, duration: 34, title: 'Title', performer: 'Performer', copy: false, timeout: 90
+        audio_path: path, duration: 34, title: 'Title', performer: 'Performer', copy: false
       )
 
       expect(result).to eq(message_id: 456, remote_id: 'remote-id')
@@ -106,9 +106,9 @@ else
       message = double(id: 456)
       allow(bot).to receive(:td).and_return(td)
       allow(td).to receive(:send_message).and_return(future)
-      allow(future).to receive(:value!).with(30).and_return(message)
+      allow(future).to receive(:value!).with(no_args).and_return(message)
 
-      result = bot.post_editor.send(:send_message_content, 123, 42, {'@type' => 'inputMessageText'}, 30)
+      result = bot.post_editor.send(:send_message_content, 123, 42, {'@type' => 'inputMessageText'})
 
       expect(result).to be(message)
       expect(td).to have_received(:send_message) do |args|
