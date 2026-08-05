@@ -1,6 +1,7 @@
 require 'cgi'
 require 'concurrent'
 require 'iso-639'
+require 'net/http'
 
 module Ewprs
   class Translator
@@ -52,7 +53,9 @@ module Ewprs
       'without any delay'      => 'Interpret the English phrase "without any delay" as "immediately".',
       'trifarious'             => 'Interpret the English adjective "trifarious" as "threefold".'
     }.freeze
-    TRANSPORT_ERRORS      = [EOFError, Errno::ECONNRESET, Errno::ECONNREFUSED].freeze
+    TRANSPORT_ERRORS      = [
+      EOFError, Errno::ECONNRESET, Errno::ECONNREFUSED, Net::OpenTimeout, Net::ReadTimeout
+    ].freeze
     RETRYABLE_HTTP_STATUS = [500, 502, 503, 504].freeze
     TRANSPORT_RETRIES     = 3
     TRANSPORT_RETRY_DELAY = 2

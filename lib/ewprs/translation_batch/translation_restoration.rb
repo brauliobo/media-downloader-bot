@@ -32,6 +32,12 @@ module Ewprs
             output = projected
             retry
           end
+          projected = project_introduced_delimiters(unit.prepared, output) if error.respond_to?(:code) &&
+                                                                         error.code == :delimiters
+          if projected && projected != output
+            output = projected
+            retry
+          end
           project_editorial = error.message.match?(/changed editorial tags|changed editorial brackets/)
           project_editorial ||= error.is_a?(ProtectedTokenError) && unit.prepared.match?(EDITORIAL_TAG)
           project_editorial &&= !attempted_projections[:editorial]
@@ -191,6 +197,20 @@ module Ewprs
           next unless projected.scan(pattern).size == missing
 
           missing.times { projected.sub!(pattern, marker) }
+        end
+      end
+
+      def project_introduced_delimiters(source, output)
+        TranslationValidator::DELIMITER_PAIRS.each_with_object(output.to_s.dup) do |(opening, closing), projected|
+          next unless source.to_s.count(opening).zero? && source.to_s.count(closing).zero?
+
+          depth = 0
+          balanced = projected.each_char.all? do |character|
+            depth += 1 if character == opening
+            depth -= 1 if character == closing
+            depth >= 0
+          end && depth.zero?
+          projected.delete!(opening + closing) if balanced
         end
       end
 

@@ -281,6 +281,36 @@ RSpec.describe Ewprs::TranslationBatch do
     expect(units.map(&:source)).to include('binds')
   end
 
+  it 'unitizes mixed English prose after foreign-term detection' do
+    batch = described_class.new(
+      root: root, target: 'ar', cache: cache, translator: translator, stdout: StringIO.new
+    )
+    source = '<p>And the Tibeto-Chinese languages include Ladhakii, Kinnarii, Kirátii, ' \
+             'Lepcá, Yiáru, Gáro, Khaśiya, Mizo and Newari.</p>'
+
+    template = batch.send(:unitize, source)
+
+    expect(template).to match(described_class::UNIT_MARKER)
+    expect(batch.instance_variable_get(:@units).values.map(&:source)).to include(
+      a_string_starting_with('And the Tibeto-Chinese languages include')
+    )
+  end
+
+  it 'unitizes prose around marked linguistic examples' do
+    batch = described_class.new(
+      root: root, target: 'ar', cache: cache, translator: translator, stdout: StringIO.new
+    )
+    source = '<p>The word &ldquo;Tamil&rdquo; comes from the word dra&#x301;vid&#x301; &ndash; ' \
+             'dra&#x301;vid&#x301; &rarr; dra&#x301;mid&#x301; &rarr; dra&#x301;mil &rarr; ta&#x301;mil.</p>'
+
+    template = batch.send(:unitize, source)
+
+    expect(template).to match(described_class::UNIT_MARKER)
+    expect(batch.instance_variable_get(:@units).values.map(&:source)).to include(
+      a_string_starting_with('The word &ldquo;Tamil&rdquo; comes from')
+    )
+  end
+
   it 'preserves a coordinated inline original before an unquoted rendering' do
     batch.send(
       :unitize,
@@ -2157,6 +2187,19 @@ RSpec.describe Ewprs::TranslationBatch do
     ).to eq(
       'Außerdem lebt sauna [a note], ein Mann, der (through death or divorce) seine Frau verloren hat, in Rarh.'
     )
+  end
+
+  it 'removes balanced delimiters introduced around translated prose' do
+    unit = described_class::Unit.new(
+      key: 'introduced-delimiters', source: 'Bengali: Pakur&#x301;.', prepared: 'Bengali: __P0001__.',
+      tokens: {'__P0001__' => 'Pakur&#x301;'}, leading: '', trailing: ''
+    )
+    arabic = described_class.new(root: root, target: 'ar', cache: cache, translator: translator)
+
+    expect(
+      arabic.send(:restore_tokens_with_retries, unit, 'البنغالية (__P0001__).')
+    ).to eq('البنغالية Pakur&#x301;.')
+    expect(translator.repair_calls).to be_empty
   end
 
   it 'attempts smart-quote projection only once before bounded repair' do

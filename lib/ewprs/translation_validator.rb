@@ -50,7 +50,30 @@ module Ewprs
       'de' => %w[respectively].to_h { |word| [word, true] }.freeze
     }.freeze
     SOURCE_PROSE_ANCHORS = {
+      'en' => %w[
+        absolute accepted acoustic afraid affectionate anahata anus attributive attains
+        attained author becomes became beatitude bengalee behind bliss body boy cannot
+        categories characteristics come controls cord dance declare definition derived
+        directly divided divine evening example examples experience expression external
+        four flare genitary grow hand hence high here hindi human ideation include
+        includes included instance kinds language languages later leg literature little
+        machine meaning means meditation millet moved name next organ organs organization
+        east eastern offering overjoyed path peace pahari peanut philosophy prefix
+        propensities published recognizes religion remain remains remembering school science
+        secondly seed self-knowledge says shyness sorghum spelled starts stick supreme
+        ten these triple varieties using vaishnavite vocal war western wife within would
+        yielding
+        knowable knows soybean
+      ].to_h { |word| [word, true] }.freeze,
       'de' => %w[definition plus].to_h { |word| [word, true] }.freeze
+    }.freeze
+    SOURCE_PROSE_CONNECTORS = {
+      'en' => %w[
+        after although among another because before between called comes first from has have
+        however if in include includes included is language languages means now of originally
+        published remains so than that the these this those through translated used using when
+        where which while with word words are
+      ].to_h { |word| [word, true] }.freeze
     }.freeze
     PROTECTED_CONNECTORS = {
       'de' => %w[and are is or].to_h { |word| [word, true] }.freeze
@@ -142,7 +165,7 @@ module Ewprs
     def protected_source_fragment?(source)
       words = normalized_words(source)
       return false if words.size < 4
-      return false if source_prose_anchor?(words)
+      return false if source_prose_anchor?(words, source: source)
 
       source_word_ratio = source_words(words).fdiv(words.size)
       return false if source_word_ratio > 0.2
@@ -153,7 +176,7 @@ module Ewprs
 
     def protected_inline_fragment?(source)
       words = normalized_words(source)
-      return false if source_prose_anchor?(words)
+      return false if source_prose_anchor?(words, source: source)
 
       single_word = visible_text(source).match?(/\A(?:\p{L}\p{M}*)+[,;]?\z/u)
       return true if words.one? && (
@@ -403,7 +426,7 @@ module Ewprs
       return false if words.size < 2 || formula_or_reference?(source)
       return false if protected_source_fragment?(source)
 
-      source_words(words) >= 2 || source_suffix_words(words) >= 2
+      source_words(words) >= 2 || source_suffix_words(words) >= 2 || source_prose_anchor?(words, source: source)
     end
 
     def formula_or_reference?(source)
@@ -444,12 +467,16 @@ module Ewprs
         TARGET_SHARED_PHRASES.fetch(target_language, []).include?(words)
     end
 
-    def source_prose_anchor?(words)
-      anchors = RETAINED_SOURCE_WORDS.fetch(target_language, {}).merge(
+    def source_prose_anchor?(words, source: nil)
+      anchors = SOURCE_PROSE_ANCHORS.fetch(source_language, {}).merge(
+        RETAINED_SOURCE_WORDS.fetch(target_language, {}),
         SOURCE_PROSE_ANCHORS.fetch(target_language, {}),
         PROTECTED_CONNECTORS.fetch(target_language, {})
       )
-      words.any? { |word| anchors.key?(word) }
+      return true if words.any? { |word| anchors.key?(word) }
+
+      connectors = SOURCE_PROSE_CONNECTORS.fetch(source_language, {})
+      source_words(words) >= 2 && words.any? { |word| connectors.key?(word) }
     end
 
     def marked_word_count(value)

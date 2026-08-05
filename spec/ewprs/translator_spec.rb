@@ -127,6 +127,20 @@ RSpec.describe Ewprs::Translator do
     expect(calls).to eq(4)
   end
 
+  it 'retries model request timeouts' do
+    calls = 0
+    allow(Utils::HTTP).to receive(:post) do
+      calls += 1
+      raise Net::ReadTimeout if calls == 1
+
+      Struct.new(:body).new({choices: [{message: {content: 'Übersetzt'}}]}.to_json)
+    end
+    expect(translator).to receive(:sleep).with(2).once
+
+    expect(translator.translate_markup('Translated', to: 'de')).to eq('Übersetzt')
+    expect(calls).to eq(2)
+  end
+
   it 'retries transient model server responses' do
     calls = 0
     server_error = Mechanize::ResponseCodeError.new(Struct.new(:code).new('500'))

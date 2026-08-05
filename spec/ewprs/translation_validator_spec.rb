@@ -538,6 +538,53 @@ RSpec.describe Ewprs::TranslationValidator do
     expect(validator.protected_source_fragment?('Sa no buddhya shubhayá saḿyunaktu')).to be(true)
   end
 
+  it 'does not protect English prose that contains marked source-language terms' do
+    arabic = described_class.new(source_language: 'en', target_language: 'ar')
+
+    expect(
+      arabic.protected_source_fragment?(
+        'And the Tibeto-Chinese languages include Ladhakii, Kinnarii, Kirátii, Lepcá, Yiáru, ' \
+        'Gáro, Khaśiya, Mizo and Newari.'
+      )
+    ).to be(false)
+    expect(
+      arabic.protected_source_fragment?(
+        'These propensities are dharma, artha, káma, mokśa, avajiṋá, múrcchá, and prashraya.'
+      )
+    ).to be(false)
+  end
+
+  it 'recognizes source-language connectors in mixed linguistic examples' do
+    arabic = described_class.new(source_language: 'en', target_language: 'ar')
+
+    [
+      'The word &ldquo;Tamil&rdquo; comes from the word drávid́ &ndash; drávid́ &rarr; drámid́ &rarr; drámil &rarr; támil.',
+      'After Bhúr bhuvah svah another oṋm.',
+      'Agraháyańa, Paośa, Mágha, Phálguna &ndash; plant wheat with big lentils, big peas or red mustard.',
+      'T́a, t́ha, d́a, d́ha, ńa, and śa are cerebral letters.',
+      'PARÁ SHÁNTI. Absolute peace, supreme beatitude.',
+      'BÁBÁ. Affectionate name for Shrii Shrii Ánandamúrti.',
+      'ANANDA MARGA. Path of divine bliss; Ánanda Márga Pracáraka Saḿgha.',
+      'GAOŔIIYA VAEŚŃAVA DHARMA. The Bengalee Vaishnavite religion.',
+      'BAODDHA VIJIŃÁNAVÁDA. School of Buddhist Maháyáńa philosophy.',
+      'Remembering Parama Puruśa is dhyána.',
+      'Rukmińii was Krśńa’s wife.',
+      'Kaśt́a cannot be spelled kast́a.',
+      'Margaret Áhladii Dásii was overjoyed.'
+    ].each do |source|
+      expect(arabic.protected_source_fragment?(source)).to be(false), source
+    end
+
+    expect(
+      arabic.valid?(
+        source: '__P0001__ remains the exclusive witness.',
+        translated: '__P0001__ remains the exclusive witness.'
+      )
+    ).to be(false)
+
+    expect(arabic.protected_source_fragment?("So'pi pápavinirmukto mám eva prapadyate")).to be(true)
+  end
+
   it 'does not protect mixed foreign text containing source-language prose anchors' do
     german = described_class.new(source_language: 'en', target_language: 'de')
 
