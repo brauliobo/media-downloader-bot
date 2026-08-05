@@ -21,11 +21,20 @@ RSpec.describe Diarizer do
     expect(sentences.map(&:speaker_id)).to eq([3, 8])
   end
 
-  it 'rejects transcript sentences with no diarization overlap' do
+  it 'assigns a sentence to the nearest speaker when diarization has a gap' do
     sentence = SymMash.new(start: 10.0, end: 11.0)
-    speaker = SymMash.new(start: 0.0, end: 1.0, speaker_id: 0)
+    speakers = [
+      SymMash.new(start: 0.0, end: 1.0, speaker_id: 0),
+      SymMash.new(start: 5.0, end: 6.0, speaker_id: 1),
+    ]
 
-    expect { described_class.assign_speakers!([sentence], [speaker]) }
-      .to raise_error(/no diarization overlap/)
+    described_class.assign_speakers!([sentence], speakers)
+
+    expect(sentence.speaker_id).to eq(1)
+  end
+
+  it 'rejects empty diarization output' do
+    expect { described_class.assign_speakers!([], []) }
+      .to raise_error(/no speaker segments/)
   end
 end

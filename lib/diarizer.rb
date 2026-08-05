@@ -14,14 +14,17 @@ class Diarizer
     raise 'diarization returned no speaker segments' if segments.empty?
 
     Array(sentences).each do |sentence|
-      segment, overlap = segments.map do |candidate|
-        start  = [sentence.start.to_f, candidate.start.to_f].max
-        finish = [sentence.end.to_f, candidate.end.to_f].min
-        [candidate, [finish - start, 0.0].max]
-      end.max_by(&:last)
-
-      raise "no diarization overlap for sentence at #{sentence.start}-#{sentence.end}" unless overlap.positive?
-
+      segment = segments.max_by do |candidate|
+        start   = [sentence.start.to_f, candidate.start.to_f].max
+        finish  = [sentence.end.to_f, candidate.end.to_f].min
+        overlap = [finish - start, 0.0].max
+        distance = [
+          candidate.start.to_f - sentence.end.to_f,
+          sentence.start.to_f - candidate.end.to_f,
+          0.0
+        ].max
+        [overlap, -distance]
+      end
       sentence.speaker_id = segment.speaker_id
     end
   end
