@@ -17,6 +17,8 @@ module Audiobook
         next unless s
         next if s.respond_to?(:speakable?) && !s.speakable?
         next if sentences.any? { |existing| existing.equal?(s) }
+        next if creates_reference_cycle?(s)
+
         sentences << s
       end
       self
@@ -32,6 +34,25 @@ module Audiobook
     def to_h
       { 'reference' => { 'id' => id, 'sentences' => sentences.map(&:to_h) } }
     end
+
+    private
+
+    def creates_reference_cycle?(sentence)
+      pending = Array(sentence.references).dup
+      seen = []
+
+      until pending.empty?
+        reference = pending.pop
+        next if seen.any? { |item| item.equal?(reference) }
+        return true if reference.equal?(self)
+
+        seen << reference
+        reference.sentences.each do |nested_sentence|
+          pending.concat(Array(nested_sentence.references))
+        end
+      end
+
+      false
+    end
   end
 end
-

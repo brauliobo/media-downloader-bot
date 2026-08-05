@@ -39,4 +39,32 @@ RSpec.describe Audiobook::Book do
       expect { book.write(File.join(dir, 'book.yml')) }.not_to raise_error
     end
   end
+
+  it 'rejects cyclic footnote references before serializing the book' do
+    first = Audiobook::Reference.new('1')
+    second = Audiobook::Reference.new('2')
+    main = Audiobook::Sentence.new('Main sentence.')
+    first_note = Audiobook::Sentence.new('First note.')
+    second_note = Audiobook::Sentence.new('Second note.')
+
+    main.add_reference(first)
+    first_note.add_reference(second)
+    first.add_sentences(first_note)
+    second_note.add_reference(first)
+    second.add_sentences(second_note)
+
+    expect(second.sentences).to be_empty
+
+    book = described_class.allocate
+    book.instance_variable_set(:@metadata, SymMash.new(language: 'pt'))
+    book.instance_variable_set(:@lang, 'pt')
+    book.instance_variable_set(
+      :@pages,
+      [Audiobook::Page.new(1, [Audiobook::Paragraph.new([main])])]
+    )
+
+    Dir.mktmpdir do |dir|
+      expect { book.write(File.join(dir, 'book.yml')) }.not_to raise_error
+    end
+  end
 end
