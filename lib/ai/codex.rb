@@ -8,18 +8,19 @@ module AI
 
     MODEL = ENV['CODEX_SHORTS_MODEL']
 
-    def self.prompt(text, model: MODEL)
+    def self.prompt(text, model: MODEL, effort: nil)
       Tempfile.create('codex-response') do |out_file|
         cmd = [
           'codex', 'exec',
           '--sandbox', 'read-only',
-          '--ask-for-approval', 'never',
+          '-c', 'approval_policy=never',
           '--ephemeral',
           '--skip-git-repo-check',
           '--color', 'never',
           '-o', out_file.path
         ]
         cmd += ['--model', model] unless model.to_s.strip.empty?
+        cmd += ['-c', "model_reasoning_effort=#{effort}"] unless effort.to_s.strip.empty?
         cmd << '-'
 
         _out, err, st = Open3.capture3(*cmd, stdin_data: text)

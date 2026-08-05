@@ -10,7 +10,7 @@ RSpec.describe AI::Codex do
         output_file = args[args.index('-o') + 1]
         File.write(output_file, 'answer')
 
-        expect(args).to include('codex', 'exec', '--sandbox', 'read-only', '--ask-for-approval', 'never')
+        expect(args).to include('codex', 'exec', '--sandbox', 'read-only', '-c', 'approval_policy=never')
         expect(args).to include('--ephemeral', '--skip-git-repo-check', '--color', 'never')
         expect(args.last).to eq('-')
         expect(stdin_data).to eq('prompt text')
@@ -29,5 +29,20 @@ RSpec.describe AI::Codex do
 
       expect(described_class.json_prompt('prompt', schema: schema)).to eq('title' => 'Hello')
     end
+  end
+
+  it 'passes the requested reasoning effort to codex' do
+    status = instance_double(Process::Status, success?: true)
+
+    expect(Open3).to receive(:capture3) do |*args, stdin_data:|
+      output_file = args[args.index('-o') + 1]
+      File.write(output_file, 'answer')
+
+      expect(args).to include('--model', 'gpt-5.6-luna', '-c', 'model_reasoning_effort=low')
+      expect(stdin_data).to eq('prompt text')
+      ['', '', status]
+    end
+
+    expect(described_class.prompt('prompt text', model: 'gpt-5.6-luna', effort: 'low')).to eq('answer')
   end
 end

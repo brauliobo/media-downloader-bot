@@ -18,10 +18,9 @@ module Dubbing
     module_function
 
     def extract_by_speaker(input_path, segments, sentences:, dir:, min_duration: MIN_DURATION, max_duration: MAX_DURATION, filter: :raw, pad_duration: nil)
-      Array(segments).group_by(&:speaker_id).each_with_index.to_h do |(speaker_id, _speaker_segments), index|
+      Array(sentences).group_by(&:speaker_id).each_with_index.to_h do |(speaker_id, speaker_sentences), index|
         speaker_dir = File.join(dir, format('speaker-%04d', index))
         FileUtils.mkdir_p(speaker_dir)
-        speaker_sentences = Array(sentences).select { |sentence| sentence.speaker_id == speaker_id }
         selections = select(speaker_sentences, min_duration, max_duration)
         raise "speaker #{speaker_id} has no usable reference" if selections.empty?
 

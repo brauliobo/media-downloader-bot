@@ -10,6 +10,7 @@ module Processors
     BLOCKED_DOMAINS = ENV.fetch('BLOCKED_DOMAINS', '').split.map { |host| host.downcase.delete_prefix('.') }.freeze
     DUB_FLAGS       = %w[1 true].freeze
     SUBTITLE_MODES  = %w[none source both].freeze
+    HASHTAG_ALIASES = {'#' => 'hashtags', 'hts' => 'hashtags'}.freeze
 
     attr_reader :ctx
     delegate :msg, :st, :dir, :tmp, :url, :opts, :session, :service, to: :ctx
@@ -85,7 +86,7 @@ module Processors
       k, v = s.split('=', 2)
       v = 1 if v.nil?
 
-      key = k.to_s.strip
+      key = HASHTAG_ALIASES.fetch(k.to_s.strip, k.to_s.strip)
       return opts if key.empty?
 
       meta_prefix = key.start_with?('meta.') || key.start_with?('metadata.')
@@ -111,9 +112,21 @@ module Processors
     end
 
     def self.normalize_options(opts)
+      normalize_hashtags_opt opts
       normalize_dub_opt opts
       normalize_sub_opt opts
       expand_lang_opt opts
+    end
+
+    def self.normalize_hashtags_opt(opts)
+      value = opts[:hashtags] || opts[:hts] || opts['#'] || opts[:'#']
+      return opts unless value
+
+      opts[:hashtags] = value
+      opts.delete(:hts)
+      opts.delete('#')
+      opts.delete(:'#')
+      opts
     end
 
     def self.normalize_dub_opt(opts)

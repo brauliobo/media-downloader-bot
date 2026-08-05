@@ -5,7 +5,7 @@ module Utils
   class InputParser
     Result = Data.define(:url, :opts)
     URL_TOKEN_REGEXP = %r{\A(?:https?://)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:[/?#][^\s]*)?\z}i
-    OPT_TOKEN_REGEXP = /\A[a-z][a-z0-9_.-]*(?:=.*)?\z/
+    OPT_TOKEN_REGEXP = /\A(?:#|[a-z][a-z0-9_.-]*)(?:=.*)?\z/
     MAX_URLS = ENV.fetch('MAX_URLS_PER_MESSAGE', 10).to_i
 
     def self.parse(line)

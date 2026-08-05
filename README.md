@@ -53,6 +53,21 @@ still requires a chunking layer. Canary word timestamps do not include
 confidence scores and therefore cannot be used by the separate voice-reference
 quality selector.
 
+## Transcription hashtags
+
+Append Codex-generated Instagram-style hashtags to the media caption with any of
+these options:
+
+```bash
+bundle exec ruby bin/zip input.wav hashtags lang=pt
+bundle exec ruby bin/zip input.wav '#'
+bundle exec ruby bin/zip input.wav hts
+```
+
+The generator uses `gpt-5.6-luna` with low reasoning effort. It follows the
+requested `lang` language, chooses singular or plural based on the transcript,
+and only combines two words when they form a meaningful concept.
+
 ## Voice cloning evaluation
 
 Use `bin/voice_clone_eval` for repeatable OmniVoice clone comparisons. It uses

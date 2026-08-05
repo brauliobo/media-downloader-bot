@@ -4,6 +4,7 @@ require_relative '../utils/mime_types'
 require_relative '../zipper'
 require_relative '../dubbing'
 require_relative '../presets/camera'
+require_relative '../hashtags'
 require 'timeout'
 
 module Processors
@@ -48,6 +49,8 @@ module Processors
 
       self.class.probe i
       return i.stl.error "Unknown type for #{i.fn_in}" unless i.type
+
+      generate_hashtags(i) if i.opts.hashtags
 
       if i.opts.genshorts
         Processors::Shorts.new(dir: dir, msg: msg, st: st, stline: i.stl).generate_and_upload_shorts(i)
@@ -94,6 +97,14 @@ module Processors
       i.mime   = 'application/x-subrip'
       i.opts.format = SymMash.new(mime: i.mime)
       i.uploads = nil
+    end
+
+    def generate_hashtags(i)
+      @stl&.update 'transcribing for hashtags'
+      result = Subtitler.transcribe(i.fn_in)
+      language = i.opts.lang || i.opts.slang || result.lang
+      @stl&.update 'generating hashtags'
+      i.info.hashtags = Hashtags.generate(result.output, lang: language)
     end
 
     def tag i

@@ -83,6 +83,18 @@ RSpec.describe Worker do
     expect(worker.send(:msg_caption, input, max: 1024)).to eq('_Input caption_')
   end
 
+  it 'appends generated hashtags to captions' do
+    worker = described_class.new(SymMash.new(from: {id: 1}, chat: {id: 1}))
+    input  = SymMash.new(
+      opts: SymMash.new(caption: 1, hashtags: 1),
+      type: SymMash.new(name: :document),
+      url:  nil,
+      info: SymMash.new(title: 'Input caption', uploader: nil, description: '', hashtags: '#mindfulness #health'),
+    )
+
+    expect(worker.send(:msg_caption, input, max: 1024)).to eq("_Input caption_\n\n\\#mindfulness \\#health")
+  end
+
   it 'translates long captions paragraph by paragraph' do
     worker = described_class.new(SymMash.new(from: {id: 1}, chat: {id: 1}))
     body   = "First paragraph.\n\nSecond paragraph."

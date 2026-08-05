@@ -63,6 +63,20 @@ RSpec.describe Dubbing::VoiceReference do
     expect(references.fetch('SPEAKER_00').text).to eq('Speaker zero.')
   end
 
+  it 'ignores diarized speakers without matching transcript sentences' do
+    references = described_class.extract_by_speaker(
+      input,
+      [
+        segment(0, 1, speaker_id: 'SPEAKER_00'),
+        segment(2, 6, speaker_id: 'SPEAKER_01'),
+      ],
+      sentences: [sentence(2, 6, source_text: 'Speaker one.', speaker_id: 'SPEAKER_01')],
+      dir: dir
+    )
+
+    expect(references.keys).to eq(['SPEAKER_01'])
+  end
+
   it 'provides its own TTS voice-cloning options' do
     reference = described_class::Reference.new(path: '/tmp/speaker.wav', text: 'Reference text.')
 

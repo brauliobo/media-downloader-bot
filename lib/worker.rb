@@ -331,6 +331,10 @@ class Worker
       text << "\n\n" if text.present?
       text << Bot::MsgHelpers.me(i.url)
     end
+    if info.hashtags.present?
+      text << "\n\n" if text.present?
+      text << Bot::MsgHelpers.me(info.hashtags)
+    end
     text
   end
 

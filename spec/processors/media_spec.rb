@@ -35,6 +35,19 @@ RSpec.describe Processors::Media do
     end
   end
 
+  describe '#generate_hashtags' do
+    it 'transcribes the input and uses an explicit language for hashtags' do
+      transcript = SymMash.new(output: SymMash.new(text: 'Mindfulness and health.'), lang: 'en')
+      i = input(fn_in: '/tmp/in.mp4', opts: SymMash.new(hashtags: 1, slang: 'pt'))
+      allow(Subtitler).to receive(:transcribe).with(i.fn_in).and_return(transcript)
+      allow(Hashtags).to receive(:generate).with(transcript.output, lang: 'pt').and_return('#atencao')
+
+      processor.send(:generate_hashtags, i)
+
+      expect(i.info.hashtags).to eq('#atencao')
+    end
+  end
+
   describe '#handle_input size limits' do
     let(:fixture) { File.join(dir, 'out.mp4') }
     let(:i) do
