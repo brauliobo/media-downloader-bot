@@ -41,7 +41,7 @@ RSpec.describe Dubbing::Audio do
     expect(scheduled.last.speed).to eq(1.0)
   end
 
-  it 'slows shorter speech to the source sentence span' do
+  it 'keeps shorter speech at its natural speed' do
     first = described_class::Clip.new(path: File.join(dir, 'first.wav'), start: 0.0, end: 2.0)
     second = described_class::Clip.new(path: File.join(dir, 'second.wav'), start: 3.0, end: 4.0)
     allow(Prober).to receive(:for).with(first.path).and_return(SymMash.new(format: SymMash.new(duration: 1.0)))
@@ -49,8 +49,8 @@ RSpec.describe Dubbing::Audio do
 
     scheduled = described_class.schedule([first, second], duration: 5.0)
 
-    expect(scheduled.first.speed).to eq(0.5)
-    expect(scheduled.first.end).to eq(2.0)
+    expect(scheduled.first.speed).to eq(1.0)
+    expect(scheduled.first.end).to eq(1.0)
   end
 
   it 'uses the required speed even when it exceeds the former ceiling' do
@@ -74,7 +74,7 @@ RSpec.describe Dubbing::Audio do
     allow(Prober).to receive(:for).with(input).and_return(SymMash.new(format: SymMash.new(duration: 1.5)))
     expect(Sh).to receive(:run) do |command|
       expect(command).to include('amix\=inputs\=1:normalize\=0', 'loudnorm\=I\=-18:TP\=-1.5:LRA\=7')
-      expect(command).to include('atempo\=0.750000')
+      expect(command).not_to include('atempo')
       File.write(output, 'mixed')
       ['', '', ok_status]
     end
