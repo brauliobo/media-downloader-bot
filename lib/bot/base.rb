@@ -14,9 +14,10 @@ module Bot
 
     def send_album(msg, text, uploads:, parse_mode: 'MarkdownV2', **_params)
       puts text
-      uploads.map do |up|
-        type = Utils::MimeTypes.telegram_type(up.mime)
-        send_message(msg, '', type: type, parse_mode: parse_mode, file_path: up.fn_out, file_mime: up.mime)
+      uploads.map.with_index do |up, index|
+        type = Utils::MimeTypes.telegram_type(up)
+        caption = index.zero? ? text : ''
+        send_message(msg, caption, type: type, parse_mode: parse_mode, file_path: up.fn_out, file_mime: up.mime)
       end
     end
 

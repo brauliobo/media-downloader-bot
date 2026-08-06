@@ -155,7 +155,7 @@ module Bot
 
     def album_media(batch, caption, parse_mode)
       batch.map.with_index do |up, i|
-        media = { type: Utils::MimeTypes.telegram_type(up.mime), media: "attach://file#{i}" }
+        media = { type: Utils::MimeTypes.telegram_type(up), media: "attach://file#{i}" }
         if i.zero? && caption.present?
           media[:caption] = parse_text(caption, parse_mode: parse_mode)
           media[:parse_mode] = parse_mode

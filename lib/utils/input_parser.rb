@@ -1,10 +1,8 @@
-require 'addressable/uri'
-require 'uri'
+require_relative 'url'
 
 module Utils
   class InputParser
     Result = Data.define(:url, :opts)
-    URL_TOKEN_REGEXP = %r{\A(?:https?://)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:[/?#][^\s]*)?\z}i
     OPT_TOKEN_REGEXP = /\A(?:#|[a-z][a-z0-9_.-]*)(?:=.*)?\z/
     MAX_URLS = ENV.fetch('MAX_URLS_PER_MESSAGE', 10).to_i
 
@@ -15,8 +13,7 @@ module Utils
       if (url_index = args.index { |arg| url_like?(arg) })
         url_str = args[url_index]
         args    = args[(url_index + 1)..] || []
-        url_str = "https://#{url_str}" unless url_str.match?(%r{\Ahttps?://}i)
-        url     = Addressable::URI.parse(url_str) rescue nil
+        url = Url.parse(url_str)
       end
 
       opts = args.each_with_object({}) do |a, h|
@@ -28,7 +25,7 @@ module Utils
     end
 
     def self.url_like?(token)
-      token.to_s.match?(URI::DEFAULT_PARSER.make_regexp) || token.to_s.match?(URL_TOKEN_REGEXP)
+      !!Url.token?(token)
     end
 
     def self.input_text(ctx)

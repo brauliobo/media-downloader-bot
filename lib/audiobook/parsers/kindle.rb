@@ -1,5 +1,5 @@
-require 'uri'
 require_relative 'puppeteer_base'
+require_relative '../../utils/url'
 
 module Audiobook
   module Parsers
@@ -11,7 +11,7 @@ module Audiobook
       ].freeze
 
       def self.supports?(url)
-        host = URI(url).host rescue nil
+        host = Utils::Url.parse(url)&.host
         READ_HOSTS.include?(host)
       end
 
@@ -20,7 +20,7 @@ module Audiobook
       def self.extract_data(target_url, stl: nil, opts: nil, **_kwargs)
         raise ArgumentError, 'TARGET_URL must be a Kindle reader URL' unless supports?(target_url)
         raise 'Authentication redirect detected (signin). Ensure cookies are set.' if target_url.to_s.include?('signin')
-        domain = URI(target_url).host
+        domain = Utils::Url.parse(target_url).host
         parent = parent_host_for(domain)
         primary_header = fetch_cookie_header_for(domain)
         parent_header  = fetch_cookie_header_for(parent) rescue nil
@@ -65,5 +65,4 @@ module Audiobook
     end
   end
 end
-
 

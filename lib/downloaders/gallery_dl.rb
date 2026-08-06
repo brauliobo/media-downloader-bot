@@ -19,13 +19,13 @@ module Downloaders
     end
 
     def gallery_post?
-      validate_public_url!(url)
+      validate_public_url!(normalized_url)
       items = gallery_rows.select { |item| item.is_a?(Array) && item.first == 3 }
       items.present? && !(items.one? && items.first.last['type'].to_s == 'video')
     end
 
     def download
-      validate_public_url!(url)
+      source_url = validate_public_url!(normalized_url)
       before = downloaded_files
       info   = gallery_info
       gopts  = gallery_opts
@@ -36,7 +36,7 @@ module Downloaders
       return st.error('gallery-dl did not download media') if files.empty?
 
       SymMash.new(
-        url:     url,
+        url:     source_url,
         opts:    gopts,
         info:    info,
         uploads: files.map.with_index { |file, i| upload(file, i + 1, info, gopts) }
@@ -52,7 +52,7 @@ module Downloaders
     def command
       cmd = [gallery_dl, '-X', EXTRACTORS, '--no-part', '--no-mtime', '-D', tmp]
       cmd.concat ['--cookies', cookie_path] if cookie_path
-      cmd << url.to_s
+      cmd << normalized_url
     end
 
     def gallery_dl
@@ -67,10 +67,10 @@ module Downloaders
       meta = metadata
       user = meta.user || meta.author || SymMash.new
       SymMash.new(
-        title:       meta.content.presence || meta.title.presence || File.basename(url.to_s),
+        title:       meta.content.presence || meta.title.presence || File.basename(normalized_url.to_s),
         description: meta.description.presence,
         uploader:    user.nick.presence || user.name.presence,
-        display_id:  (meta.tweet_id || meta.id || url).to_s,
+        display_id:  (meta.tweet_id || meta.id || normalized_url).to_s,
         language:    meta.lang
       )
     end
@@ -90,7 +90,7 @@ module Downloaders
     def gallery_rows
       return @gallery_rows if defined?(@gallery_rows)
 
-      out, = Sh.run [gallery_dl, '-X', EXTRACTORS, '-j', url.to_s], chdir: tmp
+      out, = Sh.run [gallery_dl, '-X', EXTRACTORS, '-j', normalized_url], chdir: tmp
       @gallery_rows = JSON.parse(out)
     rescue StandardError
       @gallery_rows = []
@@ -115,7 +115,7 @@ module Downloaders
         type:   SymMash.new(name: Utils::MimeTypes.telegram_type(mime)),
         mime:   mime,
         opts:   gopts.deep_dup,
-        url:    url,
+        url:    normalized_url,
         info:   info.merge(title: info.title.presence || title, display_id: "#{info.display_id}-#{pos}")
       )
     end

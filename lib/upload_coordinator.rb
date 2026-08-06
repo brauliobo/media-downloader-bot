@@ -1,3 +1,5 @@
+require_relative 'utils/mime_types'
+
 class UploadCoordinator
   def initialize(worker)
     @worker = worker
@@ -5,7 +7,7 @@ class UploadCoordinator
   end
 
   def upload_or_queue(input, pos)
-    if worker.opts.album && album_item?(input)
+    if worker.opts.album && Utils::MimeTypes.album_item?(input)
       album_queue << [pos, input]
     else
       upload(input)
@@ -36,17 +38,12 @@ class UploadCoordinator
   attr_reader :worker, :album_queue
 
   def upload_album(input)
-    info    = worker.send(:translate_caption_info, input.info, input.opts)
-    caption = worker.send(:msg_caption, input, max: worker.caption_limit, info: info)
+    caption = worker.send(:caption_for, input)
     worker.send_album worker.msg, caption, uploads: input.uploads, parse_mode: 'MarkdownV2'
   end
 
   def album_uploads?(uploads)
-    uploads.size > 1 && uploads.all? { |up| album_item?(up) }
-  end
-
-  def album_item?(input)
-    input.mime.to_s.start_with?('image/', 'video/') && File.exist?(input.fn_out.to_s)
+    uploads.size > 1 && uploads.all? { |up| Utils::MimeTypes.album_item?(up) }
   end
 
   def container(uploads, source)

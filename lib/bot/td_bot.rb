@@ -4,6 +4,7 @@ require 'set'
 require 'fileutils'
 require 'retriable'
 require_relative 'base'
+require_relative 'caption'
 require_relative 'jobs'
 require_relative 'rate_limiter'
 require_relative '../td_bot/chat_identifier'
@@ -141,6 +142,7 @@ module Bot
     def send_message(msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, cancel_job: nil, **params)
       t = type.to_s
       media_type, params = normalize_params(params, type: type) unless t.in?(%w[message text])
+      text = Caption.normalize(text, parse_mode: parse_mode) if media_type
       ret = td_with_rate_limit('send_message') do
         throttle!
         reply_to = incoming_message_id(msg, :id, :message_id)
@@ -194,15 +196,11 @@ module Bot
     end
 
     def album_caption_text(msg, text, parse_mode)
-      text = td_markdown_caption(text)
+      text = Caption.normalize(text, parse_mode: parse_mode)
       return text if text.size <= MEDIA_CAPTION_LIMIT
 
       send_message(msg, text, parse_mode: parse_mode)
       truncate_album_caption(text, MEDIA_CAPTION_LIMIT)
-    end
-
-    def td_markdown_caption(text)
-      MsgHelpers::MARKDOWN_NON_FORMAT.reduce(text.to_s) { |caption, char| caption.gsub("\\#{char}", char) }
     end
 
     def truncate_album_caption(text, limit)
@@ -226,9 +224,10 @@ module Bot
         caption = i.zero? ? text.to_s : ''
         td_with_rate_limit('send_album_item') do
           throttle!
-          if up.mime.to_s.start_with?('video/')
+          case Utils::MimeTypes.telegram_type(up)
+          when :video
             message_sender.send_video(msg.chat.id, caption, video: up.fn_out, reply_to: nil)
-          elsif up.mime.to_s.start_with?('image/')
+          when :photo
             message_sender.send_photo(msg.chat.id, caption, photo: up.fn_out, parse_mode: parse_mode, reply_to: nil, timeout: 1_800)
           else
             message_sender.send_document(msg.chat.id, caption, document: up.fn_out, reply_to: nil)

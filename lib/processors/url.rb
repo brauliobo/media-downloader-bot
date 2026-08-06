@@ -17,10 +17,9 @@ module Processors
 
     def kindle_url?
       return false if url.to_s.empty?
-      host = URI(url).host rescue nil
+      host = Utils::Url.parse(url)&.host
       Audiobook::Parsers::Kindle::READ_HOSTS.include?(host)
     end
   end
 end
-
 

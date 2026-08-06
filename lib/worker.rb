@@ -1,7 +1,6 @@
 require_relative 'boot'
 
 require_relative 'utils/sh'
-require_relative 'utils/url_shortener'
 require_relative 'bot/msg_helpers'
 require_relative 'models/session' if ENV['DB']
 require_relative 'context'
@@ -191,6 +190,11 @@ class Worker
     service.respond_to?(:max_caption) ? service.max_caption : 1024
   end
 
+  def caption_for(input)
+    info = translate_caption_info(input.info, input.opts)
+    msg_caption(input, max: caption_limit, info: info)
+  end
+
   private
 
   def peach_threads
@@ -247,19 +251,16 @@ class Worker
 
   def upload_one i
     # Treat documents (e.g., SRT-only) via standard path using fn_out/type
-    type_name = i.type&.name
-    type_name = type_name.to_sym if type_name.respond_to?(:to_sym)
-    is_doc = (type_name == :document)
-    oprobe = (i.oprobe ||= Prober.for i.fn_out) unless is_doc
+    media_type = Utils::MimeTypes.telegram_type(i)
+    is_doc = media_type == :document
+    oprobe = (i.oprobe ||= Prober.for i.fn_out) if %i[audio video].include?(media_type)
     info   = i.info
     durat  = oprobe&.format&.duration&.to_i
     opts   = i.opts
 
-    caption_info = translate_caption_info(info, opts)
-
     info.title = msg_limit(info.title, percent: 90) if info.title
 
-    caption = msg_caption i, max: caption_limit, info: caption_info
+    caption = caption_for(i)
     return send_message msg, caption if opts.simulate
 
     vstrea     = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
@@ -268,10 +269,8 @@ class Worker
     file_path  = i.fn_out
 
     paid = (ENV['PAID'] || msg.from.id.in?([6884159818])) && !is_doc
-    type = i.type
-
     media  = SymMash.new(
-      type: type.name, duration: durat, width: vstrea&.width, height: vstrea&.height,
+      type: media_type, duration: durat, width: vstrea&.width, height: vstrea&.height,
       title: info.title, performer: info.uploader, supports_streaming: true, thumb_path: thumb_path
     )
     ret_msg = i.ret_msg = SymMash.new star_count: (20 if paid)
@@ -282,7 +281,7 @@ class Worker
       ret_msg.merge!(media, file_path: file_path, file_mime: mime)
     end
 
-    ret_msg[:type] ||= type.name
+    ret_msg[:type] ||= media_type
 
     pp ret_msg if ENV['DEBUG']
     caption = 'paid' if paid
@@ -317,7 +316,7 @@ class Worker
   def build_msg_caption(i, title: nil, info: i.info)
     caption_opts = i.opts || opts || SymMash.new
     text = ''
-    if caption_opts.caption or i.type == Zipper::Types.video
+    if caption_opts.caption || Utils::MimeTypes.telegram_type(i) == :video
       title_text = (title || info.title).to_s
       text  = markdown_italic(title_text) if title_text.present?
       text << "\n" if text.present? && info.uploader
@@ -327,9 +326,9 @@ class Worker
       text << "\n\n" if text.present?
       text << markdown_italic(info.description.strip)
     end
-    if i.url
+    if (source_url = Utils::Url.normalize(i.url))
       text << "\n\n" if text.present?
-      text << Bot::MsgHelpers.me(i.url)
+      text << Bot::MsgHelpers.me(source_url)
     end
     if info.hashtags.present?
       text << "\n\n" if text.present?

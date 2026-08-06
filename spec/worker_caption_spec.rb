@@ -23,6 +23,44 @@ RSpec.describe Worker do
     expect(worker.send(:msg_caption, input, max: 1024)).to eq("Joe Tippens\n\nhttps:\\/\\/x\\.com\\/i\\/status\\/1")
   end
 
+  it 'keeps the full protocol when building captions for bare source urls' do
+    worker = described_class.new(SymMash.new(from: {id: 1}, chat: {id: 1}))
+    input  = SymMash.new(
+      opts: SymMash.new(caption: 1),
+      type: SymMash.new(name: :photo),
+      url:  'x.com/i/status/1',
+      info: SymMash.new(title: 'Photo', uploader: nil, description: '')
+    )
+    worker.instance_variable_set(:@opts, input.opts)
+
+    expect(worker.send(:msg_caption, input, max: 1024)).to include('https:\/\/x\.com\/i\/status\/1')
+  end
+
+  it 'uploads photos through the media path without probing them as audio or video' do
+    Dir.mktmpdir('photo-upload-') do |dir|
+      path = File.join(dir, 'photo.jpg')
+      File.write(path, '')
+      msg     = SymMash.new(from: {id: 1}, chat: {id: 1})
+      service = Bot::Mock.new
+      allow(service).to receive(:send_message).and_return(SymMash.new(message_id: 1))
+      worker  = described_class.new(msg, service: service)
+      input   = SymMash.new(
+        fn_out: path,
+        mime:   'image/jpeg',
+        type:   SymMash.new(name: :photo),
+        opts:   SymMash.new(caption: 1),
+        url:    'https://example.com/photo',
+        info:   SymMash.new(title: 'Photo', description: '')
+      )
+      allow(Prober).to receive(:for)
+
+      worker.upload(input)
+
+      expect(Prober).not_to have_received(:for)
+      expect(service).to have_received(:send_message).with(msg, anything, hash_including(type: :photo))
+    end
+  end
+
   it 'keeps a truncated title instead of dropping to only uploader and url' do
     worker = described_class.new(SymMash.new(from: {id: 1}, chat: {id: 1}))
     input  = SymMash.new(

@@ -31,8 +31,7 @@ RSpec.describe UploadCoordinator do
 
   it 'flushes queued mixed media as one album' do
     uploads = [item('1.jpg', 'image/jpeg'), item('2.mp4', 'video/mp4')]
-    allow(worker).to receive(:send).with(:translate_caption_info, uploads.first.info, opts).and_return(uploads.first.info)
-    allow(worker).to receive(:send).with(:msg_caption, anything, max: 1024, info: uploads.first.info).and_return('_caption_')
+    allow(worker).to receive(:send).with(:caption_for, anything).and_return('_caption_')
     allow(worker).to receive(:send_album)
 
     coordinator = described_class.new(worker)
@@ -46,8 +45,7 @@ RSpec.describe UploadCoordinator do
   it 'limits album captions for media groups' do
     uploads = [item('1.jpg', 'image/jpeg'), item('2.jpg', 'image/jpeg')]
     long = 'a' * 2_000
-    allow(worker).to receive(:send).with(:translate_caption_info, uploads.first.info, opts).and_return(uploads.first.info)
-    allow(worker).to receive(:send).with(:msg_caption, anything, max: 1024, info: uploads.first.info).and_return(long.first(1024))
+    allow(worker).to receive(:send).with(:caption_for, anything).and_return(long.first(1024))
     allow(worker).to receive(:send_album)
 
     coordinator = described_class.new(worker)
@@ -60,8 +58,7 @@ RSpec.describe UploadCoordinator do
   it 'uses the worker caption limit for albums' do
     uploads = [item('1.jpg', 'image/jpeg'), item('2.jpg', 'image/jpeg')]
     allow(worker).to receive(:caption_limit).and_return(4096)
-    allow(worker).to receive(:send).with(:translate_caption_info, uploads.first.info, opts).and_return(uploads.first.info)
-    allow(worker).to receive(:send).with(:msg_caption, anything, max: 4096, info: uploads.first.info).and_return('td caption')
+    allow(worker).to receive(:send).with(:caption_for, anything).and_return('td caption')
     allow(worker).to receive(:send_album)
 
     coordinator = described_class.new(worker)

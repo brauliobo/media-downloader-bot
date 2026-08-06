@@ -75,7 +75,7 @@ RSpec.describe Downloaders::YtDlp do
       ctx.url = 'https://rumble.com/v7c086u-modern-education-is-working-exactly-as-planned-sf736.html?e9s=src_v1'
       captured = nil
       body = {html: '<iframe src="https://rumble.com/embed/v79tk6m/" />'}.to_json
-      allow(Utils::HTTP).to receive(:get).and_return(SymMash.new(body: body))
+      allow(Utils::HTTP).to receive(:get_public).and_return(body)
       allow(Sh).to receive(:run) { |cmd, **_| captured = cmd; ['', '', 0] }
 
       downloader.download
@@ -185,7 +185,7 @@ RSpec.describe Downloaders::YtDlp do
       expect(shared.format).to be_nil
     end
 
-    it 'prefers info.webpage_url over the shortified url' do
+    it 'preserves the full info.webpage_url' do
       i.url  = 'youtu.be/abc'
       i.info = SymMash.new(webpage_url: 'https://www.youtube.com/watch?v=abc')
       captured = nil

@@ -1,5 +1,6 @@
 require 'active_support/core_ext/module/delegation'
 require_relative '../utils/safety'
+require_relative '../utils/url'
 
 module Downloaders
   class Base
@@ -9,6 +10,10 @@ module Downloaders
 
     def initialize(ctx)
       @ctx = ctx
+    end
+
+    def normalized_url
+      @normalized_url ||= Utils::Url.normalize(url)
     end
 
     def self.build(ctx)

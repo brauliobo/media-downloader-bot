@@ -1,6 +1,7 @@
 require_relative 'base'
 require_relative '../utils/cookie_jar'
 require_relative '../utils/http'
+require_relative '../utils/url'
 require_relative '../prober'
 require 'fileutils'
 require 'uri'
@@ -15,9 +16,9 @@ module Downloaders
     REMOTE   = ENV['YT_DLP_REMOTE_COMPONENTS']
 
     def download
-      source_url = url.to_s
+      source_url = normalized_url
       return st.error('No URL found') if source_url.blank?
-      source_url = normalize_url(source_url)
+      source_url = normalize_rumble_url(source_url)
       validate_public_url!(source_url)
 
       cmd = "#{base_cmd} --write-info-json --no-clean-infojson --skip-download -o #{Sh.escape("info-%(playlist_index)s.%(ext)s")} #{Sh.escape(source_url)}"
@@ -31,11 +32,10 @@ module Downloaders
 
     def download_one(i, pos: 1)
       fn  = "input-#{pos}"
-      url = i.info&.webpage_url.presence || i.url
-      url = "https://#{url}" unless url =~ /\Ahttps?:\/\//i
-      url = normalize_url(url)
-      validate_public_url!(url)
-      cmd = "#{base_cmd} -o #{Sh.escape("#{fn}.%(ext)s")} #{Sh.escape(url)}"
+      source_url = Utils::Url.normalize(i.info&.webpage_url.presence || i.url)
+      source_url = normalize_rumble_url(source_url)
+      validate_public_url!(source_url)
+      cmd = "#{base_cmd} -o #{Sh.escape("#{fn}.%(ext)s")} #{Sh.escape(source_url)}"
       _, e, s = Sh.run cmd, chdir: dir
       raise "download error: #{e}" unless s == 0
 
@@ -128,8 +128,8 @@ module Downloaders
       end
     end
 
-    def normalize_url(source_url)
-      uri = URI(source_url)
+    def normalize_rumble_url(source_url)
+      uri = Utils::Url.parse(source_url)
       host = uri.host.to_s.downcase
       return source_url unless host == 'rumble.com' || host.end_with?('.rumble.com')
       return source_url if uri.path.match?(%r{\A/embed/}i)
@@ -170,14 +170,13 @@ module Downloaders
     end
 
     def build_input(info, i, mult)
-      info.url   = mult ? info.webpage_url : url
-      short_url  = Utils::UrlShortener.shortify(info) || info.url
+      info.url   = Utils::Url.normalize(mult ? info.webpage_url : url)
       info.title = format_title(info, i, mult)
       
       err = check_duration!(info)
       return err if err 
 
-      SymMash.new(url: short_url, opts: opts.deep_dup, info: info)
+      SymMash.new(url: info.url, opts: opts.deep_dup, info: info)
     end
 
     def format_title(info, i, mult)
