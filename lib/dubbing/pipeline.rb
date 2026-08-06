@@ -190,10 +190,27 @@ module Dubbing
 
     def apply_timeline(clips)
       @sentences.zip(clips).each do |sentence, clip|
-        sentence.start = clip.start
-        sentence.end   = [clip.end, video_duration].min
+        source_start = sentence.start.to_f
+        source_end   = sentence.end.to_f
+        target_start = clip.start.to_f
+        target_end   = [clip.end.to_f, video_duration].min
+        retime_words!(sentence.words, source_start, source_end, target_start, target_end)
+        sentence.start = target_start
+        sentence.end   = target_end
       end
       @sentences.select! { |sentence| sentence.start < video_duration }
+    end
+
+    def retime_words!(words, source_start, source_end, target_start, target_end)
+      source_duration = source_end - source_start
+      target_duration = target_end - target_start
+      return unless source_duration.positive? && target_duration.positive?
+
+      scale = target_duration / source_duration
+      Array(words).each do |word|
+        word.start = target_start + (word.start.to_f - source_start) * scale
+        word.end   = target_start + (word.end.to_f - source_start) * scale
+      end
     end
 
     def merge_speaker_sentences!

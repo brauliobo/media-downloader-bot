@@ -144,6 +144,26 @@ RSpec.describe Dubbing::Pipeline do
     expect(opts.sub_vtt).not_to include('Tchau.')
   end
 
+  it 'retimes translated word cues to the rendered clip timing' do
+    pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), probe: probe)
+    sentence = SymMash.new(
+      text:  'Olá mundo.',
+      start: 1.0,
+      end:   5.0,
+      words: [
+        SymMash.new(word: 'Olá', start: 1.0, end: 2.0),
+        SymMash.new(word: 'mundo.', start: 2.0, end: 5.0),
+      ],
+    )
+    pipeline.instance_variable_set(:@sentences, [sentence])
+
+    clip = Dubbing::Audio::ScheduledClip.new(path: 'first.wav', start: 1.0, end: 3.0, speed: 2.0)
+    pipeline.send(:apply_timeline, [clip])
+
+    expect([sentence.start, sentence.end]).to eq([1.0, 3.0])
+    expect(sentence.words.map { |word| [word.start, word.end] }).to eq([[1.0, 1.5], [1.5, 3.0]])
+  end
+
   it 'coalesces contiguous sentences from the same speaker into one utterance' do
     pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), probe: probe)
     pipeline.instance_variable_set(
