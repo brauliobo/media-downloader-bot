@@ -58,7 +58,7 @@ module Dubbing
       raise 'dubbed speech has no positive source interval' unless natural_limit.positive?
       return 1.0 if duration <= 0
 
-      [duration / natural_limit, 1.0].max
+      duration / natural_limit
     end
 
     def speech_limit(clip, next_clip, duration)
