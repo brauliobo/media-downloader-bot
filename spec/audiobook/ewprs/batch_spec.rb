@@ -85,6 +85,27 @@ RSpec.describe Audiobook::Ewprs::Batch do
     expect(resumed.run(discourses: [entries.first], books: [])[:edited]).to eq(0)
   end
 
+  it 'skips edit entries without published message records' do
+    audio = File.join(output, 'first.m4a')
+    File.write(audio, 'replacement audio')
+    allow(Prober).to receive(:for).with(audio).and_return(double(format: double(duration: 12.4)))
+    manager = double
+    expect(manager).to receive(:edit_generated_message).with(
+      hash_including(chat_id: -100123, message_id: 123, audio_path: audio, duration: 12)
+    ).and_return(message_id: 123, remote_id: 'replacement-remote')
+
+    batch = described_class.new(
+      catalog: catalog, output: output, jobs: 1, manager: manager, chat_id: -100123,
+      topic: topic, apply: true, edit: true, edit_run_id: 'run', stdout: StringIO.new
+    )
+    batch.record(entries.first, message_id: 123)
+
+    result = batch.run(discourses: entries, books: [])
+
+    expect(result[:edited]).to eq(1)
+    expect(result[:published]).to eq(1)
+  end
+
   it 're-edits old checkpoints for a new edit run and resumes that run' do
     audio = File.join(output, 'first.m4a')
     File.write(audio, 'audio')

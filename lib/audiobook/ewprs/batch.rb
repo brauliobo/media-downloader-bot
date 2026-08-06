@@ -42,6 +42,8 @@ module Audiobook::Ewprs
     end
 
     def run(discourses:, books:)
+      discourses = edit_entries(discourses) if edit
+      books      = edit_entries(books) if edit
       total = discourses.size + books.size
       process_stage(discourses, offset: 0, total: total)
       process_stage(books, offset: discourses.size, total: total)
@@ -61,7 +63,11 @@ module Audiobook::Ewprs
 
     private
 
-    attr_reader :manager, :chat_id, :topic, :stdout, :stderr, :upload_dir, :edit_run_id
+    attr_reader :manager, :chat_id, :topic, :stdout, :stderr, :upload_dir, :edit, :edit_run_id
+
+    def edit_entries(entries)
+      entries.select { |entry| published.key?(entry_key(entry)) }
+    end
 
     def process_stage(entries, offset:, total:)
       return if entries.empty?
