@@ -22,6 +22,14 @@ module Utils
       parse(value)&.to_s
     end
 
+    def self.display(value)
+      normalize(value)&.sub(%r{\Ahttps?://}i, '')&.sub(%r{\Awww\.}i, '')
+    end
+
+    def self.trailing_display_urls(text)
+      text.to_s[%r{(?:\n\n(?:https?://)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:[/?#][^\s]*)?)+\z}i]
+    end
+
     def self.token?(value)
       token = value.to_s
       token.match?(TOKEN_REGEXP) && parse(token)

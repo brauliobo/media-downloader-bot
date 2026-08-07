@@ -6,6 +6,11 @@ RSpec.describe Utils::Url do
     expect(described_class.normalize('https://x.com/i/status/1')).to eq('https://x.com/i/status/1')
   end
 
+  it 'removes the protocol and www prefix for displayed links' do
+    expect(described_class.display('https://www.example.com/photo.jpg')).to eq('example.com/photo.jpg')
+    expect(described_class.display('example.com/photo.jpg')).to eq('example.com/photo.jpg')
+  end
+
   it 'parses query and fragment components without dropping the scheme' do
     uri = described_class.parse('https://example.com/photo?album=1#cover')
 

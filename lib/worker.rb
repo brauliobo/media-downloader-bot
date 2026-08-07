@@ -326,7 +326,7 @@ class Worker
       text << "\n\n" if text.present?
       text << markdown_italic(info.description.strip)
     end
-    if (source_url = Utils::Url.normalize(i.url))
+    if (source_url = Utils::Url.display(i.url))
       text << "\n\n" if text.present?
       text << Bot::MsgHelpers.me(source_url)
     end

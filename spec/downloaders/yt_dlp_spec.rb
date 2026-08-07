@@ -194,6 +194,21 @@ RSpec.describe Downloaders::YtDlp do
       expect(captured).to match(%r{https://www\\?\.youtube\\?\.com/watch})
     end
 
+    it 'uses the regular short YouTube link format for Shorts' do
+      ctx.url = 'https://www.youtube.com/shorts/abc123'
+      info = SymMash.new(
+        webpage_url: 'https://www.youtube.com/shorts/abc123',
+        display_id:  'abc123',
+        _filename:   'abc123.mp4',
+        duration:    10,
+      )
+
+      input = downloader.send(:build_input, info, 0, false)
+
+      expect(input.url).to eq('youtu.be/abc123')
+      expect(input.info.url).to eq('https://www.youtube.com/shorts/abc123')
+    end
+
     it 'uses full x.com descriptions when titles are ellipsized' do
       info = SymMash.new(
         webpage_url: 'https://x.com/i/status/2070518837150167314',

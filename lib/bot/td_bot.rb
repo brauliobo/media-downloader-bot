@@ -7,6 +7,7 @@ require_relative 'base'
 require_relative 'caption'
 require_relative 'jobs'
 require_relative 'rate_limiter'
+require_relative '../utils/url'
 require_relative '../td_bot/chat_identifier'
 require_relative '../td_bot/post_editor'
 
@@ -117,7 +118,7 @@ module Bot
       if i.respond_to?(:opts) && i.opts.description && i.info.description.strip.presence
         text << "\n\n_#{me i.info.description.strip}_"
       end
-      text << "\n\n#{i.url}" if i.url
+      text << "\n\n#{source_url}" if (source_url = Utils::Url.display(i.url))
       text
     end
 
@@ -204,7 +205,7 @@ module Bot
     end
 
     def truncate_album_caption(text, limit)
-      suffix = text.to_s[/(?:\n\nhttps?:\/\/\S+)+\z/]
+      suffix = Utils::Url.trailing_display_urls(text)
       return truncate_markdown_caption(text, limit) unless suffix && suffix.size < limit
 
       body = text.to_s.delete_suffix(suffix).rstrip

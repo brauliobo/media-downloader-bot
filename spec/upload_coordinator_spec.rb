@@ -144,7 +144,7 @@ RSpec.describe UploadCoordinator do
 
     expect(real_worker).to have_received(:send_album).with(
       real_worker.msg,
-      '_Legenda em portugues_' + "\n\n" + 'https:\/\/x\.com\/i\/status\/2073169414275350804',
+      '_Legenda em portugues_' + "\n\n" + 'x\.com\/i\/status\/2073169414275350804',
       uploads: uploads,
       parse_mode: 'MarkdownV2'
     )

@@ -153,7 +153,7 @@ else
     end
 
     it 'preserves trailing links when truncating TDLib album captions' do
-      url     = 'https:\/\/x\.com\/i\/status\/2073169414275350804'
+      url     = 'x\.com\/i\/status\/2073169414275350804'
       caption = "_#{'a' * described_class::MEDIA_CAPTION_LIMIT}_\n\n#{url}"
       msg     = SymMash.new(chat: {id: 123})
       allow(bot).to receive(:send_message)
@@ -161,11 +161,11 @@ else
       truncated = bot.album_caption_text(msg, caption, 'MarkdownV2')
 
       expect(truncated.size).to be <= described_class::MEDIA_CAPTION_LIMIT
-      expect(truncated).to end_with('https://x.com/i/status/2073169414275350804')
+      expect(truncated).to end_with('x.com/i/status/2073169414275350804')
       expect(truncated.scan(/(?<!\\)_/).size).to be_even
       expect(bot).to have_received(:send_message).with(
         msg,
-        "_#{'a' * described_class::MEDIA_CAPTION_LIMIT}_\n\nhttps://x.com/i/status/2073169414275350804",
+        "_#{'a' * described_class::MEDIA_CAPTION_LIMIT}_\n\nx.com/i/status/2073169414275350804",
         parse_mode: 'MarkdownV2'
       )
     end

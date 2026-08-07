@@ -170,13 +170,26 @@ module Downloaders
     end
 
     def build_input(info, i, mult)
-      info.url   = Utils::Url.normalize(mult ? info.webpage_url : url)
+      source_url = Utils::Url.normalize(mult ? info.webpage_url : url)
+      info.url   = source_url
       info.title = format_title(info, i, mult)
       
       err = check_duration!(info)
       return err if err 
 
-      SymMash.new(url: info.url, opts: opts.deep_dup, info: info)
+      SymMash.new(url: display_url(info, source_url), opts: opts.deep_dup, info: info)
+    end
+
+    def display_url(info, source_url)
+      return Utils::Url.display(source_url) unless youtube_url?(source_url)
+
+      video_id = info.id.presence || info.display_id.presence
+      video_id ? "youtu.be/#{video_id}" : Utils::Url.display(source_url)
+    end
+
+    def youtube_url?(source_url)
+      host = Utils::Url.parse(source_url)&.host.to_s.downcase
+      host == 'youtu.be' || host == 'youtube.com' || host.end_with?('.youtube.com')
     end
 
     def format_title(info, i, mult)

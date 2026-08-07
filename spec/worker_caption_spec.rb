@@ -20,10 +20,10 @@ RSpec.describe Worker do
     )
     worker.instance_variable_set(:@opts, input.opts)
 
-    expect(worker.send(:msg_caption, input, max: 1024)).to eq("Joe Tippens\n\nhttps:\\/\\/x\\.com\\/i\\/status\\/1")
+    expect(worker.send(:msg_caption, input, max: 1024)).to eq("Joe Tippens\n\nx\\.com\\/i\\/status\\/1")
   end
 
-  it 'keeps the full protocol when building captions for bare source urls' do
+  it 'removes the protocol when building captions for source urls' do
     worker = described_class.new(SymMash.new(from: {id: 1}, chat: {id: 1}))
     input  = SymMash.new(
       opts: SymMash.new(caption: 1),
@@ -33,7 +33,7 @@ RSpec.describe Worker do
     )
     worker.instance_variable_set(:@opts, input.opts)
 
-    expect(worker.send(:msg_caption, input, max: 1024)).to include('https:\/\/x\.com\/i\/status\/1')
+    expect(worker.send(:msg_caption, input, max: 1024)).to include('x\.com\/i\/status\/1')
   end
 
   it 'uploads photos through the media path without probing them as audio or video' do
