@@ -10,13 +10,12 @@ RSpec.describe Translator::HyMT2 do
   end
 
   around do |example|
-    original = ENV.values_at('HYMT2_HOST', 'HYMT2_MODEL', 'HYMT2_CONCURRENCY')
-    ENV['HYMT2_HOST']        = 'http://127.0.0.1:12002/'
-    ENV['HYMT2_MODEL']       = 'Hy-MT2-7B-Q4_K_M.gguf'
-    ENV['HYMT2_CONCURRENCY'] = '1'
+    original = ENV.values_at('HYMT2_HOST', 'HYMT2_MODEL')
+    ENV['HYMT2_HOST']  = 'http://127.0.0.1:12002/'
+    ENV['HYMT2_MODEL'] = 'Hy-MT2-7B-Q4_K_M.gguf'
     example.run
   ensure
-    %w[HYMT2_HOST HYMT2_MODEL HYMT2_CONCURRENCY].zip(original).each do |key, value|
+    %w[HYMT2_HOST HYMT2_MODEL].zip(original).each do |key, value|
       value ? ENV[key] = value : ENV.delete(key)
     end
   end
@@ -33,6 +32,20 @@ RSpec.describe Translator::HyMT2 do
     end
 
     expect(backend.translate('It is on the house.', from: 'en', to: 'pt')).to eq('É por conta da casa.')
+  end
+
+  it 'uses the surrounding peach thread context for array requests' do
+    contexts = Queue.new
+    allow(Utils::HTTP).to receive(:post) do |_url, _body, _headers|
+      contexts << Thread.current[Enumerable::PEACH_THREADS]
+      response
+    end
+
+    Enumerable.with_peach_threads(2) do
+      backend.translate(%w[first second], from: 'en', to: 'es')
+    end
+
+    expect(2.times.map { contexts.pop }).to all(eq(2))
   end
 
   it 'translates arrays independently and preserves their order' do

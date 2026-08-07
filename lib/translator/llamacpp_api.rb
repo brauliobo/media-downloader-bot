@@ -1,4 +1,3 @@
-require 'concurrent'
 require 'iso-639'
 
 class Translator
@@ -29,21 +28,19 @@ class Translator
     def translate_concurrently(texts, to:, durations: nil, context: nil)
       return [] if texts.empty?
 
-      executor = Concurrent::FixedThreadPool.new([llama_concurrency, texts.size].min)
-      futures  = texts.map.with_index do |text, idx|
-        Concurrent::Promises.future_on(executor, text, durations&.fetch(idx), context && context_for(context, idx)) do |segment, duration, nearby|
-          prompt = if duration
-            dubbing_translation_prompt(segment, to: to, duration: duration, context: nearby)
-          else
-            translation_prompt(segment, to: to)
-          end
-          chat_completion(prompt)
+      translations = Array.new(texts.size)
+      texts.each_with_index.peach(reraise: true) do |text, idx|
+        duration = durations&.fetch(idx)
+        nearby   = context && context_for(context, idx)
+        prompt   = if duration
+          dubbing_translation_prompt(text, to: to, duration: duration, context: nearby)
+        else
+          translation_prompt(text, to: to)
         end
+        translations[idx] = chat_completion(prompt)
       end
-      Concurrent::Promises.zip(*futures).value!
-    ensure
-      executor&.shutdown
-      executor&.wait_for_termination
+
+      translations
     end
 
     def context_for(texts, index)
@@ -99,10 +96,5 @@ class Translator
     def llama_model
       ENV.fetch('LLAMA_CPP_MODEL', 'local-model')
     end
-
-    def llama_concurrency
-      [ENV.fetch('LLAMA_CPP_CONCURRENCY', 8).to_i, 1].max
-    end
-
   end
 end
