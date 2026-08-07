@@ -50,6 +50,23 @@ RSpec.describe Subtitler::VTT do
     expect(payloads(translated)).to eq(['Olá.', 'Esta é outra frase.'])
   end
 
+  it 'translates cues that use minute-second timestamps' do
+    vtt = <<~VTT
+      WEBVTT
+
+      00:00.240 --> 00:02.310
+      Arthritis is getting worse.
+    VTT
+
+    allow(::Translator).to receive(:translate).and_return(['A artrite está piorando.'])
+
+    translated = described_class.translate(vtt, from: 'en', to: 'pt')
+
+    expect(translated).to include(
+      "00:00:00.240 --> 00:00:02.310\nA artrite está piorando."
+    )
+  end
+
   it 'does not merge normalized cues from different speakers' do
     mash = SymMash.new(segments: [
       SymMash.new(text: 'Hello.', start: 0.0, end: 1.0, words: [], speaker_id: 0),

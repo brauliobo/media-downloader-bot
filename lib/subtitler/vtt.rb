@@ -5,6 +5,8 @@ require_relative 'translator'
 
 class Subtitler
   class VTT
+    TIMESTAMP = /\A(?:(\d{1,2}):)?(\d{2}):(\d{2})(?:[\.,](\d{3}))?/.freeze
+
     def self.clean(vtt)
       return vtt unless vtt
       vtt
@@ -185,19 +187,16 @@ class Subtitler
     end
 
     def self.hms_to_s(hms)
-      return unless hms
-      if hms =~ /(\d{1,2}):(\d{2}):(\d{2})/
-        Regexp.last_match(1).to_i * 3600 + Regexp.last_match(2).to_i * 60 + Regexp.last_match(3).to_i
-      end
+      return unless (match = hms&.match(TIMESTAMP))
+
+      match[1].to_i * 3600 + match[2].to_i * 60 + match[3].to_i
     end
 
     def self.hmsms_to_s(hms)
-      return unless hms
-      if hms =~ /(\d{1,2}):(\d{2}):(\d{2})([\.,](\d{3}))?/
-        base = Regexp.last_match(1).to_i * 3600 + Regexp.last_match(2).to_i * 60 + Regexp.last_match(3).to_i
-        ms = Regexp.last_match(5).to_i
-        base + ms / 1000.0
-      end
+      return unless (match = hms&.match(TIMESTAMP))
+
+      base = match[1].to_i * 3600 + match[2].to_i * 60 + match[3].to_i
+      base + match[4].to_i / 1000.0
     end
 
     def self.s_to_hmsms(sec)
