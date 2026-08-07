@@ -15,13 +15,10 @@ class UploadCoordinator
   end
 
   def upload(input)
-    if input.uploads.present?
-      return upload_album(container(input.uploads, input)) if album_uploads?(input.uploads)
+    uploads = Array.wrap(input.uploads.presence || input)
+    return upload_album(container(uploads, input)) if album_uploads?(uploads)
 
-      input.uploads.each { |up| worker.send(:upload_one, up) }
-    else
-      worker.send(:upload_one, input)
-    end
+    uploads.each { |upload| worker.upload_item(upload) }
   ensure
     worker.cleanup_input(input)
   end
@@ -38,7 +35,7 @@ class UploadCoordinator
   attr_reader :worker, :album_queue
 
   def upload_album(input)
-    caption = worker.send(:caption_for, input)
+    caption = worker.caption_for(input)
     worker.send_album worker.msg, caption, uploads: input.uploads, parse_mode: 'MarkdownV2'
   end
 

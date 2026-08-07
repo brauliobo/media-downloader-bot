@@ -31,7 +31,7 @@ RSpec.describe UploadCoordinator do
 
   it 'flushes queued mixed media as one album' do
     uploads = [item('1.jpg', 'image/jpeg'), item('2.mp4', 'video/mp4')]
-    allow(worker).to receive(:send).with(:caption_for, anything).and_return('_caption_')
+    allow(worker).to receive(:caption_for).with(anything).and_return('_caption_')
     allow(worker).to receive(:send_album)
 
     coordinator = described_class.new(worker)
@@ -45,7 +45,7 @@ RSpec.describe UploadCoordinator do
   it 'limits album captions for media groups' do
     uploads = [item('1.jpg', 'image/jpeg'), item('2.jpg', 'image/jpeg')]
     long = 'a' * 2_000
-    allow(worker).to receive(:send).with(:caption_for, anything).and_return(long.first(1024))
+    allow(worker).to receive(:caption_for).with(anything).and_return(long.first(1024))
     allow(worker).to receive(:send_album)
 
     coordinator = described_class.new(worker)
@@ -58,7 +58,7 @@ RSpec.describe UploadCoordinator do
   it 'uses the worker caption limit for albums' do
     uploads = [item('1.jpg', 'image/jpeg'), item('2.jpg', 'image/jpeg')]
     allow(worker).to receive(:caption_limit).and_return(4096)
-    allow(worker).to receive(:send).with(:caption_for, anything).and_return('td caption')
+    allow(worker).to receive(:caption_for).with(anything).and_return('td caption')
     allow(worker).to receive(:send_album)
 
     coordinator = described_class.new(worker)
@@ -70,13 +70,13 @@ RSpec.describe UploadCoordinator do
 
   it 'uploads a single queued item normally' do
     upload = item('1.jpg', 'image/jpeg')
-    allow(worker).to receive(:send).with(:upload_one, upload)
+    allow(worker).to receive(:upload_item).with(upload)
 
     coordinator = described_class.new(worker)
     coordinator.upload_or_queue(upload, 0)
     coordinator.flush
 
-    expect(worker).to have_received(:send).with(:upload_one, upload)
+    expect(worker).to have_received(:upload_item).with(upload)
     expect(worker).to have_received(:cleanup_input).with(upload)
   end
 
@@ -87,7 +87,7 @@ RSpec.describe UploadCoordinator do
     input  = File.join(dir, 'input.mp4')
     File.write(input, '')
     upload.fn_in = input
-    allow(real_worker).to receive(:upload_one)
+    allow(real_worker).to receive(:upload_item)
 
     described_class.new(real_worker).upload(upload)
 
@@ -102,7 +102,7 @@ RSpec.describe UploadCoordinator do
     )
     real_worker.instance_variable_set(:@dir, dir)
     upload = item('1.mp4', 'video/mp4')
-    allow(real_worker).to receive(:upload_one)
+    allow(real_worker).to receive(:upload_item)
 
     described_class.new(real_worker).upload(upload)
 

@@ -249,7 +249,9 @@ class Worker
     edit_message(msg, msg.resp.message_id, text: raw, force: true, parse_mode: nil, cancel_job: false) rescue nil
   end
 
-  def upload_one i
+  public
+
+  def upload_item i
     # Treat documents (e.g., SRT-only) via standard path using fn_out/type
     media_type = Utils::MimeTypes.telegram_type(i)
     is_doc = media_type == :document
@@ -287,6 +289,8 @@ class Worker
     caption = 'paid' if paid
     send_message msg, caption, **ret_msg
   end
+
+  private
 
   def msg_caption(i, max: nil, info: i.info)
     caption_opts = i.opts || opts || SymMash.new
