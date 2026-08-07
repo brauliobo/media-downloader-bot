@@ -1,5 +1,6 @@
 module Bot
   require_relative 'msg_helpers'
+  require_relative 'album'
   require_relative '../utils/mime_types'
 
   class Base
@@ -14,9 +15,8 @@ module Bot
 
     def send_album(msg, text, uploads:, parse_mode: 'MarkdownV2', **_params)
       puts text
-      uploads.map.with_index do |up, index|
+      Album.new(uploads, text).items.map do |up, caption|
         type = Utils::MimeTypes.telegram_type(up)
-        caption = index.zero? ? text : ''
         send_message(msg, caption, type: type, parse_mode: parse_mode, file_path: up.fn_out, file_mime: up.mime)
       end
     end

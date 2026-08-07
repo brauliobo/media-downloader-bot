@@ -103,17 +103,16 @@ module Bot
 
     def send_album(msg, text, uploads:, parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **_params)
       sent  = []
-      first = true
+      album = Album.new(uploads, text)
 
-      uploads.each_slice(10) do |batch|
+      album.batches.each do |batch|
         throttle!
         payload = {
           chat_id:             msg.chat.id,
           reply_to_message_id: incoming_message_id(msg),
-          media:               album_media(batch, first ? text : nil, parse_mode)
+          media:               album_media(batch.uploads, batch.caption, parse_mode)
         }
-        batch.each_with_index { |up, i| payload["file#{i}".to_sym] = build_upload_io(up.fn_out, up.mime) }
-        first = false
+        batch.uploads.each_with_index { |up, i| payload["file#{i}".to_sym] = build_upload_io(up.fn_out, up.mime) }
         sent.concat Array(tg.send(:send_media_group, **payload).map { |m| SymMash.new(m.to_h) })
       end
 
