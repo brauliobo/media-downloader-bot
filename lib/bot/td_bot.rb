@@ -80,19 +80,6 @@ module Bot
       end
     end
 
-    def me(text)
-      return text unless text
-      text = text.gsub('\\', '\\\\')
-      text.gsub('`', '\\`')
-    end
-    alias_method :mnfe, :me
-
-    def mfe(text)
-      return text unless text
-      MsgHelpers::MARKDOWN_FORMAT.each { |c| text = text.gsub(c, "\\#{c}") }
-      text
-    end
-
     def download_file(file_id_or_info, priority: 32, offset: 0, limit: 0, synchronous: true, dir: nil)
       result = file_manager.download_file(
         file_id_or_info, priority: priority, offset: offset, limit: limit,
@@ -106,20 +93,6 @@ module Bot
         raise "Failed to download file: no local path available (got: #{result.inspect})"
       end
       local_path
-    end
-
-    def msg_caption(i)
-      return '' if i.respond_to?(:opts) && i.opts.nocaption
-      text = ''
-      if (i.respond_to?(:opts) && i.opts.caption) || (i.respond_to?(:type) && i.type == Zipper::Types.video)
-        text  = "_#{me i.info.title}_"
-        text << "\n#{me i.info.uploader}" if i.info.uploader
-      end
-      if i.respond_to?(:opts) && i.opts.description && i.info.description.strip.presence
-        text << "\n\n_#{me i.info.description.strip}_"
-      end
-      text << "\n\n#{source_url}" if (source_url = Utils::Url.display(i.url))
-      text
     end
 
     def normalize_params(params, type:)
@@ -171,25 +144,22 @@ module Bot
 
     def send_album(msg, text, uploads:, parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **_params)
       sent  = []
-      first = true
-      text  = album_caption_text(msg, text, parse_mode)
+      album = Album.new(uploads, album_caption_text(msg, text, parse_mode))
 
-      uploads.each_slice(10) do |batch|
-        batch_caption = first ? text : nil
-        first = false
+      album.batches.each do |batch|
         result = td_with_rate_limit('send_album') do
           throttle!
-          message_sender.send_media_album(msg.chat.id, batch, caption: batch_caption, parse_mode: parse_mode, timeout: 1_800)
+          message_sender.send_media_album(msg.chat.id, batch.uploads, caption: batch.caption, parse_mode: parse_mode, timeout: 1_800)
         end
         unless result
-          sent.concat send_album_items(msg, batch, batch_caption, parse_mode)
+          sent.concat send_album_items(msg, batch, parse_mode)
           next
         end
         sent.concat(result.respond_to?(:messages) ? result.messages : Array(result))
       rescue TD::Error => e
         raise unless e.message.to_s.include?('InputFile is not specified')
 
-        sent.concat send_album_items(msg, batch, batch_caption, parse_mode)
+        sent.concat send_album_items(msg, batch, parse_mode)
       end
 
       finalize_sent_message(msg, td_message_response(sent.first), delete: delete, delete_both: delete_both)
@@ -220,9 +190,8 @@ module Bot
       caption.size < limit ? "#{caption}_" : "#{caption[0...-1]}_"
     end
 
-    def send_album_items(msg, batch, text, parse_mode)
-      batch.map.with_index do |up, i|
-        caption = i.zero? ? text.to_s : ''
+    def send_album_items(msg, batch, parse_mode)
+      batch.items.map do |up, caption|
         td_with_rate_limit('send_album_item') do
           throttle!
           case Utils::MimeTypes.telegram_type(up)
