@@ -12,6 +12,88 @@ RSpec.describe Audiobook::Book do
     end
   end
 
+  it 'keeps page boundaries when fewer than three PDF pages are selected' do
+    path = File.expand_path('../fixtures/image-text-handler.pdf', __dir__)
+    book = described_class.from_input(path, opts: SymMash.new(pages: '2'))
+
+    expect(book.pages.map(&:number)).to eq([2])
+    expect(book.pages.first.all_sentences.map(&:text)).to include('DADOS DE COPYRIGHT')
+  end
+
+  describe '.from_yaml' do
+    it 'loads only requested pages while preserving their source numbers' do
+      data = {
+        'pages' => 3.times.map do |index|
+          { 'page' => { 'number' => index + 1, 'items' => [
+            { 'paragraph' => { 'sentences' => [{ 'text' => "Page #{index + 1}." }] } },
+          ] } }
+        end,
+      }
+
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, 'book.yml')
+        File.write(path, YAML.dump(data))
+        book = described_class.from_yaml(path, opts: SymMash.new(pages: '1,3'))
+
+        expect(book.pages.map(&:number)).to eq([1, 3])
+        expect(book.pages.flat_map(&:all_sentences).map(&:text)).to eq(['Page 1.', 'Page 3.'])
+      end
+    end
+
+    it 'removes repeated multi-sentence footers from pages and references' do
+      data = {
+        'language' => 'pt',
+        'pages' => %w[One Two Three Four].map.with_index do |word, index|
+          footer = [
+            { 'text' => 'All rights reserved.' },
+            { 'text' => 'No part of this publication may be reproduced.' },
+          ]
+          items = [
+            { 'paragraph' => { 'sentences' => [{ 'text' => "Unique body text #{word}." }] } },
+            { 'paragraph' => { 'sentences' => footer } },
+          ]
+          if index == 3
+            items.pop
+            joined_footer = [{ 'text' => footer.map { |sentence| sentence['text'] }.join(' ') }]
+            items.first['paragraph']['sentences'].first['references'] = [
+              { 'reference' => { 'id' => '1', 'sentences' => joined_footer } },
+            ]
+          end
+          { 'page' => { 'number' => index + 1, 'items' => items } }
+        end,
+      }
+
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, 'book.yml')
+        File.write(path, YAML.dump(data))
+        book = described_class.from_yaml(path)
+        spoken = book.pages.flat_map(&:all_sentences).map(&:text)
+
+        expect(spoken).to contain_exactly(
+          'Unique body text One.', 'Unique body text Two.', 'Unique body text Three.', 'Unique body text Four.'
+        )
+      end
+    end
+
+    it 'keeps repeated page boundaries when includeall is enabled' do
+      data = {
+        'pages' => 3.times.map do |index|
+          { 'page' => { 'number' => index + 1, 'items' => [
+            { 'paragraph' => { 'sentences' => [{ 'text' => 'Repeated footer.' }] } },
+          ] } }
+        end,
+      }
+
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, 'book.yml')
+        File.write(path, YAML.dump(data))
+        book = described_class.from_yaml(path, opts: SymMash.new(includeall: true))
+
+        expect(book.pages.flat_map(&:all_sentences).map(&:text)).to eq(['Repeated footer.'] * 3)
+      end
+    end
+  end
+
   it 'serializes word-number footnotes without nesting a reference in itself' do
     data = SymMash.new(
       metadata: { page_count: 1, language: 'pt' },

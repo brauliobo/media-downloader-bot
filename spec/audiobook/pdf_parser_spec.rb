@@ -53,4 +53,16 @@ RSpec.describe Audiobook::Parsers::Pdf do
 
     expect(document.pages.map(&:number)).to eq([1, 2])
   end
+
+  it 'extracts only selected disjoint page ranges with original page numbers' do
+    data = described_class.extract_data(
+      fixture_path('image-text-handler.pdf'),
+      opts: SymMash.new(pages: '1,3')
+    )
+
+    expect(data.metadata.page_count).to eq(3)
+    expect(data.metadata.selected_pages).to eq([1, 3])
+    expect(data.content.images.map(&:page)).to eq([1])
+    expect(data.content.lines.map(&:page).uniq).to eq([3])
+  end
 end

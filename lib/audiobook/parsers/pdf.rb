@@ -1,5 +1,6 @@
 require 'nokogiri'
 require_relative 'base'
+require_relative '../page_selection'
 require_relative '../../utils/sh'
 
 module Audiobook
@@ -11,9 +12,20 @@ module Audiobook
         all_lines = []
         image_pages = []
 
-        document   = extract_document(pdf_path, page_limit: MAX_PAGES + 1)
-        page_count = document.pages.size
-        raise ArgumentError, "PDF has too many pages (maximum #{MAX_PAGES})" if page_count > MAX_PAGES
+        selected_pages = PageSelection.parse(opts&.pages)
+        if selected_pages
+          raise ArgumentError, "too many selected pages (maximum #{MAX_PAGES})" if selected_pages.size > MAX_PAGES
+
+          page_count = extract_page_count(pdf_path)
+          missing = selected_pages.reject { |page| page <= page_count }
+          raise ArgumentError, "pages not found: #{missing.join(', ')}" if missing.any?
+
+          document = extract_document(pdf_path, page_limit: MAX_PAGES + 1, page_numbers: selected_pages)
+        else
+          document   = extract_document(pdf_path, page_limit: MAX_PAGES + 1)
+          page_count = document.pages.size
+          raise ArgumentError, "PDF has too many pages (maximum #{MAX_PAGES})" if page_count > MAX_PAGES
+        end
 
         document.pages.each do |page|
           stl&.update "Analyzing document: page #{page.number}/#{page_count}" if stl
@@ -28,7 +40,11 @@ module Audiobook
         end
 
         SymMash.new(
-          metadata: SymMash.new(has_ocr_pages: image_pages.any?, page_count: page_count),
+          metadata: SymMash.new(
+            has_ocr_pages:  image_pages.any?,
+            page_count:     page_count,
+            selected_pages: selected_pages,
+          ),
           content: SymMash.new(lines: all_lines, images: image_pages),
           opts: opts
         )
@@ -52,9 +68,17 @@ module Audiobook
         result
       end
 
-      def self.extract_document(pdf_path, page_limit:)
+      def self.extract_document(pdf_path, page_limit:, page_numbers: nil)
+        ranges = page_numbers ? consecutive_ranges(page_numbers) : [[1, page_limit]]
+        pages = ranges.flat_map do |first_page, last_page|
+          extract_document_range(pdf_path, first_page: first_page, last_page: last_page)
+        end
+        SymMash.new(pages: pages)
+      end
+
+      def self.extract_document_range(pdf_path, first_page:, last_page:)
         output, stderr, status = Sh.run [
-          'pdftotext', '-f', '1', '-l', page_limit.to_s,
+          'pdftotext', '-f', first_page.to_s, '-l', last_page.to_s,
           '-bbox-layout', '-enc', 'UTF-8', pdf_path, '-'
         ]
         Sh.assert_success!('PDF text extraction failed', stderr, status: status)
@@ -80,13 +104,26 @@ module Audiobook
             )
           end
           SymMash.new(
-            number: index + 1,
+            number: first_page + index,
             width:  page['width'].to_f,
             height: page_height,
             lines:  lines
           )
         end
-        SymMash.new(pages: pages)
+        pages
+      end
+
+      def self.extract_page_count(pdf_path)
+        output, stderr, status = Sh.run ['pdfinfo', pdf_path]
+        Sh.assert_success!('PDF page count failed', stderr, status: status)
+        count = output[/^Pages:\s+(\d+)$/i, 1]&.to_i
+        raise 'PDF page count missing' unless count&.positive?
+
+        count
+      end
+
+      def self.consecutive_ranges(page_numbers)
+        page_numbers.slice_when { |left, right| right != left + 1 }.map { |range| [range.first, range.last] }
       end
 
       def self.line_text(words)

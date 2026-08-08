@@ -20,6 +20,7 @@ require_relative 'section'
 require_relative 'image'
 require_relative 'ocr_text'
 require_relative 'page'
+require_relative 'page_selection'
 require_relative '../translator'
 
 module Audiobook
@@ -160,6 +161,8 @@ module Audiobook
       obj.instance_variable_set(:@stl, stl)
       obj.instance_variable_set(:@lang, metadata.language || 'en')
       obj.instance_variable_set(:@pages, pages)
+      obj.send(:select_pages!)
+      obj.send(:filter_repeated_page_boundaries!) unless obj.send(:include_all?)
       obj
     end
 
@@ -242,6 +245,9 @@ module Audiobook
       else
         @pages = pages_from_paragraphs
       end
+
+      select_pages!
+      filter_repeated_page_boundaries! unless include_all?
       
       translate! if translation_needed?
     end
@@ -616,7 +622,10 @@ module Audiobook
         images_added << [page_num, path]
       end
 
-      1.upto(total_pages) { |page_num| pages_hash[page_num] ||= [] } if total_pages
+      if total_pages
+        page_numbers = @metadata.selected_pages || 1.upto(total_pages)
+        page_numbers.each { |page_num| pages_hash[page_num] ||= [] }
+      end
       
       # Create Page objects
       pages_hash.sort.map { |page_num, items| Page.new(page_num, items) }
@@ -659,6 +668,94 @@ module Audiobook
       items_with_pages.each_with_object(SymMash.new { |h, k| h[k] = [] }) do |item_data, h|
         h[item_data.page] << item_data.item
       end
+    end
+
+    def include_all?
+      !!(@opts&.includeall || @data&.opts&.includeall)
+    end
+
+    def select_pages!
+      selected_pages = PageSelection.parse(@opts&.pages)
+      return unless selected_pages
+
+      available_pages = pages.map(&:number)
+      missing_pages   = selected_pages - available_pages
+      raise ArgumentError, "pages not found: #{missing_pages.join(', ')}" if missing_pages.any?
+
+      @pages = pages.select { |page| selected_pages.include?(page.number) }
+    end
+
+    def filter_repeated_page_boundaries!
+      return if pages.size < 3
+
+      normalized_counts = Hash.new(0)
+      exact_counts      = Hash.new(0)
+      page_candidates   = {}
+
+      pages.each do |page|
+        candidates = [page.items.first, page.items.last].compact.uniq.flat_map { |item| direct_sentences(item) }
+        page_candidates[page] = candidates
+        candidates.map { |sentence| normalize_boundary_text(sentence.text) }.uniq.each { |text| normalized_counts[text] += 1 }
+        candidates.map { |sentence| exact_boundary_text(sentence.text) }.uniq.each { |text| exact_counts[text] += 1 }
+      end
+
+      threshold = [(pages.size * 0.3).ceil, 3].max
+      repeated_normalized = normalized_counts.select { |_, count| count >= threshold }.keys.to_set
+      repeated_exact      = exact_counts.select { |_, count| count >= threshold }.keys.to_set
+      return if repeated_normalized.empty?
+
+      pages.each do |page|
+        boundary_sentences = page_candidates.fetch(page).to_set
+        page.items.reject! do |item|
+          remove_item = prune_repeated_sentences!(item, boundary_sentences, repeated_normalized, repeated_exact)
+          remove_item || (item.respond_to?(:empty?) && item.empty?)
+        end
+      end
+    end
+
+    def direct_sentences(item)
+      item.is_a?(Sentence) ? [item] : (item.respond_to?(:sentences) ? item.sentences : [])
+    end
+
+    def prune_repeated_sentences!(item, boundary_sentences, repeated_normalized, repeated_exact)
+      if item.is_a?(Sentence)
+        prune_repeated_references!(item, repeated_exact)
+        return repeated_sentence?(item, boundary_sentences, repeated_normalized, repeated_exact)
+      end
+      return false unless item.respond_to?(:sentences)
+
+      item.sentences.reject! do |sentence|
+        prune_repeated_references!(sentence, repeated_exact)
+        repeated_sentence?(sentence, boundary_sentences, repeated_normalized, repeated_exact)
+      end
+      false
+    end
+
+    def prune_repeated_references!(sentence, repeated_exact)
+      sentence.references.each do |reference|
+        reference.sentences.reject! do |referenced|
+          prune_repeated_references!(referenced, repeated_exact)
+          repeated_exact_sentence?(referenced, repeated_exact)
+        end
+      end
+    end
+
+    def repeated_sentence?(sentence, boundary_sentences, repeated_normalized, repeated_exact)
+      repeated_exact_sentence?(sentence, repeated_exact) ||
+        (boundary_sentences.include?(sentence) && repeated_normalized.include?(normalize_boundary_text(sentence.text)))
+    end
+
+    def repeated_exact_sentence?(sentence, repeated_exact)
+      text = exact_boundary_text(sentence.text)
+      repeated_exact.any? { |candidate| text == candidate || (candidate.length >= 40 && text.include?(candidate)) }
+    end
+
+    def normalize_boundary_text(text)
+      exact_boundary_text(text).gsub(/\d+/, '<d>')
+    end
+
+    def exact_boundary_text(text)
+      text.to_s.downcase.gsub(/\s+/, ' ').strip
     end
 
     # Build pages from legacy paragraph format
@@ -752,6 +849,8 @@ module Audiobook
       
       # Group lines by page
       pages_hash = lines_data.group_by { |l| l['page'] || l[:page] || (l.is_a?(SymMash) ? l.page : nil) }
+      return lines_data if @metadata.selected_pages && pages_hash.size < 3
+
       hdrf_counts = Hash.new(0)
       
       # Count how often first/last lines appear across pages
