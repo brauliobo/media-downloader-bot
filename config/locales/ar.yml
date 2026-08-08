@@ -1,0 +1,16 @@
+ar:
+  audiobook:
+    ewprs:
+      caption:
+        type: "النوع: %{kind}"
+        date_place: "التاريخ/المكان: %{value}"
+        published_in: "نُشر في: %{value}"
+        chapters: "الفصول: %{count}/%{total}"
+        language: "اللغة: %{language}"
+        kinds:
+          discourse: خطاب
+          book: كتاب
+        languages:
+          ar: العربية
+          en: الإنجليزية
+          pt: البرتغالية

@@ -11,7 +11,7 @@ module Audiobook::Ewprs
     ].join(',').freeze
     UNAVAILABLE_BOOK = /unpublished in English|not yet published in any language|as yet unpublished in any language/i
     ONLINE_PLACEHOLDER = /\A\[To see if this discourse is now available online,/i
-    LANGUAGE_NAMES = {'en' => 'English', 'pt' => 'Portuguese'}.freeze
+    LANGUAGE_NAMES = {'ar' => 'Arabic', 'en' => 'English', 'pt' => 'Portuguese'}.freeze
     VOICE_ACCENTS  = {'en' => nil, 'pt' => 'portuguese accent'}.freeze
 
     Entry = Struct.new(:kind, :title, :path, :info, :sources, :book_refs, :chapters, keyword_init: true) do

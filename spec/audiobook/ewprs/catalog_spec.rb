@@ -41,6 +41,19 @@ RSpec.describe Audiobook::Ewprs::Catalog do
     end
   end
 
+  it 'passes Arabic language aliases through to OmniVoice' do
+    Dir.mktmpdir('ewprs-') do |root|
+      entry = described_class::Entry.new(kind: :discourse, title: 'Arabic title', path: '/tmp/discourse.html')
+      catalog = described_class.new(root, language: 'ar')
+
+      options = catalog.parse_options(entry)
+
+      expect(catalog.language_name).to eq('Arabic')
+      expect(options.html_language).to eq('ar')
+      expect(options.instruct).to eq('male, middle-aged, moderate pitch, ar accent')
+    end
+  end
+
   it 'uses translated titles from discourse and book files' do
     Dir.mktmpdir('ewprs-') do |root|
       FileUtils.mkdir_p(File.join(root, 'HTML/Navigation'))
