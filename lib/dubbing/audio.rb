@@ -53,22 +53,63 @@ module Dubbing
     end
 
     def schedule(clips, duration:)
-      clips.map do |clip|
-        start         = clip.start.to_f
-        clip_duration = Prober.for(clip.path).format.duration.to_f
-        natural_limit = speech_limit(clip, duration)
-        speed         = fit_speed(clip_duration, natural_limit)
-        finish = start + clip_duration / speed
+      clip_durations = clips.map { |clip| Prober.for(clip.path).format.duration.to_f }
+      speech_limits  = clips.map { |clip| speech_limit(clip, duration) }
+      before, after  = gap_allowances(clips, clip_durations, speech_limits, duration)
 
-        ScheduledClip.new(path: clip.path, start: start, end: finish, speed: speed)
+      clips.each_with_index.map do |clip, idx|
+        schedule_clip(clip, clip_durations[idx], speech_limits[idx], before[idx], after[idx])
       end
+    end
+
+    def gap_allowances(clips, clip_durations, speech_limits, duration)
+      before    = Array.new(clips.size, 0.0)
+      after     = Array.new(clips.size, 0.0)
+      remaining = clip_durations.zip(speech_limits).map { |clip_duration, limit| positive(clip_duration - limit) }
+      return [before, after] if clips.empty?
+
+      claim_gap!(before, 0, positive(clips.first.start.to_f), remaining)
+      clips.each_cons(2).with_index do |(left, right), idx|
+        share_gap!(positive(right.start.to_f - left.end.to_f), idx, before, after, remaining)
+      end
+      claim_gap!(after, -1, positive(duration.to_f - clips.last.end.to_f), remaining)
+
+      [before, after]
+    end
+
+    def share_gap!(gap, left_idx, before, after, remaining)
+      right_idx  = left_idx + 1
+      total_need = remaining[left_idx] + remaining[right_idx]
+      return unless gap.positive? && total_need.positive?
+
+      available = [gap, total_need].min
+      left_gap  = available * remaining[left_idx] / total_need
+      claim_gap!(after, left_idx, left_gap, remaining)
+      claim_gap!(before, right_idx, available - left_gap, remaining)
+    end
+
+    def claim_gap!(allowances, idx, gap, remaining)
+      allowances[idx] = [gap, remaining[idx]].min
+      remaining[idx] -= allowances[idx]
+    end
+
+    def schedule_clip(clip, clip_duration, speech_limit, before, after)
+      start     = clip.start.to_f - before
+      speed     = fit_speed(clip_duration, speech_limit + before + after)
+      finish    = start + clip_duration / speed
+
+      ScheduledClip.new(path: clip.path, start: start, end: finish, speed: speed)
+    end
+
+    def positive(value)
+      [value, 0.0].max
     end
 
     def fit_speed(duration, natural_limit)
       raise 'dubbed speech has no positive source interval' unless natural_limit.positive?
       return 1.0 if duration <= 0
 
-      duration / natural_limit
+      [duration / natural_limit, 1.0].max
     end
 
     def speech_limit(clip, duration)
