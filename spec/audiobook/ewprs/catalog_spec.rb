@@ -54,6 +54,19 @@ RSpec.describe Audiobook::Ewprs::Catalog do
     end
   end
 
+  it 'configures Chinese parsing and narration' do
+    Dir.mktmpdir('ewprs-') do |root|
+      entry = described_class::Entry.new(kind: :discourse, title: 'Chinese title', path: '/tmp/discourse.html')
+      catalog = described_class.new(root, language: 'zh')
+
+      options = catalog.parse_options(entry)
+
+      expect(catalog.language_name).to eq('Chinese')
+      expect(options.html_language).to eq('zh')
+      expect(options.instruct).to eq('male, middle-aged, moderate pitch, chinese accent')
+    end
+  end
+
   it 'uses translated titles from discourse and book files' do
     Dir.mktmpdir('ewprs-') do |root|
       FileUtils.mkdir_p(File.join(root, 'HTML/Navigation'))

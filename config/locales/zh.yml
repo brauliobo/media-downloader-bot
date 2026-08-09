@@ -1,0 +1,14 @@
+zh:
+  audiobook:
+    ewprs:
+      caption:
+        type: "类型：%{kind}"
+        date_place: "日期/地点：%{value}"
+        published_in: "出版信息：%{value}"
+        chapters: "章节：%{count}/%{total}"
+        language: "语言：%{language}"
+        kinds:
+          discourse: 论述
+          book: 书籍
+        languages:
+          zh: 简体中文
