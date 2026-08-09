@@ -1,5 +1,6 @@
 require 'nokogiri'
 require_relative 'base'
+require_relative '../cover'
 require_relative '../page_selection'
 require_relative '../../utils/sh'
 
@@ -39,8 +40,11 @@ module Audiobook
           end
         end
 
+        cover = Cover.detect(pdf_path, page: document.pages.first) if document.pages.any?
+
         SymMash.new(
           metadata: SymMash.new(
+            cover:          cover,
             has_ocr_pages:  image_pages.any?,
             page_count:     page_count,
             selected_pages: selected_pages,

@@ -43,7 +43,8 @@ module Audiobook
   # Unified helper to generate audiobook and return ready-to-upload entries
   def self.generate_uploads(source, dir:, stl:, opts: SymMash.new)
     base = base_from_source(source)
-    audio_out = File.join(dir, "#{base}.opus")
+    audio_format = Zipper::Types.audio.aac
+    audio_out = File.join(dir, "#{base}.#{audio_format.ext}")
     result = generate(source, audio_out, stl: stl, opts: opts)
     yaml_upload = SymMash.new(
       fn_out: result.yaml,
@@ -62,9 +63,10 @@ module Audiobook
       SymMash.new(
         fn_out: result.audio,
         type: SymMash.new(name: :audio),
-        info: SymMash.new(title: base, uploader: '', thumbnail: thumbnail_path),
-        mime: 'audio/ogg',
-        opts: SymMash.new(format: SymMash.new(mime: 'audio/ogg'))
+        info: SymMash.new(title: base, uploader: ''),
+        thumb: thumbnail_path,
+        mime: audio_format.mime,
+        opts: SymMash.new(format: audio_format)
       )
     ]
 

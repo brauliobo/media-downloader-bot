@@ -79,6 +79,23 @@ RSpec.describe 'Audiobook OCR language detection' do
     expect(uploads.first.mime).to eq('application/x-yaml')
   end
 
+  it 'uses the book cover as the audio thumbnail' do
+    book = instance_double(Audiobook::Book)
+    allow(book).to receive(:thumb).with(dir: 'tmp', base: 'book').and_return('/tmp/book-cover.jpg')
+    allow(book).to receive(:metadata).and_return(SymMash.new)
+    allow(Audiobook).to receive(:base_from_source).and_return('book')
+    allow(Audiobook).to receive(:generate).and_return(
+      SymMash.new(yaml: 'book.yml', audio: 'book.m4a', book: book)
+    )
+    allow(Prober).to receive(:for)
+
+    uploads = Audiobook.generate_uploads('book.pdf', dir: 'tmp', stl: nil)
+
+    expect(uploads.last.thumb).to eq('/tmp/book-cover.jpg')
+    expect(uploads.last.mime).to eq('audio/aac')
+    expect(uploads.last.fn_out).to eq('book.m4a')
+  end
+
   it 'loads the top-level language written by the audiobook YAML format' do
     Dir.mktmpdir do |dir|
       path = File.join(dir, 'book.yml')

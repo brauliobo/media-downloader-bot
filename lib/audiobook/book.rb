@@ -278,6 +278,7 @@ module Audiobook
     end
 
     def thumb(dir:, base:)
+      return metadata.cover&.thumbnail(dir: dir, base: base) if metadata.key?(:cover)
       return nil unless (first_page = pages.first)
       return nil unless (first_image = first_page.items.find { |item| item.is_a?(Audiobook::Image) })
       return nil unless first_image.path
