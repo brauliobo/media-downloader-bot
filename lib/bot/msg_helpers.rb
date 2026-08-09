@@ -33,15 +33,15 @@ module Bot
     MARKDOWN_ALL        = MARKDOWN_FORMAT + MARKDOWN_NON_FORMAT
 
     def me t
-      MARKDOWN_ALL.each{ |c| t = t.gsub c, "\\#{c}" }
+      MARKDOWN_ALL.each{ |c| t = t.gsub(c) { "\\#{c}" } }
       t
     end
     def mnfe t
-      MARKDOWN_NON_FORMAT.each{ |c| t = t.gsub c, "\\#{c}" }
+      MARKDOWN_NON_FORMAT.each{ |c| t = t.gsub(c) { "\\#{c}" } }
       t
     end
     def mfe t
-      MARKDOWN_FORMAT.each{ |c| t = t.gsub c, "\\#{c}" }
+      MARKDOWN_FORMAT.each{ |c| t = t.gsub(c) { "\\#{c}" } }
       t
     end
 
