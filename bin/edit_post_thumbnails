@@ -1,0 +1,31 @@
+#!/usr/bin/env ruby
+
+require_relative '../lib/services/edit_post_thumbnails'
+
+options = {}
+urls = ARGV.filter_map do |argument|
+  if argument.match?(/\A[a-z_]+=/i)
+    key, value = argument.split('=', 2)
+    options[key.to_sym] = value
+    nil
+  else
+    argument
+  end
+end
+
+abort 'usage: bin/edit_post_thumbnails thumb=/path/cover.jpg URL [URL ...]' if urls.empty? || options[:thumb].to_s.empty?
+
+chat_ids = options[:chats].to_s.split(',').to_h do |entry|
+  username, chat_id = entry.split(':', 2)
+  [username, Integer(chat_id)]
+end
+
+Services::EditPostThumbnails.new(
+  urls:      urls,
+  thumbnail: options.fetch(:thumb),
+  source:    options[:source],
+  resolver:  (->(username) { chat_ids.fetch(username) } unless chat_ids.empty?),
+  drb:       options[:drb],
+  timeout:   options.fetch(:timeout, 7_200),
+  tmpdir:    options[:tmpdir],
+).run
