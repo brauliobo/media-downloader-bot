@@ -81,15 +81,26 @@ module Dubbing
         text = Subtitler::Translator.clean_translation(translated)
         next if text.empty?
 
+        source_words, target_words = translated_word_timings(sentence, text)
         SymMash.new(
           text:         text,
           source_text:  sentence.text.to_s.strip,
-          source_words: Array(sentence.words).map { |word| SymMash.new(word.to_h) },
+          source_words: source_words,
           start:        sentence.start.to_f,
           end:          sentence.end.to_f,
-          words:        []
+          words:        target_words
         )
       end
+    end
+
+    def translated_word_timings(sentence, text)
+      source_words = Array(sentence.words).map { |word| SymMash.new(word.to_h) }
+      target_words = source_words.map { |word| SymMash.new(word.to_h) }
+      return [source_words, target_words] if target_words.empty?
+
+      timed = SymMash.new(words: target_words)
+      Subtitler::Translator.assign_tokens_to_words!(timed, Subtitler::Translator.tokenize_text(text))
+      [source_words, timed.words]
     end
 
     def synthesize_timeline(workdir)
@@ -126,7 +137,7 @@ module Dubbing
     end
 
     def translated_subtitle_vtt
-      build_subtitle_vtt(SymMash.new(segments: @sentences), normalize: false)
+      build_subtitle_vtt(SymMash.new(segments: @sentences))
     end
 
     def source_subtitle_vtt
@@ -146,7 +157,7 @@ module Dubbing
     end
 
     def build_subtitle_vtt(data, normalize: true)
-      Subtitler::VTT.build(data, normalize: normalize, word_tags: false)
+      Subtitler::VTT.build(data, normalize: normalize, word_tags: !@opts.nowords)
     end
 
     def subtitle_target_lang

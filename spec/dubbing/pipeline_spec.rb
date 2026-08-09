@@ -66,7 +66,7 @@ RSpec.describe Dubbing::Pipeline do
     expect(opts.sub_vtt).to include('00:00:00.500 --> 00:00:01.500', 'Boa tarde.')
   end
 
-  it 'does not project source word timing onto translated speech' do
+  it 'keeps source-projected highlighting without aligning synthesized speech' do
     opts = SymMash.new(dub: 1, slang: 'pt', sub_mode: 'language', sub_lang: 'pt')
     pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)
     pipeline.instance_variable_set(:@source_lang, 'en')
@@ -86,8 +86,8 @@ RSpec.describe Dubbing::Pipeline do
     pipeline.send(:prepare_translated_subtitles)
 
     expect(sentences.first.source_words.map(&:word)).to eq(['Hello', 'world.'])
-    expect(sentences.first.words).to be_empty
-    expect(opts.sub_vtt).not_to include('<00:00:01.000>')
+    expect(sentences.first.words.map(&:word)).to eq(['Olá', 'mundo.'])
+    expect(opts.sub_vtt).to include('<00:00:01.000>mundo.')
   end
 
   it 'reuses source sentences for sub=source' do
@@ -199,7 +199,7 @@ RSpec.describe Dubbing::Pipeline do
     expect(opts.sub_vtt).not_to include('Olá. Tchau.')
   end
 
-  it 'keeps a long sentence in one authoritative subtitle cue' do
+  it 'keeps generated subtitle cues within the shared maximum length' do
     opts = SymMash.new(dub: 1, gensubs: 1, slang: 'pt')
     pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)
     pipeline.instance_variable_set(
@@ -222,10 +222,8 @@ RSpec.describe Dubbing::Pipeline do
       lines[(lines.index(timing) + 1)..].join(' ')
     end
 
-    expect(payloads).to eq([
-      'Esta é uma frase muito longa com palavras suficientes para exigir a divisão em mais de uma legenda legível.'
-    ])
-    expect(opts.sub_vtt.scan('-->').size).to eq(1)
+    expect(payloads).not_to be_empty
+    expect(payloads).to all(have_attributes(length: be <= Subtitler::Translator::MAX_SUBTITLE_CHARS))
   end
 
   it 'writes an opt-in timing score for future evaluations' do
