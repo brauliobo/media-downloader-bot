@@ -1,4 +1,5 @@
 require 'fileutils'
+require 'json'
 require 'tmpdir'
 
 require_relative '../diarizer'
@@ -13,10 +14,7 @@ require_relative 'voice_reference'
 module Dubbing
   class Pipeline
     DEFAULT_TARGET_LANG = 'pt'.freeze
-    MAX_UTTERANCE_GAP   = 0.25
-    MAX_UTTERANCE_SPAN  = 10.0
-
-    attr_reader :source_lang, :target_lang, :speaker_references, :sentences
+    attr_reader :source_lang, :target_lang, :speaker_references, :sentences, :timing_score
 
     def self.apply(input_path, dir:, opts:, stl: nil, probe: nil)
       new(input_path, dir: dir, opts: opts, stl: stl, probe: probe).apply
@@ -54,9 +52,9 @@ module Dubbing
           dir:       workdir,
           transcriber: ::VoiceReference::Transcriber.new
         )
-        merge_speaker_sentences!
         timeline = synthesize_timeline(workdir)
-        apply_timeline(timeline.clips)
+        @timing_score = timeline.score
+        write_timing_score
         prepare_translated_subtitles
         mix_video(timeline.path, workdir)
       end
@@ -83,26 +81,15 @@ module Dubbing
         text = Subtitler::Translator.clean_translation(translated)
         next if text.empty?
 
-        source_words, target_words = translated_word_timings(sentence, text)
         SymMash.new(
           text:         text,
           source_text:  sentence.text.to_s.strip,
-          source_words: source_words,
+          source_words: Array(sentence.words).map { |word| SymMash.new(word.to_h) },
           start:        sentence.start.to_f,
           end:          sentence.end.to_f,
-          words:        target_words
+          words:        []
         )
       end
-    end
-
-    def translated_word_timings(sentence, text)
-      source_words = Array(sentence.words).map { |word| SymMash.new(word.to_h) }
-      target_words = source_words.map { |word| SymMash.new(word.to_h) }
-      return [source_words, target_words] if target_words.empty?
-
-      timed = SymMash.new(words: target_words)
-      Subtitler::Translator.assign_tokens_to_words!(timed, Subtitler::Translator.tokenize_text(text))
-      [source_words, timed.words]
     end
 
     def synthesize_timeline(workdir)
@@ -139,7 +126,7 @@ module Dubbing
     end
 
     def translated_subtitle_vtt
-      build_subtitle_vtt(SymMash.new(segments: @sentences))
+      build_subtitle_vtt(SymMash.new(segments: @sentences), normalize: false)
     end
 
     def source_subtitle_vtt
@@ -159,57 +146,17 @@ module Dubbing
     end
 
     def build_subtitle_vtt(data, normalize: true)
-      Subtitler::VTT.build(data, normalize: normalize, word_tags: !@opts.nowords)
+      Subtitler::VTT.build(data, normalize: normalize, word_tags: false)
     end
 
     def subtitle_target_lang
       @opts.sub_lang.presence || target_lang
     end
 
-    def apply_timeline(clips)
-      @sentences.zip(clips).each do |sentence, clip|
-        source_start = sentence.start.to_f
-        source_end   = sentence.end.to_f
-        target_start = clip.start.to_f
-        target_end   = [clip.end.to_f, video_duration].min
-        retime_words!(sentence.words, source_start, source_end, target_start, target_end)
-        sentence.start = target_start
-        sentence.end   = target_end
-      end
-      @sentences.select! { |sentence| sentence.start < video_duration }
-    end
+    def write_timing_score
+      return unless @opts.dubscore.present?
 
-    def retime_words!(words, source_start, source_end, target_start, target_end)
-      source_duration = source_end - source_start
-      target_duration = target_end - target_start
-      return unless source_duration.positive? && target_duration.positive?
-
-      scale = target_duration / source_duration
-      Array(words).each do |word|
-        word.start = target_start + (word.start.to_f - source_start) * scale
-        word.end   = target_start + (word.end.to_f - source_start) * scale
-      end
-    end
-
-    def merge_speaker_sentences!
-      @sentences = @sentences.each_with_object([]) do |sentence, utterances|
-        previous = utterances.last
-        if previous && mergeable_utterance?(previous, sentence)
-          previous.text         = "#{previous.text} #{sentence.text}".strip
-          previous.source_text  = "#{previous.source_text} #{sentence.source_text}".strip
-          previous.source_words = Array(previous.source_words) + Array(sentence.source_words)
-          previous.words        = Array(previous.words) + Array(sentence.words)
-          previous.end          = sentence.end
-        else
-          utterances << sentence
-        end
-      end
-    end
-
-    def mergeable_utterance?(previous, sentence)
-      gap  = sentence.start.to_f - previous.end.to_f
-      span = sentence.end.to_f - previous.start.to_f
-      previous.speaker_id == sentence.speaker_id && gap.between?(0, MAX_UTTERANCE_GAP) && span <= MAX_UTTERANCE_SPAN
+      File.write(File.expand_path(@opts.dubscore.to_s), JSON.pretty_generate(timing_score))
     end
 
     def mix_video(dub_audio, workdir)

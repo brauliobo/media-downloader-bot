@@ -99,3 +99,16 @@ or `text_file=` when the reference has already been extracted.
 The Sherpa/TitaNet cosine value is a local speaker-similarity proxy, not
 OmniVoice's official SIM-o metric. Set `embedding=false` or `transcription=false`
 when the corresponding local service is unavailable.
+
+## Dubbing timing evaluation
+
+Pass `dubscore=PATH` to write a JSON timing report for a dubbing run:
+
+```bash
+bundle exec ruby bin/zip input.mp4 dub=pt dubscore=/tmp/dubbing-timing.json
+```
+
+`deviation_index` is the root-mean-square absolute `log2` tempo adjustment,
+scaled by 100. A natural-speed run scores `0`; both `0.5x` and `2x` score `100`.
+The report also includes subtitle-slot error and speed distribution values for
+comparison across future runs.

@@ -27,18 +27,18 @@ RSpec.describe Dubbing::Audio do
     expect(described_class.normalize(input, output)).to eq(output)
   end
 
-  it 'fits speech to the source sentence span before the next line' do
+  it 'fits speech to its subtitle slot independently of the next sentence' do
     first = described_class::Clip.new(path: File.join(dir, 'first.wav'), start: 0.0, end: 1.5)
-    second = described_class::Clip.new(path: File.join(dir, 'second.wav'), start: 2.0, end: 4.0)
+    second = described_class::Clip.new(path: File.join(dir, 'second.wav'), start: 1.0, end: 4.0)
     allow(Prober).to receive(:for).with(first.path).and_return(SymMash.new(format: SymMash.new(duration: 2.4)))
     allow(Prober).to receive(:for).with(second.path).and_return(SymMash.new(format: SymMash.new(duration: 2.0)))
 
     scheduled = described_class.schedule([first, second], duration: 5.0)
 
-    expect(scheduled.map(&:start)).to eq([0.0, 2.0])
+    expect(scheduled.map(&:start)).to eq([0.0, 1.0])
     expect(scheduled.first.end).to eq(1.5)
     expect(scheduled.first.speed).to be_within(0.001).of(2.4 / 1.5)
-    expect(scheduled.last.speed).to eq(1.0)
+    expect(scheduled.last.speed).to eq(2.0 / 3.0)
   end
 
   it 'stretches shorter speech to the source sentence span' do

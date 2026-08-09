@@ -1,11 +1,16 @@
 require_relative '../utils/sh'
 require_relative '../zipper'
+require_relative 'timing_score'
 
 module Dubbing
   module Audio
     Clip          = Data.define(:path, :start, :end)
     ScheduledClip = Data.define(:path, :start, :end, :speed)
-    Timeline      = Data.define(:path, :clips)
+    Timeline      = Data.define(:path, :clips, :score) do
+      def initialize(path:, clips:, score: nil)
+        super
+      end
+    end
 
     module_function
 
@@ -18,11 +23,12 @@ module Dubbing
     end
 
     def render_timeline(clips, output, duration:)
-      return Timeline.new(path: silence(output, duration), clips: []) if clips.empty?
+      return Timeline.new(path: silence(output, duration), clips: [], score: TimingScore.call([], [])) if clips.empty?
 
-      clips = schedule(clips, duration: duration)
-      inputs = clips.map { |clip| "-i #{Sh.escape(clip.path)}" }.join(' ')
-      chains = clips.map.with_index do |clip, idx|
+      source_clips = clips
+      clips        = schedule(source_clips, duration: duration)
+      inputs       = clips.map { |clip| "-i #{Sh.escape(clip.path)}" }.join(' ')
+      chains       = clips.map.with_index do |clip, idx|
         delay = (clip.start.to_f * 1000).round
         speed = clip.speed == 1.0 ? '' : "#{tempo_filter(clip.speed)},"
         "[#{idx}:a]#{speed}adelay=#{delay}:all=1[a#{idx}]"
@@ -33,7 +39,11 @@ module Dubbing
       command = "#{Zipper::FFMPEG} #{inputs} -filter_complex #{Sh.escape(filter)} " \
         "-ac 1 -ar 48000 #{Sh.escape(output)}"
 
-      Timeline.new(path: run!('dub timeline', command, output), clips: clips)
+      Timeline.new(
+        path:  run!('dub timeline', command, output),
+        clips: clips,
+        score: TimingScore.call(source_clips, clips)
+      )
     end
 
     def replace_video_audio(video, audio, output, duration:)
@@ -43,10 +53,10 @@ module Dubbing
     end
 
     def schedule(clips, duration:)
-      clips.map.with_index do |clip, idx|
+      clips.map do |clip|
         start         = clip.start.to_f
         clip_duration = Prober.for(clip.path).format.duration.to_f
-        natural_limit = speech_limit(clip, clips[idx + 1], duration)
+        natural_limit = speech_limit(clip, duration)
         speed         = fit_speed(clip_duration, natural_limit)
         finish = start + clip_duration / speed
 
@@ -61,9 +71,8 @@ module Dubbing
       duration / natural_limit
     end
 
-    def speech_limit(clip, next_clip, duration)
-      next_boundary = next_clip&.start&.to_f || duration.to_f
-      [clip.end.to_f, next_boundary].min - clip.start.to_f
+    def speech_limit(clip, duration)
+      [clip.end.to_f, duration.to_f].min - clip.start.to_f
     end
 
     def tempo_filter(speed)
