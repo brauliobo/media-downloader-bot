@@ -71,7 +71,7 @@ RSpec.describe Audiobook::Ewprs::Batch do
 
     expect(result[:edited]).to eq(1)
     expect(record).to include(
-      operation: 'edit', message_id: 123, remote_id: 'replacement-remote',
+      operation: 'edit', title: 'First', message_id: 123, remote_id: 'replacement-remote',
       audio_sha256: Digest::SHA256.file(audio).hexdigest
     )
 

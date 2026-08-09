@@ -216,6 +216,7 @@ module Audiobook::Ewprs
       record = previous.merge(
         at:             Time.now.utc.iso8601,
         operation:      'edit',
+        title:          entry.title,
         chat_id:        chat_id,
         forum_topic_id: topic[:forum_topic_id],
         message_id:     response.message_id,
