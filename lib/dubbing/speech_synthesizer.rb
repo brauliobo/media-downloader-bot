@@ -18,13 +18,15 @@ module Dubbing
 
     def render
       @stl&.update 'dubbing: synthesizing'
-      clips = Array.new(@sentences.size)
-      on_batch = progress_callback
+      clips             = Array.new(@sentences.size)
+      options           = TTS::Options.for(@opts)
+      on_batch          = progress_callback
+      use_target_voice  = target_reference_supported?
 
       speaker_groups.each_with_index do |(speaker_id, indices), speaker_index|
         reference = @references.fetch(speaker_id)
         jobs      = jobs_for(indices)
-        synthesize_speaker(reference, jobs, speaker_index, on_batch)
+        synthesize_speaker(reference, jobs, speaker_index, options, on_batch, use_target_voice)
         normalize_jobs(jobs, indices, clips)
       end
 
@@ -47,23 +49,27 @@ module Dubbing
       end
     end
 
-    def synthesize_speaker(reference, jobs, speaker_index, on_batch)
-      options = TTS::Options.for(@opts)
-      return synthesize_direct(reference, jobs, options, on_batch) unless target_reference_supported?
+    def synthesize_speaker(reference, jobs, speaker_index, options, on_batch, use_target_voice)
+      target_reference = if use_target_voice
+        target_reference_for(reference, jobs, speaker_index, options)
+      else
+        reference
+      end
 
+      synthesize_jobs(jobs, target_reference, options, on_batch: on_batch)
+    end
+
+    def target_reference_for(reference, jobs, speaker_index, options)
       # Short cross-lingual targets can echo the source-language voice prompt.
       anchor_text = jobs.max_by { |job| job.fetch(:text).to_s.length }.fetch(:text).to_s
       anchor_path = File.join(@workdir, format('speaker-%04d.target-reference.wav', speaker_index))
       anchor_job = {text: anchor_text, lang: @target_lang, out_path: anchor_path}
-      source_options = options.merge(reference.tts_options)
 
-      TTS.synthesize_batch(items: [anchor_job], threads: 1, **source_options)
-
-      target_options = options.merge(speaker_wav: anchor_path, ref_text: anchor_text)
-      TTS.synthesize_batch(items: jobs, on_batch: on_batch, threads: 1, **target_options)
+      synthesize_jobs([anchor_job], reference, options)
+      VoiceReference::Reference.new(path: anchor_path, text: anchor_text)
     end
 
-    def synthesize_direct(reference, jobs, options, on_batch)
+    def synthesize_jobs(jobs, reference, options, on_batch: nil)
       TTS.synthesize_batch(
         items:    jobs,
         on_batch: on_batch,

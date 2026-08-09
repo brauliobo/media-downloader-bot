@@ -5,12 +5,12 @@
 - Use the Ruby version from `.ruby-version`; run `rvm use` before Ruby, Bundler, RSpec, or Rake commands.
 - Manage dependencies with Bundler and keep `Gemfile` and `Gemfile.lock` consistent.
 
-## Engineering
+## Code
 
 - Fix root causes with small changes that follow existing patterns.
 - Keep localized static text in `config/locales`; do not embed language-specific labels in Ruby.
-- Keep EWPRS audiobook code under `lib/audiobook/ewprs/` and matching specs under `spec/audiobook/ewprs/`.
-- Preserve unrelated worktree changes and never commit secrets, generated media, caches, or runtime logs.
+- Keep EWPRS audiobook code under `lib/audiobook/ewprs/` with matching specs under `spec/audiobook/ewprs/`.
+- Preserve unrelated worktree changes; never commit secrets, generated media, caches, or runtime logs.
 
 ## Verification
 
@@ -24,4 +24,5 @@
 
 ## Git
 
-- Commit only when explicitly requested and use focused commits with concrete module or feature prefixes.
+- Commit only when explicitly requested.
+- Use focused commits with concrete module or feature prefixes.
