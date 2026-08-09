@@ -29,8 +29,14 @@ class Subtitler
 
     def self.sentences_for(segs)
       return [] if segs.nil?
-      return TextHelpers.sentences_from_segments(segs) if segs.any? { |s| Array(s.words).any? }
-      segs.flat_map { |segment| text_sentences_for(segment) }
+
+      sentences = if segs.any? { |s| Array(s.words).any? }
+        TextHelpers.sentences_from_segments(segs)
+      else
+        segs.flat_map { |segment| text_sentences_for(segment) }
+      end
+
+      sentences.select { |sentence| sentence.end.to_f > sentence.start.to_f }
     end
 
     def self.batch_translate_texts(texts, from:, to:)

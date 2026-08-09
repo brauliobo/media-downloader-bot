@@ -124,6 +124,19 @@ RSpec.describe Subtitler::Translator do
     expect(mash.segments.all? { |s| Array(s.words).empty? }).to eq(true)
   end
 
+  it 'ignores transcription segments with no positive timing interval' do
+    segments = [
+      SymMash.new(start: 0.0, end: 1.0, words: [SymMash.new(word: 'Hello.', start: 0.0, end: 1.0)]),
+      SymMash.new(start: 1.0, end: 1.0, words: [SymMash.new(word: 'Bad.', start: 1.0, end: 1.0)]),
+      SymMash.new(start: 1.0, end: 2.0, words: [SymMash.new(word: 'Goodbye.', start: 1.0, end: 2.0)]),
+    ]
+
+    sentences = described_class.sentences_for(segments)
+
+    expect(sentences.map(&:text)).to eq(['Hello.', 'Goodbye.'])
+    expect(sentences).to all(satisfy { |sentence| sentence.end > sentence.start })
+  end
+
   it 'splits wordless text into timed sentences before translating' do
     verbose_json = {
       segments: [
