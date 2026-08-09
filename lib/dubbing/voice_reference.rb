@@ -1,6 +1,7 @@
 require 'fileutils'
 
 require_relative '../voice_reference/audio_analyzer'
+require_relative '../voice_reference/transcriber'
 require_relative '../zipper'
 
 module Dubbing
@@ -17,11 +18,15 @@ module Dubbing
 
     module_function
 
-    def extract_by_speaker(input_path, segments, sentences:, dir:, min_duration: MIN_DURATION, max_duration: MAX_DURATION, filter: :raw, pad_duration: nil)
+    def extract_by_speaker(input_path, segments, sentences:, dir:, min_duration: MIN_DURATION, max_duration: MAX_DURATION, filter: :raw, pad_duration: nil, transcriber: nil)
+      segments_by_speaker = Array(segments).group_by(&:speaker_id)
       Array(sentences).group_by(&:speaker_id).each_with_index.to_h do |(speaker_id, speaker_sentences), index|
         speaker_dir = File.join(dir, format('speaker-%04d', index))
         FileUtils.mkdir_p(speaker_dir)
         selections = select(speaker_sentences, min_duration, max_duration)
+        if selections.empty? && transcriber
+          selections = select_segments(segments_by_speaker.fetch(speaker_id, []), min_duration, max_duration)
+        end
         raise "speaker #{speaker_id} has no usable reference" if selections.empty?
 
         clips = selections.map.with_index do |selection, idx|
@@ -29,7 +34,7 @@ module Dubbing
         end
         path = File.join(speaker_dir, 'speaker.wav')
         Zipper.concat_audio(clips, path)
-        text = selections.map(&:text).reject(&:empty?).join(' ')
+        text = reference_text(path, selections, transcriber)
         raise "speaker #{speaker_id} has no reference transcript" if text.empty?
 
         [speaker_id, Reference.new(path: path, text: text)]
@@ -45,6 +50,21 @@ module Dubbing
 
         Selection.new(start: start, duration: finish - start, text: text)
       end
+      choose(available, min_duration, max_duration)
+    end
+
+    def select_segments(segments, min_duration, max_duration)
+      available = Array(segments).filter_map do |segment|
+        start = segment.start.to_f
+        finish = segment.end.to_f
+        next if finish <= start
+
+        Selection.new(start: start, duration: [finish - start, max_duration].min, text: '')
+      end
+      choose(available, min_duration, max_duration)
+    end
+
+    def choose(available, min_duration, max_duration)
       return [] if available.empty?
 
       selected = bounded(available, max_duration)
@@ -84,6 +104,13 @@ module Dubbing
       )
 
       out
+    end
+
+    def reference_text(path, selections, transcriber)
+      return selections.map(&:text).reject(&:empty?).join(' ') unless transcriber
+
+      transcriber.call(path).fetch(:segments).map { |segment| segment.fetch(:text).to_s.strip }
+        .reject(&:empty?).join(' ')
     end
   end
 end

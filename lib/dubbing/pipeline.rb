@@ -6,9 +6,8 @@ require_relative '../prober'
 require_relative '../subtitler'
 require_relative '../subtitler/translator'
 require_relative '../translator'
-require_relative '../tts'
-require_relative '../tts/options'
 require_relative 'audio'
+require_relative 'speech_synthesizer'
 require_relative 'voice_reference'
 
 module Dubbing
@@ -52,7 +51,8 @@ module Dubbing
           @input_path,
           diarization.segments,
           sentences: @sentences,
-          dir:       workdir
+          dir:       workdir,
+          transcriber: ::VoiceReference::Transcriber.new
         )
         merge_speaker_sentences!
         timeline = synthesize_timeline(workdir)
@@ -106,37 +106,15 @@ module Dubbing
     end
 
     def synthesize_timeline(workdir)
-      @stl&.update 'dubbing: synthesizing'
-      clips          = Array.new(@sentences.size)
-      completed      = 0
-      progress_mutex = Mutex.new
-      on_batch       = lambda do |batch|
-        progress_mutex.synchronize do
-          completed += batch.size
-          @stl&.update "dubbing: synthesizing #{completed}/#{@sentences.size}"
-        end
-      end
-      @sentences.each_index.group_by { |idx| @sentences.fetch(idx).speaker_id }.each do |speaker_id, indices|
-        reference = @speaker_references.fetch(speaker_id)
-        options   = TTS::Options.for(@opts).merge(reference.tts_options)
-        jobs = indices.map do |idx|
-          {
-            text:     @sentences.fetch(idx).text,
-            lang:     target_lang,
-            out_path: File.join(workdir, format('sentence-%04d.raw.wav', idx + 1))
-          }
-        end
-
-        TTS.synthesize_batch(items: jobs, on_batch: on_batch, threads: 1, **options)
-        jobs.zip(indices).each do |job, idx|
-          fit = File.join(workdir, format('sentence-%04d.fit.wav', idx + 1))
-          Audio.normalize(job.fetch(:out_path), fit)
-          sentence = @sentences.fetch(idx)
-          clips[idx] = Audio::Clip.new(path: fit, start: sentence.start.to_f, end: sentence.end.to_f)
-        end
-      end
-
-      Audio.render_timeline(clips, File.join(workdir, 'dub.wav'), duration: video_duration)
+      SpeechSynthesizer.new(
+        sentences:       @sentences,
+        references:      @speaker_references,
+        opts:            @opts,
+        target_lang:     target_lang,
+        workdir:         workdir,
+        video_duration:  video_duration,
+        stl:             @stl
+      ).render
     end
 
     def prepare_translated_subtitles

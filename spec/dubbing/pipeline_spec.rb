@@ -213,6 +213,7 @@ RSpec.describe Dubbing::Pipeline do
     allow(::Translator).to receive(:translate_for_dubbing).and_return(['Olá.', 'Tchau.'])
     allow(Diarizer).to receive(:diarize).and_return(diarization)
     allow(Dubbing::VoiceReference).to receive(:extract_by_speaker).and_return(speakers)
+    allow(TTS).to receive(:supports?).and_return(false)
     allow(Dubbing::Audio).to receive(:normalize) { |_raw, out| File.write(out, 'fit') }
     allow(Dubbing::Audio).to receive(:render_timeline) do |clips, output, duration:|
       expect(duration).to eq(6.0)
@@ -247,7 +248,13 @@ RSpec.describe Dubbing::Pipeline do
     expect(::Translator).to have_received(:translate_for_dubbing)
       .with(['Hello.', 'Bye.'], from: 'en', to: 'pt', durations: [1.0, 1.0])
     expect(Dubbing::VoiceReference).to have_received(:extract_by_speaker)
-      .with(input, diarization.segments, sentences: kind_of(Array), dir: kind_of(String))
+      .with(
+        input,
+        diarization.segments,
+        sentences:   kind_of(Array),
+        dir:         kind_of(String),
+        transcriber: kind_of(VoiceReference::Transcriber)
+      )
     expect(pipeline.sentences.map(&:speaker_id)).to eq([0, 1])
     expect(pipeline.sentences.map(&:source_text)).to eq(['Hello.', 'Bye.'])
     expect(pipeline.sentences.map(&:start)).to eq([0.0, 2.0])

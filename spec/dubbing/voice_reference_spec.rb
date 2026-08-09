@@ -83,6 +83,40 @@ RSpec.describe Dubbing::VoiceReference do
     expect(reference.tts_options).to eq(speaker_wav: '/tmp/speaker.wav', ref_text: 'Reference text.')
   end
 
+  it 'uses the extracted audio transcript when one is provided' do
+    transcriber = instance_double('VoiceReference::Transcriber', call: {
+      segments: [{text: 'Observed reference.'}]
+    })
+
+    reference = described_class.extract_by_speaker(
+      input,
+      [segment(0, 3)],
+      sentences: [sentence(0, 3, source_text: 'Hallucinated reference.')],
+      dir: dir,
+      transcriber: transcriber
+    ).fetch(0)
+
+    expect(reference.text).to eq('Observed reference.')
+  end
+
+  it 'uses bounded diarization turns when assigned transcript sentences are too long' do
+    transcriber = instance_double('VoiceReference::Transcriber')
+    allow(transcriber).to receive(:call).and_return(segments: [{text: 'Observed speaker turn.'}])
+
+    reference = described_class.extract_by_speaker(
+      input,
+      [segment(10, 22, speaker_id: 'SPEAKER_01')],
+      sentences: [sentence(0, 20, source_text: 'A transcript span that is too long.', speaker_id: 'SPEAKER_01')],
+      dir: dir,
+      transcriber: transcriber
+    ).fetch('SPEAKER_01')
+
+    clip = File.join(dir, 'speaker-0000', 'speaker-0001.wav')
+    expect(File.read(clip)).to eq('10.0:8.0')
+    expect(reference.text).to eq('Observed speaker turn.')
+    expect(transcriber).to have_received(:call).with(reference.path)
+  end
+
   it 'combines complete reference sentences up to the cap' do
     segments = [segment(0, 1, speaker_id: 0), segment(2, 6, speaker_id: 0)]
     sentences = [
