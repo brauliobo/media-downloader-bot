@@ -142,7 +142,8 @@ RSpec.describe 'Audiobook TTS speed' do
       expect(VoiceReference).to receive(:from_url).with(
         url: 'https://example.com/narrator',
         output: File.join(dir, 'audiobook_voice_reference.wav'),
-        language: 'pt'
+        language: 'pt',
+        reference_filter: :clone
       ).and_return(reference)
       allow(Language).to receive(:author_gender).and_return('female')
       expect(TTS).not_to receive(:synthesize)
@@ -169,7 +170,8 @@ RSpec.describe 'Audiobook TTS speed' do
         expect(options.except(:on_status)).to eq(
           url: 'https://example.com/narrator',
           output: File.join(dir, 'audiobook_voice_reference.wav'),
-          language: 'pt'
+          language: 'pt',
+          reference_filter: :clone
         )
         options.fetch(:on_status).call('Transcribing voice reference')
         reference

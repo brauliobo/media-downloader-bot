@@ -135,7 +135,12 @@ module Audiobook
 
       if voice_url
         ref_path  = File.join(dir, 'audiobook_voice_reference.wav')
-        reference_options = {url: voice_url, output: ref_path, language: @lang}
+        reference_options = {
+          url:              voice_url,
+          output:           ref_path,
+          language:         @lang,
+          reference_filter: :clone,
+        }
         reference_options[:on_status] = @stl.method(:update) if @stl
         reference = ::VoiceReference.from_url(**reference_options)
         return options.merge(speaker_wav: ref_path, ref_text: reference.text)
