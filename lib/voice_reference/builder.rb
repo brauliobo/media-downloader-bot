@@ -12,17 +12,23 @@ class VoiceReference
     MIN_AVERAGE_PROBABILITY   = 0.85
     MIN_P10_PROBABILITY       = 0.75
 
-    def initialize(transcriber: Transcriber.new, selector: Selector.new, analyzer: AudioAnalyzer.new, language: 'en', reference_filter: :raw)
+    def initialize(
+      transcriber: Transcriber.new, selector: Selector.new, analyzer: AudioAnalyzer.new, language: 'en',
+      reference_filter: :raw, on_status: nil
+    )
       @transcriber      = transcriber
       @selector         = selector
       @analyzer         = analyzer
       @language         = language
       @reference_filter = reference_filter
+      @on_status        = on_status
     end
 
     def build(audio_files:, output:, transcripts: {})
       recordings = Array(audio_files).map do |audio|
-        {audio: audio, transcript: transcripts.fetch(audio) { transcriber.call(audio) }}
+        transcript = transcripts.fetch(audio) { transcriber.call(audio) }
+        transcript = transcript.merge(language: transcript[:language].presence || language)
+        {audio: audio, transcript: transcript}
       end
       candidate = validated_candidate(selector.rank(recordings), output)
       raise 'no voice reference candidate passed quality checks' unless candidate
@@ -41,7 +47,7 @@ class VoiceReference
 
     private
 
-    attr_reader :transcriber, :selector, :analyzer, :language, :reference_filter
+    attr_reader :transcriber, :selector, :analyzer, :language, :reference_filter, :on_status
 
     def sidecar(output, extension)
       output.sub(/\.[^.]+\z/, extension)
@@ -49,7 +55,9 @@ class VoiceReference
 
     def validated_candidate(candidates, output)
       Dir.mktmpdir('voice-reference-validation-') do |dir|
-        Array(candidates).first(MAX_VALIDATION_CANDIDATES).each_with_index do |candidate, index|
+        selected = Array(candidates).first(MAX_VALIDATION_CANDIDATES)
+        selected.each_with_index do |candidate, index|
+          on_status&.call("Validating voice reference #{index + 1}/#{selected.size}")
           path = File.join(dir, "#{candidate_key(candidate)}.wav")
           analyzer.extract(candidate, path, filter: reference_filter)
           validation = validation_report(
@@ -82,7 +90,8 @@ class VoiceReference
       p10           = probabilities.empty? ? 0 : probabilities.sort[(probabilities.size * 0.1).floor]
       observed      = segments.map { |segment| segment.fetch(:text) }.join(' ')
       similarity    = VoiceReference::TranscriptQuality.word_similarity(expected, observed)
-      transcript_ok = transcript.fetch(:language) == language &&
+      transcript_language = transcript[:language].presence || language
+      transcript_ok = transcript_language == language &&
         average >= MIN_AVERAGE_PROBABILITY && p10 >= MIN_P10_PROBABILITY &&
         similarity >= MIN_TRANSCRIPT_SIMILARITY
       {
@@ -91,7 +100,7 @@ class VoiceReference
         voice_quality_filter: AudioAnalyzer::FILTERS.fetch(reference_filter),
         transcript: {
           accepted:            transcript_ok,
-          language:            transcript.fetch(:language),
+          language:            transcript_language,
           expected:            expected,
           observed:            observed,
           similarity:          similarity,

@@ -155,6 +155,32 @@ RSpec.describe 'Audiobook TTS speed' do
     end
   end
 
+  it 'forwards voice link extraction progress to the audiobook status' do
+    stub_const('TTS::BACKEND', TTS::OmniVoice)
+    book = instance_double(Audiobook::Book, metadata: {language: 'pt'}, pages: [])
+    status = double(update: nil)
+    runner = Audiobook::Runner.new(
+      book, status, SymMash.new(voice: 'https://example.com/narrator')
+    )
+
+    Dir.mktmpdir do |dir|
+      reference = VoiceReference::Candidate.new(text: 'Uma passagem clara da narradora.')
+      expect(VoiceReference).to receive(:from_url) do |**options|
+        expect(options.except(:on_status)).to eq(
+          url: 'https://example.com/narrator',
+          output: File.join(dir, 'audiobook_voice_reference.wav'),
+          language: 'pt'
+        )
+        options.fetch(:on_status).call('Transcribing voice reference')
+        reference
+      end
+
+      runner.send(:tts_options, dir)
+
+      expect(status).to have_received(:update).with('Transcribing voice reference')
+    end
+  end
+
   it 'preserves explicit voice instructions for a recorded reference' do
     stub_const('TTS::BACKEND', TTS::OmniVoice)
     book = instance_double(Audiobook::Book, metadata: {language: 'en'}, pages: [])

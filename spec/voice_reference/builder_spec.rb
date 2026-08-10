@@ -23,11 +23,13 @@ RSpec.describe VoiceReference::Builder do
       end
       selector = double(rank: [candidate])
       analyzer    = double
+      statuses    = []
       allow(analyzer).to receive(:extract) { |_candidate, path| File.write(path, 'wav') }
       allow(analyzer).to receive(:report).and_return(accepted: true)
 
       result = described_class.new(
-        transcriber: transcriber, selector: selector, analyzer: analyzer
+        transcriber: transcriber, selector: selector, analyzer: analyzer,
+        on_status: ->(status) { statuses << status }
       ).build(audio_files: ['source.webm'], output: output)
 
       expect(result).to eq(candidate)
@@ -40,6 +42,7 @@ RSpec.describe VoiceReference::Builder do
       expect(candidate.validation[:selection]).to eq(rank: 1, rejected_candidates: 0)
       expect(candidate.artifacts.dig(:audio, :path)).to eq(output)
       expect(candidate.artifacts.dig(:audio, :sha256)).to match(/\A[0-9a-f]{64}\z/)
+      expect(statuses).to eq(['Validating voice reference 1/1'])
     end
   end
 
@@ -71,6 +74,39 @@ RSpec.describe VoiceReference::Builder do
     end
   end
 
+  it 'reports each URL extraction stage' do
+    Dir.mktmpdir('voice-reference-status-') do |dir|
+      source     = File.join(dir, 'source.webm')
+      output     = File.join(dir, 'reference.wav')
+      transcript = {language: 'pt', segments: []}
+      candidate  = VoiceReference::Candidate.new(text: 'Uma passagem clara.')
+      downloader = double(call: source)
+      transcriber = double(call: transcript)
+      selector    = instance_double(VoiceReference::Selector)
+      builder     = instance_double(described_class, build: candidate)
+      statuses    = []
+      on_status   = ->(status) { statuses << status }
+      allow(VoiceReference::Selector).to receive(:new).and_return(selector)
+      allow(described_class).to receive(:new).with(
+        transcriber: transcriber, selector: selector, language: 'pt', reference_filter: :raw,
+        on_status: on_status
+      ).and_return(builder)
+
+      result = VoiceReference.from_url(
+        url: 'https://example.com/voice', output: output, language: 'pt',
+        downloader: downloader, transcriber: transcriber, on_status: on_status
+      )
+
+      expect(result).to eq(candidate)
+      expect(statuses).to eq([
+        'Downloading voice reference',
+        'Transcribing voice reference',
+        'Selecting voice reference',
+        'Voice reference ready'
+      ])
+    end
+  end
+
   it 'validates the extracted transcript in the configured language' do
     builder = described_class.new(language: 'pt')
     text    = 'Esta passagem de referência possui uma voz clara e natural.'
@@ -85,5 +121,36 @@ RSpec.describe VoiceReference::Builder do
     )
 
     expect(report[:accepted]).to eq(true)
+  end
+
+  it 'uses the configured language when transcription omits detection' do
+    transcript = {language: nil, segments: []}
+    selector   = double(rank: [])
+    builder    = described_class.new(transcriber: double(call: transcript), selector: selector, language: 'es')
+
+    expect do
+      builder.build(audio_files: ['source.opus'], output: 'reference.wav')
+    end.to raise_error(RuntimeError, /no voice reference candidate/)
+
+    expect(selector).to have_received(:rank).with([
+      {audio: 'source.opus', transcript: {language: 'es', segments: []}}
+    ])
+  end
+
+  it 'uses the configured language when clip validation omits detection' do
+    builder = described_class.new(language: 'es')
+    text    = 'Además, son capaces de disipar las cargas eléctricas.'
+    report  = builder.send(
+      :validation_report,
+      text,
+      {
+        language: nil,
+        segments: [{text: text, probabilities: Array.new(text.split.size, 0.95)}]
+      },
+      {accepted: true}
+    )
+
+    expect(report[:accepted]).to eq(true)
+    expect(report.dig(:transcript, :language)).to eq('es')
   end
 end
