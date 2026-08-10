@@ -19,7 +19,7 @@ RSpec.describe Language do
   it 'raises when language detection fails' do
     allow(AI::JSONSchema).to receive(:ask).and_raise('offline')
 
-    expect { described_class.detect([SymMash.new(text: '???')]) }.to raise_error(RuntimeError, 'offline')
+    expect { described_class.detect([SymMash.new(text: 'Texto em portugues')]) }.to raise_error(RuntimeError, 'offline')
   end
 
   it 'uses the majority language across sampled text chunks' do
@@ -50,6 +50,13 @@ RSpec.describe Language do
 
     expect(described_class.detect([SymMash.new(text: text)])).to eq('pt')
     expect(inputs.size).to be > 1
+  end
+
+  it 'ignores chunks containing only page-number punctuation' do
+    stub_const('Language::CHUNK_SIZE', 20)
+    text = 'Texto em portugues. ' + ('.' * 27) + '85'
+
+    expect(described_class.language_chunks([SymMash.new(text: text)])).to eq(['Texto em portugues. '])
   end
 
   it 'raises on failed chunks instead of falling back to English' do

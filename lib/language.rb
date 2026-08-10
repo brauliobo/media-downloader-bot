@@ -61,7 +61,7 @@ module Language
   def self.language_chunks(paragraphs)
     text = paragraphs.map { |p| p[:text].to_s.strip }.reject(&:empty?).join("\n")
     chunks = text.scan(/.{1,#{CHUNK_SIZE}}/m).first(MAX_CHUNKS)
-    chunks.reject { |chunk| chunk.strip.empty? }
+    chunks.select { |chunk| chunk.match?(/\p{L}/) }
   end
 
   def self.stable_reference_text(text, lang)
