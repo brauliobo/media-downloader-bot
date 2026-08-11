@@ -12,6 +12,20 @@ RSpec.describe Bot::UserQueue do
   end
 
   describe '#with_user_slot' do
+    it 'runs stop commands without waiting for an occupied user slot' do
+      queue = described_class.instance
+      queue.acquire(non_admin_id)
+      ran = false
+      msg = msg_for(non_admin_id)
+      msg.text = '/stop'
+
+      queue.with_user_slot(bot, msg) { ran = true }
+
+      expect(ran).to be(true)
+    ensure
+      queue&.release(non_admin_id)
+    end
+
     it 'serializes concurrent jobs from the same non-admin user' do
       queue   = described_class.instance
       started = Queue.new

@@ -11,6 +11,7 @@ module Bot
 
   class Jobs
     CANCEL_PREFIX = 'job:cancel:'.freeze
+    STOP_COMMAND  = %r{\A/stop(?:@\w+)?(?:\s|\z)}i.freeze
 
     attr_reader :queue
 
@@ -63,6 +64,17 @@ module Bot
       end
     end
 
+    def cancel_all(user_id:, chat_id:, admin: false)
+      @mutex.synchronize do
+        @jobs.values.count do |job|
+          next false if job[:cancelled]
+          next false unless admin || (job[:owner_id].to_i == user_id.to_i && job[:chat_id].to_i == chat_id.to_i)
+
+          job[:cancelled] = true
+        end
+      end
+    end
+
     def cancelled?(id)
       @mutex.synchronize { @jobs.dig(id.to_s, :cancelled) == true }
     end
@@ -79,6 +91,10 @@ module Bot
     def self.cancel_id(data)
       value = data.to_s
       value.delete_prefix(CANCEL_PREFIX) if value.start_with?(CANCEL_PREFIX)
+    end
+
+    def self.stop_command?(text)
+      text.to_s.match?(STOP_COMMAND)
     end
   end
 end

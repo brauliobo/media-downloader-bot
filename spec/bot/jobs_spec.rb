@@ -37,12 +37,45 @@ RSpec.describe Bot::Jobs do
     expect(jobs.cancelled?(job[:id])).to be(true)
   end
 
+  it 'cancels all active jobs belonging to an owner in a chat' do
+    jobs       = described_class.new
+    first      = jobs.submit(msg)
+    second     = jobs.submit(msg)
+    other_chat = jobs.submit(SymMash.new(from: {id: 123}, chat: {id: 456}, text: 'url'))
+    other_user = jobs.submit(SymMash.new(from: {id: 456}, chat: {id: 123}, text: 'url'))
+    jobs.cancel(first[:id], user_id: 123, chat_id: 123)
+
+    expect(jobs.cancel_all(user_id: 123, chat_id: 123)).to eq(1)
+    expect(jobs.cancelled?(first[:id])).to be(true)
+    expect(jobs.cancelled?(second[:id])).to be(true)
+    expect(jobs.cancelled?(other_chat[:id])).to be(false)
+    expect(jobs.cancelled?(other_user[:id])).to be(false)
+    expect(jobs.cancel_all(user_id: 123, chat_id: 123)).to eq(0)
+  end
+
+  it 'lets an admin cancel active jobs across chats and owners' do
+    jobs   = described_class.new
+    first  = jobs.submit(msg)
+    second = jobs.submit(SymMash.new(from: {id: 456}, chat: {id: 789}, text: 'url'))
+
+    expect(jobs.cancel_all(user_id: 999, chat_id: 999, admin: true)).to eq(2)
+    expect(jobs.cancelled?(first[:id])).to be(true)
+    expect(jobs.cancelled?(second[:id])).to be(true)
+  end
+
   it 'encodes and decodes compact cancel callback data' do
     data = described_class.cancel_data('job-id')
 
     expect(data).to eq('job:cancel:job-id')
     expect(described_class.cancel_id(data)).to eq('job-id')
     expect(described_class.cancel_id('unrelated')).to be_nil
+  end
+
+  it 'recognizes stop commands without matching longer command names' do
+    expect(described_class.stop_command?('/stop')).to be(true)
+    expect(described_class.stop_command?('/stop@media_bot')).to be(true)
+    expect(described_class.stop_command?('/stop now')).to be(true)
+    expect(described_class.stop_command?('/stopping')).to be(false)
   end
 end
 

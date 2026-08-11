@@ -48,6 +48,8 @@ module Bot
     # is at the limit, blocks until a slot frees, deletes the notice, then yields.
     # Must run in the bot's main process so all messages share queue state.
     def with_user_slot(bot, msg)
+      return yield if Jobs.stop_command?(msg.text)
+
       user_id = msg.from.id
       admin   = Bot::MsgHelpers.from_admin?(msg)
       queued_msg = (bot.send_message(msg, Bot::MsgHelpers.me(QUEUED_MSG)) if !admin && queued?(user_id))

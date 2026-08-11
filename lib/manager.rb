@@ -32,6 +32,7 @@ class Manager
   START_MSG = <<-EOS
 Download and convert videos/audios from Youtube, Facebook, Instagram, etc.
 Options:
+- Use `/stop` to cancel all your active jobs in this chat
 - Use `audio` keyword after link to extract audio
 - Use `caption` to put title and uploader
 - Use `hashtags`, `#`, or `hts` to generate Instagram-style hashtags from transcription
@@ -118,6 +119,7 @@ EOS
     return if msg.from.id.in? BLOCKED_USERS
 
     cmd_text = Utils::InputParser.message_text(msg).presence
+    return stop_jobs(msg) if Bot::Jobs.stop_command?(cmd_text)
     return Commands::Cookie.new(bot, msg).process if cmd_text&.starts_with?('/cookies') || (msg.document&.file_name&.downcase == 'cookies.txt')
 
     enqueue_message msg
@@ -151,6 +153,17 @@ EOS
 
   def finish_job(id:)
     jobs.finish(id)
+  end
+
+  def stop_jobs(msg)
+    admin_id = Bot::MsgHelpers::ADMIN_CHAT_ID
+    count = jobs.cancel_all(
+      user_id: msg.from.id,
+      chat_id: msg.chat.id,
+      admin:   admin_id && msg.from.id.to_i == admin_id,
+    )
+    text  = I18n.t('bot.stop.result', count: count)
+    bot.send_message(msg, Bot::MsgHelpers.me(text))
   end
 
   def start_edit_posts_job(args)

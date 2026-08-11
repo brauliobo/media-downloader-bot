@@ -1,4 +1,10 @@
 en:
+  bot:
+    stop:
+      result:
+        zero: "No active jobs to stop."
+        one: "Stopping 1 job..."
+        other: "Stopping %{count} jobs..."
   audiobook:
     ewprs:
       caption:
