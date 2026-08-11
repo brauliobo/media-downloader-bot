@@ -7,12 +7,12 @@ require_relative 'worker'
 class WorkerDaemon
   def initialize(service_uri = nil)
     @service_uri = service_uri || ENV['BOT_HTTP'] || ENV['BOT_DRB']
-    @shutdown = false
+    @shutdown_reason = nil
   end
 
   def run
-    trap(:TERM) { @shutdown = true }
-    trap(:INT) { @shutdown = true }
+    trap(:TERM) { @shutdown_reason = :restart }
+    trap(:INT) { @shutdown_reason = :cancel }
 
     if @service_uri.start_with?('http')
       run_http
@@ -30,7 +30,7 @@ class WorkerDaemon
     puts "Worker connected to HTTP service at #{@service_uri}"
 
     loop do
-      break if @shutdown
+      break if @shutdown_reason
 
       begin
         response = http_client.get('/queue/dequeue')
@@ -40,7 +40,7 @@ class WorkerDaemon
         
         if job_data
           job = {job_data: job_data, worker_uri: result['service_uri'] || @service_uri}
-          if @shutdown
+          if @shutdown_reason
             pid = fork { process_message(job) }
             Process.detach(pid)
             exit(0)
@@ -51,7 +51,7 @@ class WorkerDaemon
       rescue Faraday::TimeoutError, Faraday::ConnectionFailed
         sleep 0.1
       rescue => e
-        next if @shutdown
+        next if @shutdown_reason
         puts "Error dequeuing: #{e.message}"
         sleep 1
       end
@@ -63,12 +63,12 @@ class WorkerDaemon
     puts "Worker connected to DRb service at #{@service_uri}"
 
     loop do
-      break if @shutdown && manager.queue_size == 0
+      break if @shutdown_reason && manager.queue_size == 0
 
       begin
         job_data = manager.dequeue(timeout: 1)
       rescue => e
-        next if @shutdown
+        next if @shutdown_reason
         puts "Error dequeuing: #{e.message}"
         sleep 1
         next
@@ -77,7 +77,7 @@ class WorkerDaemon
       next unless job_data
 
       job = {job_data: job_data, worker_uri: manager.bot_service_uri}
-      if @shutdown
+      if @shutdown_reason
         pid = fork { process_message(job) }
         Process.detach(pid)
         exit(0)
@@ -95,6 +95,7 @@ class WorkerDaemon
     control   ||= Worker.service
     runner      = Bot::JobRunner.new(
       cancelled: ->(id) { control.job_cancelled?(id) },
+      interrupted: ->(_id) { @shutdown_reason },
       finished:  ->(id) { control.finish_job(id) },
     )
     runner.run(job_id) do

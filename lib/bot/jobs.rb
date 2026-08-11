@@ -4,6 +4,9 @@ module Bot
   class JobCancelled < Interrupt
   end
 
+  class JobRestarted < Interrupt
+  end
+
   Callback = Struct.new(:id, :user_id, :chat_id, :message_id, :data, keyword_init: true)
 
   class Jobs

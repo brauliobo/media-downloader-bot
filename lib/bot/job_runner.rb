@@ -5,9 +5,10 @@ module Bot
     CANCEL_POLL_INTERVAL = 0.25
     CANCEL_GRACE_SECONDS = 5
 
-    def initialize(cancelled:, finished:)
-      @cancelled = cancelled
-      @finished  = finished
+    def initialize(cancelled:, interrupted:, finished:)
+      @cancelled   = cancelled
+      @interrupted = interrupted
+      @finished    = finished
     end
 
     def run(job_id, &work)
@@ -15,8 +16,9 @@ module Bot
         Process.setpgrp
         thread = Thread.current
         Signal.trap(:TERM) { thread.raise JobCancelled }
+        Signal.trap(:USR1) { thread.raise JobRestarted }
         work.call
-      rescue JobCancelled
+      rescue JobCancelled, JobRestarted
         exit! 0
       rescue => e
         STDERR.puts "Error processing job: #{e.class}: #{e.message}"
@@ -47,6 +49,8 @@ module Bot
             Process.waitpid(pid) unless leader_reaped
             break
           end
+        elsif (signal_name = interruption_signal(job_id))
+          cancel_started_at = monotonic_time if signal(pid, signal_name)
         elsif cancelled?(job_id)
           cancel_started_at = monotonic_time if signal(pid, :TERM)
         end
@@ -61,6 +65,15 @@ module Bot
       @cancelled.call(job_id)
     rescue StandardError
       false
+    end
+
+    def interruption_signal(job_id)
+      case @interrupted.call(job_id)
+      when :restart then :USR1
+      when :cancel  then :TERM
+      end
+    rescue StandardError
+      nil
     end
 
     def signal(pid, signal)

@@ -4,7 +4,7 @@ require_relative '../lib/worker_daemon'
 RSpec.describe Bot::JobRunner do
   describe '#monitor' do
     it 'terminates the job process group after cancellation is requested' do
-      runner = described_class.new(cancelled: ->(_id) { true }, finished: ->(_id) {})
+      runner = described_class.new(cancelled: ->(_id) { true }, interrupted: ->(_id) {}, finished: ->(_id) {})
       allow(Process).to receive(:waitpid).and_return(nil, 123)
       allow(runner).to receive(:signal).and_return(true)
       allow(runner).to receive(:process_group_alive?).with(123).and_return(false)
@@ -16,7 +16,7 @@ RSpec.describe Bot::JobRunner do
     end
 
     it 'kills a process group that does not stop during the grace period' do
-      runner = described_class.new(cancelled: ->(_id) { true }, finished: ->(_id) {})
+      runner = described_class.new(cancelled: ->(_id) { true }, interrupted: ->(_id) {}, finished: ->(_id) {})
       allow(Process).to receive(:waitpid).and_return(nil, 123)
       allow(runner).to receive(:signal).and_return(true)
       allow(runner).to receive(:process_group_alive?).with(123).and_return(true)
@@ -30,7 +30,7 @@ RSpec.describe Bot::JobRunner do
     end
 
     it 'retries TERM when the process group is not ready yet' do
-      runner = described_class.new(cancelled: ->(_id) { true }, finished: ->(_id) {})
+      runner = described_class.new(cancelled: ->(_id) { true }, interrupted: ->(_id) {}, finished: ->(_id) {})
       allow(Process).to receive(:waitpid).and_return(nil, nil, 123)
       allow(runner).to receive(:signal).with(123, :TERM).and_return(false, true)
       allow(runner).to receive(:process_group_alive?).with(123).and_return(false)
@@ -40,6 +40,18 @@ RSpec.describe Bot::JobRunner do
       runner.send(:monitor, 123, 'job-id')
 
       expect(runner).to have_received(:signal).with(123, :TERM).twice
+    end
+
+    it 'interrupts the job process group with USR1 during a unit restart' do
+      runner = described_class.new(cancelled: ->(_id) { false }, interrupted: ->(_id) { :restart }, finished: ->(_id) {})
+      allow(Process).to receive(:waitpid).and_return(nil, 123)
+      allow(runner).to receive(:signal).and_return(true)
+      allow(runner).to receive(:process_group_alive?).with(123).and_return(false)
+      allow(runner).to receive(:sleep)
+
+      runner.send(:monitor, 123, 'job-id')
+
+      expect(runner).to have_received(:signal).with(123, :USR1)
     end
   end
 end

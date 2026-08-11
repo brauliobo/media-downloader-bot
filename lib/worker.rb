@@ -97,6 +97,10 @@ class Worker
     cancelled = true
     @st&.error('Cancelled', cancel_job: false)
     raise
+  rescue Bot::JobRestarted
+    cancelled = true
+    @st&.error('Restarting...', cancel_job: false)
+    raise
   ensure
     clear_cancel_button unless cancelled
   end

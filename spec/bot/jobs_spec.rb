@@ -62,10 +62,11 @@ RSpec.describe Manager, '#enqueue_message' do
     runner  = double
     manager.instance_variable_set(:@bot, bot)
 
-    allow(Bot::JobRunner).to receive(:new) do |cancelled:, finished:|
+    allow(Bot::JobRunner).to receive(:new) do |cancelled:, interrupted:, finished:|
       allow(runner).to receive(:run) do |id, &_work|
         expect(manager.jobs.cancel(id, user_id: 123, chat_id: 456)).to eq(:cancelled)
         expect(cancelled.call(id)).to be(true)
+        expect(interrupted.call(id)).to be_nil
         finished.call(id)
       end
       runner

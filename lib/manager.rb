@@ -269,7 +269,7 @@ EOS
 
   def run_inline_job(msg)
     job = jobs.register(msg)
-    runner = Bot::JobRunner.new(cancelled: jobs.method(:cancelled?), finished: jobs.method(:finish))
+    runner = Bot::JobRunner.new(cancelled: jobs.method(:cancelled?), interrupted: ->(_id) {}, finished: jobs.method(:finish))
     runner.run(job[:id]) do
       DB.disconnect if defined? DB
       Process.setproctitle 'media-downloader-tgbot worker'

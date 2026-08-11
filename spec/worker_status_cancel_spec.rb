@@ -49,6 +49,15 @@ RSpec.describe Worker, 'job status controls' do
     expect(service.edited.last.last).to include(text: 'Cancelled', cancel_job: false, force: true)
   end
 
+  it 'replaces the status with a restart notice when the unit stops' do
+    worker = described_class.new(msg, service: service, job_id: 'job-id', skip_cleanup: true)
+    worker.send(:init_status)
+    allow(worker).to receive(:run).and_raise(Bot::JobRestarted)
+
+    expect { worker.process }.to raise_error(Bot::JobRestarted)
+    expect(service.edited.last.last).to include(text: 'Restarting\\.\\.\\.', cancel_job: false, force: true)
+  end
+
   it 'removes the work directory synchronously when cancelled' do
     Dir.mktmpdir do |tmpdir|
       worker   = described_class.new(msg, service: service, tmpdir: tmpdir, workdir_path: nil)
