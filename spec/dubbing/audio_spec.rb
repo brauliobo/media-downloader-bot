@@ -1,5 +1,6 @@
 require 'spec_helper'
 require_relative '../../lib/dubbing/audio'
+require_relative '../../lib/subtitler/translator'
 
 RSpec.describe Dubbing::Audio do
   let(:dir) { Dir.mktmpdir('dub-audio-spec-') }
@@ -51,6 +52,33 @@ RSpec.describe Dubbing::Audio do
 
     expect(scheduled.first.speed).to eq(1.0)
     expect(scheduled.first.end).to eq(1.0)
+  end
+
+  it 'keeps every sentence from a multi-sentence subtitle at or above natural speed' do
+    subtitle = SymMash.new(text: 'First sentence. Second sentence.', start: 1.0, end: 5.0, words: [])
+    sentences = Subtitler::Translator.sentences_for([subtitle])
+    clips = sentences.map.with_index do |sentence, idx|
+      described_class::Clip.new(path: File.join(dir, "sentence-#{idx}.wav"), start: sentence.start, end: sentence.end)
+    end
+    clips.each do |clip|
+      allow(Prober).to receive(:for).with(clip.path).and_return(SymMash.new(format: SymMash.new(duration: 0.5)))
+    end
+
+    scheduled = described_class.schedule(clips, duration: 6.0)
+
+    expect(sentences.size).to eq(2)
+    expect(scheduled.map(&:speed)).to all(be >= 1.0)
+  end
+
+  it 'rejects scheduled clips below natural speed' do
+    expect do
+      described_class::ScheduledClip.new(path: 'speech.wav', start: 0.0, end: 2.0, speed: 0.5)
+    end.to raise_error(ArgumentError, 'dubbed speech speed cannot be below 1x')
+  end
+
+  it 'rejects rendering below natural speed' do
+    expect { described_class.tempo_filter(0.5) }
+      .to raise_error(ArgumentError, 'dubbed speech speed cannot be below 1x')
   end
 
   it 'uses gaps before and after a sentence to avoid speeding it up' do
