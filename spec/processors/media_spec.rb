@@ -35,6 +35,19 @@ RSpec.describe Processors::Media do
     end
   end
 
+  describe '.probe' do
+    it 'subtracts cuts from the projected media duration' do
+      i = input(fn_in: '/tmp/in.mp3', opts: SymMash.new(cuts: '10-20,30-35'))
+      allow(Prober).to receive(:for).and_return(
+        SymMash.new(format: SymMash.new(duration: 60), streams: [SymMash.new(codec_type: 'audio')])
+      )
+
+      described_class.probe(i)
+
+      expect(i.durat).to eq(45.0)
+    end
+  end
+
   describe '#generate_hashtags' do
     it 'transcribes the input and uses an explicit language for hashtags' do
       transcript = SymMash.new(output: SymMash.new(text: 'Mindfulness and health.'), lang: 'en')

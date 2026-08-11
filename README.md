@@ -68,6 +68,20 @@ The generator uses `gpt-5.6-luna` with low reasoning effort. It follows the
 requested `lang` language, chooses singular or plural based on the transcript,
 and only combines two words when they form a meaningful concept.
 
+## Media edits
+
+Use comma-separated time intervals to silence audio or remove sections from
+audio and video. Timestamps accept seconds, `MM:SS`, or `HH:MM:SS`, with up to
+three decimal places:
+
+```bash
+bundle exec ruby bin/zip input.mp4 silences=10-20,1:00-1:05
+bundle exec ruby bin/zip input.mp4 cuts=30-40,1:30.5-1:45
+```
+
+`silences=` preserves the media duration. `cuts=` removes each interval from
+both tracks and closes the resulting gaps.
+
 ## Voice cloning evaluation
 
 Use `bin/voice_clone_eval` for repeatable OmniVoice clone comparisons. It uses

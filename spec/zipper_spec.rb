@@ -349,6 +349,59 @@ RSpec.describe Zipper do
     expect(Sh).to have_received(:run).with(include('-af highpass=f=80,lowpass=f=9000,afftdn=nf=-25'))
   end
 
+  it 'silences audio and cuts video and audio over shared time intervals' do
+    probe = SymMash.new(
+      format: SymMash.new(duration: 180),
+      streams: [
+        SymMash.new(codec_type: 'video', width: 1920, height: 1080),
+        SymMash.new(codec_type: 'audio'),
+      ],
+    )
+    opts = SymMash.new(
+      cuts:     '10-20,1:00-1:05',
+      silences: '30-40,1:30-1:40',
+      format:   Zipper::Types.video.h264,
+      acodec:   'aac',
+      metadata: {},
+    )
+
+    allow(Sh).to receive(:run)
+
+    zipper = described_class.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts)
+    zipper.zip_video
+
+    expect(zipper.duration).to eq(165.0)
+    expect(Sh).to have_received(:run).with(
+      include(
+        "select='not(between(t\\,10\\,20)+between(t\\,60\\,65))',setpts=N/FRAME_RATE/TB",
+        "-af volume=0:enable='between(t\\,30\\,40)+between(t\\,90\\,100)'," \
+          "aselect='not(between(t\\,10\\,20)+between(t\\,60\\,65))',asetpts=N/SR/TB"
+      )
+    )
+  end
+
+  it 'applies silence and cuts to audio-only media through one audio filter option' do
+    probe = SymMash.new(
+      format: SymMash.new(duration: 60),
+      streams: [SymMash.new(codec_type: 'audio')],
+    )
+    opts = SymMash.new(
+      cuts:     '20-25',
+      silences: '10-15',
+      format:   Zipper::Types.audio.mp3,
+      metadata: {},
+    )
+
+    allow(Sh).to receive(:run)
+
+    described_class.new('/tmp/in.mp3', '/tmp/out.mp3', probe: probe, opts: opts).zip_audio
+
+    expect(Sh).to have_received(:run).with(
+      include("-af volume=0:enable='between(t\\,10\\,15)',aselect='not(between(t\\,20\\,25))',asetpts=N/SR/TB")
+    )
+    expect(Sh).not_to have_received(:run).with(match(/-af .* -af /))
+  end
+
   it 'creates pause wavs at the requested sample rate' do
     Dir.mktmpdir('pause-spec-') do |dir|
       allow(Sh).to receive(:run) do

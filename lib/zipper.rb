@@ -5,6 +5,7 @@ require 'digest'
 require 'json'
 require_relative 'prober'
 require_relative 'utils/safety'
+require_relative 'utils/time_ranges'
 require_relative 'subtitler/ass'
 require_relative 'zipper/formats'
 require_relative 'zipper/limits'
@@ -278,7 +279,7 @@ class Zipper
   attr_reader :info
   attr_reader :iopts, :oopts, :dopts, :opts
   attr_reader :fgraph, :maps
-  attr_reader :duration
+  attr_reader :duration, :cuts, :silences
   attr_reader :type
 
   def initialize infile, outfile, info: nil, probe: nil, stl: nil, opts: SymMash.new
@@ -303,12 +304,18 @@ class Zipper
 
     @maps = []
 
+    @cuts     = Utils::TimeRanges.parse(opts.cuts, option: :cuts)
+    @silences = Utils::TimeRanges.parse(opts.silences, option: :silences)
+    source_duration = probe.format.duration.to_f
+    cuts.validate!(source_duration, allow_entire: false)
+    silences.validate!(source_duration)
+
     opts.speed   = opts.speed&.to_f || 1
     opts.width   = opts.width&.to_i
     opts.quality = opts.quality&.to_i if opts.quality
     opts.abrate  = opts.abrate&.to_i
     # Use the instance variable to avoid referencing the (possibly nil) local parameter.
-    @duration    = probe.format.duration.to_f / opts.speed
+    @duration    = (source_duration - cuts.total_duration) / opts.speed
     opts.cudaenc = Formats.cuda_encode?(opts)
     opts.cudadec = Formats.cuda_decode?(opts)
     opts.cuda    = opts.cudaenc || opts.cudadec
@@ -348,6 +355,7 @@ class Zipper
     apply_audio_channels
 
     Zipper::Subtitle.apply(self)
+    apply_media_edits
     apply_speed
     apply_cut
     append_audio_filter_options
@@ -438,6 +446,7 @@ class Zipper
 
     apply_speech_cleanup
     apply_voice_quality
+    apply_media_edits
     apply_speed
     apply_audio_size_limit
     apply_cut
@@ -448,8 +457,6 @@ class Zipper
     acodec      = acodec_tmpl % {abrate: opts.bitrate}
 
     audio_post_opts = AUDIO_POST_OPTS % {metadata: metadata_args}
-    oopts << " -af #{audio_filters.join(',')}" if audio_filters.present?
-
     # Do not force channels; let encoder decide (previously caused artifacts)
 
     cmd_params = {
@@ -589,6 +596,47 @@ class Zipper
     fgraph << "setpts=PTS/#{opts.speed}" if video?
     #iopts  << " -t #{duration}" # attached subtitle mess with the length of the video
     append_audio_filter "atempo=#{opts.speed}"
+  end
+
+  def apply_media_edits
+    apply_silences
+    apply_cuts
+  end
+
+  def apply_silences
+    return if silences.empty? || !audio_stream?
+
+    append_audio_filter "volume=0:enable='#{interval_expression(silences)}'"
+  end
+
+  def apply_cuts
+    return if cuts.empty?
+
+    expression = "not(#{interval_expression(cuts)})"
+    if video?
+      fgraph << "select='#{expression}'"
+      fgraph << 'setpts=N/FRAME_RATE/TB'
+    end
+    return unless audio_stream?
+
+    append_audio_filter "aselect='#{expression}'"
+    append_audio_filter 'asetpts=N/SR/TB'
+  end
+
+  def interval_expression(ranges)
+    ranges.intervals.map do |interval|
+      "between(t\\,#{time_value(interval.start)}\\,#{time_value(interval.finish)})"
+    end.join('+')
+  end
+
+  def time_value(value)
+    return value.to_i.to_s if value.to_i == value
+
+    format('%.3f', value).sub(/0+\z/, '').delete_suffix('.')
+  end
+
+  def audio_stream?
+    probe.streams.any? { |stream| stream.codec_type == 'audio' }
   end
 
   def apply_voice_quality

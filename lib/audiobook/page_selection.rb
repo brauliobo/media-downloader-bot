@@ -1,33 +1,25 @@
+require_relative '../utils/range_list'
+
 module Audiobook
   class PageSelection
     MAX_SELECTED_PAGES = 10_000
 
     def self.parse(value)
-      source = value.to_s.strip
-      return if source.empty?
+      ranges = Utils::RangeList.parse(value, option: :pages) { |part| positive_page(part) }
+      return unless ranges
 
       pages = []
-      source.split(',', -1).each do |token|
-        selected = case token.strip
-        when /\A(\d+)\z/
-          [positive_page(Regexp.last_match(1), source)]
-        when /\A(\d+)-(\d+)\z/
-          first = positive_page(Regexp.last_match(1), source)
-          last  = positive_page(Regexp.last_match(2), source)
-          invalid!(source) if first > last || last - first + 1 > MAX_SELECTED_PAGES
-          (first..last).to_a
-        else
-          invalid!(source)
-        end
-        invalid!(source) if pages.size + selected.size > MAX_SELECTED_PAGES
-        pages.concat(selected)
+      ranges.each do |range|
+        count = range.last - range.first + 1
+        invalid!(value) if count > MAX_SELECTED_PAGES || pages.size + count > MAX_SELECTED_PAGES
+        pages.concat((range.first..range.last).to_a)
       end
 
       pages.uniq.sort
     end
 
-    def self.positive_page(value, source)
-      value.to_i.then { |page| page.positive? ? page : invalid!(source) }
+    def self.positive_page(value)
+      Integer(value, 10).then { |page| page.positive? ? page : raise(ArgumentError) }
     end
     private_class_method :positive_page
 

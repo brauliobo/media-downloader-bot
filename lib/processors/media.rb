@@ -1,6 +1,7 @@
 require_relative 'file'
 require_relative '../utils/thumb'
 require_relative '../utils/mime_types'
+require_relative '../utils/time_ranges'
 require_relative '../zipper'
 require_relative '../dubbing'
 require_relative '../presets/camera'
@@ -26,7 +27,10 @@ module Processors
 
       i.probe  = Prober.for i.fn_in
       raise "probe missing format for #{i.fn_in}" unless i.probe&.format
-      i.durat  = i.probe.format.duration.to_i
+      source_duration = i.probe.format.duration.to_f
+      cuts     = Utils::TimeRanges.parse(i.opts.cuts, option: :cuts).validate!(source_duration, allow_entire: false)
+      Utils::TimeRanges.parse(i.opts.silences, option: :silences).validate!(source_duration)
+      i.durat  = source_duration - cuts.total_duration
       i.durat -= Utils::Duration.new(i.opts.ss).to_i if i.opts.ss
 
       # Derive type from MIME if recognized, otherwise fall back to ffprobe streams
@@ -115,7 +119,6 @@ module Processors
       speed    = i.opts.speed&.to_f
       durat    = i.durat
       durat   /= speed if speed
-      durat   -= Utils::Duration.new(i.opts.ss).to_i if i.opts.ss
 
       Presets::Camera.apply(i.opts, path: i.fn_in) if video_input?(i) && i.opts.camera
 

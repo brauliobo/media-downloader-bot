@@ -22,6 +22,15 @@ RSpec.describe Utils::InputParser do
     expect(parsed.opts).to eq('ss' => '14:57', 'to' => '20:00')
   end
 
+  it 'keeps comma-separated media edit intervals' do
+    parsed = described_class.parse('https://example.com/v silences=10-20,1:00-1:05 cuts=30-40,2:00-2:10')
+
+    expect(parsed.opts).to include(
+      'silences' => '10-20,1:00-1:05',
+      'cuts'     => '30-40,2:00-2:10',
+    )
+  end
+
   it 'normalizes bare urls before parsing' do
     parsed = described_class.parse('x.com/i/status/2070518837150167314 audio')
 
