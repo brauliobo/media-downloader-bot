@@ -1,0 +1,14 @@
+fr:
+  audiobook:
+    ewprs:
+      caption:
+        type: "Type : %{kind}"
+        date_place: "Date/lieu : %{value}"
+        published_in: "Publié dans : %{value}"
+        chapters: "Chapitres : %{count}/%{total}"
+        language: "Langue : %{language}"
+        kinds:
+          discourse: Discours
+          book: Livre
+        languages:
+          fr: Français

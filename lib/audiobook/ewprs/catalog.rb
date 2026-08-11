@@ -12,7 +12,7 @@ module Audiobook::Ewprs
     UNAVAILABLE_BOOK = /unpublished in English|not yet published in any language|as yet unpublished in any language/i
     ONLINE_PLACEHOLDER = /\A\[To see if this discourse is now available online,/i
     LANGUAGE_NAMES = {
-      'ar' => 'Arabic', 'de' => 'German', 'en' => 'English', 'es' => 'Spanish', 'pt' => 'Portuguese', 'zh' => 'Chinese'
+      'ar' => 'Arabic', 'de' => 'German', 'en' => 'English', 'es' => 'Spanish', 'fr' => 'French', 'pt' => 'Portuguese', 'zh' => 'Chinese'
     }.freeze
     VOICE_ACCENTS  = {'pt' => 'portuguese accent', 'zh' => 'chinese accent'}.freeze
 

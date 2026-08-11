@@ -80,6 +80,19 @@ RSpec.describe Audiobook::Ewprs::Catalog do
     end
   end
 
+  it 'configures French parsing and narration' do
+    Dir.mktmpdir('ewprs-') do |root|
+      entry = described_class::Entry.new(kind: :discourse, title: 'Titre français', path: '/tmp/discourse.html')
+      catalog = described_class.new(root, language: 'fr')
+
+      options = catalog.parse_options(entry)
+
+      expect(catalog.language_name).to eq('French')
+      expect(options.html_language).to eq('fr')
+      expect(options.instruct).to eq('male, middle-aged, moderate pitch')
+    end
+  end
+
   it 'uses translated titles from discourse and book files' do
     Dir.mktmpdir('ewprs-') do |root|
       FileUtils.mkdir_p(File.join(root, 'HTML/Navigation'))
