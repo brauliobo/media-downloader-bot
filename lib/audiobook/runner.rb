@@ -10,6 +10,7 @@ module Audiobook
   class Runner
     VOICE_REFERENCE_TEXT  = Language::REF_FALLBACK
     VOICE_REFERENCE_WORDS = 12..24
+    VOICE_REFERENCE_MAX_CHARS = 240
     AUTHOR_SAMPLE_PAGES   = 3
 
     def initialize(book, stl = nil, opts = nil)
@@ -222,6 +223,7 @@ module Audiobook
         text = sentence.text.to_s.strip
         words = text.split
         next unless VOICE_REFERENCE_WORDS.cover?(words.size)
+        next if text.length > VOICE_REFERENCE_MAX_CHARS
 
         text
       end.max_by { |text| text.split.size }

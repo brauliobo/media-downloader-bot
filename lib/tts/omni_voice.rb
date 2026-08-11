@@ -5,7 +5,7 @@ class TTS
     include HTTPBackend
 
     configure_backend(
-      base_url:              "http://127.0.0.1:#{ENV['OMNIVOICE_PORT']&.to_i || 10440}",
+      base_url:              ENV['OMNIVOICE_URL'] || "http://127.0.0.1:#{ENV['OMNIVOICE_PORT']&.to_i || 10440}",
       segment_chars:         ENV['OMNIVOICE_SEGMENT_CHARS']&.to_i || 420,
       batch_synth_path:      '/synthesize_batch',
       segment:               false,

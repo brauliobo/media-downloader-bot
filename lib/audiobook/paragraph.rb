@@ -85,8 +85,8 @@ module Audiobook
 
     # Discover paragraphs from Line objects (with font metadata)
     # Returns array of { item:, page: } hashes
-    def self.discover_from_lines(lines)
-      Detector.discover_from_lines(lines)
+    def self.discover_from_lines(lines, max_sentence_chars: Factory::MAX_SENTENCE_CHARS)
+      Detector.discover_from_lines(lines, max_sentence_chars: max_sentence_chars)
     end
 
     # Legacy discover for text strings (EPUB, etc)

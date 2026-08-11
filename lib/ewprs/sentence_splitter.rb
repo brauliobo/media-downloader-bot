@@ -6,15 +6,22 @@ module Ewprs
     PAIRED_COORDINATION = /\bboth\b[^.!?]*,\s+[^.!?]*,\s+and\b[^.!?]*,/i
     COMMA_BOUNDARY = /(?<=,)\s+/
     OPENING_QUOTE = /(?:&(?:ldquo|lsquo|quot);|["“‘])/
-    HONORIFIC_ABBREVIATION = /\b(?:Dr|Mr|Mrs|Ms|Prof)\z/i
+    HONORIFIC_ABBREVIATION = /\b(?:Dr|Mr|Mrs|Ms|Prof|Sr|Sra|St)\z/i
+    NO_BOUNDARY_TOKENS = /(?!)\z/
+    SENTENCE_END = '[.!?…。！？]'
+    CLOSING_QUOTES = '["”’」』】）]*'
+    CJK_CHARACTER = '[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]'
 
     module_function
 
-    def split(text, boundary_tokens:, max_chars:)
+    def split(text, boundary_tokens: NO_BOUNDARY_TOKENS, max_chars: Float::INFINITY)
       transparent = "(?:#{boundary_tokens.source})*"
       boundary = %r{
-        ([.!?…]"?)(\s*\d{1,3})?(#{transparent})\s+
-        (?=#{transparent}(?:(?:\[\[?|#{OPENING_QUOTE})?\p{Lu}|\())
+        (#{SENTENCE_END}#{CLOSING_QUOTES})(\s*\d{1,3})?(#{transparent})
+        (?:
+          \s+(?=#{transparent}(?:(?:\[\[?|#{OPENING_QUOTE})?\p{Lu}|\())
+          |\s*(?=#{transparent}(?:#{OPENING_QUOTE})?#{CJK_CHARACTER})
+        )
       }ux
       sentences = Array(text).join
         .gsub(/(?<=&#8230;)\s+/i, "\n")
@@ -58,6 +65,7 @@ module Ewprs
       remaining = text
       while remaining.length > max_chars
         boundary = remaining.rindex(/\s+/, max_chars) || remaining.index(/\s+/, max_chars)
+        return remaining.scan(/.{1,#{max_chars}}/m) if !boundary && remaining.match?(/#{CJK_CHARACTER}/u)
         return [text] unless boundary
 
         chunks << remaining[0...boundary].rstrip

@@ -60,6 +60,19 @@ RSpec.describe 'Audiobook TTS speed' do
     end
   end
 
+  it 'rejects oversized whitespace-light source text for voice references' do
+    short_text = Array.new(16, '中文').join(' ')
+    long_text  = Array.new(20, '这是一段明显过长的中文参考文本').join(' ')
+    page = Audiobook::Page.new(1, [
+      Audiobook::Heading.new(short_text),
+      Audiobook::Heading.new(long_text),
+    ])
+    book = instance_double(Audiobook::Book, metadata: {'language' => 'zh'}, pages: [page])
+    runner = Audiobook::Runner.new(book, nil, SymMash.new)
+
+    expect(runner.send(:source_voice_reference_text)).to eq(short_text)
+  end
+
   it 'uses language-specific reference text for non-English audiobooks' do
     stub_const('TTS::BACKEND', TTS::OmniVoice)
     book = instance_double(Audiobook::Book, metadata: { 'language' => 'pt' }, pages: [])

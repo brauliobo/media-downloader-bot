@@ -7,12 +7,13 @@ require_relative '../../text_helpers'
 module Audiobook
   class Paragraph
     class Detector
-      def self.discover_from_lines(lines)
-        new(lines).detect
+      def self.discover_from_lines(lines, max_sentence_chars: Factory::MAX_SENTENCE_CHARS)
+        new(lines, max_sentence_chars: max_sentence_chars).detect
       end
 
-      def initialize(lines)
+      def initialize(lines, max_sentence_chars: Factory::MAX_SENTENCE_CHARS)
         @lines = lines
+        @max_sentence_chars = max_sentence_chars
         @baseline_spacing = calculate_baseline_spacing(lines)
         @spacing_threshold = @baseline_spacing * 1.5
         @indent_threshold = calculate_indent_threshold(lines)
@@ -56,7 +57,7 @@ module Audiobook
           end
 
           if should_break
-            items = Factory.create_items_from_lines(buf, start_page)
+            items = Factory.create_items_from_lines(buf, start_page, max_sentence_chars: @max_sentence_chars)
             items_with_pages.concat(items)
             buf = [line]
             start_page = line.page_number
@@ -67,7 +68,7 @@ module Audiobook
         end
 
         if buf.any?
-          items = Factory.create_items_from_lines(buf, start_page)
+          items = Factory.create_items_from_lines(buf, start_page, max_sentence_chars: @max_sentence_chars)
           items_with_pages.concat(items)
         end
 

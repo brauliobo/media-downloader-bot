@@ -42,6 +42,14 @@ RSpec.describe Ewprs::SentenceSplitter do
     )
   end
 
+  it 'splits CJK sentences without requiring spaces or uppercase letters' do
+    text = '第一句。 第二句！第三句？“第四句。”'
+
+    expect(described_class.split(text, max_chars: 800)).to eq(
+      ['第一句。', '第二句！', '第三句？', '“第四句。”']
+    )
+  end
+
   it 'keeps an honorific and name in the same sentence' do
     text = 'Hypnotism was used to cure disease by Dr. James Braid. This method spread.'
 
@@ -63,6 +71,14 @@ RSpec.describe Ewprs::SentenceSplitter do
 
     expect(described_class.split(text, boundary_tokens: /__P\d{4}__/, max_chars: 20)).to eq(
       ['Alpha beta gamma;', 'delta epsilon zeta,', 'eta theta iota.']
+    )
+  end
+
+  it 'hard-splits oversized CJK text without whitespace boundaries' do
+    text = '这是一个没有空格或标点的中文句子'
+
+    expect(described_class.split(text, max_chars: 6)).to eq(
+      ['这是一个没有', '空格或标点的', '中文句子']
     )
   end
 

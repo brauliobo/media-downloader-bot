@@ -20,6 +20,30 @@ RSpec.describe Audiobook::Book do
     expect(book.pages.first.all_sentences.map(&:text)).to include('DADOS DE COPYRIGHT')
   end
 
+  it 'splits translated CJK paragraph text before audiobook generation' do
+    line = Audiobook::Line.new('第一句。 第二句！第三句？', font_size: 12, page_number: 1)
+
+    items = Audiobook::Paragraph::Factory.create_items_from_lines([line], 1)
+
+    expect(items.first[:item].sentences.map(&:text)).to eq(['第一句。', '第二句！', '第三句？'])
+  end
+
+  it 'applies the Chinese sentence limit to embedded-language lines' do
+    text = 'Vásáḿsi jiirńani yathá viháya naváni grhńáti naro’paráńi; ' \
+      'Tathá shariiráni viháya jiirńányáni saḿyáti naváni dehii.'
+    data = SymMash.new(
+      metadata: {language: 'zh'},
+      opts:     {includeall: true},
+      content:  {lines: [{text: text, language: 'sa', font_size: 12, page: 1}], images: []}
+    )
+
+    book = described_class.new(data: data)
+    sentences = book.pages.first.all_sentences.map(&:text)
+
+    expect(sentences.map(&:length).max).to be <= described_class::CHINESE_MAX_SENTENCE_CHARS
+    expect(sentences.join(' ')).to eq(text)
+  end
+
   describe '.from_yaml' do
     it 'loads only requested pages while preserving their source numbers' do
       data = {

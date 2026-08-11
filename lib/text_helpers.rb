@@ -1,3 +1,5 @@
+require_relative 'ewprs/sentence_splitter'
+
 module TextHelpers
   EOS_PUNCT      = /[.!?…]$/
   EOS_PUNCT_FULL = /[\.!?¡¿；。？！]"?$/
@@ -65,12 +67,8 @@ module TextHelpers
     [clean, ids]
   end
 
-  def self.split_sentences(text)
-    parts = Array(text).join
-      .gsub(/([.!?…]"?)(\s*\d{1,3})?\s+(?=\p{Lu})/u, "\\1\\2\n")
-      .split(/\n+/)
-      .map { |s| s.strip }
-      .reject(&:empty?)
+  def self.split_sentences(text, max_chars: Float::INFINITY)
+    parts = Ewprs::SentenceSplitter.split(text, max_chars: max_chars)
 
     parts.each_with_object([]) do |part, result|
       if result.any? && result.last.match?(/\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Sra|St)\.$/i)

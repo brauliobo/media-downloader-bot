@@ -28,6 +28,7 @@ module Audiobook
   class Book
     LANGUAGE_SAMPLE_PAGES = 5
     MAX_STRUCTURED_BYTES = ENV.fetch('MAX_STRUCTURED_DOCUMENT_BYTES', 20 * 1024 * 1024).to_i
+    CHINESE_MAX_SENTENCE_CHARS = 30
 
     attr_reader :metadata, :pages
 
@@ -401,7 +402,10 @@ module Audiobook
       end.reject(&:empty?)
       
       # Discover paragraphs across all pages (handles cross-page paragraphs)
-      items_with_pages = Paragraph.discover_from_lines(lines).map { |e| SymMash.new(e) }
+      items_with_pages = Paragraph.discover_from_lines(
+        lines,
+        max_sentence_chars: @lang == 'zh' ? CHINESE_MAX_SENTENCE_CHARS : Paragraph::Factory::MAX_SENTENCE_CHARS
+      ).map { |e| SymMash.new(e) }
 
       # Pre-compute body font per page as the most frequent paragraph font size
       body_font_by_page = compute_body_font_by_page(items_with_pages)

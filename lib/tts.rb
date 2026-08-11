@@ -1,3 +1,5 @@
+require 'retriable'
+
 require_relative 'tts/piper'
 require_relative 'tts/chatterbox'
 require_relative 'tts/coqui_tts'
@@ -17,11 +19,15 @@ class TTS
   end
 
   def self.synthesize_batch(items:, on_batch: nil, threads: nil, **args)
-    batches = items.each_slice(BATCH_SIZE).to_a
+    chinese = items.any? { |item| (item[:lang] || item['lang'] || args[:lang]).to_s == 'zh' }
+    batch_size = chinese ? 1 : BATCH_SIZE
+    batches = items.each_slice(batch_size).to_a
     errors = Queue.new
 
     process_batch = lambda do |batch|
-      BACKEND.synthesize_batch(items: batch, **args)
+      Retriable.retriable(tries: 4, base_interval: 0.5, multiplier: 2.0) do
+        BACKEND.synthesize_batch(items: batch, **args)
+      end
       on_batch&.call(batch)
     rescue StandardError => error
       errors << error

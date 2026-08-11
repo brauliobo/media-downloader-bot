@@ -41,7 +41,7 @@ RSpec.describe Audiobook::Ewprs::Catalog do
     end
   end
 
-  it 'passes Arabic language aliases through to OmniVoice' do
+  it 'uses neutral narration for Arabic' do
     Dir.mktmpdir('ewprs-') do |root|
       entry = described_class::Entry.new(kind: :discourse, title: 'Arabic title', path: '/tmp/discourse.html')
       catalog = described_class.new(root, language: 'ar')
@@ -50,7 +50,7 @@ RSpec.describe Audiobook::Ewprs::Catalog do
 
       expect(catalog.language_name).to eq('Arabic')
       expect(options.html_language).to eq('ar')
-      expect(options.instruct).to eq('male, middle-aged, moderate pitch, ar accent')
+      expect(options.instruct).to eq('male, middle-aged, moderate pitch')
     end
   end
 
@@ -64,6 +64,19 @@ RSpec.describe Audiobook::Ewprs::Catalog do
       expect(catalog.language_name).to eq('Chinese')
       expect(options.html_language).to eq('zh')
       expect(options.instruct).to eq('male, middle-aged, moderate pitch, chinese accent')
+    end
+  end
+
+  it 'configures Spanish parsing and narration' do
+    Dir.mktmpdir('ewprs-') do |root|
+      entry = described_class::Entry.new(kind: :discourse, title: 'Título español', path: '/tmp/discourse.html')
+      catalog = described_class.new(root, language: 'es')
+
+      options = catalog.parse_options(entry)
+
+      expect(catalog.language_name).to eq('Spanish')
+      expect(options.html_language).to eq('es')
+      expect(options.instruct).to eq('male, middle-aged, moderate pitch')
     end
   end
 

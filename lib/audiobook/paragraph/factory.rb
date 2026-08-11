@@ -7,13 +7,16 @@ require_relative '../../text_helpers'
 module Audiobook
   class Paragraph
     class Factory
-      def self.create_items_from_lines(lines, start_page)
-        new(lines, start_page).create
+      MAX_SENTENCE_CHARS = 800
+
+      def self.create_items_from_lines(lines, start_page, max_sentence_chars: MAX_SENTENCE_CHARS)
+        new(lines, start_page, max_sentence_chars: max_sentence_chars).create
       end
 
-      def initialize(lines, start_page)
+      def initialize(lines, start_page, max_sentence_chars: MAX_SENTENCE_CHARS)
         @lines = lines
         @start_page = start_page
+        @max_sentence_chars = max_sentence_chars
       end
 
       def create
@@ -62,7 +65,7 @@ module Audiobook
       end
 
       def create_sentences(normalized, language)
-        Sentence.build_all(TextHelpers.split_sentences(normalized)).each do |sentence|
+        Sentence.build_all(TextHelpers.split_sentences(normalized, max_chars: @max_sentence_chars)).each do |sentence|
           sentence.language = language
         end
       end

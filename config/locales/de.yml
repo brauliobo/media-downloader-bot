@@ -1,0 +1,14 @@
+de:
+  audiobook:
+    ewprs:
+      caption:
+        type: "Typ: %{kind}"
+        date_place: "Datum/Ort: %{value}"
+        published_in: "Veröffentlicht in: %{value}"
+        chapters: "Kapitel: %{count}/%{total}"
+        language: "Sprache: %{language}"
+        kinds:
+          discourse: Diskurs
+          book: Buch
+        languages:
+          de: Deutsch
