@@ -16,6 +16,7 @@ RuntimeDirectoryMode=0700
 Environment=LD_LIBRARY_PATH=/srv/whisper.cpp/runtime
 ExecStart=/srv/whisper.cpp/runtime/whisper-server \
   --model /srv/whisper.cpp/models/ggml-large-v3-turbo.bin \
+  --vad --vad-model /srv/whisper.cpp/models/ggml-silero-v6.2.0.bin \
   --host 127.0.0.1 --port 828%i --threads 16 -l auto --device %i --convert
 ExecStartPost=/usr/bin/curl --fail --silent --show-error --retry 90 --retry-delay 1 --retry-connrefused --retry-all-errors --retry-max-time 90 --max-time 2 http://127.0.0.1:828%i/health
 
