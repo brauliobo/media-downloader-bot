@@ -4,6 +4,7 @@ require 'set'
 require 'fileutils'
 require 'uri'
 require 'date'
+require_relative 'source_formats'
 require_relative 'parsers/pdf'
 require_relative 'parsers/epub'
 require_relative 'parsers/html'
@@ -45,21 +46,21 @@ module Audiobook
     def self.from_input(input_path, opts: nil, stl: nil)
       return parse_url_kindle(input_path, opts: opts, stl: stl) if url_kindle?(input_path)
 
-      ext = File.extname(input_path).downcase
-      return from_yaml(input_path, opts: opts, stl: stl) if %w[.yml .yaml].include?(ext)
+      format = SourceFormats.format_for_path(input_path)
+      return from_yaml(input_path, opts: opts, stl: stl) if format&.dig(:loader) == :yaml
 
-      new(data: parse_by_extension(input_path, ext, opts: opts, stl: stl), opts: opts, stl: stl)
+      new(data: parse_input(input_path, format, opts: opts, stl: stl), opts: opts, stl: stl)
     end
 
     def self.detect_language(input_path, opts: nil, stl: nil)
       lang = explicit_language(opts)
       return lang if lang
 
-      ext  = File.extname(input_path).downcase
-      data = if %w[.yml .yaml].include?(ext)
+      format = SourceFormats.format_for_path(input_path)
+      data = if format&.dig(:loader) == :yaml
         SymMash.new(load_yaml(input_path))
       else
-        parse_by_extension(input_path, ext, opts: opts, stl: stl)
+        parse_input(input_path, format, opts: opts, stl: stl)
       end
 
       obj = allocate
@@ -71,15 +72,9 @@ module Audiobook
       obj.metadata.language || 'en'
     end
 
-    def self.parse_by_extension(input_path, ext = File.extname(input_path).downcase, opts: nil, stl: nil)
-      case ext
-      when '.json'         then parse_json(input_path, opts: opts)
-      when '.pdf'          then parse_pdf(input_path, stl: stl, opts: opts)
-      when '.epub'         then parse_epub(input_path, stl: stl, opts: opts)
-      when '.html', '.htm' then parse_html(input_path, stl: stl, opts: opts)
-      when '.txt'          then parse_txt(input_path, stl: stl, opts: opts)
-      else                      parse_fallback_ocr(input_path, stl: stl, opts: opts)
-      end
+    def self.parse_input(input_path, format = SourceFormats.format_for_path(input_path), opts: nil, stl: nil)
+      parser = format&.fetch(:parser, nil) || :parse_fallback_ocr
+      public_send(parser, input_path, stl: stl, opts: opts)
     end
 
     def self.explicit_language(opts)
@@ -115,7 +110,7 @@ module Audiobook
       new(data: data, opts: opts, stl: stl)
     end
 
-    def self.parse_json(json_path, opts: nil)
+    def self.parse_json(json_path, stl: nil, opts: nil)
       SymMash.new(JSON.parse(read_structured(json_path)))
     end
 

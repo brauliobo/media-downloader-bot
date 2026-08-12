@@ -4,7 +4,8 @@ RSpec.describe Audiobook::Parsers::Txt do
   def with_txt(content, encoding: Encoding::UTF_8, name: 'book.txt')
     Dir.mktmpdir do |dir|
       path = File.join(dir, name)
-      File.binwrite(path, content.encode(encoding))
+      encoded = content.encoding == Encoding::ASCII_8BIT ? content : content.encode(encoding)
+      File.binwrite(path, encoded)
       yield path
     end
   end
@@ -63,6 +64,20 @@ RSpec.describe Audiobook::Parsers::Txt do
       data = described_class.extract_data(path)
 
       expect(data.content.lines.first.text).to eq('It’s readable.')
+    end
+  end
+
+  it 'decodes BOM-marked UTF-16 text' do
+    {
+      Encoding::UTF_16LE => "\xFF\xFE".b,
+      Encoding::UTF_16BE => "\xFE\xFF".b,
+    }.each do |encoding, bom|
+      content = bom + 'Readable UTF-16 text.'.encode(encoding).b
+      with_txt(content, encoding: Encoding::ASCII_8BIT) do |path|
+        data = described_class.extract_data(path)
+
+        expect(data.content.lines.first.text).to eq('Readable UTF-16 text.')
+      end
     end
   end
 

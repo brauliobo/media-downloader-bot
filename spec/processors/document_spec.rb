@@ -8,8 +8,8 @@ RSpec.describe Processors::Document do
 
   it 'recognizes plain text audiobook documents' do
     expect(described_class.document_kind(doc(file_name: 'book.txt', mime_type: 'text/plain'))).to eq(:txt)
-    expect(described_class.txt_document?(doc(file_name: 'notes.TXT'))).to eq(true)
     expect(described_class.can_handle?(SymMash.new(document: doc(file_name: 'story.txt')))).to eq(true)
+    expect(described_class.can_handle?(SymMash.new(document: doc(file_name: 'notes.md', mime_type: 'text/plain')))).to eq(false)
   end
 
   it 'still recognizes pdf epub and yaml documents' do

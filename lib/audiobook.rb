@@ -9,6 +9,7 @@ require_relative 'tts'
 require_relative 'zipper'
 require_relative 'utils/sh'
 require_relative 'translator'
+require_relative 'audiobook/source_formats'
 require_relative 'audiobook/book'
 require_relative 'audiobook/chapter'
 require_relative 'audiobook/pauses'
@@ -26,9 +27,7 @@ module Audiobook
     opts ||= SymMash.new
     book = Audiobook::Book.from_input(input_path, opts: opts, stl: stl)
 
-    yaml_path = input_path.sub(/\.(pdf|epub|json|html|htm|txt)$/i, '.yml')
-    yaml_path = input_path if input_path =~ /\.(yml|yaml)$/i
-    yaml_path = File.join(File.dirname(out_audio), "#{File.basename(out_audio, File.extname(out_audio))}.yml") if yaml_path == input_path
+    yaml_path = SourceFormats.yaml_path(input_path, out_audio)
 
     book.write(yaml_path)
 

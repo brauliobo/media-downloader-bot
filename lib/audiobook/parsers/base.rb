@@ -47,11 +47,18 @@ module Audiobook
       def self.read_text(path, max_bytes: MAX_TEXT_BYTES)
         raise ArgumentError, 'document is too large' if File.size(path) > max_bytes
 
-        raw  = File.binread(path)
+        raw = File.binread(path)
+        return decode_utf16(raw, Encoding::UTF_16LE) if raw.start_with?("\xFF\xFE".b)
+        return decode_utf16(raw, Encoding::UTF_16BE) if raw.start_with?("\xFE\xFF".b)
+
         utf8 = raw.dup.force_encoding(Encoding::UTF_8)
         return utf8 if utf8.valid_encoding?
 
         raw.force_encoding(Encoding::Windows_1252).encode(Encoding::UTF_8)
+      end
+
+      def self.decode_utf16(raw, encoding)
+        raw.byteslice(2..).force_encoding(encoding).encode(Encoding::UTF_8)
       end
 
       def self.normalize_plain_text(text)
