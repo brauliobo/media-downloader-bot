@@ -2,6 +2,7 @@ require 'thread'
 
 require_relative '../tts'
 require_relative '../tts/options'
+require_relative '../utils/progress_counter'
 require_relative 'audio'
 
 module Dubbing
@@ -20,16 +21,18 @@ module Dubbing
       @stl&.update 'dubbing: synthesizing'
       clips             = Array.new(@sentences.size)
       options           = TTS::Options.for(@opts)
-      on_batch          = progress_callback
+      synthesis         = progress_counter('synthesizing')
+      normalization     = progress_counter('normalizing speech')
       use_target_voice  = target_reference_supported?
 
       speaker_groups.each_with_index do |(speaker_id, indices), speaker_index|
         reference = @references.fetch(speaker_id)
         jobs      = jobs_for(indices)
-        synthesize_speaker(reference, jobs, speaker_index, options, on_batch, use_target_voice)
-        normalize_jobs(jobs, indices, clips)
+        synthesize_speaker(reference, jobs, speaker_index, options, synthesis.batch_callback, use_target_voice)
+        normalize_jobs(jobs, indices, clips, normalization)
       end
 
+      @stl&.update 'dubbing: rendering speech'
       Audio.render_timeline(clips, File.join(@workdir, 'dub.wav'), duration: @video_duration)
     end
 
@@ -82,23 +85,19 @@ module Dubbing
       TTS.supports?(:stable_voice_reference) && TTS.supports?(:batch_synthesis)
     end
 
-    def normalize_jobs(jobs, indices, clips)
+    def normalize_jobs(jobs, indices, clips, progress)
       jobs.zip(indices).each do |job, idx|
         fit = File.join(@workdir, format('sentence-%04d.fit.wav', idx + 1))
         Audio.normalize(job.fetch(:out_path), fit)
         sentence = @sentences.fetch(idx)
         clips[idx] = Audio::Clip.new(path: fit, start: sentence.start.to_f, end: sentence.end.to_f)
+        progress.advance
       end
     end
 
-    def progress_callback
-      completed = 0
-      mutex = Mutex.new
-      lambda do |batch|
-        mutex.synchronize do
-          completed += batch.size
-          @stl&.update "dubbing: synthesizing #{completed}/#{@sentences.size}"
-        end
+    def progress_counter(operation)
+      Utils::ProgressCounter.new(total: @sentences.size, status: @stl) do |completed, total|
+        "dubbing: #{operation} #{completed}/#{total}"
       end
     end
   end

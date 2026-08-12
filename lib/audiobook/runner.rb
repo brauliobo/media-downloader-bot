@@ -5,6 +5,7 @@ require_relative '../zipper'
 require_relative '../tts/options'
 require_relative '../language'
 require_relative '../voice_reference'
+require_relative '../utils/progress_counter'
 
 module Audiobook
   class Runner
@@ -187,15 +188,10 @@ module Audiobook
       return if jobs.empty?
 
       speed, options = AudioFiles.split_speed_options(speech_options)
-      completed = 0
-      progress_mutex = Mutex.new
-      on_batch = lambda do |batch|
-        progress_mutex.synchronize do
-          completed += batch.size
-          @stl&.update "#{jobs[completed - 1][:status]}, audio #{completed}/#{jobs.size}"
-        end
+      progress = Utils::ProgressCounter.new(total: jobs.size, status: @stl) do |completed, total|
+        "#{jobs[completed - 1][:status]}, audio #{completed}/#{total}"
       end
-      TTS.synthesize_batch(items: jobs, on_batch: on_batch, **options)
+      TTS.synthesize_batch(items: jobs, on_batch: progress.batch_callback, **options)
       AudioFiles.speed_all(jobs.map { |job| job[:out_path] }, speed)
     end
 

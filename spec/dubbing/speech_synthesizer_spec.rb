@@ -49,4 +49,31 @@ RSpec.describe Dubbing::SpeechSynthesizer do
     expect(calls.last.fetch(:options)).to include(ref_text: sentences.last.text)
     expect(calls.last.fetch(:options).fetch(:speaker_wav)).to end_with('speaker-0000.target-reference.wav')
   end
+
+  it 'reports normalization progress before timeline rendering' do
+    updates = []
+    status = double(update: nil)
+    allow(status).to receive(:update) { |message| updates << message }
+    allow(TTS).to receive(:synthesize_batch) do |items:, on_batch: nil, **|
+      items.each { |item| File.write(item.fetch(:out_path), 'raw') }
+      on_batch&.call(items)
+    end
+
+    described_class.new(
+      sentences:      sentences,
+      references:     {'speaker' => reference},
+      opts:           SymMash.new,
+      target_lang:    'pt',
+      workdir:        dir,
+      video_duration: 5.0,
+      stl:            status
+    ).render
+
+    expect(updates).to include(
+      'dubbing: synthesizing 2/2',
+      'dubbing: normalizing speech 1/2',
+      'dubbing: normalizing speech 2/2'
+    )
+    expect(updates.last).to eq('dubbing: rendering speech')
+  end
 end
