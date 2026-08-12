@@ -10,6 +10,8 @@ class TTS
   module HTTPBackend
     extend ActiveSupport::Concern
 
+    REQUEST_TIMEOUT = ENV.fetch('TTS_HTTP_TIMEOUT', 2.minutes).to_i
+
     included do
       mattr_accessor :base_url
       mattr_accessor :segment_chars
@@ -52,7 +54,7 @@ class TTS
       kwargs.each { |key, value| form[key.to_s] = value.to_s }
 
       response = post_form(
-        Utils::HTTP.client,
+        Utils::HTTP.client(timeout: REQUEST_TIMEOUT),
         "#{base_url}#{batch_synth_path}",
         form,
         speaker_wav || ENV['SPEAKER_WAV']
@@ -71,7 +73,7 @@ class TTS
     private
 
     def http_synthesize(text:, lang:, out_path:, speaker_wav: nil, **kwargs)
-      agent, url = Utils::HTTP.client, "#{self.base_url}#{self.synth_path}"
+      agent, url = Utils::HTTP.client(timeout: REQUEST_TIMEOUT), "#{self.base_url}#{self.synth_path}"
       clean_text = text.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
       segments = self.segment ? segment_text(clean_text, self.segment_chars) : [clean_text]
 

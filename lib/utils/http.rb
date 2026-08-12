@@ -10,12 +10,11 @@ module Utils
 
     class << self
 
-      def client
-        Thread.current[:utils_http] ||= Mechanize.new.tap do |a|
-          t = ENV['HTTP_TIMEOUT']&.to_i || 30.minutes
-          a.open_timeout = t
-          a.read_timeout = t
-        end
+      def client(timeout: ENV['HTTP_TIMEOUT']&.to_i || 30.minutes)
+        Thread.current[:utils_http] ||= Mechanize.new
+        Thread.current[:utils_http].open_timeout = timeout
+        Thread.current[:utils_http].read_timeout = timeout
+        Thread.current[:utils_http]
       end
 
       delegate_missing_to :client

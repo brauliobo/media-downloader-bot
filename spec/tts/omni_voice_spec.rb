@@ -128,6 +128,19 @@ RSpec.describe TTS::OmniVoice do
     end
   end
 
+  it 'uses a finite timeout for synthesis requests' do
+    agent = double
+
+    expect(Utils::HTTP).to receive(:client)
+      .with(timeout: TTS::HTTPBackend::REQUEST_TIMEOUT)
+      .and_return(agent)
+    allow(agent).to receive(:post).and_return(double(code: '200', body: 'wav'))
+
+    Dir.mktmpdir('omnivoice-spec-') do |dir|
+      described_class.synthesize(text: 'Hello', lang: 'en', out_path: File.join(dir, 'out.wav'))
+    end
+  end
+
   it 'forwards the reference transcript when cloning a speaker voice' do
     Dir.mktmpdir('omnivoice-spec-') do |dir|
       paths = [File.join(dir, 'one.wav')]
