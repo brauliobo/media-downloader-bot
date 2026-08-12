@@ -55,11 +55,13 @@ RSpec.describe 'TTS batch synthesis' do
     result = Queue.new
     completed = Queue.new
     worker = Thread.new do
-      result << TTS.synthesize_batch(
-        items: items,
-        threads: 1,
-        on_batch: ->(batch) { completed << batch.size }
-      )
+      Enumerable.with_peach_threads(10) do
+        result << TTS.synthesize_batch(
+          items: items,
+          threads: 1,
+          on_batch: ->(batch) { completed << batch.size }
+        )
+      end
     end
 
     expect(Timeout.timeout(1) { backend.started.pop }).to eq(2)

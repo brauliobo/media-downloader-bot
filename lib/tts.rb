@@ -33,7 +33,11 @@ class TTS
       errors << error
     end
 
-    batches.peach(threads: threads, &process_batch)
+    if threads
+      Enumerable.with_peach_threads(threads) { batches.peach(threads: threads, &process_batch) }
+    else
+      batches.peach(&process_batch)
+    end
 
     raise errors.pop unless errors.empty?
 
