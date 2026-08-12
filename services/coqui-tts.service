@@ -4,6 +4,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
+SyslogIdentifier=coqui-tts
 User=mdb
 Nice=19
 

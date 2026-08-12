@@ -6,12 +6,13 @@ RequiresMountsFor=/srv/llama.cpp-hymt2
 StopWhenUnneeded=yes
 
 [Service]
+SyslogIdentifier=hymt2-gpu%i
 User=braulio
 Nice=19
 UMask=0077
 
 WorkingDirectory=/srv/llama.cpp-hymt2
-ExecStart=/bin/sh -c 'exec env CUDA_VISIBLE_DEVICES=%i /srv/llama.cpp-hymt2/runtime/llama-server --model /srv/llama.cpp-hymt2/Hy-MT2-7B-Q4_K_M.gguf --host 127.0.0.1 --port 1202%i --n-gpu-layers 99 --ctx-size 16384 --parallel 1 --cont-batching --no-host'
+ExecStart=/bin/bash -c 'export CUDA_VISIBLE_DEVICES=%i; exec -a hymt2-gpu%i /srv/llama.cpp-hymt2/runtime/llama-server --model /srv/llama.cpp-hymt2/Hy-MT2-7B-Q4_K_M.gguf --host 127.0.0.1 --port 1202%i --n-gpu-layers 99 --ctx-size 16384 --parallel 1 --cont-batching --no-host'
 ExecStartPost=/usr/bin/curl --fail --silent --show-error --retry 90 --retry-delay 1 --retry-connrefused --retry-all-errors --retry-max-time 90 --max-time 2 http://127.0.0.1:1202%i/health
 
 Environment=LD_LIBRARY_PATH=/srv/llama.cpp-hymt2/runtime

@@ -4,11 +4,15 @@ import threading
 import zipfile
 from pathlib import Path
 
+import setproctitle
 import torch
 from demucs.api import Separator, save_audio
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
+
+gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "?")
+setproctitle.setproctitle(f"demucs-gpu{gpu}")
 
 MODEL = os.environ.get("DEMUCS_MODEL", "htdemucs")
 DEVICE = os.environ.get("DEMUCS_DEVICE", "cuda")
@@ -25,6 +29,7 @@ def load_separator():
     if DEVICE == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("Demucs requires an available CUDA device")
     separator = Separator(model=MODEL, device=DEVICE, jobs=0, progress=False)
+    separator.model.to(DEVICE)
 
 
 @app.get("/health/ready")

@@ -4,6 +4,7 @@ RequiresMountsFor=/srv/OmniVoice
 After=network-online.target
 
 [Service]
+SyslogIdentifier=omnivoice-reload-gpu%i
 Type=oneshot
 ExecStart=/usr/local/libexec/omnivoice-reload %i
 StateDirectory=omnivoice-reload

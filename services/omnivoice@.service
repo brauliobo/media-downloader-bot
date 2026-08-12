@@ -6,6 +6,7 @@ RequiresMountsFor=/srv/OmniVoice
 StopWhenUnneeded=yes
 
 [Service]
+SyslogIdentifier=omnivoice-gpu%i
 DynamicUser=yes
 Nice=19
 WorkingDirectory=/srv/OmniVoice

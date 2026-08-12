@@ -1,23 +1,25 @@
 [Unit]
-Description=Demucs voice separation backend on GPU 1
+Description=Demucs voice separation backend on GPU %i
 After=network-online.target
 Wants=network-online.target
 
 [Service]
+SyslogIdentifier=demucs-gpu%i
 User=braulio
 Nice=19
 UMask=0077
 
-WorkingDirectory=/home/braulio/Projects/demucs
-Environment=CUDA_VISIBLE_DEVICES=1
+WorkingDirectory=/srv/demucs
+Environment=CUDA_VISIBLE_DEVICES=%i
 Environment=DEMUCS_DEVICE=cuda
 Environment=DEMUCS_MODEL=htdemucs
-Environment=HF_HOME=/var/cache/voice-separator-demucs/huggingface
-Environment=TORCH_HOME=/var/cache/voice-separator-demucs/torch
+Environment=HF_HOME=/var/cache/demucs-%i/huggingface
+Environment=TORCH_HOME=/var/cache/demucs-%i/torch
 Environment=PYTHONDONTWRITEBYTECODE=1
-CacheDirectory=voice-separator-demucs
-RuntimeDirectory=voice-separator-demucs
-ExecStart=/home/braulio/Projects/demucs/runtime/bin/uvicorn demucs_service:app --app-dir /home/braulio/Projects/media-downloader-bot/services/voice_separation --host 127.0.0.1 --port 8084 --workers 1
+CacheDirectory=demucs-%i
+RuntimeDirectory=demucs-%i
+ExecCondition=/usr/bin/test %i -eq 1
+ExecStart=/srv/demucs/runtime/bin/python -m uvicorn demucs_service:app --app-dir /home/braulio/Projects/media-downloader-bot/services/voice_separation --host 127.0.0.1 --port 8084 --workers 1
 ExecStartPost=/usr/bin/curl --fail --silent --show-error --retry 300 --retry-delay 2 --retry-connrefused --retry-all-errors --retry-max-time 600 --max-time 2 http://127.0.0.1:8084/health/ready
 
 NoNewPrivileges=yes
@@ -26,7 +28,7 @@ ProtectSystem=strict
 ProtectHome=read-only
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
-Restart=on-failure
+Restart=always
 RestartSec=30
 TimeoutStartSec=12min
 TimeoutStopSec=2min

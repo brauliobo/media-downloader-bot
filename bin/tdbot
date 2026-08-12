@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 ENV['TD_BOT'] = '1'
+Process.setproctitle 'media-downloader-tdbot'
 require_relative '../lib/manager'
 
 $bot = Manager.new

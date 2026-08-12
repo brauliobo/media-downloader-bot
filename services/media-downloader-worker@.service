@@ -4,6 +4,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
+SyslogIdentifier=mdb-worker-%i
 CPUQuota=900%
 LimitNOFILE=1001001
 User=mdb
@@ -24,6 +25,7 @@ TimeoutStopSec=300
 
 Environment=BUNDLE_DEPLOYMENT=true
 Environment=BUNDLE_FROZEN=false
+Environment=SYSTEMD_INSTANCE=%i
 Environment=BOT_HTTP=http://localhost:8080
 Environment=THREADS=10
 Environment=DB=1

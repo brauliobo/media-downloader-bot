@@ -1,3 +1,4 @@
+import ctypes
 import os
 import threading
 import time
@@ -6,6 +7,9 @@ import numpy as np
 import sherpa_onnx
 import soundfile as sf
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+
+gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "?")
+ctypes.CDLL(None).prctl(15, f"sherpa-gpu{gpu}".encode(), 0, 0, 0)
 
 SEGMENTATION_MODEL = os.environ.get(
     "SHERPA_SEGMENTATION_MODEL", "/srv/sherpa-onnx/models/segmentation/model.onnx"

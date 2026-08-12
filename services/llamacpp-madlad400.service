@@ -4,11 +4,12 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
+SyslogIdentifier=madlad400
 User=braulio
 Nice=19
 
 WorkingDirectory=/srv/llama.cpp
-ExecStart=/srv/llama.cpp/llama-server --port 12001 -c 2048 --temp 0 --hf-repo brauliobo/madlad400-7b-mt-bt-Q4_K_M-GGUF --hf-file madlad400-7b-mt-bt-q4_k_m.gguf
+ExecStart=@/srv/llama.cpp/llama-server madlad400 --port 12001 -c 2048 --temp 0 --hf-repo brauliobo/madlad400-7b-mt-bt-Q4_K_M-GGUF --hf-file madlad400-7b-mt-bt-q4_k_m.gguf
 
 RestartSec=30
 

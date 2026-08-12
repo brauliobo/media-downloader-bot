@@ -6,6 +6,7 @@ RequiresMountsFor=/srv/whisper.cpp
 StopWhenUnneeded=yes
 
 [Service]
+SyslogIdentifier=whisper-gpu%i
 User=braulio
 Nice=19
 UMask=0077
@@ -14,7 +15,7 @@ WorkingDirectory=/run/whispercpp-server-%i
 RuntimeDirectory=whispercpp-server-%i
 RuntimeDirectoryMode=0700
 Environment=LD_LIBRARY_PATH=/srv/whisper.cpp/runtime
-ExecStart=/srv/whisper.cpp/runtime/whisper-server \
+ExecStart=@/srv/whisper.cpp/runtime/whisper-server whisper-gpu%i \
   --model /srv/whisper.cpp/models/ggml-large-v3-turbo.bin \
   --vad --vad-model /srv/whisper.cpp/models/ggml-silero-v6.2.0.bin \
   --host 127.0.0.1 --port 828%i --threads 16 -l auto --device %i --convert

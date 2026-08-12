@@ -4,6 +4,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
+SyslogIdentifier=moss-tts
 User=mdb
 Group=mdb
 Nice=19

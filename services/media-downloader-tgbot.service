@@ -1,5 +1,5 @@
 [Unit]
-Description=media-downloader-tdbot
+Description=media-downloader-tgbot
 After=network-online.target
 Wants=network-online.target
 
@@ -8,6 +8,7 @@ Wants=network-online.target
 #Requires=vpnspace-openvpn.service
 
 [Service]
+SyslogIdentifier=media-downloader-tgbot
 CPUQuota=500%
 LimitNOFILE=1001001
 #DynamicUser=yes

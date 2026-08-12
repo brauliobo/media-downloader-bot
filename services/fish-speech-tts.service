@@ -4,6 +4,7 @@ After=network-online.target fish-speech-upstream.service
 Wants=network-online.target fish-speech-upstream.service
 
 [Service]
+SyslogIdentifier=fish-speech-tts
 User=mdb
 Nice=19
 

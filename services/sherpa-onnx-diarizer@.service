@@ -5,6 +5,7 @@ Wants=network-online.target
 StopWhenUnneeded=yes
 
 [Service]
+SyslogIdentifier=sherpa-diarizer-gpu%i
 User=braulio
 Nice=19
 UMask=0077

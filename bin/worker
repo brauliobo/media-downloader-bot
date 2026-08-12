@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
+instance = ENV.fetch('SYSTEMD_INSTANCE', '?')
+Process.setproctitle "media-downloader-worker-#{instance}"
 require_relative '../lib/worker_daemon'
 
 WorkerDaemon.new.run
-

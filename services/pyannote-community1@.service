@@ -5,6 +5,7 @@ Wants=network-online.target
 StopWhenUnneeded=yes
 
 [Service]
+SyslogIdentifier=pyannote-gpu%i
 User=braulio
 Nice=19
 UMask=0077

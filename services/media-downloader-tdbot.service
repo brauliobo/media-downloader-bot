@@ -8,6 +8,7 @@ Wants=network-online.target
 #Requires=vpnspace-openvpn.service
 
 [Service]
+SyslogIdentifier=media-downloader-tdbot
 CPUQuota=500%
 LimitNOFILE=1001001
 #DynamicUser=yes

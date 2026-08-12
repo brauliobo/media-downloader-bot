@@ -4,7 +4,8 @@ BindsTo=whispercpp-tinydiarize@%i.service
 After=whispercpp-tinydiarize@%i.service
 
 [Service]
-ExecStart=/usr/lib/systemd/systemd-socket-proxyd --exit-idle-time=30min 127.0.0.1:838%i
+SyslogIdentifier=tinydiarize-proxy-gpu%i
+ExecStart=@/usr/lib/systemd/systemd-socket-proxyd tinydiarize-proxy-gpu%i --exit-idle-time=30min 127.0.0.1:838%i
 DynamicUser=yes
 NoNewPrivileges=yes
 PrivateTmp=yes

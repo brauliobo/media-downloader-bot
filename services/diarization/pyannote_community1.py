@@ -3,10 +3,14 @@ import threading
 import time
 
 import numpy as np
+import setproctitle
 import soundfile as sf
 import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pyannote.audio import Pipeline
+
+gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "?")
+setproctitle.setproctitle(f"pyannote-gpu{gpu}")
 
 MODEL_PATH = os.environ.get("PYANNOTE_MODEL", "/srv/pyannote-community1/model")
 DEVICE = os.environ.get("DIARIZATION_DEVICE", "cuda")

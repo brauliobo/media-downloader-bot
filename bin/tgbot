@@ -1,8 +1,8 @@
 #!/usr/bin/env ruby
 
 ENV['TG_BOT'] = '1'
+Process.setproctitle 'media-downloader-tgbot'
 require_relative '../lib/manager'
 
 $bot = Manager.new
 $bot.start
-
