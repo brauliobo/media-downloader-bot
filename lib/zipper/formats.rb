@@ -51,7 +51,7 @@ class Zipper
           qflag_cpu:  '-crf',
           qflag_cuda: '-cq',
           preset_cuda: 'p4',
-          extra_cuda: '-tune hq -spatial_aq 1 -temporal_aq 1 -b:v 0',
+          extra_cuda: '-tune hq -spatial-aq 1 -temporal-aq 1 -b:v 0',
         },
 
         h265: {
@@ -63,7 +63,7 @@ class Zipper
           qflag_cpu:  '-crf',
           qflag_cuda: '-cq',
           preset_cuda: 'p5',
-          extra_cuda: '-tune hq -multipass qres -spatial_aq 1 -temporal_aq 1 -rc-lookahead 32 -b:v 0',
+          extra_cuda: '-tune hq -multipass qres -spatial-aq 1 -temporal-aq 1 -rc-lookahead 32 -b:v 0',
         },
 
         av1: {

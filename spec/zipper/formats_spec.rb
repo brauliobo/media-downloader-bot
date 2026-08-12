@@ -56,12 +56,16 @@ RSpec.describe Zipper::Formats do
 
     it 'uses NVENC constant-quality flags for CUDA h264' do
       expect(Zipper::Types.video.h264.qflag_cuda).to eq('-cq')
-      expect(Zipper::Types.video.h264.extra_cuda).to include('-b:v 0')
+      expect(Zipper::Types.video.h264.extra_cuda).to include(
+        '-spatial-aq 1', '-temporal-aq 1', '-b:v 0'
+      )
     end
 
     it 'uses a higher-quality NVENC preset for CUDA h265' do
       expect(Zipper::Types.video.h265.preset_cuda).to eq('p5')
-      expect(Zipper::Types.video.h265.extra_cuda).to include('-spatial_aq 1')
+      expect(Zipper::Types.video.h265.extra_cuda).to include(
+        '-spatial-aq 1', '-temporal-aq 1'
+      )
     end
   end
 end
