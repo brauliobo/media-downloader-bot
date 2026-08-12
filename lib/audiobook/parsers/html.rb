@@ -1,6 +1,5 @@
 require 'nokogiri'
 require_relative 'base'
-require_relative '../../text_helpers'
 
 module Audiobook
   module Parsers
@@ -10,10 +9,6 @@ module Audiobook
       EXCLUDED_SELECTOR = 'script,style,noscript,template,nav,form,button,svg'.freeze
       FONT_SIZES = {
         'h1' => 24, 'h2' => 22, 'h3' => 20, 'h4' => 18, 'h5' => 16, 'h6' => 14
-      }.freeze
-      WINDOWS_CONTROLS = {
-        "\u0085" => '...', "\u0091" => "'", "\u0092" => "'",
-        "\u0093" => '"', "\u0094" => '"', "\u0096" => '-', "\u0097" => '--'
       }.freeze
 
       def self.extract_data(path, stl: nil, opts: nil, **_kwargs)
@@ -31,7 +26,7 @@ module Audiobook
         else
           selected_lines(root, selector)
         end
-        page_count = paginate(lines, (opts&.wpp || 300).to_i)
+        page_count = paginate(lines, words_per_page(opts))
 
         SymMash.new(
           metadata: SymMash.new(
@@ -79,11 +74,7 @@ module Audiobook
       def self.read_html(path)
         raise ArgumentError, 'HTML document is too large' if File.size(path) > MAX_BYTES
 
-        raw = File.binread(path)
-        utf8 = raw.dup.force_encoding(Encoding::UTF_8)
-        return utf8 if utf8.valid_encoding?
-
-        raw.force_encoding(Encoding::Windows_1252).encode(Encoding::UTF_8)
+        read_text(path, max_bytes: MAX_BYTES)
       end
 
       def self.node_text(node)
@@ -100,9 +91,7 @@ module Audiobook
       end
 
       def self.normalize(text)
-        value = TextHelpers.normalize_text(text)
-        WINDOWS_CONTROLS.each { |from, to| value.gsub!(from, to) }
-        value.unicode_normalize(:nfc)
+        normalize_plain_text(text)
       end
 
       def self.font_size(node)
@@ -136,23 +125,6 @@ module Audiobook
         [node, *node.ancestors].filter_map { |element| element['lang'].to_s.strip.presence }.first
       end
 
-      def self.line(text, font_size, section_level: nil, language: nil)
-        text = normalize(text)
-        SymMash.new(
-          text: text, font_size: font_size, section_level: section_level,
-          language: language.to_s.strip.presence, y: nil, page: 1
-        ).compact unless text.empty?
-      end
-
-      def self.paginate(lines, words_per_page)
-        words_per_page = 300 unless words_per_page.positive?
-        words = 0
-        lines.each do |line|
-          line.page = 1 + words / words_per_page
-          words += line.text.split.size
-        end
-        lines.last&.page || 1
-      end
     end
   end
 end

@@ -3,40 +3,38 @@ require_relative 'file'
 module Processors
   class Document < File
     MAX_BYTES = ENV.fetch('MAX_DOCUMENT_BYTES', 200 * 1024 * 1024).to_i
+    AUDIOBOOK_KINDS = {
+      pdf:  { exts: %w[.pdf], mimes: %w[application/pdf] },
+      epub: { exts: %w[.epub], mimes: %w[application/epub+zip] },
+      yaml: { exts: %w[.yml .yaml], mimes: %w[application/x-yaml] },
+      txt:  { exts: %w[.txt], mimes: %w[text/plain] },
+    }.freeze
 
     self.attr = :document
-    def self.pdf_document?(doc_or_msg)
+
+    def self.document_kind(doc_or_msg)
       doc = doc_or_msg.respond_to?(:document) ? doc_or_msg.document : doc_or_msg
-      doc && (doc.mime_type == 'application/pdf' || doc.file_name.to_s.downcase.end_with?('.pdf'))
+      return unless doc
+
+      fname = doc.file_name.to_s.downcase
+      mime  = doc.mime_type.to_s
+      AUDIOBOOK_KINDS.each do |kind, spec|
+        return kind if spec[:mimes].include?(mime) || spec[:exts].any? { |ext| fname.end_with?(ext) }
+      end
+      nil
     end
 
-    def self.epub_document?(doc_or_msg)
-      doc = doc_or_msg.respond_to?(:document) ? doc_or_msg.document : doc_or_msg
-      fname = doc&.file_name.to_s.downcase
-      doc && (doc.mime_type == 'application/epub+zip' || fname.end_with?('.epub'))
-    end
+    def self.pdf_document?(doc_or_msg)  = document_kind(doc_or_msg) == :pdf
+    def self.epub_document?(doc_or_msg) = document_kind(doc_or_msg) == :epub
+    def self.yaml_document?(doc_or_msg) = document_kind(doc_or_msg) == :yaml
+    def self.txt_document?(doc_or_msg)  = document_kind(doc_or_msg) == :txt
+    def self.can_handle?(msg)           = !!document_kind(msg)
 
-    def self.yaml_document?(doc_or_msg)
-      doc = doc_or_msg.respond_to?(:document) ? doc_or_msg.document : doc_or_msg
-      fname = doc&.file_name.to_s.downcase
-      doc && (doc.mime_type == 'application/x-yaml' || fname.end_with?('.yml') || fname.end_with?('.yaml'))
-    end
-
-    def self.can_handle?(msg)
-      pdf_document?(msg) || epub_document?(msg) || yaml_document?(msg)
-    end
-
-    def pdf_document?
-      self.class.pdf_document?(msg)
-    end
-
-    def epub_document?
-      self.class.epub_document?(msg)
-    end
-
-    def yaml_document?
-      self.class.yaml_document?(msg)
-    end
+    def document_kind   = self.class.document_kind(msg)
+    def pdf_document?   = document_kind == :pdf
+    def epub_document?  = document_kind == :epub
+    def yaml_document?  = document_kind == :yaml
+    def txt_document?   = document_kind == :txt
 
     def download
       info = msg.document
@@ -49,16 +47,16 @@ module Processors
     end
 
     def handle_input(i, pos: nil, **_kwargs)
-      return super unless pdf_document? || epub_document? || yaml_document?
+      kind = document_kind
+      return super unless kind
       raise 'no input provided' unless i
 
-      @stl&.update 'OCR & TTS' unless yaml_document?
-      @stl&.update 'Generating audiobook from YAML' if yaml_document?
+      @stl&.update(kind == :yaml ? 'Generating audiobook from YAML' : 'OCR & TTS')
       begin
-        if yaml_document?
-          i.uploads = Audiobook::Yaml.generate_audio(i.fn_in, dir: dir, stl: @stl, opts: i.opts)
+        i.uploads = if kind == :yaml
+          Audiobook::Yaml.generate_audio(i.fn_in, dir: dir, stl: @stl, opts: i.opts)
         else
-          i.uploads = Audiobook.generate_uploads(i.fn_in, dir: dir, stl: @stl, opts: i.opts)
+          Audiobook.generate_uploads(i.fn_in, dir: dir, stl: @stl, opts: i.opts)
         end
         i
       rescue => e
@@ -68,4 +66,3 @@ module Processors
     end
   end
 end
-

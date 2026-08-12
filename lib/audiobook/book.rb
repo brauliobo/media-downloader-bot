@@ -7,6 +7,7 @@ require 'date'
 require_relative 'parsers/pdf'
 require_relative 'parsers/epub'
 require_relative 'parsers/html'
+require_relative 'parsers/txt'
 require_relative 'parsers/kindle'
 require_relative '../text_helpers'
 require_relative '../ocr'
@@ -43,27 +44,22 @@ module Audiobook
 
     def self.from_input(input_path, opts: nil, stl: nil)
       return parse_url_kindle(input_path, opts: opts, stl: stl) if url_kindle?(input_path)
-      case File.extname(input_path).downcase
-      when '.yml', '.yaml' then from_yaml(input_path, opts: opts, stl: stl)
-      when '.json'         then new(data: parse_json(input_path, opts: opts), opts: opts, stl: stl)
-      when '.pdf'          then new(data: parse_pdf(input_path, stl: stl, opts: opts), opts: opts, stl: stl)
-      when '.epub'         then new(data: parse_epub(input_path, stl: stl, opts: opts), opts: opts, stl: stl)
-      when '.html', '.htm' then new(data: parse_html(input_path, stl: stl, opts: opts), opts: opts, stl: stl)
-      else                      new(data: parse_fallback_ocr(input_path, stl: stl, opts: opts), opts: opts, stl: stl)
-      end
+
+      ext = File.extname(input_path).downcase
+      return from_yaml(input_path, opts: opts, stl: stl) if %w[.yml .yaml].include?(ext)
+
+      new(data: parse_by_extension(input_path, ext, opts: opts, stl: stl), opts: opts, stl: stl)
     end
 
     def self.detect_language(input_path, opts: nil, stl: nil)
       lang = explicit_language(opts)
       return lang if lang
 
-      data = case File.extname(input_path).downcase
-      when '.yml', '.yaml' then SymMash.new(load_yaml(input_path))
-      when '.json'         then parse_json(input_path, opts: opts)
-      when '.pdf'          then parse_pdf(input_path, stl: stl, opts: opts)
-      when '.epub'         then parse_epub(input_path, stl: stl, opts: opts)
-      when '.html', '.htm' then parse_html(input_path, stl: stl, opts: opts)
-      else                      parse_fallback_ocr(input_path, stl: stl, opts: opts)
+      ext  = File.extname(input_path).downcase
+      data = if %w[.yml .yaml].include?(ext)
+        SymMash.new(load_yaml(input_path))
+      else
+        parse_by_extension(input_path, ext, opts: opts, stl: stl)
       end
 
       obj = allocate
@@ -73,6 +69,17 @@ module Audiobook
       obj.instance_variable_set(:@stl, stl)
       obj.send(:detect_language_from_first_pages)
       obj.metadata.language || 'en'
+    end
+
+    def self.parse_by_extension(input_path, ext = File.extname(input_path).downcase, opts: nil, stl: nil)
+      case ext
+      when '.json'         then parse_json(input_path, opts: opts)
+      when '.pdf'          then parse_pdf(input_path, stl: stl, opts: opts)
+      when '.epub'         then parse_epub(input_path, stl: stl, opts: opts)
+      when '.html', '.htm' then parse_html(input_path, stl: stl, opts: opts)
+      when '.txt'          then parse_txt(input_path, stl: stl, opts: opts)
+      else                      parse_fallback_ocr(input_path, stl: stl, opts: opts)
+      end
     end
 
     def self.explicit_language(opts)
@@ -129,6 +136,11 @@ module Audiobook
     def self.parse_html(html_path, stl: nil, opts: nil)
       stl&.update 'Analyzing HTML document'
       Parsers::Html.parse(html_path, stl: stl, opts: opts)
+    end
+
+    def self.parse_txt(txt_path, stl: nil, opts: nil)
+      stl&.update 'Analyzing text document'
+      Parsers::Txt.parse(txt_path, stl: stl, opts: opts)
     end
 
     def self.parse_fallback_ocr(path, stl: nil, opts: nil)

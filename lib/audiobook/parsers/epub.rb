@@ -73,8 +73,7 @@ module Audiobook
 
         # Word-based pagination estimate (default ~300 words/page). Use the larger estimate.
         total_words = lines.sum { |l| l.text.to_s.split(/\s+/).reject(&:empty?).size }
-        wpp = (opts&.wpp || 300).to_i
-        wpp = 300 if wpp <= 0
+        wpp = words_per_page(opts)
         est_pages = [1, (total_words / wpp.to_f).ceil].max
         desired_pages = [page_count, est_pages].max
 
