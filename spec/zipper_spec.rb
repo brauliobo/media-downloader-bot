@@ -34,6 +34,25 @@ RSpec.describe Zipper do
     expect(Sh).to have_received(:run).with(include('-c:v h264_nvenc'))
   end
 
+  it 'uses the current ffmpeg option for variable frame rate output' do
+    probe = SymMash.new(
+      format: SymMash.new(duration: 60),
+      streams: [SymMash.new(codec_type: 'video', width: 1920, height: 1080)],
+    )
+    opts = SymMash.new(
+      format:   Zipper::Types.video.h264,
+      acodec:   'aac',
+      metadata: {},
+    )
+
+    allow(Sh).to receive(:run)
+
+    described_class.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
+
+    expect(Sh).to have_received(:run).with(include('-fps_mode vfr'))
+    expect(Sh).not_to have_received(:run).with(include('-vsync'))
+  end
+
   it 'uses the CUDA quality default when quality is omitted' do
     probe = SymMash.new(
       format: SymMash.new(duration: 60),

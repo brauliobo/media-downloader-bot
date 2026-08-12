@@ -18,7 +18,7 @@ class Zipper
   class_attribute :pause_cache_mutex
 
   # Constants removed; quality defaults are set dynamically per instance.
-  VFR_OPTS    = '-vsync vfr'
+  VFR_OPTS    = '-fps_mode vfr'
   VF_SCALE_M2 = "scale=%{width}:trunc(ow/a/2)*2".freeze
   VF_SCALE_M8 = "scale=%{width}:trunc(ow/a/8)*8".freeze
 

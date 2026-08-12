@@ -5,9 +5,10 @@ require_relative '../subtitler'
 
 class VoiceReference
   class Transcriber
-    def initialize(backend: Subtitler, cache_dir: nil)
-      @backend   = backend
-      @cache_dir = File.expand_path(cache_dir) if cache_dir
+    def initialize(backend: Subtitler, cache_dir: nil, separate_voice: true)
+      @backend        = backend
+      @cache_dir      = File.expand_path(cache_dir) if cache_dir
+      @separate_voice = separate_voice
       FileUtils.mkdir_p(@cache_dir) if @cache_dir
     end
 
@@ -15,7 +16,9 @@ class VoiceReference
       cache = cache_path(audio)
       return JSON.parse(File.read(cache), symbolize_names: true) if cache && File.exist?(cache)
 
-      result = backend.transcribe(audio, format: 'verbose_json', merge_words: false)
+      options = {format: 'verbose_json', merge_words: false}
+      options[:separate_voice] = false unless separate_voice
+      result = backend.transcribe(audio, **options)
       transcript = normalize(result)
       File.write(cache, JSON.pretty_generate(transcript)) if cache
       transcript
@@ -23,7 +26,7 @@ class VoiceReference
 
     private
 
-    attr_reader :backend, :cache_dir
+    attr_reader :backend, :cache_dir, :separate_voice
 
     def normalize(result)
       output = result.output

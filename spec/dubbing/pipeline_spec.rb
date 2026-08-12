@@ -4,10 +4,18 @@ require_relative '../../lib/dubbing'
 RSpec.describe Dubbing::Pipeline do
   let(:dir) { Dir.mktmpdir('dub-spec-') }
   let(:input) { File.join(dir, 'input.mp4') }
+  let(:vocals) { File.join(dir, 'vocals.wav') }
+  let(:non_vocals) { File.join(dir, 'no-vocals.wav') }
+  let(:stems) { VoiceSeparator::Stems.new(vocals: vocals, non_vocals: non_vocals) }
   let(:probe) { SymMash.new(format: SymMash.new(duration: 6.0), streams: [SymMash.new(codec_type: 'video')]) }
   let(:status) { instance_double(Bot::Status::Line, update: nil) }
 
-  before { File.write(input, 'video') }
+  before do
+    File.write(input, 'video')
+    File.write(vocals, 'vocals')
+    File.write(non_vocals, 'non-vocals')
+    allow(VoiceSeparator).to receive(:with_stems).and_yield(stems)
+  end
   after { FileUtils.remove_entry(dir) if Dir.exist?(dir) }
 
   def transcript(lang: 'en')
@@ -126,6 +134,7 @@ RSpec.describe Dubbing::Pipeline do
     output = described_class.apply(input, dir: dir, opts: SymMash.new(dub: 1), stl: status, probe: probe)
 
     expect(output).to eq(input)
+    expect(Subtitler).to have_received(:transcribe).with(vocals, separate_voice: false)
   end
 
   it 'translates and batch synthesizes with each extracted speaker reference' do
@@ -159,7 +168,7 @@ RSpec.describe Dubbing::Pipeline do
       ]
       Dubbing::Audio::Timeline.new(path: output, clips: scheduled)
     end
-    allow(Dubbing::Audio).to receive(:replace_video_audio) do |_video, _audio, out, **_|
+    allow(Dubbing::Audio).to receive(:replace_video_audio) do |_video, _speech, _non_vocals, out, **_|
       File.write(out, 'video')
     end
     allow(pipeline).to receive(:mix_video).and_return(File.join(dir, 'out.mp4'))
@@ -185,7 +194,7 @@ RSpec.describe Dubbing::Pipeline do
       .with(['Hello.', 'Bye.'], from: 'en', to: 'pt', durations: [1.0, 1.0])
     expect(Dubbing::VoiceReference).to have_received(:extract_by_speaker)
       .with(
-        input,
+        vocals,
         diarization.segments,
         sentences:   kind_of(Array),
         dir:         kind_of(String),
@@ -197,6 +206,7 @@ RSpec.describe Dubbing::Pipeline do
     expect(opts.sub_vtt).to include('00:00:00.000 --> 00:00:01.000', 'Olá.')
     expect(opts.sub_vtt).to include('00:00:02.000 --> 00:00:03.000', 'Tchau.')
     expect(opts.sub_vtt).not_to include('Olá. Tchau.')
+    expect(Diarizer).to have_received(:diarize).with(vocals, speakers: nil)
   end
 
   it 'keeps generated subtitle cues within the shared maximum length' do

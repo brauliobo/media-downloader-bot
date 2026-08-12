@@ -138,16 +138,16 @@ RSpec.describe Dubbing::Audio do
     described_class.render_timeline([clip], output, duration: 3.0)
   end
 
-  it 'replaces source audio instead of mixing it under the dub' do
+  it 'mixes the non-vocal stem under generated speech' do
     output = File.join(dir, 'output.mp4')
     expect(Sh).to receive(:run) do |command|
-      expect(command).to include('-map 0:v:0 -map 1:a:0')
-      expect(command).not_to include('sidechaincompress')
-      expect(command).not_to include('amix')
+      expect(command).to include('-i dub.wav -i no-vocals.wav')
+      expect(command).to include('amix\=inputs\=2:normalize\=0', '-map 0:v:0 -map [a]')
+      expect(command).not_to include('-map 1:a:0')
       File.write(output, 'video')
       ['', '', ok_status]
     end
 
-    described_class.replace_video_audio('video.mp4', 'dub.wav', output, duration: 6.0)
+    described_class.replace_video_audio('video.mp4', 'dub.wav', 'no-vocals.wav', output, duration: 6.0)
   end
 end

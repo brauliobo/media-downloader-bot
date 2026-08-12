@@ -7,6 +7,7 @@ require_relative '../prober'
 require_relative '../subtitler'
 require_relative '../subtitler/translator'
 require_relative '../translator'
+require_relative '../voice_separator'
 require_relative 'audio'
 require_relative 'speech_synthesizer'
 require_relative 'voice_reference'
@@ -31,32 +32,35 @@ module Dubbing
     end
 
     def apply
-      @stl&.update 'dubbing: transcribing'
-      transcript = Subtitler.transcribe(@input_path)
-      @transcript_output = transcript.output
-      @source_lang = Subtitler.normalize_lang(transcript.lang)
-      return @input_path if @source_lang.present? && @source_lang == target_lang
+      @stl&.update 'dubbing: separating voice'
+      VoiceSeparator.with_stems(@input_path, dir: @dir) do |stems|
+        @stl&.update 'dubbing: transcribing'
+        transcript = Subtitler.transcribe(stems.vocals, separate_voice: false)
+        @transcript_output = transcript.output
+        @source_lang = Subtitler.normalize_lang(transcript.lang)
+        next @input_path if @source_lang.present? && @source_lang == target_lang
 
-      @stl&.update 'dubbing: translating'
-      @sentences = translated_sentences(transcript.output)
-      return @input_path if @sentences.empty?
+        @stl&.update 'dubbing: translating'
+        @sentences = translated_sentences(transcript.output)
+        next @input_path if @sentences.empty?
 
-      Dir.mktmpdir('dub-', @dir) do |workdir|
-        @stl&.update 'dubbing: diarizing'
-        diarization = Diarizer.diarize(@input_path, speakers: @opts.speakers&.to_i)
-        Diarizer.assign_speakers!(@sentences, diarization.segments)
-        @speaker_references = VoiceReference.extract_by_speaker(
-          @input_path,
-          diarization.segments,
-          sentences: @sentences,
-          dir:       workdir,
-          transcriber: ::VoiceReference::Transcriber.new
-        )
-        timeline = synthesize_timeline(workdir)
-        @timing_score = timeline.score
-        write_timing_score
-        prepare_translated_subtitles
-        mix_video(timeline.path, workdir)
+        Dir.mktmpdir('dub-', @dir) do |workdir|
+          @stl&.update 'dubbing: diarizing'
+          diarization = Diarizer.diarize(stems.vocals, speakers: @opts.speakers&.to_i)
+          Diarizer.assign_speakers!(@sentences, diarization.segments)
+          @speaker_references = VoiceReference.extract_by_speaker(
+            stems.vocals,
+            diarization.segments,
+            sentences: @sentences,
+            dir:       workdir,
+            transcriber: ::VoiceReference::Transcriber.new(separate_voice: false)
+          )
+          timeline = synthesize_timeline(workdir)
+          @timing_score = timeline.score
+          write_timing_score
+          prepare_translated_subtitles
+          mix_video(timeline.path, stems.non_vocals, workdir)
+        end
       end
     end
 
@@ -170,10 +174,12 @@ module Dubbing
       File.write(File.expand_path(@opts.dubscore.to_s), JSON.pretty_generate(timing_score))
     end
 
-    def mix_video(dub_audio, workdir)
+    def mix_video(dub_audio, non_vocals, workdir)
       @stl&.update 'dubbing: mixing'
       output = File.join(workdir, 'dubbed-source.mp4')
-      Audio.replace_video_audio(@input_path, dub_audio, output, duration: video_duration)
+      Audio.replace_video_audio(
+        @input_path, dub_audio, non_vocals, output, duration: video_duration
+      )
 
       final = File.join(@dir, "dubbed-#{File.basename(@input_path, File.extname(@input_path))}.mp4")
       FileUtils.cp(output, final)

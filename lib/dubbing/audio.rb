@@ -135,9 +135,13 @@ module Dubbing
       )
     end
 
-    def replace_video_audio(video, audio, output, duration:)
-      command = "#{Zipper::FFMPEG} -i #{Sh.escape(video)} -i #{Sh.escape(audio)} " \
-        "-map 0:v:0 -map 1:a:0 -t #{duration} -c:v copy -c:a aac -b:a 128k #{Sh.escape(output)}"
+    def replace_video_audio(video, speech, non_vocals, output, duration:)
+      filter = '[1:a]aformat=sample_rates=48000:channel_layouts=stereo[speech];' \
+        '[2:a]aformat=sample_rates=48000:channel_layouts=stereo[bed];' \
+        "[speech][bed]amix=inputs=2:normalize=0,alimiter=limit=0.95,atrim=0:#{duration}[a]"
+      command = "#{Zipper::FFMPEG} -i #{Sh.escape(video)} -i #{Sh.escape(speech)} " \
+        "-i #{Sh.escape(non_vocals)} -filter_complex #{Sh.escape(filter)} " \
+        "-map 0:v:0 -map [a] -t #{duration} -c:v copy -c:a aac -b:a 128k #{Sh.escape(output)}"
       run!('dub mux', command, output)
     end
 
