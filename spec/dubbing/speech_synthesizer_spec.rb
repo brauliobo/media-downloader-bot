@@ -70,10 +70,12 @@ RSpec.describe Dubbing::SpeechSynthesizer do
     ).render
 
     expect(updates).to include(
+      'dubbing: preparing speaker voice 1/1',
       'dubbing: synthesizing 2/2',
       'dubbing: normalizing speech 1/2',
       'dubbing: normalizing speech 2/2'
     )
+    expect(updates.index('dubbing: preparing speaker voice 1/1')).to be < updates.index('dubbing: synthesizing 2/2')
     expect(updates.last).to eq('dubbing: rendering speech')
   end
 end

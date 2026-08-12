@@ -64,6 +64,7 @@ module Dubbing
 
     def target_reference_for(reference, jobs, speaker_index, options)
       # Short cross-lingual targets can echo the source-language voice prompt.
+      @stl&.update "dubbing: preparing speaker voice #{speaker_index + 1}/#{speaker_groups.size}"
       anchor_text = jobs.max_by { |job| job.fetch(:text).to_s.length }.fetch(:text).to_s
       anchor_path = File.join(@workdir, format('speaker-%04d.target-reference.wav', speaker_index))
       anchor_job = {text: anchor_text, lang: @target_lang, out_path: anchor_path}
