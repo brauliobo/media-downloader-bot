@@ -11,7 +11,7 @@ require_relative 'tts/moss_tts'
 
 class TTS
   BACKEND = const_get(ENV['TTS'] || 'OmniVoice')
-  BATCH_SIZE = 2
+  BATCH_SIZE = 1
   DEFAULT_SAMPLE_RATE = 22_050
 
   def self.synthesize(**args)
@@ -19,9 +19,7 @@ class TTS
   end
 
   def self.synthesize_batch(items:, on_batch: nil, threads: nil, **args)
-    chinese = items.any? { |item| (item[:lang] || item['lang'] || args[:lang]).to_s == 'zh' }
-    batch_size = chinese ? 1 : BATCH_SIZE
-    batches = items.each_slice(batch_size).to_a
+    batches = items.each_slice(BATCH_SIZE).to_a
     errors = Queue.new
 
     process_batch = lambda do |batch|

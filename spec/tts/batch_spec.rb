@@ -2,7 +2,7 @@ require 'spec_helper'
 require 'timeout'
 
 RSpec.describe 'TTS batch synthesis' do
-  it 'runs fixed-size batches concurrently through peach' do
+  it 'runs single-item batches concurrently through peach' do
     backend = Class.new do
       class << self
         attr_accessor :started, :release
@@ -26,18 +26,18 @@ RSpec.describe 'TTS batch synthesis' do
       result << TTS.synthesize_batch(items: items, on_batch: ->(batch) { completed << batch.size })
     end
 
-    expect(2.times.map { Timeout.timeout(1) { backend.started.pop } }).to eq([2, 2])
-    2.times { backend.release << true }
+    expect(4.times.map { Timeout.timeout(1) { backend.started.pop } }).to eq([1, 1, 1, 1])
+    4.times { backend.release << true }
     worker.join
     expect(result.pop).to eq(items.map { |item| item[:out_path] })
-    expect(2.times.map { completed.pop }.sort).to eq([2, 2])
+    expect(4.times.map { completed.pop }.sort).to eq([1, 1, 1, 1])
   ensure
     ENV['THREADS'] = old_threads
-    2.times { backend&.release&.push(true) }
+    4.times { backend&.release&.push(true) }
     worker&.join
   end
 
-  it 'runs fixed-size batches sequentially with one thread' do
+  it 'runs single-item batches sequentially with one thread' do
     backend = Class.new do
       class << self
         attr_accessor :started, :release
@@ -64,37 +64,22 @@ RSpec.describe 'TTS batch synthesis' do
       end
     end
 
-    expect(Timeout.timeout(1) { backend.started.pop }).to eq(2)
+    expect(Timeout.timeout(1) { backend.started.pop }).to eq(1)
     expect { Timeout.timeout(0.1) { backend.started.pop } }.to raise_error(Timeout::Error)
     backend.release << true
-    expect(Timeout.timeout(1) { backend.started.pop }).to eq(2)
+    expect(Timeout.timeout(1) { backend.started.pop }).to eq(1)
+    backend.release << true
+    expect(Timeout.timeout(1) { backend.started.pop }).to eq(1)
+    backend.release << true
+    expect(Timeout.timeout(1) { backend.started.pop }).to eq(1)
     backend.release << true
     worker.join
 
     expect(result.pop).to eq(items.map { |item| item[:out_path] })
-    expect(2.times.map { completed.pop }).to eq([2, 2])
+    expect(4.times.map { completed.pop }).to eq([1, 1, 1, 1])
   ensure
-    2.times { backend&.release&.push(true) }
+    4.times { backend&.release&.push(true) }
     worker&.join
-  end
-
-  it 'uses single-item model batches for Chinese synthesis' do
-    backend = Class.new do
-      class << self
-        attr_accessor :batches
-
-        def synthesize_batch(items:, **)
-          batches << items
-        end
-      end
-    end
-    backend.batches = []
-    stub_const('TTS::BACKEND', backend)
-    items = 3.times.map { |idx| {text: idx.to_s, lang: 'zh', out_path: "#{idx}.wav"} }
-
-    TTS.synthesize_batch(items: items, threads: 1)
-
-    expect(backend.batches.map(&:size)).to eq([1, 1, 1])
   end
 
   it 'retries transient batch backend failures' do
