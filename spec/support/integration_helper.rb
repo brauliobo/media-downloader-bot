@@ -37,6 +37,15 @@ module IntegrationHelper
 
   # Sequential, hermetic environment for an integration spec.
   def setup_pipeline_env(workdir)
+    @pipeline_state = {
+      env:    %w[THREADS API_THREADS TMPDIR SKIP_META PATH YTDLP_STUB_PLAN].to_h { |name| [name, ENV[name]] },
+      worker: {
+        tmpdir:       Worker.tmpdir,
+        workdir_path: Worker.workdir_path,
+        skip_cleanup: Worker.skip_cleanup,
+      },
+    }
+
     ENV['THREADS'] = '1'
     ENV['API_THREADS'] = '1'
     ENV['TMPDIR'] = workdir
@@ -48,10 +57,18 @@ module IntegrationHelper
   end
 
   def teardown_pipeline_env
-    ENV.delete('YTDLP_STUB_PLAN')
-    ENV.delete('TMPDIR')
-    Worker.workdir_path = nil
-    Worker.skip_cleanup = false
+    @pipeline_state[:env].each do |name, value|
+      if value.nil?
+        ENV.delete name
+      else
+        ENV[name] = value
+      end
+    end
+
+    Worker.tmpdir       = @pipeline_state[:worker][:tmpdir]
+    Worker.workdir_path = @pipeline_state[:worker][:workdir_path]
+    Worker.skip_cleanup = @pipeline_state[:worker][:skip_cleanup]
+    @pipeline_state = nil
   end
 
   # Writes a yt-dlp stub plan to ENV. The stub script reads this on each invocation.
