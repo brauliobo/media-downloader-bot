@@ -3,44 +3,31 @@
 require_relative 'formats'
 
 class Zipper
-  # Math helpers that convert byte / bitrate / duration numbers while keeping
-  # all sizing logic in a single place.  Pure functions only – no IO.
   module Limits
-    # Direct copies from Zipper constants so other code keeps working.
     VID_WIDTH_REDUC        = SymMash.new width: 80, minutes: 8
-    AUD_BRATE_REDUC        = SymMash.new brate:  8, minutes: 8
+    AUD_BRATE_REDUC        = SymMash.new brate: 8, minutes: 8
     MAX_VIDEO_MAXRATE_KBIT = 50_000
+    VideoSize = Data.define :maxrate, :bufsize, :rate_control, :bitrate
 
     module_function
 
-    # -- Class-level helpers -------------------------------------------------
-
-    # Max audio duration (minutes) for a given bitrate and size limit.
-    #   br – bitrate in kbit/s
-    def max_audio_duration(br, size_mb_limit)
+    def max_audio_duration br, size_mb_limit
       1000 * size_mb_limit / (br.to_i / 8) / 60.0
     end
 
-    # Threshold after which we start reducing video resolution.
-    # Returns minutes.
-    def vid_duration_thld(size_mb_limit)
+    def vid_duration_thld size_mb_limit
       return Float::INFINITY unless size_mb_limit
-      # Baseline: 20 minutes when the limit is 50 MB (Telegram). Scale linearly.
+
       (size_mb_limit * 20.0 / 50).ceil
     end
 
-    # Same idea for audio.
-    def aud_duration_thld(size_mb_limit)
+    def aud_duration_thld size_mb_limit
       return Float::INFINITY unless size_mb_limit
-      max_audio_duration(Zipper::Formats::TYPES.audio.opus.opts.bitrate, size_mb_limit)
+
+      max_audio_duration Zipper::Formats::TYPES.audio.opus.opts.bitrate, size_mb_limit
     end
 
-    # -- Instance-level helpers ---------------------------------------------
-    # These two methods expect a typical Zipper instance with `duration` and
-    # `opts` ivars. They mutate opts in-place and return any extra ffmpeg
-    # size-limit flags as string (video) or nil (audio).
-
-    def apply_audio_size_limit!(zipper)
+    def apply_audio_size_limit! zipper
       return if zipper.opts.onlysrt
       return unless Zipper.size_mb_limit
 
@@ -49,53 +36,47 @@ class Zipper
       end
     end
 
-    def apply_video_size_limits!(zipper)
+    def apply_video_size_limits! zipper
       return if zipper.opts.onlysrt
       return unless Zipper.size_mb_limit
       return unless zipper.duration.finite? && zipper.duration.positive?
 
-      minutes  = (zipper.duration / 60).ceil
-      vthld    = vid_duration_thld(Zipper.size_mb_limit)
+      minutes = (zipper.duration / 60).ceil
+      threshold = vid_duration_thld Zipper.size_mb_limit
 
-      # ---- reduce resolution ---------------------------------------------
-      if minutes > vthld && zipper.opts.width > zipper.dopts.width / 3
-        reduc,intv  = VID_WIDTH_REDUC.values_at(:width, :minutes)
-        zipper.opts.width -= reduc * ((minutes - vthld).to_f / intv).ceil
-        zipper.opts.width  = zipper.dopts.width / 3 if zipper.opts.width < zipper.dopts.width / 3
+      if minutes > threshold && zipper.opts.width > zipper.dopts.width / 3
+        reduction, interval = VID_WIDTH_REDUC.values_at :width, :minutes
+        zipper.opts.width -= reduction * ((minutes - threshold).to_f / interval).ceil
+        zipper.opts.width = zipper.dopts.width / 3 if zipper.opts.width < zipper.dopts.width / 3
         zipper.opts.width -= 1 if zipper.opts.width.odd?
       end
 
-      # ---- reduce audio bitrate -----------------------------------------
-      if minutes > vthld && zipper.opts.abrate > zipper.dopts.abrate / 2
-        reduc,intv   = AUD_BRATE_REDUC.values_at(:brate, :minutes)
-        zipper.opts.abrate -= reduc * ((minutes - vthld).to_f / intv).ceil
-        zipper.opts.abrate  = zipper.dopts.abrate / 2 if zipper.opts.abrate < zipper.dopts.abrate / 2
+      if minutes > threshold && zipper.opts.abrate > zipper.dopts.abrate / 2
+        reduction, interval = AUD_BRATE_REDUC.values_at :brate, :minutes
+        zipper.opts.abrate -= reduction * ((minutes - threshold).to_f / interval).ceil
+        zipper.opts.abrate = zipper.dopts.abrate / 2 if zipper.opts.abrate < zipper.dopts.abrate / 2
       end
 
-      audsize  = (zipper.duration * zipper.opts.abrate.to_f / 8) / 1000
-      vidsize  = (Zipper.size_mb_limit - audsize).to_i
-      bufsize  = "#{vidsize}M"
+      audio_size = (zipper.duration * zipper.opts.abrate.to_f / 8) / 1000
+      video_size = (Zipper.size_mb_limit - audio_size).to_i
+      maxrate = (8 * (zipper.opts.percent * video_size * 1000) / zipper.duration).to_i
+      maxrate = zipper.opts.vbrate if zipper.opts.vbrate && maxrate > zipper.opts.vbrate
+      maxrate = MAX_VIDEO_MAXRATE_KBIT if maxrate > MAX_VIDEO_MAXRATE_KBIT
 
-      maxrate  = (8 * (zipper.opts.percent * vidsize * 1000) / zipper.duration).to_i
-      maxrate  = zipper.opts.vbrate if zipper.opts.vbrate && maxrate > zipper.opts.vbrate
-      maxrate  = MAX_VIDEO_MAXRATE_KBIT if maxrate > MAX_VIDEO_MAXRATE_KBIT
-      maxrate  = "#{maxrate}k"
-
-      video_size_opts(zipper, maxrate: maxrate, bufsize: bufsize)
+      video_size_opts zipper, maxrate: "#{maxrate}k", bufsize: "#{video_size}M"
     end
 
-    def video_size_opts(zipper, maxrate:, bufsize:)
+    def video_size_opts zipper, maxrate:, bufsize:
       case zipper.format_name
       when :h264, :h265
-        opts = []
-        opts << '-rc:v vbr' if zipper.opts.cudaenc
-        opts << "-maxrate:v #{maxrate}"
-        opts << "-bufsize #{bufsize}"
-        opts.join(' ')
+        VideoSize.new(
+          maxrate:     maxrate,
+          bufsize:     bufsize,
+          rate_control: zipper.opts.cudaenc ? :vbr : nil,
+          bitrate:     nil
+        )
       when :vp9
-        "-rc vbr -b:v #{maxrate}"
-      else
-        ''
+        VideoSize.new maxrate: nil, bufsize: nil, rate_control: :vbr, bitrate: maxrate.to_i
       end
     end
   end

@@ -2,7 +2,7 @@ require_relative '../subtitler/ass'
 require_relative '../subtitler'
 require_relative '../translator'
 require_relative '../output'
-require_relative '../utils/sh'
+require_relative '../ffmpeg'
 
 class Zipper
   # All subtitle-related responsibilities live here.
@@ -15,10 +15,10 @@ class Zipper
       s.empty? ? 'sub' : s
     end
 
-    def apply(zipper)
+    def apply zipper
       return unless subtitles_requested?(zipper.opts)
 
-      vtt, lng, tsp = source_vtt(zipper, translate_to: subtitle_translation_target(zipper.opts))
+      vtt, lng, = source_vtt(zipper, translate_to: subtitle_translation_target(zipper.opts))
       vtt = Subtitler::VTT.clean(vtt)
       zipper.stl&.update 'transcoding'
 
@@ -31,14 +31,12 @@ class Zipper
       prefix = zipper.outfile ? File.basename(zipper.outfile, File.extname(zipper.outfile)) : 'sub'
       ass_path = File.join(dir, "#{safe_ass_prefix(prefix)}.ass")
       File.write ass_path, ass_body
-      zipper.fgraph << "ass=#{Sh.escape(ass_path)}"
+      zipper.burn_subtitle ass_path
 
       if zipper.opts.speed == 1
         vtt_path = File.join(dir, "#{prefix}.vtt")
         File.write vtt_path, vtt
-        zipper.iopts << " -i #{Sh.escape(vtt_path)}"
-        meta = " -c:s mov_text -metadata:s:s:0 language=#{lng} -metadata:s:s:0 title=#{lng}"
-        zipper.oopts << meta
+        zipper.add_subtitle_input vtt_path, language: lng
       end
     end
 
@@ -61,17 +59,21 @@ class Zipper
       [Subtitler::VTT.clean(vtt), lng, tsp]
     end
 
-    def prepare_subtitle(infile, info:, probe:, stl:, opts:)
-      zipper = Zipper.new(infile, nil, info: info, probe: probe, stl: stl, opts: opts)
+    def prepare_subtitle infile, info:, probe:, stl:, opts:, ffmpeg: nil, ffmpeg_factory: nil
+      zipper = Zipper.new infile, nil, info: info, probe: probe, stl: stl, opts: opts,
+                          ffmpeg: ffmpeg, ffmpeg_factory: ffmpeg_factory
       prepare(zipper, translate_to: subtitle_translation_target(opts))
     end
 
-    def generate_srt(infile, dir:, info:, probe:, stl:, opts:)
+    def generate_srt infile, dir:, info:, probe:, stl:, opts:, ffmpeg: nil
+      ffmpeg ||= FFmpeg.new
       opts ||= SymMash.new
       opts.format ||= Zipper::Types.audio.opus unless opts.respond_to?(:format) && opts.format
       opts.audio  ||= 1
 
-      vtt, lng, tsp = prepare_subtitle(infile, info: info, probe: probe, stl: stl, opts: opts)
+      vtt, lng, tsp = prepare_subtitle(
+        infile, info: info, probe: probe, stl: stl, opts: opts, ffmpeg: ffmpeg
+      )
 
       srt_path = Output.filename(info, dir: dir, ext: 'srt')
       srt_content = if tsp
@@ -80,9 +82,7 @@ class Zipper
         vtt_for_conversion = opts.onlysrt ? Subtitler.strip_word_tags(vtt) : vtt
         tmp_vtt = File.join(dir, 'sub.vtt')
         File.write tmp_vtt, vtt_for_conversion
-        content, _, status = Sh.run "#{Zipper::FFMPEG} -i #{Sh.escape tmp_vtt} -f srt -"
-        raise 'srt conversion failed' unless status.success?
-        content
+        ffmpeg.convert_subtitle input: tmp_vtt, format: :srt, label: 'srt conversion failed'
       end
 
       if (target_lang = Subtitler.normalize_lang(opts.slang)) && lng.to_s != target_lang.to_s
@@ -100,6 +100,10 @@ class Zipper
       return false if subtitle_mode(opts) == 'none'
 
       opts.slang || opts.sub_mode.present? || opts.sub.present? || opts.subs || opts.gensubs || opts.onlysrt || opts.sub_vtt
+    end
+
+    def sanitize_vtt vtt
+      Subtitler::VTT.clean vtt
     end
 
     def subtitle_mode(opts)
@@ -140,7 +144,7 @@ class Zipper
 
       entry = subtitles[lang].find { |sub| sub.ext == 'vtt' } || subtitles[lang].first
       body  = Utils::HTTP.get_public(entry.url)
-      vtt   = Subtitler::VTT.to_vtt(body, entry.ext)
+      vtt   = Subtitler::VTT.to_vtt body, entry.ext, ffmpeg: zipper.send(:ffmpeg_builder)
       zipper.stl&.update "subs:scraped:#{lang}"
       [vtt, lang]
     end
@@ -153,7 +157,7 @@ class Zipper
       index = streams.index { |stream| subtitle_match?(zipper.opts.slang, stream) }
       return [nil, nil] unless index
 
-      vtt = Subtitler::VTT.extract_embedded(zipper, index)
+      vtt = Subtitler::VTT.extract_embedded zipper, index, ffmpeg: zipper.send(:ffmpeg_builder)
       lang = streams[index].lang
       zipper.stl&.update "subs:embedded:#{lang}"
       [vtt, lang]

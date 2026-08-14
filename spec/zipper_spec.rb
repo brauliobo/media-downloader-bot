@@ -1,487 +1,331 @@
 require 'spec_helper'
 
 RSpec.describe Zipper do
-  it 'cleans a temporary wav after yielding it' do
-    Dir.mktmpdir('zipper-wav-spec-') do |dir|
-      wav = File.join(dir, 'input.wav')
-      File.write(wav, 'wav')
-      allow(described_class).to receive(:audio_to_wav).with('/tmp/input.mp4').and_return(wav)
+  def video_probe duration: 60, audio: false, width: 1920, height: 1080
+    streams = [SymMash.new(codec_type: 'video', width: width, height: height)]
+    streams << SymMash.new(codec_type: 'audio') if audio
+    SymMash.new(format: SymMash.new(duration: duration), streams: streams)
+  end
 
-      result = described_class.with_audio_wav('/tmp/input.mp4') { |file| file.read }
+  def audio_probe duration: 60
+    SymMash.new(format: SymMash.new(duration: duration), streams: [SymMash.new(codec_type: 'audio')])
+  end
 
-      expect(result).to eq('wav')
-      expect(File).not_to exist(wav)
+  def ffmpeg_double result: ['', '', nil]
+    ffmpeg = instance_double FFmpeg
+    methods = %i[
+      input seek probe disable output_frame_rate output_sample_rate output_channels frame_rate_mode
+      add_filter add_map map_stream scale preserve_resolution_scale metadata codec encode_video maxrate buffer_size
+      rate_control bitrate no_audio copy_audio encode_audio metadata_policy movflags
+      end_at output capture create_silence concat_audio add_audio_floor speed_audio
+      audio_to_wav convert_subtitle subtitle_codec
+    ]
+    methods.each { |method| allow(ffmpeg).to receive(method) }
+    allow(ffmpeg).to receive(:capture).and_return result
+    ffmpeg
+  end
+
+  def video_options(extra = {})
+    SymMash.new({format: Zipper::Types.video.h264, metadata: {}}.merge(extra))
+  end
+
+  it 'preserves the historical input and output option readers' do
+    zipper = described_class.new(
+      '/tmp/in.mp4', '/tmp/out.mp4', probe: video_probe, opts: video_options
+    )
+
+    expect(zipper.iopts).to eq ''
+    expect(zipper.oopts).to eq ''
+  end
+
+  it 'cleans a temporary wav after yielding it through an injected builder' do
+    ffmpeg = ffmpeg_double
+    output = nil
+    allow(ffmpeg).to receive(:audio_to_wav) do |arguments|
+      output = arguments.fetch(:output)
+      File.write output, 'wav'
+      output
     end
-  end
 
-  it 'uses CUDA decode and encode when cuda is enabled' do
-    probe = SymMash.new(
-      format: SymMash.new(duration: 60),
-      streams: [SymMash.new(codec_type: 'video', width: 1920, height: 1080)],
-    )
-    opts = SymMash.new(
-      cuda: 1,
-      format: Zipper::Types.video.h264,
-      acodec: 'aac',
-      metadata: {},
-    )
-
-    allow(Sh).to receive(:run)
-
-    described_class.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
-
-    expect(Sh).to have_received(:run).with(include('-hwaccel cuda -i /tmp/in.mp4'))
-    expect(Sh).to have_received(:run).with(include('-c:v h264_nvenc'))
-  end
-
-  it 'uses the current ffmpeg option for variable frame rate output' do
-    probe = SymMash.new(
-      format: SymMash.new(duration: 60),
-      streams: [SymMash.new(codec_type: 'video', width: 1920, height: 1080)],
-    )
-    opts = SymMash.new(
-      format:   Zipper::Types.video.h264,
-      acodec:   'aac',
-      metadata: {},
-    )
-
-    allow(Sh).to receive(:run)
-
-    described_class.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
-
-    expect(Sh).to have_received(:run).with(include('-fps_mode vfr'))
-    expect(Sh).not_to have_received(:run).with(include('-vsync'))
-  end
-
-  it 'uses the CUDA quality default when quality is omitted' do
-    probe = SymMash.new(
-      format: SymMash.new(duration: 60),
-      streams: [SymMash.new(codec_type: 'video', width: 1920, height: 1080)],
-    )
-    opts = SymMash.new(
-      cuda:     1,
-      format:   Zipper::Types.video.h265,
-      acodec:   'aac',
-      metadata: {},
-    )
-
-    allow(Sh).to receive(:run)
-
-    described_class.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
-
-    expect(Sh).to have_received(:run).with(include('-cq 33'))
-  end
-
-  it 'stream-copies replaced dub audio through the final video transcode' do
-    probe = SymMash.new(
-      format: SymMash.new(duration: 60),
-      streams: [SymMash.new(codec_type: 'video', width: 1920, height: 1080)],
-    )
-    opts = SymMash.new(
-      dub:      1,
-      format:   Zipper::Types.video.h264,
-      acodec:   'aac',
-      metadata: {},
-    )
-
-    allow(Sh).to receive(:run)
-
-    described_class.new('/tmp/dubbed.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
-
-    expect(Sh).to have_received(:run).with(include('-c:a copy'))
-    expect(Sh).not_to have_received(:run).with(include('-profile:a aac_he'))
-  end
-
-  it 're-encodes replaced dub audio when an audio filter changes it' do
-    probe = SymMash.new(
-      format: SymMash.new(duration: 60),
-      streams: [SymMash.new(codec_type: 'video', width: 1920, height: 1080)],
-    )
-    opts = SymMash.new(
-      dub:      1,
-      speed:    1.2,
-      format:   Zipper::Types.video.h264,
-      acodec:   'aac',
-      metadata: {},
-    )
-
-    allow(Sh).to receive(:run)
-
-    described_class.new('/tmp/dubbed.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
-
-    expect(Sh).to have_received(:run).with(include('-af atempo=1.2'))
-    expect(Sh).to have_received(:run).with(match(/-c:a \S+/))
-    expect(Sh).not_to have_received(:run).with(include('-c:a copy'))
-  end
-
-  it 're-encodes dubbed audio when its sample rate changes' do
-    probe = SymMash.new(
-      format: SymMash.new(duration: 60),
-      streams: [SymMash.new(codec_type: 'video', width: 1920, height: 1080)],
-    )
-    opts = SymMash.new(
-      dub:      1,
-      freq:     44_100,
-      format:   Zipper::Types.video.h264,
-      acodec:   'aac',
-      metadata: {},
-    )
-
-    allow(Sh).to receive(:run)
-
-    described_class.new('/tmp/dubbed.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
-
-    expect(Sh).to have_received(:run).with(include('-ar 44100'))
-    expect(Sh).not_to have_received(:run).with(include('-c:a copy'))
-  end
-
-  it 'caps computed video maxrate for very short videos' do
-    begin
-      Zipper.size_mb_limit = 2_000
-      probe = SymMash.new(
-        format:  SymMash.new(duration: 1),
-        streams: [SymMash.new(codec_type: 'video', width: 128, height: 96)],
-      )
-      opts = SymMash.new(
-        format:   Zipper::Types.video.h264,
-        acodec:   'aac',
-        metadata: {},
-      )
-
-      allow(Sh).to receive(:run)
-
-      described_class.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
-
-      expect(Sh).to have_received(:run).with(include('-maxrate:v 50000k'))
-    ensure
-      Zipper.size_mb_limit = nil
+    result = described_class.with_audio_wav '/tmp/input.mp4', sample_rate: 16_000, channels: 1,
+                                            ffmpeg: ffmpeg do |file|
+      file.read
     end
+
+    expect(result).to eq 'wav'
+    expect(File).not_to exist(output)
+    expect(ffmpeg).to have_received(:audio_to_wav).with(
+      input: '/tmp/input.mp4', output: match(/audio-.*\.wav\z/),
+      sample_rate: 16_000, channels: 1, label: 'ffmpeg failed'
+    )
   end
 
-  it 'applies computed video size caps to CUDA encodes' do
-    begin
-      Zipper.size_mb_limit = 2_000
-      probe = SymMash.new(
-        format:  SymMash.new(duration: 3600),
-        streams: [SymMash.new(codec_type: 'video', width: 1280, height: 720)],
-      )
-      opts = SymMash.new(
-        cuda:     1,
-        format:   Zipper::Types.video.h264,
-        acodec:   'aac',
-        metadata: {},
-      )
+  it 'returns raw FFmpeg capture tuples and expresses CUDA decisions semantically' do
+    ffmpeg = ffmpeg_double result: ['stdout', 'stderr', :status]
+    opts = video_options cuda: true, acodec: 'aac'
 
-      allow(Sh).to receive(:run)
+    result = described_class.new(
+      '/tmp/in.mp4', '/tmp/out.mp4', probe: video_probe, opts: opts, ffmpeg: ffmpeg
+    ).zip_video
 
-      described_class.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
-
-      expect(Sh).to have_received(:run).with(include('-rc:v vbr -maxrate:v 4336k -bufsize 1971M'))
-    ensure
-      Zipper.size_mb_limit = nil
-    end
+    expect(result).to eq ['stdout', 'stderr', :status]
+    expect(ffmpeg).to have_received(:input).with '/tmp/in.mp4', cuda: true
+    expect(ffmpeg).to have_received(:encode_video).with :h264, cuda: true, quality: 33
+    expect(ffmpeg).to have_received(:capture)
   end
 
-  it 'applies computed video size caps when width is explicit' do
-    begin
-      Zipper.size_mb_limit = 2_000
-      probe = SymMash.new(
-        format:  SymMash.new(duration: 3600),
-        streams: [SymMash.new(codec_type: 'video', width: 1280, height: 720)],
-      )
-      opts = SymMash.new(
-        cuda:     1,
-        width:    640,
-        format:   Zipper::Types.video.h264,
-        acodec:   'aac',
-        metadata: {},
-      )
-
-      allow(Sh).to receive(:run)
-
-      described_class.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
-
-      expect(Sh).to have_received(:run).with(include('-rc:v vbr -maxrate:v 4336k -bufsize 1971M'))
-    ensure
-      Zipper.size_mb_limit = nil
-    end
-  end
-
-  it 'skips computed video size caps for non-finite durations' do
-    begin
-      Zipper.size_mb_limit = 2_000
-      probe = SymMash.new(
-        format:  SymMash.new(duration: Float::INFINITY),
-        streams: [SymMash.new(codec_type: 'video', width: 1280, height: 720)],
-      )
-      opts = SymMash.new(
-        cuda:     1,
-        format:   Zipper::Types.video.h264,
-        acodec:   'aac',
-        metadata: {},
-      )
-
-      allow(Sh).to receive(:run)
-
-      described_class.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
-
-      expect(Sh).to have_received(:run).with(include('-c:v h264_nvenc'))
-      expect(Sh).not_to have_received(:run).with(include('-maxrate:v'))
-    ensure
-      Zipper.size_mb_limit = nil
-    end
-  end
-
-  it 'uses CUDA decode without NVENC when cudadec is enabled alone' do
-    probe = SymMash.new(
-      format: SymMash.new(duration: 60),
-      streams: [SymMash.new(codec_type: 'video', width: 1920, height: 1080)],
-    )
-    opts = SymMash.new(
-      cudadec: 1,
-      format: Zipper::Types.video.h264,
-      acodec: 'aac',
-      metadata: {},
+  it 'uses named variable-frame-rate and quality operations' do
+    ffmpeg = ffmpeg_double
+    zipper = described_class.new(
+      '/tmp/in.mp4', '/tmp/out.mp4', probe: video_probe, opts: video_options(maxfr: 24, quality: 28),
+      ffmpeg: ffmpeg
     )
 
-    allow(Sh).to receive(:run)
-
-    described_class.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
-
-    expect(Sh).to have_received(:run).with(include('-hwaccel cuda -i /tmp/in.mp4'))
-    expect(Sh).to have_received(:run).with(include('-c:v libx264'))
-  end
-
-  it 'keeps NVENC but skips CUDA decode when cudaenc is enabled alone' do
-    probe = SymMash.new(
-      format: SymMash.new(duration: 60),
-      streams: [SymMash.new(codec_type: 'video', width: 1920, height: 1080)],
-    )
-    opts = SymMash.new(
-      cudaenc: 1,
-      vf: 'mpdecimate=hi=1024:lo=512:frac=0.40',
-      format: Zipper::Types.video.h264,
-      acodec: 'aac',
-      metadata: {},
-    )
-
-    allow(Sh).to receive(:run)
-
-    described_class.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
-
-    expect(Sh).to have_received(:run).with(include('-i /tmp/in.mp4'))
-    expect(Sh).to have_received(:run).with(include('-c:v h264_nvenc'))
-    expect(Sh).not_to have_received(:run).with(include('-hwaccel cuda'))
-  end
-
-  it 'does not scale camera-preserved video with encoder-safe dimensions' do
-    probe = SymMash.new(
-      format: SymMash.new(duration: 60),
-      streams: [SymMash.new(codec_type: 'video', width: 1920, height: 1080)],
-    )
-    opts = SymMash.new(
-      cuda: 1,
-      preserve_resolution: 1,
-      vf: 'mpdecimate=hi=1024:lo=512:frac=0.40',
-      format: Zipper::Types.video.h264,
-      acodec: 'aac',
-      metadata: {},
-    )
-
-    allow(Sh).to receive(:run)
-
-    described_class.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
-
-    expect(Sh).to have_received(:run).with(include('-filter_complex "mpdecimate=hi=1024:lo=512:frac=0.40,format=yuv420p"'))
-    expect(Sh).not_to have_received(:run).with(include('scale='))
-  end
-
-  it 'omits audio for noaudio video encodes' do
-    probe = SymMash.new(
-      format: SymMash.new(duration: 60),
-      streams: [SymMash.new(codec_type: 'video', width: 1920, height: 1080)],
-    )
-    opts = SymMash.new(
-      noaudio: 1,
-      format: Zipper::Types.video.h264,
-      metadata: {},
-    )
-
-    allow(Sh).to receive(:run)
-
-    described_class.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
-
-    expect(Sh).to have_received(:run).with(include(' -an '))
-  end
-
-  it 'decodes only keyframes when keyframes is enabled' do
-    probe = SymMash.new(
-      format: SymMash.new(duration: 60),
-      streams: [SymMash.new(codec_type: 'video', width: 1920, height: 1080)],
-    )
-    opts = SymMash.new(
-      keyframes: 1,
-      format: Zipper::Types.video.h264,
-      metadata: {},
-    )
-
-    allow(Sh).to receive(:run)
-
-    described_class.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
-
-    expect(Sh).to have_received(:run).with(include('-skip_frame nokey -i /tmp/in.mp4'))
-  end
-
-  it 'accepts mpdecimate filter parameters as a regular option' do
-    probe = SymMash.new(
-      format: SymMash.new(duration: 60),
-      streams: [SymMash.new(codec_type: 'video', width: 1920, height: 1080)],
-    )
-    opts = SymMash.new(
-      mpdecimate: 'hi=6144:lo=3072:frac=0.80',
-      format: Zipper::Types.video.h264,
-      metadata: {},
-    )
-
-    allow(Sh).to receive(:run)
-
-    described_class.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts).zip_video
-
-    expect(Sh).to have_received(:run).with(include('mpdecimate=hi=6144:lo=3072:frac=0.80'))
-  end
-
-  it 'applies voice quality filters only to audio encodes' do
-    probe = SymMash.new(
-      format: SymMash.new(duration: 60),
-      streams: [SymMash.new(codec_type: 'audio')],
-    )
-    opts = SymMash.new(
-      voice_quality: 1,
-      format:        Zipper::Types.audio.mp3,
-      metadata:      {},
-    )
-
-    allow(Sh).to receive(:run)
-
-    described_class.new('/tmp/in.webm', '/tmp/out.mp3', probe: probe, opts: opts).zip_audio
-
-    expect(Sh).to have_received(:run).with(include('-af highpass=f=80,lowpass=f=9000,afftdn=nf=-25'))
-  end
-
-  it 'silences audio and cuts video and audio over shared time intervals' do
-    probe = SymMash.new(
-      format: SymMash.new(duration: 180),
-      streams: [
-        SymMash.new(codec_type: 'video', width: 1920, height: 1080),
-        SymMash.new(codec_type: 'audio'),
-      ],
-    )
-    opts = SymMash.new(
-      cuts:     '10-20,1:00-1:05',
-      silences: '30-40,1:30-1:40',
-      format:   Zipper::Types.video.h264,
-      acodec:   'aac',
-      metadata: {},
-    )
-
-    allow(Sh).to receive(:run)
-
-    zipper = described_class.new('/tmp/in.mp4', '/tmp/out.mp4', probe: probe, opts: opts)
     zipper.zip_video
 
-    expect(zipper.duration).to eq(165.0)
-    expect(Sh).to have_received(:run).with(
-      include(
-        "select='not(between(t\\,10\\,20)+between(t\\,60\\,65))',setpts=N/FRAME_RATE/TB",
-        "-af volume=0:enable='between(t\\,30\\,40)+between(t\\,90\\,100)'," \
-          "aselect='not(between(t\\,10\\,20)+between(t\\,60\\,65))',asetpts=N/SR/TB"
-      )
+    expect(ffmpeg).to have_received(:output_frame_rate).with 24
+    expect(ffmpeg).to have_received(:frame_rate_mode).with :vfr
+    expect(ffmpeg).to have_received(:encode_video).with :h264, cuda: false, quality: 28
+  end
+
+  it 'copies dubbed audio until a semantic audio change requires re-encoding' do
+    copy_ffmpeg = ffmpeg_double
+    described_class.new(
+      '/tmp/dubbed.mp4', '/tmp/out.mp4', probe: video_probe, opts: video_options(dub: true),
+      ffmpeg: copy_ffmpeg
+    ).zip_video
+
+    expect(copy_ffmpeg).to have_received(:copy_audio)
+    expect(copy_ffmpeg).not_to have_received(:encode_audio)
+
+    filtered_ffmpeg = ffmpeg_double
+    described_class.new(
+      '/tmp/dubbed.mp4', '/tmp/out.mp4', probe: video_probe, opts: video_options(dub: true, speed: 1.2),
+      ffmpeg: filtered_ffmpeg
+    ).zip_video
+
+    expect(filtered_ffmpeg).to have_received(:add_filter).with 'atempo=1.2', stream: :audio
+    expect(filtered_ffmpeg).to have_received(:encode_audio).with :aac, bitrate: 64
+    expect(filtered_ffmpeg).not_to have_received(:copy_audio)
+  end
+
+  it 'falls back to Opus for unknown requested audio codecs' do
+    ffmpeg = ffmpeg_double
+
+    described_class.new(
+      '/tmp/in.mp4', '/tmp/out.mp4', probe: video_probe(audio: true),
+      opts: video_options(acodec: 'unknown'), ffmpeg: ffmpeg
+    ).zip_video
+
+    expect(ffmpeg).to have_received(:encode_audio).with :opus, bitrate: 64
+  end
+
+  it 'uses named audio rate and channel operations when re-encoding' do
+    ffmpeg = ffmpeg_double
+    opts = video_options(dub: true, freq: 44_100, ac: 2)
+
+    described_class.new(
+      '/tmp/dubbed.mp4', '/tmp/out.mp4', probe: video_probe, opts: opts, ffmpeg: ffmpeg
+    ).zip_video
+
+    expect(ffmpeg).to have_received(:output_sample_rate).with 44_100
+    expect(ffmpeg).to have_received(:output_channels).with 2
+    expect(ffmpeg).not_to have_received(:copy_audio)
+  end
+
+  it 'applies exact semantic video size limits for a short video' do
+    Zipper.size_mb_limit = 2_000
+    ffmpeg = ffmpeg_double
+
+    described_class.new(
+      '/tmp/in.mp4', '/tmp/out.mp4', probe: video_probe(duration: 1, width: 128, height: 96),
+      opts: video_options, ffmpeg: ffmpeg
+    ).zip_video
+
+    expect(ffmpeg).to have_received(:maxrate).with '50000k', stream: :video
+    expect(ffmpeg).to have_received(:buffer_size).with '1999M'
+  ensure
+    Zipper.size_mb_limit = nil
+  end
+
+  it 'applies CUDA rate control, maxrate, and buffer size limits' do
+    Zipper.size_mb_limit = 2_000
+    ffmpeg = ffmpeg_double
+
+    described_class.new(
+      '/tmp/in.mp4', '/tmp/out.mp4', probe: video_probe(duration: 3_600, audio: true),
+      opts: video_options(cuda: true), ffmpeg: ffmpeg
+    ).zip_video
+
+    expect(ffmpeg).to have_received(:rate_control).with :vbr, stream: :video
+    expect(ffmpeg).to have_received(:maxrate).with '4336k', stream: :video
+    expect(ffmpeg).to have_received(:buffer_size).with '1971M'
+  ensure
+    Zipper.size_mb_limit = nil
+  end
+
+  it 'does not apply video size limits to an infinite-duration source' do
+    Zipper.size_mb_limit = 2_000
+    ffmpeg = ffmpeg_double
+
+    described_class.new(
+      '/tmp/in.mp4', '/tmp/out.mp4', probe: video_probe(duration: Float::INFINITY),
+      opts: video_options, ffmpeg: ffmpeg
+    ).zip_video
+
+    expect(ffmpeg).not_to have_received(:maxrate)
+  ensure
+    Zipper.size_mb_limit = nil
+  end
+
+  it 'keeps validated video, audio, cut, silence, and speed filters in semantic state' do
+    ffmpeg = ffmpeg_double
+    opts = video_options(
+      cuts: '10-20', silences: '30-40', speed: 1.2,
+      vf: 'mpdecimate=hi=1024:lo=512:frac=0.40'
+    )
+
+    described_class.new(
+      '/tmp/in.mp4', '/tmp/out.mp4', probe: video_probe(audio: true), opts: opts, ffmpeg: ffmpeg
+    ).zip_video
+
+    expect(ffmpeg).to have_received(:add_filter).with(
+      'mpdecimate=hi=1024:lo=512:frac=0.40', stream: :video
+    )
+    expect(ffmpeg).to have_received(:add_filter).with 'setpts=PTS/1.2', stream: :video
+    expect(ffmpeg).to have_received(:add_filter).with 'atempo=1.2', stream: :audio
+    expect(ffmpeg).to have_received(:add_filter).with(
+      "volume=0:enable='between(t\\,30\\,40)'", stream: :audio
+    )
+    expect(ffmpeg).to have_received(:add_filter).with(
+      "select='not(between(t\\,10\\,20))'", stream: :video
     )
   end
 
-  it 'applies silence and cuts to audio-only media through one audio filter option' do
-    probe = SymMash.new(
-      format: SymMash.new(duration: 60),
-      streams: [SymMash.new(codec_type: 'audio')],
+  it 'delegates semantic filter construction to FFmpeg' do
+    ffmpeg = ffmpeg_double
+    zipper = described_class.new(
+      '/tmp/in.mp4', '/tmp/out.mp4', probe: video_probe, opts: video_options(width: 720), ffmpeg: ffmpeg
     )
-    opts = SymMash.new(
-      cuts:     '20-25',
-      silences: '10-15',
-      format:   Zipper::Types.audio.mp3,
-      metadata: {},
-    )
-
-    allow(Sh).to receive(:run)
-
-    described_class.new('/tmp/in.mp3', '/tmp/out.mp3', probe: probe, opts: opts).zip_audio
-
-    expect(Sh).to have_received(:run).with(
-      include("-af volume=0:enable='between(t\\,10\\,15)',aselect='not(between(t\\,20\\,25))',asetpts=N/SR/TB")
-    )
-    expect(Sh).not_to have_received(:run).with(match(/-af .* -af /))
+    expect(FFmpeg).to receive(:scale_filter).with(width: 720, modulus: 2).and_call_original
+    zipper.send(:scale_filters)
   end
 
-  it 'creates pause wavs at the requested sample rate' do
+  it 'delegates metadata policy and subtitle state without raw options' do
+    ffmpeg = ffmpeg_double
+    zipper = described_class.new(
+      '/tmp/in.mp4', '/tmp/out.mp4', probe: video_probe, opts: video_options(metadata: {title: 'Title'}),
+      ffmpeg: ffmpeg
+    )
+    expect(FFmpeg).to receive(:subtitle_ass_filter).with('/tmp/a:b,c.ass').and_call_original
+    allow(Zipper::Subtitle).to receive(:apply) do |instance|
+      instance.burn_subtitle '/tmp/a:b,c.ass'
+      instance.add_subtitle_input '/tmp/subtitle.vtt', language: 'en'
+    end
+
+    zipper.zip_video
+
+    expect(ffmpeg).to have_received(:input).with '/tmp/subtitle.vtt'
+    expect(ffmpeg).to have_received(:add_filter).with(
+      'ass=/tmp/a\\:b\\,c.ass', stream: :video
+    )
+    expect(ffmpeg).to have_received(:map_stream).with :subtitle, input: 1
+    expect(ffmpeg).to have_received(:subtitle_codec)
+    expect(ffmpeg).to have_received(:metadata).with :language, 'en', stream: :subtitle
+    expect(ffmpeg).to have_received(:metadata_policy).with tags: {title: 'Title'}, mark: true
+    expect(ffmpeg).to have_received(:movflags).with '+faststart'
+  end
+
+  it 'keeps FFmpeg automatic stream selection for ordinary video inputs' do
+    ffmpeg = ffmpeg_double
+
+    described_class.new(
+      '/tmp/in.mp4', '/tmp/out.mp4', probe: video_probe(audio: true),
+      opts: video_options, ffmpeg: ffmpeg
+    ).zip_video
+
+    expect(ffmpeg).not_to have_received(:map_stream)
+  end
+
+  it 'delegates pause helpers to one semantic FFmpeg pause encoding' do
+    format = {codec_name: 'aac', profile: 'HE-AAC', bit_rate: 32_004}
+    encoding = FFmpeg::PauseEncoding.new(
+      codec: 'libfdk_aac', profile: 'aac_he', bitrate: 32_004, sample_format: nil
+    )
+    allow(FFmpeg).to receive(:pause_encoding).with(format, fdk_aac: true).and_return(encoding)
+
+    expect(described_class.pause_encoder(format, fdk_aac: true)).to eq 'libfdk_aac'
+    expect(described_class.pause_profile(format, encoding.codec, fdk_aac: true)).to eq 'aac_he'
+    expect(described_class.pause_bitrate(format, encoding.codec, fdk_aac: true)).to eq 32_004
+    expect(described_class.pause_sample_format(format, encoding.codec, fdk_aac: true)).to be_nil
+    expect(FFmpeg).to have_received(:pause_encoding).with(format, fdk_aac: true).exactly(4).times
+  end
+
+  it 'creates cached pauses through FFmpeg semantic silence construction' do
     Dir.mktmpdir('pause-spec-') do |dir|
-      allow(Sh).to receive(:run) do
-        File.write(File.join(dir, 'pause_0_1_24000.wav'), 'wav')
-        ['', '', double(success?: true)]
+      ffmpeg = ffmpeg_double
+      allow(ffmpeg).to receive(:create_silence) do |arguments|
+        File.write arguments.fetch(:output), 'silence'
+        arguments.fetch(:output)
       end
 
-      path = described_class.get_pause_file(0.1, dir, sample_rate: 24_000)
+      path = described_class.get_pause_file 0.1, dir, sample_rate: 24_000, ffmpeg: ffmpeg
 
-      expect(path).to end_with('pause_0_1_24000.wav')
-      expect(Sh).to have_received(:run).with(include('sample_rate=24000'))
-    end
-  end
-
-  it 'creates each cached pause file only once across concurrent callers' do
-    Dir.mktmpdir('pause-concurrency-spec-') do |dir|
-      runs = 0
-      runs_mutex = Mutex.new
-      allow(Sh).to receive(:run) do |command|
-        runs_mutex.synchronize { runs += 1 }
-        sleep 0.05
-        File.write(command.split.last, 'silence')
-        ['', '', double(success?: true)]
-      end
-
-      threads = 4.times.map do
-        Thread.new { described_class.get_pause_file(0.1, dir, sample_rate: 24_000) }
-      end
-
-      expect(threads.map(&:value).uniq).to contain_exactly(File.join(dir, 'pause_0_1_24000.wav'))
-      expect(runs).to eq(1)
-    end
-  end
-
-  it 'creates floor-matched pauses in the chapter audio format' do
-    Dir.mktmpdir('chapter-pause-spec-') do |dir|
-      allow(Sh).to receive(:run) do |command|
-        File.write(command.split.last, 'aac')
-        ['', '', double(success?: true)]
-      end
-
-      path = described_class.get_pause_file(
-        3.5,
-        dir,
-        sample_rate: 24_000,
-        extension: '.m4a',
-        amplitude: 0.001
-      )
-
-      expect(path).to end_with('pause_3_5_24000_0_001.m4a')
-      expect(Sh).to have_received(:run).with(
-        include('anoisesrc=color=white:amplitude=0.001:sample_rate=24000', '-af lowpass=f=6000')
+      expect(path).to end_with 'pause_0_1_24000.wav'
+      expect(ffmpeg).to have_received(:create_silence).with(
+        output: path,
+        source_sample_rate: 24_000,
+        duration: 0.1,
+        filter: nil,
+        amplitude: nil,
+        sample_rate: nil,
+        channels: nil,
+        channel_layout: nil,
+        codec: nil,
+        codec_profile: nil,
+        bitrate: nil,
+        sample_format: nil,
+        label: 'Failed to create silent audio file'
       )
     end
   end
 
-  it 'encodes formatted pauses with the input channel and PCM parameters' do
+  it 'passes noise-source semantics for amplitude pauses' do
+    Dir.mktmpdir('pause-noise-spec-') do |dir|
+      ffmpeg = ffmpeg_double
+      allow(ffmpeg).to receive(:create_silence) do |arguments|
+        File.write arguments.fetch(:output), 'silence'
+        arguments.fetch(:output)
+      end
+
+      path = described_class.get_pause_file 3.5, dir, sample_rate: 24_000,
+                                             extension: '.m4a', amplitude: 0.001, ffmpeg: ffmpeg
+
+      expect(path).to end_with 'pause_3_5_24000_0_001.m4a'
+      expect(ffmpeg).to have_received(:create_silence).with(
+        output: path,
+        source_sample_rate: 24_000,
+        duration: 3.5,
+        filter: 'lowpass=f=6000',
+        amplitude: 0.001,
+        sample_rate: nil,
+        channels: nil,
+        channel_layout: nil,
+        codec: nil,
+        codec_profile: nil,
+        bitrate: nil,
+        sample_format: nil,
+        label: 'Failed to create silent audio file'
+      )
+    end
+  end
+
+  it 'passes input format policy as semantic pause arguments' do
     Dir.mktmpdir('formatted-pause-spec-') do |dir|
-      allow(Sh).to receive(:run) do |command|
-        File.write(command.split.last, 'silence')
-        ['', '', double(success?: true)]
+      ffmpeg = ffmpeg_double
+      allow(ffmpeg).to receive(:create_silence) do |arguments|
+        File.write arguments.fetch(:output), 'silence'
+        arguments.fetch(:output)
       end
       format = {
         codec_name:      'pcm_s16le',
@@ -492,24 +336,35 @@ RSpec.describe Zipper do
         bits_per_sample: 16,
       }
 
-      path = described_class.get_pause_file(3.5, dir, format: format, extension: '.wav')
+      path = described_class.get_pause_file 3.5, dir, format: format, extension: '.wav', ffmpeg: ffmpeg
 
       expect(path).to match(%r{/pause_3_5_24000_[0-9a-f]{12}\.wav\z})
-      expect(Sh).to have_received(:run).with(
-        include(
-          'anullsrc=channel_layout=stereo:sample_rate=24000',
-          '-ac 2', '-channel_layout stereo', '-c:a pcm_s16le', '-sample_fmt s16'
-        )
+      expect(ffmpeg).to have_received(:create_silence).with(
+        output: path,
+        source_sample_rate: 24_000,
+        duration: 3.5,
+        filter: nil,
+        amplitude: nil,
+        sample_rate: 24_000,
+        channels: 2,
+        channel_layout: 'stereo',
+        codec: 'pcm_s16le',
+        codec_profile: nil,
+        bitrate: nil,
+        sample_format: 's16',
+        label: 'Failed to create silent audio file'
       )
     end
   end
 
-  it 'preserves a detected AAC profile when its encoder is available' do
+  it 'preserves AAC pause profile and bitrate policy' do
     Dir.mktmpdir('aac-pause-spec-') do |dir|
-      allow(Sh).to receive(:run) do |command|
-        File.write(command.split.last, 'silence')
-        ['', '', double(success?: true)]
+      ffmpeg = ffmpeg_double
+      allow(ffmpeg).to receive(:create_silence) do |arguments|
+        File.write arguments.fetch(:output), 'silence'
+        arguments.fetch(:output)
       end
+      allow(FFmpeg).to receive(:fdk_aac_available?).and_return true
       format = {
         codec_name:     'aac',
         profile:        'HE-AAC',
@@ -519,151 +374,243 @@ RSpec.describe Zipper do
         bit_rate:       32_004,
       }
 
-      described_class.get_pause_file(3.5, dir, format: format, extension: '.m4a')
+      path = described_class.get_pause_file 3.5, dir, format: format, extension: '.m4a', ffmpeg: ffmpeg
 
-      expect(Sh).to have_received(:run).with(include('-ac 2', '-channel_layout stereo'))
-      if Zipper::Formats::FDK_AAC
-        expect(Sh).to have_received(:run).with(include('-c:a libfdk_aac', '-profile:a aac_he', '-b:a 32004'))
-      else
-        expect(Sh).not_to have_received(:run).with(include('-profile:a aac_he'))
-      end
-    end
-  end
-
-  it 'adds a calibrated continuous floor without lowering speech' do
-    Dir.mktmpdir('audio-floor-spec-') do |dir|
-      source = File.join(dir, 'speech.wav')
-      File.write(source, 'speech')
-      command = nil
-      allow(Sh).to receive(:run) do |command|
-        File.write(command.split.last, 'speech with floor')
-        ['', '', double(success?: true)]
-      end
-
-      path = described_class.add_audio_floor!(source, amplitude: 0.001, loudness_lufs: -18, sample_rate: 24_000)
-
-      expect(path).to eq(source)
-      expect(File.read(source)).to eq('speech with floor')
-      expect(Sh).to have_received(:run).with(
-        include(
-          '-f lavfi',
-          'anoisesrc\=color\=white:amplitude\=0.001:sample_rate\=24000',
-          '\[0:a\]loudnorm\=I\=-18:TP\=-2:LRA\=11\[speech\]',
-          '\[1:a\]lowpass\=f\=6000\[floor\]',
-          'normalize\=0',
-          'alimiter\=limit\=0.841395:attack\=5:release\=50:level\=false'
-        )
+      expect(ffmpeg).to have_received(:create_silence).with(
+        output: path,
+        source_sample_rate: 24_000,
+        duration: 3.5,
+        filter: nil,
+        amplitude: nil,
+        sample_rate: 24_000,
+        channels: 2,
+        channel_layout: 'stereo',
+        codec: 'libfdk_aac',
+        codec_profile: 'aac_he',
+        bitrate: 32_004,
+        sample_format: nil,
+        label: 'Failed to create silent audio file'
       )
     end
   end
 
-  it 'stream-copies audio concat when input streams match' do
-    stream = SymMash.new(
-      codec_type:      'audio',
-      codec_name:      'pcm_s16le',
-      sample_rate:     24_000,
-      channels:        1,
-      bits_per_sample: 16,
-      sample_fmt:      's16',
-    )
-    allow(Prober).to receive(:for).and_return(SymMash.new(streams: [stream]))
-    allow(Sh).to receive(:run).and_return(['', '', double(success?: true)])
+  it 'does not encode unavailable FDK HE-AAC pauses' do
+    Dir.mktmpdir('aac-pause-unavailable-spec-') do |dir|
+      ffmpeg = ffmpeg_double
+      allow(ffmpeg).to receive(:create_silence) do |arguments|
+        File.write arguments.fetch(:output), 'silence'
+        arguments.fetch(:output)
+      end
+      allow(FFmpeg).to receive(:fdk_aac_available?).and_return false
+      format = {
+        codec_name:     'aac',
+        profile:        'HE-AAC',
+        sample_rate:    24_000,
+        channels:       2,
+        channel_layout: 'stereo',
+        bit_rate:       32_004,
+      }
 
-    described_class.concat_audio(['/tmp/one.wav', '/tmp/two.wav'], '/tmp/out.wav')
+      path = described_class.get_pause_file 3.5, dir, format: format, extension: '.m4a', ffmpeg: ffmpeg
 
-    expect(Sh).to have_received(:run).with(include('-f concat', '-c copy'))
-  end
-
-  it 're-encodes audio concat when input streams differ' do
-    allow(Prober).to receive(:for) do |path|
-      rate = path.include?('pause') ? 22_050 : 24_000
-      SymMash.new(streams: [SymMash.new(
-        codec_type:      'audio',
-        codec_name:      'pcm_s16le',
-        sample_rate:     rate,
-        channels:        1,
-        bits_per_sample: 16,
-        sample_fmt:      's16',
-      )])
+      expect(ffmpeg).to have_received(:create_silence).with(
+        output: path,
+        source_sample_rate: 24_000,
+        duration: 3.5,
+        filter: nil,
+        amplitude: nil,
+        sample_rate: 24_000,
+        channels: 2,
+        channel_layout: 'stereo',
+        codec: nil,
+        codec_profile: nil,
+        bitrate: nil,
+        sample_format: nil,
+        label: 'Failed to create silent audio file'
+      )
     end
-    allow(Sh).to receive(:run).and_return(['', '', double(success?: true)])
-
-    described_class.concat_audio(['/tmp/pause.wav', '/tmp/speech.wav'], '/tmp/out.wav')
-
-    expect(Sh).to have_received(:run).with(
-      include('-filter_complex "[0:a][1:a]concat=n=2:v=0:a=1,aresample=24000[a]"')
-    )
   end
 
-  it 'lets the output container select the codec when re-encoding M4A audio' do
-    allow(Prober).to receive(:for) do |path|
-      rate = path.include?('pause') ? 22_050 : 24_000
-      SymMash.new(streams: [SymMash.new(
-        codec_type:      'audio',
-        codec_name:      'aac',
-        sample_rate:     rate,
-        channels:        2,
-        bits_per_sample: 0,
-        sample_fmt:      'fltp',
-      )])
+  it 'uses the returned pause encoding fields without repeating capability detection' do
+    Dir.mktmpdir('semantic-pause-spec-') do |dir|
+      ffmpeg = ffmpeg_double
+      allow(ffmpeg).to receive(:create_silence) do |arguments|
+        File.write arguments.fetch(:output), 'silence'
+        arguments.fetch(:output)
+      end
+      format = {
+        codec_name:     'aac',
+        profile:        'HE-AAC',
+        sample_rate:    24_000,
+        channels:       2,
+        channel_layout: 'stereo',
+        bit_rate:       32_004,
+      }
+      encoding = FFmpeg::PauseEncoding.new(
+        codec: 'libfdk_aac', profile: 'aac_he', bitrate: 32_004, sample_format: nil
+      )
+      expect(FFmpeg).to receive(:pause_encoding).with(format).once.and_return encoding
+
+      path = File.join dir, 'silence.m4a'
+      described_class.silence_file path, 3.5, format: format, ffmpeg: ffmpeg
+
+      expect(ffmpeg).to have_received(:create_silence).with(
+        output: path,
+        source_sample_rate: 24_000,
+        duration: 3.5,
+        filter: nil,
+        amplitude: nil,
+        sample_rate: 24_000,
+        channels: 2,
+        channel_layout: 'stereo',
+        codec: 'libfdk_aac',
+        codec_profile: 'aac_he',
+        bitrate: 32_004,
+        sample_format: nil,
+        label: 'Failed to create silent audio file'
+      )
     end
-    allow(Sh).to receive(:run).and_return(['', '', double(success?: true)])
-
-    described_class.concat_audio(['/tmp/pause.m4a', '/tmp/speech.m4a'], '/tmp/out.m4a')
-
-    expect(Sh).to have_received(:run).with(
-      include('-filter_complex', '-map "[a]"', '/tmp/out.m4a')
-    )
-    expect(Sh).not_to have_received(:run).with(include('-c:a pcm_s16le'))
   end
 
-  it 'uses rubberband for speech speed files' do
-    allow(FileUtils).to receive(:mv)
-    allow(File).to receive(:exist?).and_call_original
-    allow(File).to receive(:exist?).with(match(%r{/tmp/speed_.*\.wav\z})).and_return(true)
-    allow(Sh).to receive(:run).and_return(['', '', double(success?: true)])
+  it 'uses the FFmpeg-owned voice quality filter' do
+    ffmpeg = ffmpeg_double
 
-    described_class.speed_audio_file!('/tmp/speech.wav', 1.2)
+    described_class.new(
+      '/tmp/in.wav', '/tmp/out.opus', probe: audio_probe,
+      opts: SymMash.new(format: Zipper::Types.audio.opus, voice_quality: true), ffmpeg: ffmpeg
+    ).zip_audio
 
-    expect(Sh).to have_received(:run).with(
-      match(/rubberband\\=tempo\\=1\.2.*formant\\=preserved/)
-    )
-    expect(Sh).not_to have_received(:run).with(include('atempo=1.2'))
+    expect(ffmpeg).to have_received(:add_filter).with(FFmpeg::VOICE_QUALITY_FILTER, stream: :audio)
   end
 
-  it 'transcribes subtitles when gensubs is the only subtitle option' do
-    dir = Dir.mktmpdir('zipper-gensubs-')
+  it 'creates each cached pause file only once across concurrent callers' do
+    Dir.mktmpdir('pause-concurrency-spec-') do |dir|
+      ffmpeg = ffmpeg_double
+      runs = 0
+      runs_mutex = Mutex.new
+      allow(ffmpeg).to receive(:create_silence) do |arguments|
+        runs_mutex.synchronize { runs += 1 }
+        sleep 0.05
+        File.write arguments.fetch(:output), 'silence'
+        arguments.fetch(:output)
+      end
+
+      threads = 4.times.map do
+        Thread.new do
+          described_class.get_pause_file 0.1, dir, sample_rate: 24_000, ffmpeg: ffmpeg
+        end
+      end
+
+      expect(threads.map(&:value).uniq).to contain_exactly File.join(dir, 'pause_0_1_24000.wav')
+      expect(runs).to eq 1
+      expect(ffmpeg).to have_received(:create_silence).once
+    end
+  end
+
+  it 'preserves single-input copy compatibility and uses semantic concat for multiple inputs' do
+    Dir.mktmpdir('concat-spec-') do |dir|
+      one = File.join dir, 'one.wav'
+      output = File.join dir, 'out.wav'
+      File.write one, 'one'
+      expect(described_class.concat_audio([one], output)).to be_nil
+      expect(File.read(output)).to eq 'one'
+
+      ffmpeg = ffmpeg_double
+      signature = {codec_name: 'pcm_s16le', sample_rate: 24_000, channels: 1}
+      allow(Prober).to receive(:audio_signature).and_return signature
+      described_class.concat_audio %w[first.wav second.wav], '/tmp/out.wav', ffmpeg: ffmpeg
+
+      expect(ffmpeg).to have_received(:concat_audio).with(
+        inputs: match(%r{/concat\.txt\z}), output: '/tmp/out.wav', copy: true,
+        label: 'FFmpeg concat failed'
+      )
+    end
+  end
+
+  it 'uses semantic concat inputs and the highest sample rate when re-encoding' do
+    ffmpeg = ffmpeg_double
+    allow(Prober).to receive(:audio_signature) do |path, ffmpeg:|
+      {codec_name: 'pcm_s16le', sample_rate: path.include?('pause') ? 22_050 : 24_000}
+    end
+
+    described_class.concat_audio %w[/tmp/pause.wav /tmp/speech.wav], '/tmp/out.wav', ffmpeg: ffmpeg
+
+    expect(ffmpeg).to have_received(:concat_audio).with(
+      inputs: %w[/tmp/pause.wav /tmp/speech.wav], output: '/tmp/out.wav', copy: false,
+      sample_rate: 24_000, label: 'FFmpeg concat failed'
+    )
+  end
+
+  it 'preserves the concat error label' do
+    ffmpeg = ffmpeg_double
+    allow(Prober).to receive(:audio_signature).and_return({codec_name: 'pcm_s16le', sample_rate: 24_000})
+    allow(ffmpeg).to receive(:concat_audio).and_raise Sh::Error.new('FFmpeg concat failed', 'invalid audio')
+
+    expect {
+      described_class.concat_audio %w[first.wav second.wav], '/tmp/out.wav', ffmpeg: ffmpeg
+    }.to raise_error 'FFmpeg concat failed'
+  end
+
+  it 'delegates floor and speed operations while preserving temporary moves' do
+    Dir.mktmpdir('audio-helper-spec-') do |dir|
+      source = File.join dir, 'speech.wav'
+      File.write source, 'speech'
+      ffmpeg = ffmpeg_double
+      allow(ffmpeg).to receive(:add_audio_floor) do |arguments|
+        File.write arguments.fetch(:output), 'speech with floor'
+        arguments.fetch(:output)
+      end
+      allow(ffmpeg).to receive(:speed_audio) do |arguments|
+        File.write arguments.fetch(:output), 'sped'
+        arguments.fetch(:output)
+      end
+
+      expect(described_class.add_audio_floor!(
+        source, amplitude: 0.001, loudness_lufs: -18, sample_rate: 24_000, ffmpeg: ffmpeg
+      )).to eq source
+      expect(File.read(source)).to eq 'speech with floor'
+      expect(ffmpeg).to have_received(:add_audio_floor).with(
+        input: source, amplitude: 0.001, loudness_lufs: -18,
+        output: match(%r{/audio_floor_.*\.wav\z}),
+        sample_rate: 24_000, label: 'Failed to add audiobook audio floor'
+      )
+
+      expect(described_class.speed_audio_file!(source, 1.2, ffmpeg: ffmpeg)).to eq source
+      expect(File.read(source)).to eq 'sped'
+      expect(ffmpeg).to have_received(:speed_audio).with(
+        input: source, output: match(%r{/speed_.*\.wav\z}),
+        filter: match(/rubberband=tempo=1\.2.*formant=preserved/),
+        label: 'Failed to apply audio speed'
+      )
+    end
+  end
+
+  it 'extracts and sanitizes a selected subtitle stream through FFmpeg' do
+    ffmpeg = ffmpeg_double
     probe = SymMash.new(
       format: SymMash.new(duration: 60),
-      streams: [SymMash.new(codec_type: 'video', width: 1920, height: 1080)],
+      streams: [
+        SymMash.new(codec_type: 'subtitle', tags: SymMash.new(language: 'en')),
+        SymMash.new(codec_type: 'subtitle', tags: SymMash.new(language: 'pt')),
+      ]
     )
-    opts = SymMash.new(
-      gensubs:  1,
-      format:   Zipper::Types.video.h264,
-      acodec:   'aac',
-      metadata: {},
+    allow(ffmpeg).to receive(:convert_subtitle).and_return "WEBVTT\n\nHello\\Nworld"
+
+    allow(ffmpeg).to receive(:probe).and_return probe
+    result = described_class.extract_vtt '/tmp/video.mkv', 'pt', ffmpeg: ffmpeg
+
+    expect(result).to eq "WEBVTT\n\nHello\nworld"
+    expect(ffmpeg).to have_received(:convert_subtitle).with(
+      input: '/tmp/video.mkv', format: :vtt, stream_index: 1, label: 'VTT extraction failed'
     )
-    info = SymMash.new(title: 't')
-    tsp = SymMash.new(
-      segments: [
-        SymMash.new(
-          start: 0.0,
-          end:   1.0,
-          text:  'hello',
-          words: [SymMash.new(start: 0.0, end: 1.0, word: ' hello')],
-        ),
-      ],
-    )
+  end
 
-    allow(Subtitler).to receive(:transcribe).and_return(SymMash.new(output: tsp, lang: 'en'))
-    allow(Sh).to receive(:run)
+  it 'preserves the WAV conversion error label' do
+    ffmpeg = ffmpeg_double
+    allow(ffmpeg).to receive(:audio_to_wav).and_raise Sh::Error.new('ffmpeg failed', 'invalid audio')
 
-    described_class.new('/tmp/in.mp4', File.join(dir, 'out.mp4'), info: info, probe: probe, opts: opts).zip_video
-
-    expect(Subtitler).to have_received(:transcribe).with('/tmp/in.mp4')
-    expect(Sh).to have_received(:run).with(include('ass='))
-    expect(Sh).to have_received(:run).with(include('-i ', '.vtt'))
-  ensure
-    FileUtils.remove_entry(dir) if dir && Dir.exist?(dir)
+    expect {
+      described_class.audio_to_wav '/tmp/input.mp4', ffmpeg: ffmpeg
+    }.to raise_error 'ffmpeg failed'
   end
 end

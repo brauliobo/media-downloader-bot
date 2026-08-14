@@ -1,179 +1,180 @@
 # frozen_string_literal: true
 
-require 'ostruct'
+require_relative '../ffmpeg'
 
 class Zipper
-  # Collection of codec definitions, encoder templates and helpers that are
-  # purely data-oriented.  No business logic that touches files should live
-  # here – that stays in the caller (e.g. Zipper itself or the future
-  # Pipelines).
   module Formats
-    VID_WIDTH   = 720
-    VID_PERCENT = 0.99
+    VIDEO_PROFILES = FFmpeg::VIDEO_ENCODERS
+    AUDIO_PROFILES = FFmpeg::AUDIO_ENCODERS
+    FDK_AAC        = FFmpeg.fdk_aac_available?
 
-    # Detect external ffmpeg encoder availability.  Needs to be evaluated once
-    # at process boot time; we memoise via constant.
-    FDK_AAC = `ffmpeg -encoders 2>/dev/null | grep fdk_aac`.present?
-
-    # Audio encoder templates together with the coefficient that is used later
-    # for size calculations (see Limits module).
     AUDIO_ENC = SymMash.new(
       opus: {
-        percent: 0.95,
-        encode:  '-ac 1 -ar 48000 -c:a libopus -b:a %{abrate}k'.freeze,
+        percent: AUDIO_PROFILES.fetch(:opus).fetch(:percent),
+        encode:  '-ac 1 -ar 48000 -c:a libopus -b:a %{abrate}k'.freeze
       },
       aac:  {
-        percent: 0.98,
-        # aac_he_v2 doesn't work with instagram
-        encode: if FDK_AAC
-                then '-c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k'.freeze
-                else '-c:a aac -b:a %{abrate}k'.freeze end
+        percent: AUDIO_PROFILES.fetch(:aac).fetch(:percent),
+        encode:  if FDK_AAC
+                   '-c:a libfdk_aac -profile:a aac_he -b:a %{abrate}k'.freeze
+                 else
+                   '-c:a aac -b:a %{abrate}k'.freeze
+                 end
       },
       mp3:  {
-        percent: 0.99,
-        encode:  '-c:a libmp3lame -abr 1 -b:a %{abrate}k'.freeze,
-      },
+        percent: AUDIO_PROFILES.fetch(:mp3).fetch(:percent),
+        encode:  '-c:a libmp3lame -abr 1 -b:a %{abrate}k'.freeze
+      }
     )
 
-    # Codec / container matrix for both audio and video.
+    def self.video_options format
+      profile = VIDEO_PROFILES.fetch format.to_sym
+      {
+        width:   profile.fetch(:width),
+        quality: profile[:quality],
+        vbrate:  profile[:video_bitrate],
+        abrate:  profile.fetch(:audio_bitrate),
+        acodec:  profile.fetch(:audio_format),
+        percent: profile.fetch(:percent),
+      }.compact
+    end
+
+    def self.audio_options format
+      profile = AUDIO_PROFILES.fetch format.to_sym
+      {bitrate: profile.fetch(:bitrate), percent: profile.fetch(:percent)}
+    end
+
+    def self.video_encoder_options format
+      profile = VIDEO_PROFILES.fetch format.to_sym
+      extra_cuda = cuda_options profile
+      extra_cuda = "-preset #{profile[:preset_cuda]}" if extra_cuda.empty? && profile[:preset_cuda]
+      {
+        codec_cpu:   profile.fetch(:codec_cpu),
+        codec_cuda:  profile[:codec_cuda],
+        qflag_cpu:   profile[:quality_cpu] ? "-#{profile[:quality_cpu]}" : '',
+        qflag_cuda:  profile[:quality_cuda] && "-#{profile[:quality_cuda]}",
+        preset_cpu:  profile[:preset_cpu],
+        preset_cuda: profile[:preset_cuda],
+        extra_cuda:  extra_cuda
+      }.compact
+    end
+
+    def self.cuda_options profile
+      options = []
+      options.concat ['-tune', profile[:tune_cuda]] if profile[:tune_cuda]
+      options.concat ['-multipass', profile[:multipass_cuda]] if profile[:multipass_cuda]
+      options.concat ['-spatial-aq', '1', '-temporal-aq', '1'] if profile[:aq_cuda]
+      options.concat ['-rc-lookahead', profile[:lookahead_cuda].to_s] if profile[:lookahead_cuda]
+      options.concat ['-b:v', profile[:bitrate_cuda].to_s] if profile.key? :bitrate_cuda
+      options.join ' '
+    end
+
     TYPES = SymMash.new(
       video: {
         name:     :video,
         default:  :h264,
         ldefault: :h265,
-
-        h264: {
-          ext:    :mp4,
-          mime:   'video/mp4',
-          opts:   {width: VID_WIDTH, quality: 25, abrate: 64, acodec: :aac, percent: VID_PERCENT},
-          codec_cpu:  'libx264',
-          codec_cuda: 'h264_nvenc',
-          qflag_cpu:  '-crf',
-          qflag_cuda: '-cq',
-          preset_cuda: 'p4',
-          extra_cuda: '-tune hq -spatial-aq 1 -temporal-aq 1 -b:v 0',
+        h264:     {
+          ext:  :mp4,
+          mime: 'video/mp4',
+          opts: video_options(:h264),
+          **video_encoder_options(:h264)
         },
-
-        h265: {
-          ext:    :mp4,
-          mime:   'video/mp4',
-          opts:   {width: VID_WIDTH, quality: 25, abrate: 64, acodec: :aac, percent: VID_PERCENT},
-          codec_cpu:  'libx265',
-          codec_cuda: 'hevc_nvenc',
-          qflag_cpu:  '-crf',
-          qflag_cuda: '-cq',
-          preset_cuda: 'p5',
-          extra_cuda: '-tune hq -multipass qres -spatial-aq 1 -temporal-aq 1 -rc-lookahead 32 -b:v 0',
+        h265:     {
+          ext:  :mp4,
+          mime: 'video/mp4',
+          opts: video_options(:h265),
+          **video_encoder_options(:h265)
         },
-
-        av1: {
-          ext:    :mp4,
-          mime:   'video/mp4',
-          opts:   {width: VID_WIDTH, quality: 50, abrate: 64, acodec: :opus, percent: VID_PERCENT},
-          codec_cpu:  'libsvtav1',
-          codec_cuda: 'av1_nvenc',
-          qflag_cpu:  '-crf',
-          qflag_cuda: '-cq',
-          extra_cuda: '-preset p6',
+        av1:      {
+          ext:  :mp4,
+          mime: 'video/mp4',
+          opts: video_options(:av1),
+          **video_encoder_options(:av1)
         },
-
-        vp9: {
-          ext:    :mp4,
-          mime:   'video/mp4',
-          opts:   {width: VID_WIDTH, vbrate: 835, abrate: 64, acodec: :aac, percent: 0.97},
-          codec_cpu:  'libsvt_vp9',
-          qflag_cpu:  '',
-        },
+        vp9:      {
+          ext:  :mp4,
+          mime: 'video/mp4',
+          opts: video_options(:vp9),
+          **video_encoder_options(:vp9)
+        }
       },
-
       audio: {
         name:    :audio,
         default: :opus,
-
-        opus: {
-          ext:    :opus,
-          mime:   'audio/ogg',
-          opts:   {bitrate: 96, percent: AUDIO_ENC.opus.percent},
-          encode: AUDIO_ENC.opus.encode,
+        opus:    {
+          ext:  :opus,
+          mime: 'audio/ogg',
+          opts: audio_options(:opus),
+          encode: AUDIO_ENC.opus.encode
         },
-
-        aac: {
-          ext:    :m4a,
-          mime:   'audio/aac',
-          opts:   {bitrate: 96, percent: AUDIO_ENC.aac.percent},
-          encode: AUDIO_ENC.aac.encode,
+        aac:     {
+          ext:  :m4a,
+          mime: 'audio/aac',
+          opts: audio_options(:aac),
+          encode: AUDIO_ENC.aac.encode
         },
-
-        mp3: {
-          ext:    :mp3,
-          mime:   'audio/mp3',
-          opts:   {bitrate: 128, percent: AUDIO_ENC.mp3.percent},
-          encode: AUDIO_ENC.mp3.encode,
-        },
-      },
+        mp3:     {
+          ext:  :mp3,
+          mime: 'audio/mp3',
+          opts: audio_options(:mp3),
+          encode: AUDIO_ENC.mp3.encode
+        }
+      }
     )
 
-    module_function
-
-    def cuda?(opts = nil)
+    def self.cuda? opts = nil
       cuda_encode?(opts) || cuda_decode?(opts)
     end
 
-    def cuda_encode?(opts = nil)
+    def self.cuda_encode? opts = nil
       return false if opts&.nocuda
+
       !!(opts&.cuda || opts&.cudaenc || ENV['CUDA'] || ENV['CUDAENC'])
     end
 
-    def cuda_decode?(opts = nil)
+    def self.cuda_decode? opts = nil
       return false if opts&.nocuda
+
       !!(opts&.cuda || opts&.cudadec || ENV['CUDA'] || ENV['CUDADEC'])
     end
 
-    def default_width(size_mb_limit)
+    def self.default_width size_mb_limit
       return 1920 if size_mb_limit.nil? || size_mb_limit > 500
       return 1080 if size_mb_limit > 50
+
       720
     end
 
-    # Original helper moved out of Zipper – kept verbatim for BC.
-    def choose_format(type_hash, opts, durat)
+    def self.choose_format type_hash, opts, durat
       fmt = opts && opts.format
+      return fmt if fmt.respond_to? :mime
 
-      # allow callers to pass the already-resolved spec
-      return fmt if fmt.respond_to?(:mime)
-
-      # Only accept user-provided format selectors as String/Symbol.
-      # Any other truthy value (e.g. {}, 1) is treated as "no format specified".
-      fmt = fmt.to_sym if fmt.is_a?(String)
-      fmt = nil unless fmt.is_a?(Symbol)
+      fmt = fmt.to_sym if fmt.is_a? String
+      fmt = nil unless fmt.is_a? Symbol
 
       kind = (type_hash[:name] || type_hash['name']).to_s
-
-      # Accept common container/alias names and map them to internal codec keys.
-      # Users often pass extensions (mp4/m4a) rather than codec identifiers.
       if fmt
         if kind == 'video'
-          fmt = :h264 if fmt.in?(%i[mp4 x264 h.264])
-          fmt = :h265 if fmt.in?(%i[hevc x265 h.265])
-          fmt = :vp9  if fmt == :webm
+          fmt = :h264 if fmt.in? %i[mp4 x264 h.264]
+          fmt = :h265 if fmt.in? %i[hevc x265 h.265]
+          fmt = :vp9 if fmt == :webm
         elsif kind == 'audio'
-          fmt = :aac  if fmt == :m4a
+          fmt = :aac if fmt == :m4a
           fmt = :opus if fmt == :ogg
         end
       end
 
-      defk  = type_hash[:default]  || type_hash['default']
-      ldefk = type_hash[:ldefault] || type_hash['ldefault']
-      use_long_default = kind == 'video' && durat && durat >= 10.minutes && ldefk && cuda?(opts)
-      fmt ||= use_long_default ? ldefk : defk
-      fmt   = :aac if Zipper.size_mb_limit && fmt == :opus && durat && durat <= 122
+      default      = type_hash[:default] || type_hash['default']
+      long_default = type_hash[:ldefault] || type_hash['ldefault']
+      use_long_default = kind == 'video' && durat && durat >= 10.minutes && long_default && cuda?(opts)
+      fmt ||= use_long_default ? long_default : default
+      fmt = :aac if Zipper.size_mb_limit && fmt == :opus && durat && durat <= 122
       chosen = type_hash[fmt] || type_hash[fmt.to_s]
       return chosen if chosen
 
-      # Unknown user-provided fmt: fall back to defaults instead of returning nil.
-      fmt = use_long_default ? ldefk : defk
+      fmt = use_long_default ? long_default : default
       type_hash[fmt] || type_hash[fmt.to_s]
     end
-
-end
+  end
 end
