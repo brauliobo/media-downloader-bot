@@ -56,6 +56,7 @@ module Dubbing
             transcriber: ::VoiceReference::Transcriber.new(separate_voice: false)
           )
           timeline = synthesize_timeline(workdir)
+          apply_scheduled_timings!(timeline.clips)
           @timing_score = timeline.score
           write_timing_score
           prepare_translated_subtitles
@@ -117,6 +118,18 @@ module Dubbing
         video_duration:  video_duration,
         stl:             @stl
       ).render
+    end
+
+    def apply_scheduled_timings!(clips)
+      unless @sentences.size == clips.size
+        raise "dubbed timeline clip count mismatch: expected #{@sentences.size}, got #{clips.size}"
+      end
+
+      @sentences.zip(clips).each do |sentence, clip|
+        sentence.start = clip.start
+        sentence.end   = clip.end
+        sentence.words = []
+      end
     end
 
     def prepare_translated_subtitles
