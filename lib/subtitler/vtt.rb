@@ -1,4 +1,5 @@
 require 'tempfile'
+require_relative '../ffmpeg'
 require_relative '../utils/safety'
 require_relative 'segments'
 require_relative 'translator'
@@ -130,19 +131,24 @@ class Subtitler
       out
     end
 
-    def self.to_vtt(body, ext)
+    def self.to_vtt(body, ext, ffmpeg: FFmpeg.new)
       safe_ext = Utils::Safety.subtitle_ext(ext)
       Tempfile.create(['sub', ".#{safe_ext}"]) do |file|
         file.binmode
         file.write(body)
         file.flush
-        vtt, = Sh.run "#{Zipper::FFMPEG} -i #{Sh.escape(file.path)} -c:s webvtt -f webvtt -"
+        vtt = ffmpeg.convert_subtitle(
+          input: file.path, format: :vtt, label: 'VTT conversion failed'
+        )
         clean(vtt)
       end
     end
 
-    def self.extract_embedded(zipper, index)
-      vtt, = Sh.run "#{Zipper::FFMPEG} -i #{Sh.escape zipper.infile} -map 0:s:#{index} -c:s webvtt -f webvtt -"
+    def self.extract_embedded(zipper, index, ffmpeg: FFmpeg.new)
+      vtt = ffmpeg.convert_subtitle(
+        input: zipper.infile, format: :vtt, stream_index: index,
+        label: 'VTT extraction failed'
+      )
       clean(vtt)
     end
 

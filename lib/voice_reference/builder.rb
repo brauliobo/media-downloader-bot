@@ -3,6 +3,7 @@ require 'digest'
 require 'fileutils'
 require 'tmpdir'
 
+require_relative '../ffmpeg'
 require_relative 'transcript_quality'
 
 class VoiceReference
@@ -96,7 +97,7 @@ class VoiceReference
         similarity >= MIN_TRANSCRIPT_SIMILARITY
       {
         accepted: audio.fetch(:accepted) && transcript_ok,
-        tools: Audio::Quality::TOOLS.merge(transcription: 'Subtitler::WhisperCpp'),
+        tools: FFmpeg::TOOLS.merge(transcription: 'Subtitler::WhisperCpp'),
         voice_quality_filter: AudioAnalyzer::FILTERS.fetch(reference_filter),
         transcript: {
           accepted:            transcript_ok,

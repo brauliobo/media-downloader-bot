@@ -16,6 +16,7 @@ RSpec.describe Services::EditPostThumbnails do
       File.write(thumbnail, 'cover')
       File.write(source, 'audio')
       manager = double('manager')
+      ffmpeg = instance_double FFmpeg
       edits = []
       allow(manager).to receive(:chat_message) do |chat_id:, message_id:|
         {
@@ -25,16 +26,18 @@ RSpec.describe Services::EditPostThumbnails do
       end
       expect(manager).to receive(:download_file).once.with(7, dir: kind_of(String)).and_return(source)
       allow(manager).to receive(:edit_generated_message) { |**params| edits << params; {message_id: params[:message_id]} }
-      allow(Sh).to receive(:run) do |command|
-        expect(command).to include('-c:a copy', '-f mp4')
-        File.write(command.split.last, 'm4a')
-        ['', '', double(success?: true)]
+      expect(ffmpeg).to receive(:remux_audio).once do |input:, output:, label:|
+        expect(input).to eq source
+        expect(output).to end_with '/book.m4a'
+        expect(label).to eq 'Telegram audio remux failed'
+        File.write output, 'm4a'
+        output
       end
       chat_ids = {'industria_da_saude' => -1001, 'clo2_materiais' => -1002}
 
       described_class.new(
         urls: urls, thumbnail: thumbnail, manager: manager,
-        resolver: ->(username) { chat_ids.fetch(username) }, output: StringIO.new,
+        resolver: ->(username) { chat_ids.fetch username }, output: StringIO.new, ffmpeg: ffmpeg,
       ).run
 
       expect(edits.map { |edit| edit[:message_id] }).to eq([1205, 290].map { |id| id * described_class::MESSAGE_ID_FACTOR })
@@ -43,7 +46,6 @@ RSpec.describe Services::EditPostThumbnails do
       expect(edits).to all(satisfy { |edit| !edit.key?(:remote_id) })
       expect(edits.map { |edit| File.basename(edit[:thumbnail_path]) }).to all(eq('cover.jpg'))
       expect(edits.map { |edit| File.extname(edit[:file_path]) }).to all(eq('.m4a'))
-      expect(Sh).to have_received(:run).once
     end
   end
 

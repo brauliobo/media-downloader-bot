@@ -86,24 +86,25 @@ RSpec.describe 'Audiobook punctuation-only text' do
   end
 
   def sine_wav(path)
-    cmd = "#{Zipper::FFMPEG} -f lavfi -i sine=frequency=440:sample_rate=24000:duration=0.1 " \
-          "-c:a pcm_s16le #{Sh.escape(path)}"
-    _, err, status = Sh.run(cmd)
-    Sh.assert_success!('sine fixture failed', err, status: status, output: path)
+    success = system(
+      'ffmpeg', '-y', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=24000:duration=0.1',
+      '-c:a', 'pcm_s16le', path
+    )
+    raise 'sine fixture failed' unless success
   end
 
   def plateau_wav(path)
     raw = File.join(File.dirname(path), "#{File.basename(path, '.wav')}.s16le")
     File.binwrite(raw, [20_000].pack('s<') * 2_400)
-    cmd = "#{Zipper::FFMPEG} -f s16le -ar 24000 -ac 1 -i #{Sh.escape(raw)} " \
-          "-c:a pcm_s16le #{Sh.escape(path)}"
-    _, err, status = Sh.run(cmd)
-    Sh.assert_success!('plateau fixture failed', err, status: status, output: path)
+    success = system(
+      'ffmpeg', '-y', '-f', 's16le', '-ar', '24000', '-ac', '1', '-i', raw,
+      '-c:a', 'pcm_s16le', path
+    )
+    raise 'plateau fixture failed' unless success
   end
 
   def loud_plateau_blocks(path)
-    pcm, err, status = Sh.run("#{Zipper::FFMPEG} -i #{Sh.escape(path)} -ac 1 -ar 24000 -f s16le -")
-    Sh.assert_success!('waveform decode failed', err, status: status)
+    pcm = IO.popen(['ffmpeg', '-i', path, '-ac', '1', '-ar', '24000', '-f', 's16le', '-'], 'rb', &:read)
 
     pcm.unpack('s<*').each_slice(240).count do |samples|
       next false if samples.empty?

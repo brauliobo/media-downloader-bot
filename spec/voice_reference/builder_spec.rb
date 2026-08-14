@@ -121,6 +121,7 @@ RSpec.describe VoiceReference::Builder do
     )
 
     expect(report[:accepted]).to eq(true)
+    expect(report[:tools]).to eq FFmpeg::TOOLS.merge(transcription: 'Subtitler::WhisperCpp')
   end
 
   it 'uses the configured language when transcription omits detection' do

@@ -1,16 +1,9 @@
-require_relative '../utils/sh'
+require_relative '../ffmpeg'
 
 module Audio
 end
 
 class Audio::Quality
-  TOOLS = {
-    signal:       'ffmpeg astats',
-    frame_signal: 'ffmpeg astats metadata',
-    loudness:     'ffmpeg ebur128',
-    silence:      'ffmpeg silencedetect'
-  }.freeze
-
   DEFAULT_THRESHOLDS = {
     silence_threshold_db:         -35,
     max_silence_ratio:            0.1,
@@ -29,17 +22,13 @@ class Audio::Quality
 
   ANALYSIS_FLOOR_DB = -120.0
 
-  def initialize(thresholds: {})
+  def initialize thresholds: {}, ffmpeg: FFmpeg.new
     @thresholds = DEFAULT_THRESHOLDS.merge(thresholds)
+    @ffmpeg     = ffmpeg
   end
 
   def signal(path)
-    command = [
-      'ffmpeg', '-hide_banner', '-nostats', '-i', path,
-      '-af', 'astats=metadata=0:reset=0', '-f', 'null', '-'
-    ]
-    _, stderr, status = Sh.run(command)
-    Sh.assert_success!('audio signal analysis failed', stderr, status: status)
+    _, stderr = ffmpeg.analyze_audio path, kind: :signal
     {
       peak_db:            metric(stderr, 'Peak level dB'),
       rms_db:             metric(stderr, 'RMS level dB'),
@@ -110,16 +99,10 @@ class Audio::Quality
 
   private
 
-  attr_reader :thresholds
+  attr_reader :ffmpeg, :thresholds
 
   def frame_signal(path)
-    command = [
-      'ffmpeg', '-hide_banner', '-nostats', '-i', path,
-      '-af', 'astats=metadata=1:reset=1,ametadata=print:key=lavfi.astats.Overall.RMS_level:file=-',
-      '-f', 'null', '-'
-    ]
-    stdout, stderr, status = Sh.run(command)
-    Sh.assert_success!('audio frame signal analysis failed', stderr, status: status)
+    stdout, stderr = ffmpeg.analyze_audio path, kind: :frame_signal
     levels   = frame_levels("#{stdout}\n#{stderr}")
     interior = levels.size > 2 ? levels[1...-1] : levels
     quiet    = percentile(interior, 0.1)
@@ -133,12 +116,7 @@ class Audio::Quality
   end
 
   def loudness(path)
-    command = [
-      'ffmpeg', '-hide_banner', '-nostats', '-i', path,
-      '-af', 'ebur128=peak=true', '-f', 'null', '-'
-    ]
-    _, stderr, status = Sh.run(command)
-    Sh.assert_success!('audio loudness analysis failed', stderr, status: status)
+    _, stderr = ffmpeg.analyze_audio path, kind: :loudness
     summary = stderr.split('Summary:').last.to_s
     {
       integrated_lufs:   metric(summary, 'I'),
@@ -148,22 +126,12 @@ class Audio::Quality
   end
 
   def duration(path)
-    command = [
-      'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
-      '-of', 'default=noprint_wrappers=1:nokey=1', path
-    ]
-    stdout, stderr, status = Sh.run(command)
-    Sh.assert_success!('audio duration analysis failed', stderr, status: status)
-    stdout.to_f
+    ffmpeg.audio_duration path
   end
 
   def silence_duration(path)
-    command = [
-      'ffmpeg', '-hide_banner', '-nostats', '-i', path,
-      '-af', "silencedetect=noise=#{thresholds.fetch(:silence_threshold_db)}dB:d=0.08", '-f', 'null', '-'
-    ]
-    _, stderr, status = Sh.run(command)
-    Sh.assert_success!('audio silence analysis failed', stderr, status: status)
+    _, stderr = ffmpeg.analyze_audio path, kind: :silence,
+                                              silence_threshold_db: thresholds.fetch(:silence_threshold_db)
     stderr.scan(/silence_duration: (\d+(?:\.\d+)?)/).flatten.sum(&:to_f)
   end
 

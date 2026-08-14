@@ -2,35 +2,35 @@ require 'spec_helper'
 require_relative '../../lib/audio'
 
 RSpec.describe Audio::Quality do
-  it 'reports reusable signal, loudness, silence, thresholds, and acceptance' do
-    status = instance_double(Process::Status)
-    allow(Sh).to receive(:assert_success!)
-    allow(Sh).to receive(:run) do |command|
-      joined = command.join(' ')
-      case joined
-      when /ametadata=print/
-        levels = [-80, -44, -40, -32, -28, -24, -22, -20, -18, -80]
-        [levels.map { |level| "lavfi.astats.Overall.RMS_level=#{level}" }.join("\n"), '', status]
-      when /astats=/
-        ['', <<~OUTPUT, status]
-          Peak level dB: -3.0
-          RMS level dB: -18.0
-          Entropy: 0.8
-          Zero crossings rate: 0.04
-          Bit depth: 16/16/16/16
-        OUTPUT
-      when /ebur128=/
-        ['', "Summary:\nI: -18.0 LUFS\nLRA: 2.0 LU\nPeak: -3.0 dBFS\n", status]
-      when /silencedetect=/
-        ['', 'silence_duration: 0.5', status]
-      when /ffprobe/
-        ["10.0\n", '', status]
-      else
-        raise "unexpected command: #{joined}"
-      end
-    end
+  it 'leaves FFmpeg analysis labels under FFmpeg' do
+    expect(described_class.const_defined?(:TOOLS, false)).to be false
+    expect(FFmpeg::TOOLS).to be_frozen
+  end
 
-    report = described_class.new.report('/tmp/reference.wav')
+  it 'reports reusable signal, loudness, silence, thresholds, and acceptance' do
+    ffmpeg = instance_double FFmpeg
+    levels = [-80, -44, -40, -32, -28, -24, -22, -20, -18, -80]
+    allow(ffmpeg).to receive(:analyze_audio).with('/tmp/reference.wav', kind: :signal).and_return([
+      '', <<~OUTPUT
+        Peak level dB: -3.0
+        RMS level dB: -18.0
+        Entropy: 0.8
+        Zero crossings rate: 0.04
+        Bit depth: 16/16/16/16
+      OUTPUT
+    ])
+    allow(ffmpeg).to receive(:analyze_audio).with('/tmp/reference.wav', kind: :frame_signal).and_return([
+      levels.map { |level| "lavfi.astats.Overall.RMS_level=#{level}" }.join("\n"), ''
+    ])
+    allow(ffmpeg).to receive(:analyze_audio).with('/tmp/reference.wav', kind: :loudness).and_return([
+      '', "Summary:\nI: -18.0 LUFS\nLRA: 2.0 LU\nPeak: -3.0 dBFS\n"
+    ])
+    allow(ffmpeg).to receive(:analyze_audio).with(
+      '/tmp/reference.wav', kind: :silence, silence_threshold_db: -35
+    ).and_return ['', 'silence_duration: 0.5']
+    allow(ffmpeg).to receive(:audio_duration).with('/tmp/reference.wav').and_return 10.0
+
+    report = described_class.new(ffmpeg: ffmpeg).report('/tmp/reference.wav')
 
     expect(report).to include(
       accepted: true, duration: 10.0, integrated_lufs: -18.0,
@@ -43,6 +43,16 @@ RSpec.describe Audio::Quality do
       max_estimated_noise_floor_db: -30.0, min_estimated_snr_db: 12.0,
       max_edge_rms_db: -35.0
     )
+  end
+
+  it 'preserves FFmpeg analysis errors and labels' do
+    ffmpeg = instance_double FFmpeg
+    error  = Sh::Error.new 'audio signal analysis failed', 'invalid audio'
+    allow(ffmpeg).to receive(:analyze_audio).with('/tmp/broken.wav', kind: :signal).and_raise error
+
+    expect {
+      described_class.new(ffmpeg: ffmpeg).signal '/tmp/broken.wav'
+    }.to raise_error Sh::Error, 'audio signal analysis failed: invalid audio'
   end
 
   it 'returns structured errors and warnings for automation' do

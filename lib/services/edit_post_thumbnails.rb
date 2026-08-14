@@ -7,8 +7,6 @@ require 'telegram/bot'
 require 'timeout'
 require 'tmpdir'
 
-require_relative '../utils/sh'
-
 module Services
   class EditPostThumbnails
     MESSAGE_ID_FACTOR = 1_048_576
@@ -18,7 +16,8 @@ module Services
       def message_id = post_id * MESSAGE_ID_FACTOR
     end
 
-    def initialize(urls:, thumbnail:, source: nil, manager: nil, resolver: nil, drb: nil, timeout: 7_200, tmpdir: nil, output: $stdout)
+    def initialize urls:, thumbnail:, source: nil, manager: nil, resolver: nil, drb: nil, timeout: 7_200, tmpdir: nil,
+                   output: $stdout, ffmpeg: FFmpeg.new
       @targets   = urls.map { |url| parse_target(url) }
       @thumbnail = File.expand_path(thumbnail)
       @source    = File.expand_path(source) if source
@@ -27,6 +26,7 @@ module Services
       @timeout   = timeout.to_f
       @tmpdir    = tmpdir
       @output    = output
+      @ffmpeg    = ffmpeg
       @prepared  = {}
       raise ArgumentError, "thumbnail not found: #{@thumbnail}" unless File.file?(@thumbnail)
       raise ArgumentError, "source media not found: #{@source}" if @source && !File.file?(@source)
@@ -43,7 +43,7 @@ module Services
 
     private
 
-    attr_reader :targets, :manager, :resolver, :output
+    attr_reader :targets, :manager, :resolver, :output, :ffmpeg
 
     def parse_target(url)
       match = url.to_s.match(URL_PATTERN)
@@ -80,10 +80,7 @@ module Services
       return path unless media[:kind].to_s == 'audio' && File.extname(path).downcase.in?(%w[.ogg .opus])
 
       output_path = File.join(dir, "#{File.basename(media[:file_name].to_s, '.*')}.m4a")
-      command = "ffmpeg -y -i #{Sh.escape(path)} -map 0:a:0 -c:a copy -movflags +faststart -f mp4 #{Sh.escape(output_path)}"
-      _stdout, stderr, status = Sh.run(command)
-      Sh.assert_success!('Telegram audio remux failed', stderr, status: status, output: output_path)
-      output_path
+      ffmpeg.remux_audio input: path, output: output_path, label: 'Telegram audio remux failed'
     end
 
     def edit_params(post, media, path)

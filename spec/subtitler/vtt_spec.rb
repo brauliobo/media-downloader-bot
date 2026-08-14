@@ -11,6 +11,37 @@ RSpec.describe Subtitler::VTT do
     end
   end
 
+  it 'converts external subtitles through FFmpeg' do
+    ffmpeg = instance_double FFmpeg
+    expect(ffmpeg).to receive(:convert_subtitle).with(
+      input: end_with('.srt'), format: :vtt, label: 'VTT conversion failed'
+    ).and_return "WEBVTT\n\nConverted"
+
+    expect(described_class.to_vtt('subtitle body', 'srt', ffmpeg: ffmpeg))
+      .to eq "WEBVTT\n\nConverted"
+  end
+
+  it 'preserves external subtitle conversion errors' do
+    ffmpeg = instance_double FFmpeg
+    allow(ffmpeg).to receive(:convert_subtitle)
+      .and_raise Sh::Error.new('VTT conversion failed', 'invalid subtitle')
+
+    expect { described_class.to_vtt('invalid', 'srt', ffmpeg: ffmpeg) }
+      .to raise_error Sh::Error, 'VTT conversion failed: invalid subtitle'
+  end
+
+  it 'extracts an embedded subtitle stream through FFmpeg' do
+    ffmpeg = instance_double FFmpeg
+    zipper = instance_double Zipper, infile: '/media/video.mkv'
+    expect(ffmpeg).to receive(:convert_subtitle).with(
+      input: '/media/video.mkv', format: :vtt, stream_index: 2,
+      label: 'VTT extraction failed'
+    ).and_return "WEBVTT\n\nEmbedded"
+
+    expect(described_class.extract_embedded(zipper, 2, ffmpeg: ffmpeg))
+      .to eq "WEBVTT\n\nEmbedded"
+  end
+
   it 'translates VTT by sentences and applies the shared length limit' do
     vtt = <<~VTT
       WEBVTT
