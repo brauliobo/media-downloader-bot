@@ -2,6 +2,7 @@ require 'json'
 require 'open3'
 require 'tempfile'
 
+require_relative '../ffmpeg'
 require_relative 'whisper_cpp'
 
 class Subtitler
@@ -15,7 +16,7 @@ class Subtitler
     self.backend  = ENV.fetch('TRANSCRIBE_CPP_BACKEND', 'auto')
     self.device   = ENV['TRANSCRIBE_CPP_DEVICE']
     self.threads  = ENV['TRANSCRIBE_CPP_THREADS']
-    self.ffmpeg   = ENV.fetch('TRANSCRIBE_CPP_FFMPEG', 'ffmpeg')
+    self.ffmpeg   = FFmpeg.transcription_binary
 
     def transcribe(path, format: 'verbose_json', merge_words: true, language: self.language, **)
       raise ArgumentError, "unsupported transcribe.cpp format: #{format}" unless format.to_s.include?('json')
@@ -34,10 +35,8 @@ class Subtitler
       wav.close
       result.close
 
-      _, ffmpeg_error, ffmpeg_status = Open3.capture3(
-        ffmpeg, '-y', '-i', path.to_s, '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', wav.path
-      )
-      raise "ffmpeg failed: #{ffmpeg_error}" unless ffmpeg_status.success?
+      converter = FFmpeg.new ffmpeg: ffmpeg
+      converter.transcribe_wav input: path, output: wav.path, label: 'ffmpeg failed'
 
       command = [
         cli, '--quiet', '--model', model, '--language', language.to_s,
