@@ -1,5 +1,5 @@
-require_relative '../utils/sh'
-require_relative '../zipper'
+require_relative '../ffmpeg'
+require_relative '../prober'
 require_relative 'timing_score'
 
 module Dubbing
@@ -30,10 +30,10 @@ module Dubbing
     end
 
     class Scheduler
-      def initialize(clips, duration:)
+      def initialize(clips, duration:, ffmpeg:)
         @clips          = clips
         @duration       = duration.to_f
-        @clip_durations = clips.map { |clip| Prober.for(clip.path).format.duration.to_f }
+        @clip_durations = clips.map { |clip| Prober.for(clip.path, ffmpeg: ffmpeg).format.duration.to_f }
         @speech_limits  = clips.map { |clip| speech_limit(clip) }
         @remaining      = @clip_durations.zip(@speech_limits).map { |clip_duration, limit| positive(clip_duration - limit) }
         @before         = Array.new(clips.size, 0.0)
@@ -103,50 +103,43 @@ module Dubbing
 
     module_function
 
-    def normalize(input, output)
-      run!(
-        'dub audio normalization',
-        "#{Zipper::FFMPEG} -i #{Sh.escape(input)} -ac 1 -ar 48000 #{Sh.escape(output)}",
-        output
+    def normalize(input, output, ffmpeg: FFmpeg.new)
+      ffmpeg.normalize_dub_audio(
+        input: input, output: output, label: 'dub audio normalization'
       )
     end
 
-    def render_timeline(clips, output, duration:)
-      return Timeline.new(path: silence(output, duration), clips: [], score: TimingScore.call([], [])) if clips.empty?
+    def render_timeline(clips, output, duration:, ffmpeg: FFmpeg.new)
+      if clips.empty?
+        return Timeline.new(
+          path: silence(output, duration, ffmpeg: ffmpeg), clips: [],
+          score: TimingScore.call([], [])
+        )
+      end
 
       source_clips = clips
-      clips        = schedule(source_clips, duration: duration)
-      inputs       = clips.map { |clip| "-i #{Sh.escape(clip.path)}" }.join(' ')
-      chains       = clips.map.with_index do |clip, idx|
-        delay = (clip.start.to_f * 1000).round
-        speed = clip.speed == SpeechSpeed::NATURAL ? '' : "#{tempo_filter(clip.speed)},"
-        "[#{idx}:a]#{speed}adelay=#{delay}:all=1[a#{idx}]"
-      end
-      mix_inputs = clips.each_index.map { |idx| "[a#{idx}]" }.join
-      filter = "#{chains.join(';')};#{mix_inputs}amix=inputs=#{clips.size}:normalize=0," \
-        "loudnorm=I=-18:TP=-1.5:LRA=7,atrim=0:#{duration}"
-      command = "#{Zipper::FFMPEG} #{inputs} -filter_complex #{Sh.escape(filter)} " \
-        "-ac 1 -ar 48000 #{Sh.escape(output)}"
+      clips        = schedule(source_clips, duration: duration, ffmpeg: ffmpeg)
+      filter = FFmpeg.dub_timeline_filter clips: clips, duration: duration
 
       Timeline.new(
-        path:  run!('dub timeline', command, output),
+        path:  ffmpeg.render_dub_timeline(
+          inputs: clips.map(&:path), output: output, filter: filter, label: 'dub timeline'
+        ),
         clips: clips,
         score: TimingScore.call(source_clips, clips)
       )
     end
 
-    def replace_video_audio(video, speech, non_vocals, output, duration:)
-      filter = '[1:a]aformat=sample_rates=48000:channel_layouts=stereo[speech];' \
-        '[2:a]aformat=sample_rates=48000:channel_layouts=stereo[bed];' \
-        "[speech][bed]amix=inputs=2:normalize=0,alimiter=limit=0.95,atrim=0:#{duration}[a]"
-      command = "#{Zipper::FFMPEG} -i #{Sh.escape(video)} -i #{Sh.escape(speech)} " \
-        "-i #{Sh.escape(non_vocals)} -filter_complex #{Sh.escape(filter)} " \
-        "-map 0:v:0 -map [a] -t #{duration} -c:v copy -c:a aac -b:a 128k #{Sh.escape(output)}"
-      run!('dub mux', command, output)
+    def replace_video_audio(video, speech, non_vocals, output, duration:, ffmpeg: FFmpeg.new)
+      filter = FFmpeg.dub_audio_mix_filter duration: duration
+      ffmpeg.mux_dubbed_audio(
+        video: video, speech: speech, non_vocals: non_vocals, output: output,
+        duration: duration, filter: filter, label: 'dub mux'
+      )
     end
 
-    def schedule(clips, duration:)
-      Scheduler.new(clips, duration: duration).call
+    def schedule(clips, duration:, ffmpeg: FFmpeg.new)
+      Scheduler.new(clips, duration: duration, ffmpeg: ffmpeg).call
     end
 
     def tempo_filter(speed)
@@ -157,20 +150,11 @@ module Dubbing
         remaining /= 2.0
       end
       factors << remaining unless remaining == 1.0
-      factors.map { |factor| "atempo=#{format('%.6f', factor)}" }.join(',')
+      factors.map { |factor| FFmpeg.speed_filter(format('%.6f', factor), stream: :audio) }.join ','
     end
 
-    def silence(output, duration)
-      command = "#{Zipper::FFMPEG} -f lavfi -i anullsrc=channel_layout=mono:sample_rate=48000 " \
-        "-t #{duration.to_f} #{Sh.escape(output)}"
-      run!('dub silence', command, output)
-    end
-
-    def run!(label, command, output)
-      _, stderr, status = Sh.run(command)
-      raise "#{label} failed: #{stderr}" unless status.success? && File.exist?(output)
-
-      output
+    def silence(output, duration, ffmpeg: FFmpeg.new)
+      ffmpeg.create_dub_silence output: output, duration: duration, label: 'dub silence'
     end
   end
 end
