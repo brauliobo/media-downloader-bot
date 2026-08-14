@@ -13,6 +13,24 @@ RSpec.describe Processors::Media do
 
   after { FileUtils.remove_entry(dir) if Dir.exist?(dir) }
 
+  describe '#download' do
+    it 'stores remote input separately from the output directory' do
+      info      = SymMash.new(file_name: 'video.mp4')
+      msg       = SymMash.new(video: info)
+      service   = double
+      ctx       = Context.new(dir: dir, msg: msg, service: service)
+      processor = Processors::Video.new(ctx)
+      allow(service).to receive(:download_file).with(info, dir: processor.tmp)
+        .and_return(File.join(processor.tmp, info.file_name))
+
+      downloaded = processor.download
+      output = Output.filename(downloaded.info, dir: dir, ext: :mp4)
+
+      expect(downloaded.fn_in).to eq(File.join(processor.tmp, 'video.mp4'))
+      expect(File.expand_path(downloaded.fn_in)).not_to eq(File.expand_path(output))
+    end
+  end
+
   describe '#handle_input' do
     it 'marks the line in error when probe leaves type unset' do
       i = input(fn_in: '')

@@ -11,7 +11,7 @@ module Processors
       local_path = if info.respond_to?(:local_path) && ::File.exist?(info.local_path)
         info.local_path
       else
-        service.download_file(info, dir: dir)
+        service.download_file(info, dir: tmp)
       end
 
       file_opts = SymMash.new(self.opts.deep_dup.presence || {})
