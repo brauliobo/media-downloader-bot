@@ -1,4 +1,4 @@
-require_relative '../sequel'
+require_relative '../database'
 
 module Models
   class Session < Sequel::Model(:sessions)

@@ -23,7 +23,7 @@ require_relative 'bot/td_bot' if ENV['TD_BOT']
 
 if ENV['DB']
   require 'sequel'
-  require_relative 'sequel'
+  require_relative 'database'
   require_relative 'models/session' if !$0.index('sequel') and DB
 end
 

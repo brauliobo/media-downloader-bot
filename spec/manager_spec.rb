@@ -1,6 +1,15 @@
 require 'spec_helper'
+require 'open3'
+require 'rbconfig'
 
 RSpec.describe Manager do
+  it 'loads the Sequel gem when lib is in the load path' do
+    code = "require 'sequel'; abort unless defined?(Sequel::Model)"
+    _, error, status = Open3.capture3(RbConfig.ruby, '-Ilib', '-e', code)
+
+    expect(status).to be_success, error
+  end
+
   it 'serializes generated media upload errors for DRb clients' do
     manager = described_class.new
     bot     = double
