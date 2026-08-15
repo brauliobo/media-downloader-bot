@@ -135,7 +135,7 @@ module Processors
 
       opts.dub      = 1
       opts.dub_lang = value
-      opts.sub     ||= value
+      opts.sub     ||= value unless opts[:lang].present? || opts[:slang].present?
       opts
     end
 

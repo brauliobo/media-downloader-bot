@@ -84,7 +84,7 @@ RSpec.describe Processors::Base do
       expect(opts.slang).to eq('es')
       expect(opts.alang).to eq('es')
       expect(opts.dub_lang).to eq('pt')
-      expect(opts.sub_lang).to eq('pt')
+      expect(opts.sub_lang).to be_nil
     end
 
     it 'does not replace an explicit subtitle mode with dub shorthand' do
