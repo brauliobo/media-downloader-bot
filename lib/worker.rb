@@ -379,7 +379,7 @@ class Worker
     target = opts.clang || opts.dub_lang || opts.slang
     return info unless target
 
-    caption_info = opts.clang ? info.deep_dup : info
+    caption_info = (opts.clang || opts.dub_lang) ? info.deep_dup : info
     [:title, (:description if opts.description)].compact.each do |field|
       caption_info[field] = translate_caption_text(info[field], from: info.language, to: target) if info[field].present?
     end

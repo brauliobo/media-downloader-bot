@@ -127,11 +127,11 @@ RSpec.describe UploadCoordinator do
     expect(parsed.metadata.album).to eq('Name')
   end
 
-  it 'translates album captions through the shared worker caption path' do
+  it 'translates dubbed album captions without changing shared source info' do
     real_worker = Worker.new(SymMash.new(from: {id: 1}, chat: {id: 1}))
     uploads     = [item('1.jpg', 'image/jpeg'), item('2.jpg', 'image/jpeg')]
     input       = SymMash.new(
-      opts:    opts.merge(caption: 1, clang: 'pt'),
+      opts:    opts.merge(caption: 1, dub_lang: 'pt'),
       info:    SymMash.new(title: 'English caption', language: 'en', description: ''),
       url:     'https://x.com/i/status/2073169414275350804',
       uploads: uploads

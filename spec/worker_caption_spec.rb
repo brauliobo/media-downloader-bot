@@ -167,7 +167,37 @@ RSpec.describe Worker do
         expect(caption_info).to equal(info)
         expect(caption_info.title).to eq('English title')
       end
-      expect(info.title).to eq('English title') if input.key?(:clang)
+      if input.key?(:clang) || input.key?(:dub)
+        expect(caption_info).not_to equal(info)
+        expect(info.title).to eq('English title')
+      elsif target
+        expect(caption_info).to equal(info)
+      end
+    end
+  end
+
+  it 'keeps canonical media metadata when dubbing translates the caption' do
+    Dir.mktmpdir('dubbed-caption-upload-') do |dir|
+      path    = File.join(dir, 'video.mp4')
+      msg     = SymMash.new(from: {id: 1}, chat: {id: 1})
+      service = Bot::Mock.new
+      opts    = SymMash.new(dub: 'pt', caption: 1)
+      info    = SymMash.new(title: 'English title', description: '', language: 'en')
+      File.write(path, '')
+      Processors::Base.normalize_options(opts)
+      input = SymMash.new(fn_out: path, mime: 'video/mp4', opts: opts, url: nil, info: info)
+      allow(Prober).to receive(:for).and_return(nil)
+      allow(Translator).to receive(:translate).with('English title', from: 'en', to: 'pt').and_return('Titulo em portugues')
+      allow(service).to receive(:send_message).and_return(SymMash.new(message_id: 1))
+
+      described_class.new(msg, service: service).upload_item(input)
+
+      expect(service).to have_received(:send_message).with(
+        msg,
+        '_Titulo em portugues_',
+        hash_including(title: 'English title', type: :video)
+      )
+      expect(input.info.title).to eq('English title')
     end
   end
 end
