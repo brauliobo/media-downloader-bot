@@ -1,3 +1,5 @@
+require_relative 'timestamps'
+
 class Subtitler
   module Ass
 
@@ -67,22 +69,14 @@ class Subtitler
       'nobg'    => "{\\r}#{WHITE_TAG}".freeze,
     }.freeze
 
-    TIMESTAMP = /(?:(\d+):)?(\d{2}):(\d{2})\.(\d{3})/.freeze
-    INLINE_TS = /<\d{2}:\d{2}:\d{2}\.\d{3}>/.freeze
-
     # Convert VTT timestamp to seconds
     def self.parse_time t
-      return 0.0 unless (m = t.match(TIMESTAMP))
-      h = (m[1] || 0).to_i; (h*3600) + m[2].to_i*60 + m[3].to_i + m[4].to_i/1000.0
+      Subtitler.parse_timestamp(t)
     end
 
     # Format seconds to ASS time (H:MM:SS.CS)
     def self.ass_time sec
-      cs = ((sec = sec.to_f) - sec.floor)*100
-      total = sec.floor
-      h, remainder = total.divmod 3600
-      m, s = remainder.divmod 60
-      "%d:%02d:%02d.%02d" % [h, m, s, cs.round]
+      Subtitler.format_timestamp(sec, precision: 2, hour_digits: 1)
     end
 
     def self.from_vtt vtt, portrait: false, mode: :instagram, preset: 'default'
@@ -101,7 +95,7 @@ class Subtitler
         t_idx = lines.index { |l| l.include?('-->') }
         next unless t_idx
         time_line = lines[t_idx]
-        times = time_line.scan(/(\d{2}:\d{2}\.\d{3}|\d+:\d{2}:\d{2}\.\d{3})/).flatten
+        times = time_line.scan(Subtitler::TIMESTAMP_VALUE)
         start_str, end_str = times[0], times[1]
         next unless start_str && end_str
         { start: start_str, end: end_str, text: (lines[(t_idx+1)..-1] || []).join("\n") }
@@ -116,8 +110,8 @@ class Subtitler
       ass_events = cues.flat_map do |cue|
         s_sec = parse_time(cue[:start]); e_sec = parse_time(cue[:end])
         raw = CGI.unescapeHTML(cue[:text]).gsub(/\r?\n/, '\\N')
-        raw = raw.gsub(INLINE_TS, '') if mode_sym == :plain
-        if raw.match?(INLINE_TS)
+        raw = raw.gsub(Subtitler::INLINE_TIMESTAMP, '') if mode_sym == :plain
+        if raw.match?(Subtitler::INLINE_TIMESTAMP)
           wt = word_segments(raw, s_sec, e_sec)
           words = wt.map { |_,_,w| w }
           case mode_sym
@@ -149,7 +143,7 @@ class Subtitler
     end
 
     def self.word_segments raw, s_sec, e_sec
-      segs = raw.split(/<(\d{2}:\d{2}:\d{2}\.\d{3})>/)
+      segs = raw.split(Subtitler::INLINE_TIMESTAMP)
       list = []
       first = segs.first&.strip
       list << [s_sec, segs.length > 1 ? parse_time(segs[1]) : e_sec, first] if first && !first.empty?

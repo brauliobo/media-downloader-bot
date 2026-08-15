@@ -65,10 +65,24 @@ class Subtitler
 
       out = +"WEBVTT\n\n"
       Array(mash.segments).each do |segment|
-        start_time  = formatter.call(segment.start)
-        finish_time = formatter.call(segment.end)
+        source_start  = segment.start.to_f
+        source_finish = segment.end.to_f
+        next unless source_finish > source_start
+
+        start_ms  = Subtitler.timestamp_units(source_start)
+        finish_ms = Subtitler.timestamp_units(source_finish)
+        finish_ms = start_ms + 1 if finish_ms <= start_ms
+        words = Array(segment.words).map do |word|
+          SymMash.new(word.to_h.merge(start: Subtitler.timestamp_units(word.start) / 1000.0))
+        end
+        serialized = SymMash.new(segment.to_h.merge(
+          start: start_ms / 1000.0, end: finish_ms / 1000.0, words: words
+        ))
+
+        start_time  = formatter.call(serialized.start)
+        finish_time = formatter.call(serialized.end)
         out << "#{start_time} --> #{finish_time}\n"
-        out << "#{build_line(segment, formatter, word_tags)}\n\n"
+        out << "#{build_line(serialized, formatter, word_tags)}\n\n"
       end
       out
     end
@@ -157,7 +171,7 @@ class Subtitler
         utf8 = body.dup.force_encoding(Encoding::UTF_8)
         raise Encoding::InvalidByteSequenceError, 'invalid byte sequence in UTF-8' unless utf8.valid_encoding?
 
-        canonical = clean(utf8.gsub(/\r\n?|\r/, "\n"))
+        canonical = canonicalize_timestamps(clean(utf8.gsub(/\r\n?|\r/, "\n")))
         validate_native_vtt!(canonical)
         return canonical
       end
@@ -277,6 +291,20 @@ class Subtitler
       end
     end
 
+    def self.canonicalize_timestamps(vtt)
+      vtt.each_line.map do |line|
+        if line.strip.match?(Subtitler::CUE_TIMING)
+          count = 0
+          line.gsub(Subtitler::TIMESTAMP_VALUE) do |timestamp|
+            count += 1
+            count <= 2 ? timestamp.tr(',', '.') : timestamp
+          end
+        else
+          line.gsub(Subtitler::INLINE_TIMESTAMP) { |timestamp| timestamp.tr(',', '.') }
+        end
+      end.join
+    end
+
     def self.semantic_text(text)
       plain = text.to_s.gsub(/<br\s*\/?\s*>/i, ' ').gsub(/<[^>]*>/, '')
       Nokogiri::HTML5.fragment(plain).text.split.join(' ')
@@ -324,15 +352,17 @@ class Subtitler
         next token if token.empty?
 
         marker_time = word.start.to_f
-        tagged = word_tags && (idx.positive? || marker_time > segment.start.to_f) &&
-                 marker_time < segment.end.to_f && marker_time != last_marker
+        tagged = word_tags && marker_time >= segment.start.to_f &&
+                 (idx.positive? || marker_time > segment.start.to_f) &&
+                 marker_time < segment.end.to_f && (!last_marker || marker_time > last_marker)
         last_marker = marker_time if tagged
         tagged ? "<#{formatter.call(marker_time)}>#{token}" : token
       end.join(' ')
     end
 
     private_class_method :each_cue, :segments_from_vtt, :inline_timed_words,
-                         :validate_native_vtt!, :semantic_text, :flush_buffer, :hms_to_s,
+                         :validate_native_vtt!, :canonicalize_timestamps, :semantic_text,
+                         :flush_buffer, :hms_to_s,
                          :hmsms_to_s, :hmsms_to_s_exact, :s_to_hmsms,
                          :build_line
   end

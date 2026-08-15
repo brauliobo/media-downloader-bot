@@ -23,6 +23,10 @@ class Translator
     tlines = masked.each_slice(BATCH_SIZE).with_object [] do |slice, translated|
       translated.concat Array.wrap(translate slice, from: from, to: to)
     end
+    unless tlines.length == lines.length
+      raise "SRT translation result count mismatch: expected #{lines.length}, got #{tlines.length}"
+    end
+
     tlines = tlines.zip(replacements).map do |text, line_replacements|
       expected = line_replacements.map(&:first)
       actual   = text.to_s.scan(marker_pattern)

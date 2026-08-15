@@ -36,6 +36,24 @@ RSpec.describe Subtitler::VTT do
     expect(::Translator).to have_received(:translate).with(['Olá mundo novamente'], from: 'pt', to: 'es')
   end
 
+  it 'canonicalizes native comma timestamps without changing prose and burns them to ASS' do
+    body = <<~VTT
+      WEBVTT
+
+      00:00,000 --> 00:02,000
+      Wait, 1,000 <00:01,000>units
+    VTT
+
+    canonical = described_class.to_vtt(body, 'vtt')
+    ass = Subtitler::Ass.from_vtt(canonical)
+
+    expect(canonical).to include(
+      "00:00.000 --> 00:02.000\nWait, 1,000 <00:01.000>units"
+    )
+    expect(ass.lines.grep(/^Dialogue:/)).not_to be_empty
+    expect(ass).not_to include('<00:01.000>')
+  end
+
   it 'reinterprets HTTP binary bytes as UTF-8 and canonicalizes every line ending' do
     body = "\xEF\xBB\xBFWEBVTT\r\r\n00:00:00.000 --> 00:00:02.000\rOl\xC3\xA1 mundo\r".b
 
@@ -210,6 +228,31 @@ RSpec.describe Subtitler::VTT do
     expect(described_class.build(mash, normalize: false)).to include(
       '00:00:02.000 --> 00:01:03.000'
     )
+  end
+
+  it 'serializes positive sub-millisecond cues as valid one-millisecond intervals' do
+    mash = SymMash.new(segments: [
+      SymMash.new(text: 'Tiny', start: 1.0001, end: 1.0004, words: [
+        SymMash.new(word: 'Tiny', start: 1.0001, end: 1.0004),
+      ]),
+      SymMash.new(text: 'One two three four', start: 2.0004, end: 2.0024, words: [
+        SymMash.new(word: 'One', start: 2.0004, end: 2.0006),
+        SymMash.new(word: 'two', start: 2.0006, end: 2.0007),
+        SymMash.new(word: 'three', start: 2.0007, end: 2.0016),
+        SymMash.new(word: 'four', start: 2.0016, end: 2.0024),
+      ]),
+      SymMash.new(text: 'Zero', start: 3.0, end: 3.0, words: []),
+      SymMash.new(text: 'Reverse', start: 4.0, end: 3.0, words: []),
+    ])
+
+    rendered = described_class.build(mash, normalize: false)
+
+    expect(rendered).to include("00:00:01.000 --> 00:00:01.001\nTiny")
+    expect(rendered).to include(
+      "00:00:02.000 --> 00:00:02.002\nOne <00:00:02.001>two three four"
+    )
+    expect(rendered).not_to include('Zero', 'Reverse')
+    expect(described_class.to_vtt(rendered, 'vtt')).to eq(rendered)
   end
 
   it 'keeps clean cue text wordless when inline timing markers are invalid' do

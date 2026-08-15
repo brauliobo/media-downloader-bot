@@ -4,11 +4,24 @@ class Subtitler
   INLINE_TIMESTAMP = /<(#{TIMESTAMP_VALUE})>/.freeze
   CUE_TIMING       = /\A\s*#{TIMESTAMP_VALUE}\s+-->\s+#{TIMESTAMP_VALUE}(?:\s+.*)?\s*\z/.freeze
 
-  def self.format_timestamp(seconds, decimal: '.')
-    total_ms = (seconds.to_f * 1000).round
-    hours, remainder = total_ms.divmod(3_600_000)
-    minutes, remainder = remainder.divmod(60_000)
-    secs, milliseconds = remainder.divmod(1000)
-    format("%02d:%02d:%02d#{decimal}%03d", hours, minutes, secs, milliseconds)
+  def self.parse_timestamp(timestamp)
+    match = timestamp&.match(TIMESTAMP)
+    return unless match && match[0].length == timestamp.length
+    return if match[2].to_i >= 60 || match[3].to_i >= 60
+
+    match[1].to_i * 3600 + match[2].to_i * 60 + match[3].to_i + match[4].to_i / 1000.0
+  end
+
+  def self.timestamp_units(seconds, precision: 3)
+    (seconds.to_f * (10**precision)).round
+  end
+
+  def self.format_timestamp(seconds, decimal: '.', precision: 3, hour_digits: 2)
+    scale = 10**precision
+    total_units = timestamp_units(seconds, precision: precision)
+    hours, remainder = total_units.divmod(3600 * scale)
+    minutes, remainder = remainder.divmod(60 * scale)
+    secs, fraction = remainder.divmod(scale)
+    format("%0#{hour_digits}d:%02d:%02d#{decimal}%0#{precision}d", hours, minutes, secs, fraction)
   end
 end

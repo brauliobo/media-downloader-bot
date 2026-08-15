@@ -40,6 +40,18 @@ RSpec.describe Translator do
     end
   end
 
+  it 'fails clearly when a backend returns too few or too many lines' do
+    [
+      ['Only one'],
+      ['First', 'Second', 'Unexpected third'],
+    ].each do |results|
+      allow(described_class).to receive(:translate).and_return(results)
+
+      expect { described_class.translate_srt(srt, from: 'en', to: 'pt') }
+        .to raise_error(RuntimeError, 'SRT translation result count mismatch: expected 2, got ' + results.length.to_s)
+    end
+  end
+
   it 'translates ordinary SRT without adding markers' do
     plain = "1\n00:00:01,000 --> 00:00:02,000\nHello world\n"
     expect(described_class).to receive(:translate).with(['Hello world'], from: 'en', to: 'pt').and_return(['Olá mundo'])
