@@ -2,6 +2,7 @@ require 'iso-639'
 
 require_relative 'voice_separator'
 
+require_relative 'subtitler/timestamps'
 require_relative 'subtitler/whisper_cpp'
 require_relative 'subtitler/transcribe_cpp'
 require_relative 'subtitler/vtt'
@@ -21,9 +22,8 @@ class Subtitler
     end
   end
 
-  TAG_REGEX = /<\d{2}:\d{2}:\d{2}[,.]\d{3}>/
   def self.strip_word_tags str
-    str.gsub(TAG_REGEX, '')
+    str.gsub(INLINE_TIMESTAMP, '')
   end
 
   def self.normalize_lang(lang)

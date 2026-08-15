@@ -3,12 +3,11 @@ require 'tempfile'
 require_relative '../ffmpeg'
 require_relative '../utils/safety'
 require_relative 'segments'
+require_relative 'timestamps'
 require_relative 'translator'
 
 class Subtitler
   class VTT
-    TIMESTAMP = /\A(?:(\d{1,2}):)?(\d{2}):(\d{2})(?:[\.,](\d{3}))?/.freeze
-
     def self.clean(vtt)
       return vtt unless vtt
       vtt
@@ -89,7 +88,7 @@ class Subtitler
         finish_sec = hmsms_to_s(finish_str)
         next if finish_sec <= from_s || start_sec >= to_s
 
-        clamped_start = [[start_sec - from_s, 0].max, to_s - from_s].min
+        clamped_start  = [[start_sec - from_s, 0].max, to_s - from_s].min
         clamped_finish = [[finish_sec - from_s, 0].max, to_s - from_s].min
 
         start_out, finish_out = if rebase
@@ -99,6 +98,17 @@ class Subtitler
         end
 
         text = cue.reject { |line| line == timing }.join.strip
+        if rebase && (segment = segments_from_vtt(cue.join).first) && Array(segment.words).any?
+          words = segment.words.select { |word| word.end.to_f > from_s && word.start.to_f < to_s }.map do |word|
+            SymMash.new(word.to_h.merge(
+              start: [[word.start.to_f, from_s].max, to_s].min - from_s,
+              end:   [[word.end.to_f, from_s].max, to_s].min - from_s
+            ))
+          end
+          next if words.empty?
+
+          text = build_line(SymMash.new(segment.to_h.merge(words: words)), method(:s_to_hmsms), true)
+        end
         next if text.blank?
 
         index += 1
@@ -119,12 +129,16 @@ class Subtitler
           next
         end
 
-        if line.include?('-->')
-          buffer << line.tr(',', '.')
+        if stripped.match?(Subtitler::CUE_TIMING)
+          timestamps = 0
+          buffer << line.gsub(Subtitler::TIMESTAMP_VALUE) do |timestamp|
+            timestamps += 1
+            timestamps <= 2 ? timestamp.tr(',', '.') : timestamp
+          end
         elsif stripped =~ /^\d+$/
           next
         else
-          buffer << line
+          buffer << line.gsub(Subtitler::INLINE_TIMESTAMP) { |timestamp| timestamp.tr(',', '.') }
         end
       end
 
@@ -202,8 +216,9 @@ class Subtitler
       malformed = matches.any? do |match|
         match[1].match?(/\A\d{1,2}:\d{2}/) && hmsms_to_s_exact(match[1]).nil?
       end
-      timed = matches.filter_map do |match|
-        time = hmsms_to_s_exact(match[1])
+      timed = text.to_enum(:scan, Subtitler::INLINE_TIMESTAMP).filter_map do
+        match = Regexp.last_match
+        time  = hmsms_to_s_exact(match[1])
         [match, time] if time
       end
       return [] if malformed || timed.empty? || !cue_start || !cue_end
@@ -251,20 +266,20 @@ class Subtitler
     end
 
     def self.hms_to_s(hms)
-      return unless (match = hms&.match(TIMESTAMP))
+      return unless (match = hms&.match(Subtitler::TIMESTAMP))
 
       match[1].to_i * 3600 + match[2].to_i * 60 + match[3].to_i
     end
 
     def self.hmsms_to_s(hms)
-      return unless (match = hms&.match(TIMESTAMP))
+      return unless (match = hms&.match(Subtitler::TIMESTAMP))
 
       base = match[1].to_i * 3600 + match[2].to_i * 60 + match[3].to_i
       base + match[4].to_i / 1000.0
     end
 
     def self.hmsms_to_s_exact(hms)
-      match = hms&.match(TIMESTAMP)
+      match = hms&.match(Subtitler::TIMESTAMP)
       return unless match && match[0].length == hms.length
 
       hmsms_to_s(hms)

@@ -182,4 +182,63 @@ RSpec.describe Subtitler::VTT do
 
     expect(payloads(translated)).to eq(['Hello.', 'Goodbye.'])
   end
+
+  describe '.slice' do
+    let(:vtt) do
+      <<~VTT
+        WEBVTT
+
+        00:00:01.000 --> 00:00:05.000
+        One <00:00:02.000>two <00:00:03.000>three <00:00:04.000>four
+      VTT
+    end
+
+    it 'retains overlapping words and rebases inline timings inside the range' do
+      sliced = described_class.slice(vtt, from: '00:00:02', to: '00:00:04')
+
+      expect(sliced).to include("00:00:00.000 --> 00:00:02.000\ntwo <00:00:01.000>three")
+      expect(sliced).not_to include('One', 'four')
+    end
+
+    it 'keeps a word active at the left boundary as the first untagged word' do
+      active = "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nOne alpha beta <00:00:03.000>last\n"
+      sliced = described_class.slice(active, from: '00:00:02', to: '00:00:03')
+
+      expect(sliced).to include("00:00:00.000 --> 00:00:01.000\nalpha <00:00:00.333>beta")
+      expect(sliced).not_to include('<00:00:00.000>')
+    end
+
+    it 'excludes words ending at the left edge and starting at the right edge' do
+      sliced = described_class.slice(vtt, from: '00:00:02', to: '00:00:03')
+
+      expect(payloads(sliced)).to eq(['two'])
+    end
+
+    it 'leaves cue bounds and inline text unchanged without rebasing' do
+      sliced = described_class.slice(vtt, from: '00:00:02', to: '00:00:04', rebase: false)
+
+      expect(sliced).to include("00:00:01.000 --> 00:00:05.000\nOne <00:00:02.000>two <00:00:03.000>three <00:00:04.000>four")
+    end
+
+    it 'keeps the existing behavior for untagged cues' do
+      plain = "WEBVTT\n\n00:00:01.000 --> 00:00:05.000\nWhole cue text\n"
+
+      expect(described_class.slice(plain, from: '00:00:02', to: '00:00:04'))
+        .to include("00:00:00.000 --> 00:00:02.000\nWhole cue text")
+    end
+  end
+
+  describe '.srt_to_vtt' do
+    it 'normalizes recognized cue and inline timestamps without changing prose' do
+      srt = <<~SRT
+        1
+        00:00:01,000 --> 00:00:03,500
+        Wait, this costs 1,000 <00:00:02,250>units --> really.
+      SRT
+
+      expect(described_class.srt_to_vtt(srt)).to include(
+        "00:00:01.000 --> 00:00:03.500\nWait, this costs 1,000 <00:00:02.250>units --> really."
+      )
+    end
+  end
 end

@@ -22,7 +22,10 @@ RSpec.describe Zipper::Subtitle do
       .and_return ["WEBVTT\n\n<00:00:00.100>Hello", 'en', nil]
     expect(ffmpeg).to receive(:convert_subtitle).with(
       input: File.join(dir, 'sub.vtt'), format: :srt, label: 'srt conversion failed'
-    ).and_return "1\n00:00:00,000 --> 00:00:01,000\nHello\n"
+    ) do |args|
+      expect(File.read(args[:input])).to eq("WEBVTT\n\nHello")
+      "1\n00:00:00,000 --> 00:00:01,000\nHello\n"
+    end
 
     output = described_class.generate_srt(
       'video.mp4', dir: dir, info: info, probe: nil, stl: nil, opts: opts, ffmpeg: ffmpeg

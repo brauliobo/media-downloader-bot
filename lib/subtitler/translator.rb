@@ -30,10 +30,10 @@ class Subtitler
     def self.sentences_for(segs)
       return [] if segs.nil?
 
-      sentences = if segs.any? { |s| Array(s.words).any? }
-        TextHelpers.sentences_from_segments(segs)
-      else
-        segs.flat_map { |segment| text_sentences_for(segment) }
+      sentences = segs.chunk_while do |left, right|
+        Array(left.words).any? == Array(right.words).any?
+      end.flat_map do |run|
+        Array(run.first.words).any? ? TextHelpers.sentences_from_segments(run) : run.flat_map { |segment| text_sentences_for(segment) }
       end
 
       sentences.select { |sentence| sentence.end.to_f > sentence.start.to_f }

@@ -128,6 +128,21 @@ RSpec.describe Subtitler::Translator do
     expect(mash.segments.all? { |s| Array(s.words).empty? }).to eq(true)
   end
 
+  it 'processes contiguous timed and text-only runs without crossing representation boundaries' do
+    segments = [
+      SymMash.new(start: 0.0, end: 1.0, text: 'Timed start', words: [SymMash.new(word('Timed', 0.0, 0.5)), SymMash.new(word('start', 0.5, 1.0))]),
+      SymMash.new(start: 1.0, end: 2.0, text: 'continues.', words: [SymMash.new(word('continues.', 1.0, 2.0))]),
+      SymMash.new(start: 2.0, end: 3.0, text: 'Text only continues', words: nil),
+      SymMash.new(start: 3.0, end: 4.0, text: 'without punctuation', words: []),
+      SymMash.new(start: 4.0, end: 5.0, text: 'Timed again.', words: [SymMash.new(word('Timed', 4.0, 4.5)), SymMash.new(word('again.', 4.5, 5.0))]),
+    ]
+
+    sentences = described_class.sentences_for(segments)
+
+    expect(sentences.map(&:text)).to eq(['Timed start continues.', 'Text only continues', 'without punctuation', 'Timed again.'])
+    expect(sentences.map { |sentence| Array(sentence.words).any? }).to eq([true, false, false, true])
+  end
+
   it 'ignores transcription segments with no positive timing interval' do
     segments = [
       SymMash.new(start: 0.0, end: 1.0, words: [SymMash.new(word: 'Hello.', start: 0.0, end: 1.0)]),
