@@ -126,9 +126,23 @@ module Dubbing
       end
 
       @sentences.zip(clips).each do |sentence, clip|
-        sentence.start = clip.start
-        sentence.end   = clip.end
-        sentence.words = []
+        source_start    = sentence.start.to_f
+        source_end      = sentence.end.to_f
+        target_start    = clip.start.to_f
+        target_end      = clip.end.to_f
+        source_duration = source_end - source_start
+        target_duration = target_end - target_start
+
+        if source_duration.positive? && target_duration.positive?
+          scale = target_duration / source_duration
+          Array(sentence.words).each do |word|
+            word.start = target_start + (word.start.to_f - source_start) * scale
+            word.end   = target_start + (word.end.to_f - source_start) * scale
+          end
+        end
+
+        sentence.start = target_start
+        sentence.end   = target_end
       end
     end
 
