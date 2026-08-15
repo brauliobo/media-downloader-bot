@@ -50,83 +50,61 @@ RSpec.describe Processors::Base do
         expect(opts.hts).to be_nil
       end
     end
+  end
 
-    it 'uses a language-valued subtitle option as the dub language fallback' do
-      opts = SymMash.new
+  describe '.normalize_options' do
+    it 'normalizes merged dubbing options without losing subtitles or cuts' do
+      opts = SymMash.new(dub: 'pt', lang: 'pt', to: '00:30')
 
-      described_class.add_opt(opts, 'sub=pt')
+      described_class.normalize_options(opts)
 
-      expect(opts.sub_mode).to eq('language')
-      expect(opts.sub_lang).to eq('pt')
-      expect(opts.slang).to eq('pt')
-      expect(opts.alang).to eq('pt')
+      expect(opts).to include(
+        dub: 1, dub_lang: 'pt', sub_mode: 'language', sub_lang: 'pt',
+        slang: 'pt', alang: 'pt', to: '00:30'
+      )
     end
 
-    it 'keeps a language-valued dub independent while requesting matching subtitles' do
-      opts = SymMash.new
+    it 'keeps generic source preferences independent from dubbing subtitles' do
+      opts = SymMash.new(dub: 'pt', lang: 'es')
 
-      described_class.add_opt(opts, 'dub=pt')
+      described_class.normalize_options(opts)
 
-      expect(opts.dub).to eq(1)
-      expect(opts.dub_lang).to eq('pt')
-      expect(opts.slang).to be_nil
-      expect(opts.alang).to be_nil
-      expect(opts.sub_mode).to eq('language')
-      expect(opts.sub_lang).to eq('pt')
+      expect(opts).to include(
+        dub: 1, dub_lang: 'pt', sub_mode: 'language', sub_lang: 'pt',
+        slang: 'es', alang: 'es'
+      )
     end
 
-    it 'keeps explicit generic language selection independent from dubbing' do
-      opts = SymMash.new
+    it 'preserves explicit subtitle languages and modes' do
+      {
+        'es'     => ['language', 'es'],
+        'source' => ['source', nil],
+        'both'   => ['both', nil],
+        'none'   => ['none', nil],
+      }.each do |sub, (mode, lang)|
+        opts = SymMash.new(dub: 'pt', sub: sub)
 
-      described_class.add_opt(opts, 'lang=es')
-      described_class.add_opt(opts, 'dub=pt')
+        described_class.normalize_options(opts)
 
-      expect(opts.slang).to eq('es')
-      expect(opts.alang).to eq('es')
-      expect(opts.dub_lang).to eq('pt')
-      expect(opts.sub_lang).to be_nil
+        expect([opts.sub_mode, opts.sub_lang]).to eq([mode, lang])
+      end
     end
 
-    it 'does not replace an explicit subtitle mode with dub shorthand' do
-      opts = SymMash.new
+    it 'uses a standalone subtitle language as the generic language fallback' do
+      opts = SymMash.new(sub: 'pt')
 
-      described_class.add_opt(opts, 'sub=source')
-      described_class.add_opt(opts, 'dub=pt')
+      described_class.normalize_options(opts)
 
-      expect(opts.dub_lang).to eq('pt')
-      expect(opts.sub_mode).to eq('source')
-      expect(opts.sub_lang).to be_nil
+      expect(opts).to include(sub_mode: 'language', sub_lang: 'pt', slang: 'pt', alang: 'pt')
     end
 
     it 'keeps bare dub audio-only' do
-      opts = SymMash.new
+      opts = SymMash.new(dub: 1)
 
-      described_class.add_opt(opts, 'dub')
+      described_class.normalize_options(opts)
 
-      expect(opts.dub).to eq(1)
       expect(opts.sub_mode).to be_nil
       expect(opts.sub_lang).to be_nil
-    end
-
-    it 'keeps an explicit dub language ahead of the subtitle language' do
-      opts = SymMash.new
-
-      described_class.add_opt(opts, 'lang=es')
-      described_class.add_opt(opts, 'sub=pt')
-
-      expect(opts.slang).to eq('es')
-      expect(opts.alang).to eq('es')
-      expect(opts.sub_lang).to eq('pt')
-    end
-
-    it 'does not use subtitle modes as dub language fallbacks' do
-      opts = SymMash.new
-
-      described_class.add_opt(opts, 'sub=source')
-
-      expect(opts.sub_mode).to eq('source')
-      expect(opts.slang).to be_nil
-      expect(opts.alang).to be_nil
     end
   end
 end

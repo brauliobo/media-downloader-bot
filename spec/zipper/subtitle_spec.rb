@@ -48,26 +48,32 @@ RSpec.describe Zipper::Subtitle do
     }.to raise_error Sh::Error, 'srt conversion failed: invalid subtitle'
   end
 
-  it 'uses an authored locale variant without translating a base-language request' do
+  it 'selects an authored locale from normalized subtitle requests without translating it' do
     vtt  = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nOlá.\n"
     info = SymMash.new(subtitles: {
       en:      [{ext: 'vtt', url: 'https://example.com/en.vtt'}],
       :'pt-BR' => [{ext: 'vtt', url: 'https://example.com/pt-BR.vtt'}],
     })
-    opts = SymMash.new(slang: 'pt', format: Zipper::Types.video.h264)
     ffmpeg = instance_double(FFmpeg)
-    zipper = Zipper.new(
-      'video.mp4', nil, info: info,
-      probe: SymMash.new(format: {duration: 1}, streams: []), opts: opts, ffmpeg: ffmpeg
-    )
     allow(Utils::HTTP).to receive(:get_public).with('https://example.com/pt-BR.vtt').and_return(vtt)
     allow(ffmpeg).to receive(:convert_subtitle).and_return(vtt)
     expect(Subtitler::VTT).not_to receive(:translate)
 
-    fetched, lang, = described_class.prepare(zipper, translate_to: 'pt')
+    [{dub: 'pt', lang: 'es'}, {sub: 'pt-BR', lang: 'en'}].each do |attributes|
+      opts = SymMash.new(attributes.merge(format: Zipper::Types.video.h264))
+      Processors::Base.normalize_options(opts)
+      zipper = Zipper.new(
+        'video.mp4', nil, info: info,
+        probe: SymMash.new(format: {duration: 1}, streams: []), opts: opts, ffmpeg: ffmpeg
+      )
 
-    expect(fetched).to include('Olá.')
-    expect(lang).to eq('pt')
+      fetched, lang, = described_class.prepare(
+        zipper, translate_to: described_class.subtitle_translation_target(opts)
+      )
+
+      expect(fetched).to include('Olá.')
+      expect(lang).to eq('pt')
+    end
   end
 
   it 'keeps generated dubbing subtitles authoritative during final selection' do

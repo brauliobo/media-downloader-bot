@@ -165,9 +165,10 @@ class Zipper
     end
 
     def preferred_lang(zipper, subtitles)
-      requested = Subtitler.normalize_lang(zipper.opts.slang)
+      requested = zipper.opts.sub_lang.presence || zipper.opts.slang
       keys      = subtitles.keys
-      exact     = keys.find { |code| requested && code.to_s.downcase == requested }
+      exact     = keys.find { |code| requested.present? && code.to_s.casecmp?(requested.to_s) }
+      requested = Subtitler.normalize_lang(requested)
       locale    = keys.find { |code| requested && code.to_s.downcase.split(/[-_]/, 2).first == requested }
       exact || locale || keys.find { |code| code.to_s.downcase == 'en' } || keys.first
     end
