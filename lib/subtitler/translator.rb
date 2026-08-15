@@ -31,9 +31,9 @@ class Subtitler
       return [] if segs.nil?
 
       sentences = segs.chunk_while do |left, right|
-        Array(left.words).any? == Array(right.words).any?
+        representation_and_boundary(left) == representation_and_boundary(right)
       end.flat_map do |run|
-        Array(run.first.words).any? ? TextHelpers.sentences_from_segments(run) : run.flat_map { |segment| text_sentences_for(segment) }
+        Array(run.first.words).any? ? timed_sentences_for(run) : run.flat_map { |segment| text_sentences_for(segment) }
       end
 
       sentences.select { |sentence| sentence.end.to_f > sentence.start.to_f }
@@ -156,6 +156,25 @@ class Subtitler
       build_text_segments(segment, parts)
     end
 
+    def self.representation_and_boundary(segment)
+      [Array(segment.words).any?, segment[:cue_id], segment[:speaker_id]]
+    end
+
+    def self.timed_sentences_for(run)
+      source = run.first
+      clones = run.map do |segment|
+        SymMash.new(segment.to_h.merge(
+          words: Array(segment.words).map { |word| SymMash.new(word.to_h) }
+        ))
+      end
+
+      TextHelpers.sentences_from_segments(clones).each do |sentence|
+        [:cue_id, :speaker_id].each do |key|
+          sentence[key] = source[key] if source.to_h.key?(key)
+        end
+      end
+    end
+
     def self.build_text_segments(source, texts)
       total    = texts.sum(&:length)
       duration = [source.end.to_f - source.start.to_f, 0].max
@@ -182,7 +201,7 @@ class Subtitler
     end
 
     def self.assign_tokens_to_words!(sent, tokens)
-      source = Array(sent.words)
+      source = Array(sent.words).select { |word| word.end.to_f > word.start.to_f }
       tokens = Array(tokens)
       return sent.words = [] if source.empty? || tokens.empty?
 

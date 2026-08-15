@@ -43,9 +43,9 @@ RSpec.describe Subtitler::Translator do
     w0 = mash.segments[0].words
     expect(w0.map { |w| w.word }).to eq(['Olá', 'mundo!'])
     expect(w0.first.start).to eq(0.0)
-    expect(w0.last.end).to eq(0.9)
+    expect(w0.last.end).to eq(0.8)
     expect(mash.segments[0].start).to eq(0.0)
-    expect(mash.segments[0].end).to eq(0.9) # preserves end from punctuation timing
+    expect(mash.segments[0].end).to eq(0.9)
 
     w1 = mash.segments[1].words
     expect(w1.map { |w| w.word }.join(' ')).to eq('Isto é um teste.')
@@ -141,6 +141,22 @@ RSpec.describe Subtitler::Translator do
 
     expect(sentences.map(&:text)).to eq(['Timed start continues.', 'Text only continues', 'without punctuation', 'Timed again.'])
     expect(sentences.map { |sentence| Array(sentence.words).any? }).to eq([true, false, false, true])
+  end
+
+  it 'keeps timed runs separate at cue and speaker boundaries and retains metadata' do
+    segments = [
+      SymMash.new(start: 0.0, end: 1.0, text: 'First', cue_id: 1, speaker_id: 'A', words: [SymMash.new(word('First', 0.0, 1.0))]),
+      SymMash.new(start: 1.0, end: 2.0, text: 'cue', cue_id: 2, speaker_id: 'A', words: [SymMash.new(word('cue', 1.0, 2.0))]),
+      SymMash.new(start: 2.0, end: 3.0, text: 'Speaker', cue_id: 2, speaker_id: 'B', words: [SymMash.new(word('Speaker', 2.0, 3.0))]),
+    ]
+    original_words = segments.map { |segment| segment.words.map(&:to_h) }
+
+    sentences = described_class.sentences_for(segments)
+
+    expect(sentences.map(&:text)).to eq(['First', 'cue', 'Speaker'])
+    expect(sentences.map(&:cue_id)).to eq([1, 2, 2])
+    expect(sentences.map(&:speaker_id)).to eq(['A', 'A', 'B'])
+    expect(segments.map { |segment| segment.words.map(&:to_h) }).to eq(original_words)
   end
 
   it 'ignores transcription segments with no positive timing interval' do
@@ -381,6 +397,30 @@ RSpec.describe Subtitler::Translator do
       .to eq([['Olá', 'mundo', 'incrível!)'], ['Ok.']])
     expect(mash.segments.map { |segment| [segment.words.first.start, segment.words.last.end] })
       .to eq([[0.0, 0.9], [2.1, 2.9]])
+  end
+
+  it 'projects lexical tokens only onto positive-duration source slots' do
+    sentence = SymMash.new(start: 0.0, end: 2.0, words: [
+      SymMash.new(word('zero', 0.0, 0.0)),
+      SymMash.new(word('first', 0.0, 1.0)),
+      SymMash.new(word('zero', 1.0, 1.0)),
+      SymMash.new(word('last', 1.0, 2.0)),
+    ])
+
+    described_class.send(:assign_tokens_to_words!, sentence, ['um', 'dois', 'três'])
+
+    expect(sentence.words.map(&:word)).to eq(['um', 'dois', 'três'])
+    expect(sentence.words.map { |word| [word.start, word.end] }).to eq([
+      [0.0, 0.5], [0.5, 1.0], [1.0, 2.0]
+    ])
+    expect(sentence.words).to all(satisfy { |word| word.end > word.start })
+    rendered = Subtitler::VTT.build(SymMash.new(segments: [sentence]), normalize: false)
+    expect(rendered.scan(/<[^>]+>/)).to eq(['<00:00:00.500>', '<00:00:01.000>'])
+    expect(rendered).not_to include('<00:00:02.000>')
+
+    wordless = SymMash.new(words: [SymMash.new(word('zero', 1.0, 1.0))])
+    described_class.send(:assign_tokens_to_words!, wordless, ['texto'])
+    expect(wordless.words).to eq([])
   end
 
   it 'keeps honorific abbreviations attached to the following name' do

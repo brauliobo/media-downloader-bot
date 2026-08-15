@@ -3,6 +3,7 @@ require 'iso-639'
 
 require_relative '../zipper'
 require_relative 'segments'
+require_relative 'timestamps'
 require_relative 'translator'
 
 class Subtitler
@@ -34,7 +35,7 @@ class Subtitler
       use_norm = stdsub.nil? ? normalize : stdsub
       Segments.merge_adjacent!(mash) if use_norm
 
-      ts = ->(t){ h, rem = t.divmod(3600); m, s = rem.divmod(60); "%02d:%02d:%02d,%03d" % [h, m, s.to_i, (s.modulo(1)*1000).round] }
+      ts = ->(time) { Subtitler.format_timestamp(time, decimal: ',') }
 
       out = +""
       mash.segments&.each_with_index do |seg, idx|

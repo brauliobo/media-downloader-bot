@@ -74,6 +74,16 @@ RSpec.describe Subtitler::TranscribeCpp do
     )
   end
 
+  it 'carries rounded milliseconds into the next SRT second' do
+    output = SymMash.new(segments: [
+      SymMash.new(text: 'Carry', start: 1.9996, end: 62.9996, words: []),
+    ])
+
+    expect(backend.srt_convert(output, normalize: false)).to include(
+      '00:00:02,000 --> 00:01:03,000'
+    )
+  end
+
   it 'uses FFmpeg transcription binary for semantic WAV preprocessing' do
     converter = instance_double FFmpeg
     status = instance_double Process::Status, success?: true

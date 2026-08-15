@@ -12,8 +12,10 @@ RSpec.describe Translator do
 
   it 'protects and exactly restores multiple inline timestamps across lines' do
     expect(described_class).to receive(:translate) do |lines, **|
-      expect(lines).to eq(['Hello __T0000__world', 'Again __T0001__today.'])
-      ['Olá __T0000__mundo', 'Novamente __T0001__hoje.']
+      markers = lines.join.scan(/__[A-Za-z0-9_]+_\d+__/)
+      expect(markers.size).to eq(2)
+      expect(markers.uniq.size).to eq(2)
+      ['Olá ' + markers[0] + 'mundo', 'Novamente ' + markers[1] + 'hoje.']
     end
 
     translated = described_class.translate_srt(srt, from: 'en', to: 'pt')
@@ -23,12 +25,15 @@ RSpec.describe Translator do
   end
 
   it 'fails when a backend removes, duplicates, or reorders placeholders' do
-    [
-      ['Hello world', 'Again __T0001__today.'],
-      ['Hello __T0000____T0000__world', 'Again __T0001__today.'],
-      ['Hello __T0001__world', 'Again __T0000__today.'],
-    ].each do |output|
-      allow(described_class).to receive(:translate).and_return(output)
+    [:missing, :duplicate, :reordered].each do |corruption|
+      allow(described_class).to receive(:translate) do |lines, **|
+        markers = lines.join.scan(/__[A-Za-z0-9_]+_\d+__/)
+        case corruption
+        when :missing then ['Hello world', lines[1]]
+        when :duplicate then [lines[0].sub(markers[0], markers[0] * 2), lines[1]]
+        when :reordered then [lines[0].sub(markers[0], markers[1]), lines[1].sub(markers[1], markers[0])]
+        end
+      end
 
       expect { described_class.translate_srt(srt, from: 'en', to: 'pt') }
         .to raise_error(RuntimeError, /corrupted inline timestamps/)
@@ -43,5 +48,27 @@ RSpec.describe Translator do
 
     expect(translated).to include('Olá mundo')
     expect(translated).not_to include('__T', '<00:00:')
+  end
+
+  it 'treats the old placeholder namespace as ordinary prose' do
+    source = "1\n00:00:01,000 --> 00:00:02,000\nLiteral __T0000__ <00:00:01,500>text\n"
+    expect(described_class).to receive(:translate) do |lines, **|
+      expect(lines.first).to include('__T0000__')
+      [lines.first.sub('Literal', 'Literal traduzido')]
+    end
+
+    expect(described_class.translate_srt(source, from: 'en', to: 'pt'))
+      .to include('Literal traduzido __T0000__ <00:00:01,500>text')
+  end
+
+  it 'uses collision-free unbounded placeholder indexes' do
+    lines = [(0..10_000).map { |index| "<00:00:01,000>w#{index}" }.join]
+
+    protected, replacements, marker_pattern = described_class.send(:protect_srt_timestamps, lines)
+
+    markers = protected.first.scan(marker_pattern)
+    expect(markers.size).to eq(10_001)
+    expect(markers.last).to end_with('_10000__')
+    expect(replacements.first.last.first).to eq(markers.last)
   end
 end

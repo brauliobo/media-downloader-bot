@@ -36,11 +36,33 @@ RSpec.describe Subtitler::VTT do
     expect(::Translator).to have_received(:translate).with(['Olá mundo novamente'], from: 'pt', to: 'es')
   end
 
+  it 'reinterprets HTTP binary bytes as UTF-8 and canonicalizes every line ending' do
+    body = "\xEF\xBB\xBFWEBVTT\r\r\n00:00:00.000 --> 00:00:02.000\rOl\xC3\xA1 mundo\r".b
+
+    expect(described_class.to_vtt(body, 'vtt')).to eq(
+      "\uFEFFWEBVTT\n\n00:00:00.000 --> 00:00:02.000\nOlá mundo\n"
+    )
+  end
+
   it 'rejects invalid bytes in native VTT instead of deleting text' do
     body = "WEBVTT\n\nOl\xFF".force_encoding(Encoding::UTF_8)
 
     expect { described_class.to_vtt(body, 'vtt') }
       .to raise_error(Encoding::InvalidByteSequenceError, /invalid byte sequence in UTF-8/)
+  end
+
+  it 'rejects invalid native VTT structure without invoking FFmpeg' do
+    [
+      "not vtt\n",
+      "WEBVTT\n\n00:00:bad --> 00:00:02.000\nBad\n",
+      "WEBVTT\n\n00:00:02.000 --> 00:00:02.000\nBad\n",
+      "WEBVTT\n\n00:00:03.000 --> 00:00:02.000\nBad\n",
+    ].each do |body|
+      expect { described_class.to_vtt(body.b, 'vtt') }
+        .to raise_error(ArgumentError, /invalid WEBVTT/)
+    end
+
+    expect(described_class.to_vtt("WEBVTT\r".b, 'vtt')).to eq("WEBVTT\n")
   end
 
   it 'preserves external subtitle conversion errors' do
@@ -120,6 +142,15 @@ RSpec.describe Subtitler::VTT do
     )
   end
 
+  it 'preserves compact inline timestamps during translation' do
+    vtt = "WEBVTT\n\n00:00.000 --> 00:04.000\nHello <00:02.000>there.\n"
+    allow(::Translator).to receive(:translate).and_return(['Olá mundo.'])
+
+    translated = described_class.translate(vtt, from: 'en', to: 'pt')
+
+    expect(translated).to include('Olá <00:00:02.000>mundo.')
+  end
+
   it 'decodes cue markup and projects translation over structural inline timings' do
     vtt = <<~VTT
       WEBVTT
@@ -142,6 +173,43 @@ RSpec.describe Subtitler::VTT do
     )
     expect(plain).to include('Olá mundo espanhol agora.')
     expect(plain).not_to include('<00:00:')
+  end
+
+  it 'preserves spaces around standalone decoded entities' do
+    vtt = "WEBVTT\n\n00:00:00.000 --> 00:00:03.000\nencore &amp; toujours <00:00:02.000>ici\n"
+    allow(::Translator).to receive(:translate).and_return(['ainda e sempre aqui'])
+
+    described_class.translate(vtt, from: 'fr', to: 'pt')
+
+    expect(::Translator).to have_received(:translate).with(['encore & toujours ici'], from: 'fr', to: 'pt')
+  end
+
+  it 'keeps unpunctuated VTT cues separate through translation' do
+    vtt = <<~VTT
+      WEBVTT
+
+      00:00:00.000 --> 00:00:01.000
+      Hello
+
+      00:00:01.000 --> 00:00:02.000
+      there
+    VTT
+    allow(::Translator).to receive(:translate).and_return(['Olá', 'aí'])
+
+    translated = described_class.translate(vtt, from: 'en', to: 'pt')
+
+    expect(::Translator).to have_received(:translate).with(['Hello', 'there'], from: 'en', to: 'pt')
+    expect(payloads(translated)).to eq(['Olá', 'aí'])
+  end
+
+  it 'carries rounded milliseconds into the next VTT second' do
+    mash = SymMash.new(segments: [
+      SymMash.new(text: 'Carry', start: 1.9996, end: 62.9996, words: []),
+    ])
+
+    expect(described_class.build(mash, normalize: false)).to include(
+      '00:00:02.000 --> 00:01:03.000'
+    )
   end
 
   it 'keeps clean cue text wordless when inline timing markers are invalid' do
@@ -225,6 +293,28 @@ RSpec.describe Subtitler::VTT do
 
       expect(described_class.slice(plain, from: '00:00:02', to: '00:00:04'))
         .to include("00:00:00.000 --> 00:00:02.000\nWhole cue text")
+    end
+
+    it 'removes invalid timing-like markup from rebased cue text' do
+      [
+        'One <00:00:bad>two',
+        'One <00:00:04.500>two',
+        'One <00:00:03.000>two <00:00:02.000>three',
+      ].each do |text|
+        source = "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\n#{text}\n"
+        sliced = described_class.slice(source, from: '00:00:01', to: '00:00:04')
+
+        expect(payloads(sliced)).to eq([text.gsub(/<[^>]*>/, '').split.join(' ')])
+        expect(sliced).not_to match(/<\d{2}:\d{2}/)
+      end
+    end
+
+    it 'marks an intentional gap before the first retained word' do
+      source = "WEBVTT\n\n00:00:01.000 --> 00:00:05.000\n<00:00:02.000>late <00:00:03.000>word\n"
+
+      sliced = described_class.slice(source, from: '00:00:01', to: '00:00:04')
+
+      expect(sliced).to include("00:00:00.000 --> 00:00:03.000\n<00:00:01.000>late <00:00:02.000>word")
     end
   end
 

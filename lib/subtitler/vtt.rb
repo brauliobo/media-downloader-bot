@@ -61,7 +61,7 @@ class Subtitler
         Segments.merge_adjacent!(mash, max_chars: Subtitler::Translator::MAX_SUBTITLE_CHARS)
       end
 
-      formatter = ->(t) { h, rem = t.divmod(3600); m, s = rem.divmod(60); format('%02d:%02d:%06.3f', h, m, s) }
+      formatter = ->(time) { Subtitler.format_timestamp(time) }
 
       out = +"WEBVTT\n\n"
       Array(mash.segments).each do |segment|
@@ -98,16 +98,21 @@ class Subtitler
         end
 
         text = cue.reject { |line| line == timing }.join.strip
-        if rebase && (segment = segments_from_vtt(cue.join).first) && Array(segment.words).any?
-          words = segment.words.select { |word| word.end.to_f > from_s && word.start.to_f < to_s }.map do |word|
-            SymMash.new(word.to_h.merge(
-              start: [[word.start.to_f, from_s].max, to_s].min - from_s,
-              end:   [[word.end.to_f, from_s].max, to_s].min - from_s
-            ))
-          end
-          next if words.empty?
+        if rebase && (segment = segments_from_vtt(cue.join).first)
+          if Array(segment.words).any?
+            words = segment.words.select { |word| word.end.to_f > from_s && word.start.to_f < to_s }.map do |word|
+              SymMash.new(word.to_h.merge(
+                start: [[word.start.to_f, from_s].max, to_s].min - from_s,
+                end:   [[word.end.to_f, from_s].max, to_s].min - from_s
+              ))
+            end
+            next if words.empty?
 
-          text = build_line(SymMash.new(segment.to_h.merge(words: words)), method(:s_to_hmsms), true)
+            rebased = segment.to_h.merge(start: start_out, end: finish_out, words: words)
+            text = build_line(SymMash.new(rebased), method(:s_to_hmsms), true)
+          else
+            text = segment.text.to_s
+          end
         end
         next if text.blank?
 
@@ -149,10 +154,12 @@ class Subtitler
     def self.to_vtt(body, ext, ffmpeg: FFmpeg.new)
       safe_ext = Utils::Safety.subtitle_ext(ext)
       if safe_ext == 'vtt'
-        utf8 = body.encode(Encoding::UTF_8)
-        raise Encoding::InvalidByteSequenceError, "invalid byte sequence in #{body.encoding}" unless utf8.valid_encoding?
+        utf8 = body.dup.force_encoding(Encoding::UTF_8)
+        raise Encoding::InvalidByteSequenceError, 'invalid byte sequence in UTF-8' unless utf8.valid_encoding?
 
-        return clean(utf8.gsub(/\r\n?/, "\n"))
+        canonical = clean(utf8.gsub(/\r\n?|\r/, "\n"))
+        validate_native_vtt!(canonical)
+        return canonical
       end
 
       Tempfile.create(['sub', ".#{safe_ext}"]) do |file|
@@ -190,7 +197,7 @@ class Subtitler
     end
 
     def self.segments_from_vtt(vtt)
-      each_cue(vtt).filter_map do |cue|
+      each_cue(vtt).each_with_index.filter_map do |cue, cue_id|
         timing_index = cue.index { |line| line.include?('-->') }
         next unless timing_index
 
@@ -203,15 +210,16 @@ class Subtitler
         end_time   = hmsms_to_s(end_text)
 
         SymMash.new(
-          text:  text,
-          start: start_time,
-          end:   end_time,
-          words: inline_timed_words(raw_text, start_time, end_time)
+          text:   text,
+          start:  start_time,
+          end:    end_time,
+          cue_id: cue_id,
+          words:  inline_timed_words(raw_text, start_time, end_time, cue_id)
         )
       end
     end
 
-    def self.inline_timed_words(text, cue_start, cue_end)
+    def self.inline_timed_words(text, cue_start, cue_end, cue_id)
       matches = text.to_enum(:scan, /<([^>]*)>/).map { Regexp.last_match }
       malformed = matches.any? do |match|
         match[1].match?(/\A\d{1,2}:\d{2}/) && hmsms_to_s_exact(match[1]).nil?
@@ -237,7 +245,7 @@ class Subtitler
 
       boundaries = [cue_start, *times, cue_end]
       chunks.flat_map.with_index do |chunk, index|
-        tokens = Translator.tokenize_text(semantic_text(chunk))
+        tokens = semantic_text(chunk).split
         next [] if tokens.empty?
 
         start_time = boundaries.fetch(index)
@@ -248,7 +256,23 @@ class Subtitler
         tokens.map.with_index do |token, token_index|
           token_start = start_time + duration * token_index / tokens.size
           token_end   = token_index == tokens.size - 1 ? end_time : start_time + duration * (token_index + 1) / tokens.size
-          SymMash.new(word: token, start: token_start, end: token_end)
+          SymMash.new(word: token, start: token_start, end: token_end, cue_id: cue_id)
+        end
+      end
+    end
+
+    def self.validate_native_vtt!(vtt)
+      header = vtt.each_line.first&.strip
+      raise ArgumentError, 'invalid WEBVTT header' unless header&.match?(/\A\uFEFF?WEBVTT(?:[ \t].*)?\z/)
+
+      vtt.each_line.select { |line| line.include?('-->') }.each do |line|
+        raise ArgumentError, 'invalid WEBVTT cue timing' unless line.match?(Subtitler::CUE_TIMING)
+
+        start_text, end_text = line.scan(Subtitler::TIMESTAMP_VALUE).first(2)
+        start_time  = hmsms_to_s_exact(start_text)
+        finish_time = hmsms_to_s_exact(end_text)
+        unless start_time && finish_time && finish_time > start_time
+          raise ArgumentError, 'invalid WEBVTT cue range'
         end
       end
     end
@@ -281,32 +305,34 @@ class Subtitler
     def self.hmsms_to_s_exact(hms)
       match = hms&.match(Subtitler::TIMESTAMP)
       return unless match && match[0].length == hms.length
+      return if match[2].to_i >= 60 || match[3].to_i >= 60
 
       hmsms_to_s(hms)
     end
 
     def self.s_to_hmsms(sec)
-      sec = sec.to_f
-      hours = (sec / 3600).floor
-      mins  = ((sec % 3600) / 60).floor
-      secs  = (sec % 60).floor
-      ms    = ((sec - sec.floor) * 1000).round
-      format('%02d:%02d:%02d.%03d', hours, mins, secs, ms)
+      Subtitler.format_timestamp(sec)
     end
 
     def self.build_line(segment, formatter, word_tags)
       words = Array(segment.words)
       return segment.text.to_s.strip if words.empty?
 
+      last_marker = nil
       words.each_with_index.map do |word, idx|
         token = word.word.to_s.strip
         next token if token.empty?
-        word_tags && idx.positive? ? "<#{formatter.call(word.start)}>#{token}" : token
+
+        marker_time = word.start.to_f
+        tagged = word_tags && (idx.positive? || marker_time > segment.start.to_f) &&
+                 marker_time < segment.end.to_f && marker_time != last_marker
+        last_marker = marker_time if tagged
+        tagged ? "<#{formatter.call(marker_time)}>#{token}" : token
       end.join(' ')
     end
 
     private_class_method :each_cue, :segments_from_vtt, :inline_timed_words,
-                         :semantic_text, :flush_buffer, :hms_to_s,
+                         :validate_native_vtt!, :semantic_text, :flush_buffer, :hms_to_s,
                          :hmsms_to_s, :hmsms_to_s_exact, :s_to_hmsms,
                          :build_line
   end
