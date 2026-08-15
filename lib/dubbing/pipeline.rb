@@ -105,7 +105,21 @@ module Dubbing
 
       timed = SymMash.new(words: target_words)
       Subtitler::Translator.assign_tokens_to_words!(timed, Subtitler::Translator.tokenize_text(text))
-      [source_words, timed.words]
+      expanded = timed.words.flat_map do |word|
+        tokens   = Subtitler::Translator.tokenize_text(word.word)
+        duration = word.end.to_f - word.start.to_f
+
+        tokens.map.with_index do |token, index|
+          start_time = word.start.to_f + duration * index / tokens.size
+          end_time   = if index == tokens.size - 1
+            word.end.to_f
+          else
+            word.start.to_f + duration * (index + 1) / tokens.size
+          end
+          SymMash.new(word.to_h.merge(word: token, start: start_time, end: end_time))
+        end
+      end
+      [source_words, expanded]
     end
 
     def synthesize_timeline(workdir)
@@ -125,15 +139,16 @@ module Dubbing
         raise "dubbed timeline clip count mismatch: expected #{@sentences.size}, got #{clips.size}"
       end
 
-      @sentences.zip(clips).each do |sentence, clip|
+      @sentences = @sentences.zip(clips).filter_map do |sentence, clip|
         source_start    = sentence.start.to_f
         source_end      = sentence.end.to_f
         target_start    = clip.start.to_f
         target_end      = clip.end.to_f
         source_duration = source_end - source_start
         target_duration = target_end - target_start
+        next unless target_duration.positive?
 
-        if source_duration.positive? && target_duration.positive?
+        if source_duration.positive?
           scale = target_duration / source_duration
           Array(sentence.words).each do |word|
             word.start = target_start + (word.start.to_f - source_start) * scale
@@ -143,6 +158,7 @@ module Dubbing
 
         sentence.start = target_start
         sentence.end   = target_end
+        sentence
       end
     end
 

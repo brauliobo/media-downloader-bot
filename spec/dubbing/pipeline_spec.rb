@@ -74,7 +74,7 @@ RSpec.describe Dubbing::Pipeline do
   end
 
   it 'preserves scheduled word highlighting unless nowords is requested' do
-    allow(::Translator).to receive(:translate_for_dubbing).and_return(['Olá mundo.'])
+    allow(::Translator).to receive(:translate_for_dubbing).and_return(['Muito bom dia, amigo.'])
     source = SymMash.new(
       segments: [
         SymMash.new(
@@ -110,19 +110,22 @@ RSpec.describe Dubbing::Pipeline do
 
     expect(results.values.map { |result| result[:sentence].source_words.map(&:word) })
       .to all(eq(['Hello', 'world.']))
+    expect(results.values.map { |result| result[:sentence].words.map(&:word) })
+      .to all(eq(['Muito', 'bom', 'dia,', 'amigo.']))
     expect(results.values.map { |result| result[:sentence].words.map { |word| [word.start, word.end] } })
-      .to all(eq([[0.0, 0.75], [0.75, 1.5]]))
+      .to all(eq([[0.0, 0.375], [0.375, 0.75], [0.75, 1.125], [1.125, 1.5]]))
     expect(default[:vtt]).to include(
-      '00:00:00.000 --> 00:00:01.500', 'Olá <00:00:00.750>mundo.'
+      '00:00:00.000 --> 00:00:01.500',
+      'Muito <00:00:00.375>bom <00:00:00.750>dia, <00:00:01.125>amigo.'
     )
-    expect(plain[:vtt]).to include('00:00:00.000 --> 00:00:01.500', 'Olá mundo.')
+    expect(plain[:vtt]).to include('00:00:00.000 --> 00:00:01.500', 'Muito bom dia, amigo.')
     expect(plain[:vtt]).not_to include('<00:00:')
 
     highlighted = default[:ass].lines.grep(/^Dialogue:/)
     unhighlighted = plain[:ass].lines.grep(/^Dialogue:/)
-    expect(highlighted.size).to eq(2)
-    expect(highlighted.last).to include('0:00:00.75,0:00:01.50', '{\\1c&Hffffff&}', '{\\1c&HC0C0C0&}')
-    expect(unhighlighted).to contain_exactly(include('0:00:00.00,0:00:01.50', 'Olá mundo.'))
+    expect(highlighted.size).to eq(4)
+    expect(highlighted.last).to include('0:00:01.13,0:00:01.50', '{\\1c&Hffffff&}', '{\\1c&HC0C0C0&}')
+    expect(unhighlighted).to contain_exactly(include('0:00:00.00,0:00:01.50', 'Muito bom dia, amigo.'))
     expect(unhighlighted.first).not_to include('{\\1c')
   end
 
@@ -307,23 +310,39 @@ RSpec.describe Dubbing::Pipeline do
       .to raise_error(RuntimeError, 'dubbed timeline clip count mismatch: expected 2, got 1')
   end
 
-  it 'keeps word timing data when source or scheduled durations are non-positive' do
-    pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 'pt'), probe: probe)
+  it 'omits translated subtitles for zero-duration scheduled clips' do
+    opts = SymMash.new(dub: 'pt', sub_mode: 'both')
+    pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)
     sentences = [
-      SymMash.new(start: 1.0, end: 1.0, words: [SymMash.new(word: 'Olá', start: 1.0, end: 1.0)]),
-      SymMash.new(start: 2.0, end: 3.0, words: [SymMash.new(word: 'Tchau', start: 2.0, end: 3.0)])
+      SymMash.new(
+        text: 'Olá.', source_text: 'Hello.', start: 1.0, end: 2.0,
+        words: [SymMash.new(word: 'Olá.', start: 1.0, end: 2.0)]
+      ),
+      SymMash.new(
+        text: 'Tchau.', source_text: 'Bye.', start: 2.0, end: 3.0,
+        words: [SymMash.new(word: 'Tchau.', start: 2.0, end: 3.0)]
+      )
     ]
     clips = [
-      Dubbing::Audio::ScheduledClip.new(path: 'first.wav', start: 1.0, end: 2.0, speed: 1.0),
+      Dubbing::Audio::ScheduledClip.new(path: 'first.wav', start: 0.0, end: 2.0, speed: 1.0),
       Dubbing::Audio::ScheduledClip.new(path: 'second.wav', start: 3.0, end: 3.0, speed: 1.0)
     ]
     pipeline.instance_variable_set(:@sentences, sentences)
 
     pipeline.send(:apply_scheduled_timings!, clips)
+    translated_vtt = pipeline.send(:translated_subtitle_vtt)
+    translated_ass = Subtitler::Ass.from_vtt(translated_vtt)
+    pipeline.send(:prepare_translated_subtitles)
 
-    expect(sentences.map { |sentence| [sentence.start, sentence.end] }).to eq([[1.0, 2.0], [3.0, 3.0]])
-    expect(sentences.map { |sentence| sentence.words.map { |word| [word.start, word.end] } })
-      .to eq([[[1.0, 1.0]], [[2.0, 3.0]]])
+    expect(pipeline.sentences).to contain_exactly(sentences.first)
+    expect(pipeline.sentences.first.words.map { |word| [word.start, word.end] }).to eq([[0.0, 2.0]])
+    expect(translated_vtt).to include('00:00:00.000 --> 00:00:02.000', 'Olá.')
+    expect(translated_vtt).not_to include('Tchau.', '00:00:03.000 --> 00:00:03.000')
+    expect(translated_ass.lines.grep(/^Dialogue:/)).to contain_exactly(
+      include('0:00:00.00,0:00:02.00', 'Olá.')
+    )
+    expect(opts.sub_vtt).to include('Hello.', 'Olá.')
+    expect(opts.sub_vtt).not_to include('Bye.', 'Tchau.', '00:00:03.000 --> 00:00:03.000')
   end
 
   it 'keeps generated subtitle cues within the shared maximum length' do
