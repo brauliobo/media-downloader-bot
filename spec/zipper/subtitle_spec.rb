@@ -48,20 +48,22 @@ RSpec.describe Zipper::Subtitle do
     }.to raise_error Sh::Error, 'srt conversion failed: invalid subtitle'
   end
 
-  it 'selects an authored locale from normalized subtitle requests without translating it' do
-    vtt  = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nOlá.\n"
-    info = SymMash.new(subtitles: {
-      en:      [{ext: 'vtt', url: 'https://example.com/en.vtt'}],
-      :'pt-BR' => [{ext: 'vtt', url: 'https://example.com/pt-BR.vtt'}],
-    })
+  it 'prefers exact and base-matching authored locales without translating them' do
+    vtt    = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nOlá.\n"
     ffmpeg = instance_double(FFmpeg)
-    allow(Utils::HTTP).to receive(:get_public).with('https://example.com/pt-BR.vtt').and_return(vtt)
     allow(ffmpeg).to receive(:convert_subtitle).and_return(vtt)
     expect(Subtitler::VTT).not_to receive(:translate)
 
-    [{dub: 'pt', lang: 'es'}, {sub: 'pt-BR', lang: 'en'}].each do |attributes|
-      opts = SymMash.new(attributes.merge(format: Zipper::Types.video.h264))
+    [
+      ['pt-PT', [:en, :'pt-BR'], :'pt-BR'],
+      ['PT_pt', [:en, :'pt-BR'], :'pt-BR'],
+      ['pt-PT', [:en, :'pt-BR', :'pt-PT'], :'pt-PT'],
+    ].each do |requested, keys, expected|
+      subtitles = keys.to_h { |key| [key, [{ext: 'vtt', url: "https://example.com/#{key}.vtt"}]] }
+      info       = SymMash.new(subtitles: subtitles)
+      opts       = SymMash.new(sub: requested, lang: 'en', format: Zipper::Types.video.h264)
       Processors::Base.normalize_options(opts)
+      allow(Utils::HTTP).to receive(:get_public).with("https://example.com/#{expected}.vtt").and_return(vtt)
       zipper = Zipper.new(
         'video.mp4', nil, info: info,
         probe: SymMash.new(format: {duration: 1}, streams: []), opts: opts, ffmpeg: ffmpeg

@@ -49,8 +49,11 @@ RSpec.describe Dubbing::Pipeline do
       {dub: 1}                              => 'pt',
       {dub: 1, slang: 'es'}                 => 'es',
       {dub: 1, dub_lang: 'pt', slang: 'es'} => 'pt',
+      {dub: 'es-MX'}                        => 'es',
     }.each do |options, expected|
-      pipeline = described_class.new(input, dir: dir, opts: SymMash.new(options), probe: probe)
+      opts = SymMash.new(options)
+      Processors::Base.normalize_options(opts)
+      pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)
       expect(pipeline.target_lang).to eq(expected)
     end
   end

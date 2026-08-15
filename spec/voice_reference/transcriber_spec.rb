@@ -27,4 +27,22 @@ RSpec.describe VoiceReference::Transcriber do
       start: 2.5, finish: 14.5, probabilities: [0.96]
     )
   end
+
+  it 'normalizes language names, codes, and locale-qualified identifiers' do
+    {
+      'english' => 'en',
+      'pt'      => 'pt',
+      'pt-PT'   => 'pt',
+      'pt-BR'   => 'pt',
+      'pt_PT'   => 'pt',
+      'en-US'   => 'en',
+      'es_MX'   => 'es',
+      'unknown' => nil,
+    }.each do |language, expected|
+      result = SymMash.new(lang: nil, output: {language: language, segments: []})
+      backend = double(transcribe: result)
+
+      expect(described_class.new(backend: backend).call('/tmp/source.wav')[:language]).to eq(expected)
+    end
+  end
 end
