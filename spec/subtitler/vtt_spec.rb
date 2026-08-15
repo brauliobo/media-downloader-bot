@@ -21,15 +21,26 @@ RSpec.describe Subtitler::VTT do
       .to eq "WEBVTT\n\nConverted"
   end
 
-  it 'cleans native VTT without invoking FFmpeg or removing inline timings' do
+  it 'canonicalizes native VTT without invoking FFmpeg or changing UTF-8 text and inline timings' do
     ffmpeg = instance_double FFmpeg
     expect(ffmpeg).not_to receive(:convert_subtitle)
 
-    body = "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHello <00:00:01.000>world\\Nagain\n"
+    body = "WEBVTT\r\r00:00:00.000 --> 00:00:02.000\rOlá <00:00:01.000>mundo\\Nnovamente\r"
+    canonical = described_class.to_vtt(body, '.VTT', ffmpeg: ffmpeg)
 
-    expect(described_class.to_vtt(body, '.VTT', ffmpeg: ffmpeg)).to eq(
-      "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHello <00:00:01.000>world\nagain\n"
+    expect(canonical).to eq(
+      "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nOlá <00:00:01.000>mundo\nnovamente\n"
     )
+    allow(::Translator).to receive(:translate).and_return(['Hola mundo nuevamente.'])
+    described_class.translate(canonical, from: 'pt', to: 'es')
+    expect(::Translator).to have_received(:translate).with(['Olá mundo novamente'], from: 'pt', to: 'es')
+  end
+
+  it 'rejects invalid bytes in native VTT instead of deleting text' do
+    body = "WEBVTT\n\nOl\xFF".force_encoding(Encoding::UTF_8)
+
+    expect { described_class.to_vtt(body, 'vtt') }
+      .to raise_error(Encoding::InvalidByteSequenceError, /invalid byte sequence in UTF-8/)
   end
 
   it 'preserves external subtitle conversion errors' do

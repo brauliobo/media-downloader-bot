@@ -185,7 +185,7 @@ module Dubbing
         to:             subtitle_target_lang,
         merge_adjacent: false
       )
-      build_subtitle_vtt(translated)
+      build_subtitle_vtt(translated, normalize: false)
     end
 
     def bilingual_subtitle_vtt

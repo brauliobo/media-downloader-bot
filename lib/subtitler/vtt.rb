@@ -134,7 +134,12 @@ class Subtitler
 
     def self.to_vtt(body, ext, ffmpeg: FFmpeg.new)
       safe_ext = Utils::Safety.subtitle_ext(ext)
-      return clean(body) if safe_ext == 'vtt'
+      if safe_ext == 'vtt'
+        utf8 = body.encode(Encoding::UTF_8)
+        raise Encoding::InvalidByteSequenceError, "invalid byte sequence in #{body.encoding}" unless utf8.valid_encoding?
+
+        return clean(utf8.gsub(/\r\n?/, "\n"))
+      end
 
       Tempfile.create(['sub', ".#{safe_ext}"]) do |file|
         file.binmode
