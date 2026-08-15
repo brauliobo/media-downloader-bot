@@ -154,7 +154,8 @@ class Zipper
       return [nil, nil] if streams.blank?
 
       streams.each { |stream| stream.lang = ISO_639.find_by_code(stream.tags.language)&.alpha2 }
-      index = streams.index { |stream| subtitle_match?(zipper.opts.slang, stream) }
+      requested = zipper.opts.sub_lang.presence || zipper.opts.slang
+      index = streams.index { |stream| subtitle_match?(requested, stream) }
       return [nil, nil] unless index
 
       vtt = Subtitler::VTT.extract_embedded zipper, index, ffmpeg: zipper.send(:ffmpeg_builder)

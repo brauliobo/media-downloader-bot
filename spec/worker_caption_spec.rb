@@ -143,28 +143,31 @@ RSpec.describe Worker do
     expect(worker.send(:translate_caption_text, body, from: 'en', to: 'pt')).to eq("Primeiro paragrafo.\n\nSegundo paragrafo.")
   end
 
-  it 'translates only caption fields with clang' do
+  it 'selects caption translation from clang, dubbing, or legacy language only' do
     worker = described_class.new(SymMash.new(from: {id: 1}, chat: {id: 1}))
-    opts   = SymMash.new(caption: 1, description: 1, clang: 'pt')
-    info   = SymMash.new(title: 'English title', description: 'English description', language: 'en')
+    allow(Translator).to receive(:translate) { |text, from:, to:| "#{text} (#{from}->#{to})" }
 
-    allow(Translator).to receive(:translate).with('English title', from: 'en', to: 'pt').and_return('Titulo em portugues')
-    allow(Translator).to receive(:translate).with('English description', from: 'en', to: 'pt').and_return('Descricao em portugues')
+    [
+      [{dub: 'pt'}, 'pt'],
+      [{dub: 'pt', clang: 'es'}, 'es'],
+      [{dub: 'pt', lang: 'es'}, 'pt'],
+      [{lang: 'pt'}, 'pt'],
+      [{sub: 'pt'}, nil],
+    ].each do |input, target|
+      opts = SymMash.new(input.merge(caption: 1, description: 1))
+      Processors::Base.normalize_options(opts)
+      info = SymMash.new(title: 'English title', description: 'English description', language: 'en')
 
-    caption_info = worker.send(:translate_caption_info, info, opts)
+      caption_info = worker.send(:translate_caption_info, info, opts)
 
-    expect(caption_info).to include(title: 'Titulo em portugues', description: 'Descricao em portugues')
-    expect(info).to include(title: 'English title', description: 'English description')
-  end
-
-  it 'preserves slang caption translation behavior' do
-    worker = described_class.new(SymMash.new(from: {id: 1}, chat: {id: 1}))
-    opts   = SymMash.new(caption: 1, slang: 'pt')
-    info   = SymMash.new(title: 'English title', description: '', language: 'en')
-
-    allow(Translator).to receive(:translate).with('English title', from: 'en', to: 'pt').and_return('Titulo em portugues')
-
-    expect(worker.send(:translate_caption_info, info, opts)).to equal(info)
-    expect(info.title).to eq('Titulo em portugues')
+      if target
+        expect(caption_info.title).to eq("English title (en->#{target})")
+        expect(caption_info.description).to eq("English description (en->#{target})")
+      else
+        expect(caption_info).to equal(info)
+        expect(caption_info.title).to eq('English title')
+      end
+      expect(info.title).to eq('English title') if input.key?(:clang)
+    end
   end
 end

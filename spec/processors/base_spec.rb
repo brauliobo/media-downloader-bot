@@ -53,26 +53,24 @@ RSpec.describe Processors::Base do
   end
 
   describe '.normalize_options' do
-    it 'normalizes merged dubbing options without losing subtitles or cuts' do
-      opts = SymMash.new(dub: 'pt', lang: 'pt', to: '00:30')
+    it 'keeps dubbing, subtitle, and legacy language responsibilities distinct' do
+      [
+        [{dub: 'pt'}, {dub: 1, dub_lang: 'pt', sub_mode: 'language', sub_lang: 'pt'}],
+        [{sub: 'pt'}, {sub: 'pt', sub_mode: 'language', sub_lang: 'pt'}],
+        [{lang: 'pt'}, {slang: 'pt', alang: 'pt'}],
+        [{dub: 'pt', lang: 'es'}, {
+          dub: 1, dub_lang: 'pt', sub_mode: 'language', sub_lang: 'pt', slang: 'es', alang: 'es'
+        }],
+      ].each do |input, expected|
+        opts = SymMash.new(input)
 
-      described_class.normalize_options(opts)
+        described_class.normalize_options(opts)
 
-      expect(opts).to include(
-        dub: 1, dub_lang: 'pt', sub_mode: 'language', sub_lang: 'pt',
-        slang: 'pt', alang: 'pt', to: '00:30'
-      )
-    end
-
-    it 'keeps generic source preferences independent from dubbing subtitles' do
-      opts = SymMash.new(dub: 'pt', lang: 'es')
-
-      described_class.normalize_options(opts)
-
-      expect(opts).to include(
-        dub: 1, dub_lang: 'pt', sub_mode: 'language', sub_lang: 'pt',
-        slang: 'es', alang: 'es'
-      )
+        expect(opts).to include(expected)
+        expect(opts[:lang]).to be_nil
+        expect(opts.slang).to be_nil unless input.key?(:lang)
+        expect(opts.alang).to be_nil unless input.key?(:lang)
+      end
     end
 
     it 'preserves explicit subtitle languages and modes' do
@@ -88,14 +86,6 @@ RSpec.describe Processors::Base do
 
         expect([opts.sub_mode, opts.sub_lang]).to eq([mode, lang])
       end
-    end
-
-    it 'uses a standalone subtitle language as the generic language fallback' do
-      opts = SymMash.new(sub: 'pt')
-
-      described_class.normalize_options(opts)
-
-      expect(opts).to include(sub_mode: 'language', sub_lang: 'pt', slang: 'pt', alang: 'pt')
     end
 
     it 'keeps bare dub audio-only' do

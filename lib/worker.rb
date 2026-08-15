@@ -376,7 +376,7 @@ class Worker
   end
 
   def translate_caption_info(info, opts)
-    target = opts.clang || opts.slang
+    target = opts.clang || opts.dub_lang || opts.slang
     return info unless target
 
     caption_info = opts.clang ? info.deep_dup : info

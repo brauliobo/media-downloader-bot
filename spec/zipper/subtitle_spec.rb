@@ -89,4 +89,24 @@ RSpec.describe Zipper::Subtitle do
     expect(selected).to include('Dublado.')
     expect(lang).to eq('pt')
   end
+
+  it 'selects embedded subtitles using the standalone subtitle language' do
+    opts = SymMash.new(sub: 'pt', format: Zipper::Types.video.h264)
+    Processors::Base.normalize_options(opts)
+    probe = SymMash.new(
+      format: {duration: 1},
+      streams: [
+        SymMash.new(codec_type: 'subtitle', tags: {language: 'en'}),
+        SymMash.new(codec_type: 'subtitle', tags: {language: 'pt'}),
+      ]
+    )
+    zipper = Zipper.new('video.mkv', nil, info: SymMash.new, probe: probe, opts: opts)
+    allow(Subtitler::VTT).to receive(:extract_embedded).and_return("WEBVTT\n\nOlá.")
+
+    vtt, lang = described_class.send(:fetch_embedded, zipper)
+
+    expect(vtt).to include('Olá.')
+    expect(lang).to eq('pt')
+    expect(Subtitler::VTT).to have_received(:extract_embedded).with(zipper, 1, ffmpeg: anything)
+  end
 end

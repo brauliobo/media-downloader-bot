@@ -154,13 +154,9 @@ module Processors
     end
 
     def self.expand_lang_opt(opts)
-      lang = opts[:lang]
-      if lang.to_s.strip.empty? && opts[:dub_lang].to_s.strip.empty? && opts[:slang].to_s.strip.empty? && opts[:alang].to_s.strip.empty? && opts[:sub_mode] == 'language'
-        lang = opts[:sub_lang]
-      end
+      lang = opts.delete(:lang)
       return opts unless lang.present?
 
-      opts.delete(:lang)
       opts.slang ||= lang
       opts.alang ||= lang
       opts
