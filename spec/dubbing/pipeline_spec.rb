@@ -224,6 +224,75 @@ RSpec.describe Dubbing::Pipeline do
     expect(Diarizer).to have_received(:diarize).with(vocals, speakers: nil)
   end
 
+  it 'uses the default voice without removing sentences whose speaker has no usable reference' do
+    speaker_path = File.join(dir, 'speaker-0.wav')
+    File.write(speaker_path, 'speaker')
+    reference = Dubbing::VoiceReference::Reference.new(path: speaker_path, text: 'Hello.')
+    diarization = SymMash.new(segments: [
+      SymMash.new(start: 0.0, end: 1.0, speaker_id: 0),
+      SymMash.new(start: 2.0, end: 3.0, speaker_id: 1),
+    ])
+    pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), probe: probe)
+    allow(Subtitler).to receive(:transcribe).and_return(transcript)
+    allow(::Translator).to receive(:translate_for_dubbing).and_return(['Olá.', 'Tchau.'])
+    allow(Diarizer).to receive(:diarize).and_return(diarization)
+    allow(Dubbing::VoiceReference).to receive(:extract_by_speaker).and_return(0 => reference)
+    allow(TTS).to receive(:supports?).and_return(false)
+    allow(TTS).to receive(:synthesize_batch) do |items:, **|
+      items.each { |item| File.write(item.fetch(:out_path), 'raw') }
+    end
+    allow(Dubbing::Audio).to receive(:normalize) { |_raw, out| File.write(out, 'fit') }
+    allow(Dubbing::Audio).to receive(:render_timeline) do |clips, output, **|
+      Dubbing::Audio::Timeline.new(path: output, clips: clips)
+    end
+    allow(pipeline).to receive(:mix_video).and_return(File.join(dir, 'out.mp4'))
+
+    pipeline.apply
+
+    expect(pipeline.sentences.map(&:speaker_id)).to eq([0, 1])
+    expect(TTS).to have_received(:synthesize_batch).with(
+      items: [hash_including(text: 'Olá.')],
+      on_batch: kind_of(Proc),
+      threads: 1,
+      speaker_wav: speaker_path,
+      ref_text: 'Hello.'
+    )
+    expect(TTS).to have_received(:synthesize_batch).with(
+      items: [hash_including(text: 'Tchau.')],
+      on_batch: kind_of(Proc),
+      threads: 1
+    )
+  end
+
+  it 'dubs every sentence with the default voice when no speaker has a usable reference' do
+    diarization = SymMash.new(segments: [SymMash.new(start: 0.0, end: 3.0, speaker_id: 0)])
+    pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), probe: probe)
+    allow(Subtitler).to receive(:transcribe).and_return(transcript)
+    allow(::Translator).to receive(:translate_for_dubbing).and_return(['Olá.', 'Tchau.'])
+    allow(Diarizer).to receive(:diarize).and_return(diarization)
+    allow(Dubbing::VoiceReference).to receive(:extract_by_speaker).and_return({})
+    allow(TTS).to receive(:supports?).and_return(false)
+    allow(TTS).to receive(:synthesize_batch) do |items:, **|
+      items.each { |item| File.write(item.fetch(:out_path), 'raw') }
+    end
+    allow(Dubbing::Audio).to receive(:normalize) { |_raw, out| File.write(out, 'fit') }
+    allow(Dubbing::Audio).to receive(:render_timeline) do |clips, output, **|
+      Dubbing::Audio::Timeline.new(path: output, clips: clips)
+    end
+    output = File.join(dir, 'out.mp4')
+    allow(pipeline).to receive(:mix_video).and_return(output)
+
+    result = pipeline.apply
+
+    expect(result).to eq(output)
+    expect(pipeline.sentences.map(&:text)).to eq(['Olá.', 'Tchau.'])
+    expect(TTS).to have_received(:synthesize_batch).with(
+      items: [hash_including(text: 'Olá.'), hash_including(text: 'Tchau.')],
+      on_batch: kind_of(Proc),
+      threads: 1
+    )
+  end
+
   it 'fails when scheduled clips do not match translated sentences' do
     pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), probe: probe)
     sentences = [

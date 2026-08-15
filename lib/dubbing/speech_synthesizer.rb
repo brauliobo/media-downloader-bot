@@ -26,7 +26,7 @@ module Dubbing
       use_target_voice  = target_reference_supported?
 
       speaker_groups.each_with_index do |(speaker_id, indices), speaker_index|
-        reference = @references.fetch(speaker_id)
+        reference = @references[speaker_id]
         jobs      = jobs_for(indices)
         synthesize_speaker(reference, jobs, speaker_index, options, synthesis.batch_callback, use_target_voice)
         normalize_jobs(jobs, indices, clips, normalization)
@@ -53,7 +53,7 @@ module Dubbing
     end
 
     def synthesize_speaker(reference, jobs, speaker_index, options, on_batch, use_target_voice)
-      target_reference = if use_target_voice
+      target_reference = if reference && use_target_voice
         target_reference_for(reference, jobs, speaker_index, options)
       else
         reference
@@ -74,11 +74,12 @@ module Dubbing
     end
 
     def synthesize_jobs(jobs, reference, options, on_batch: nil)
+      reference_options = reference ? reference.tts_options : {}
       TTS.synthesize_batch(
         items:    jobs,
         on_batch: on_batch,
         threads:  1,
-        **options.merge(reference.tts_options)
+        **options.merge(reference_options)
       )
     end
 

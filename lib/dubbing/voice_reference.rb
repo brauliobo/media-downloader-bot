@@ -20,7 +20,7 @@ module Dubbing
 
     def extract_by_speaker(input_path, segments, sentences:, dir:, min_duration: MIN_DURATION, max_duration: MAX_DURATION, filter: :raw, pad_duration: nil, transcriber: nil)
       segments_by_speaker = Array(segments).group_by(&:speaker_id)
-      Array(sentences).group_by(&:speaker_id).each_with_index.to_h do |(speaker_id, speaker_sentences), index|
+      Array(sentences).group_by(&:speaker_id).each_with_index.filter_map do |(speaker_id, speaker_sentences), index|
         speaker_dir = File.join(dir, format('speaker-%04d', index))
         FileUtils.mkdir_p(speaker_dir)
         selections = select(speaker_sentences, min_duration, max_duration)
@@ -35,10 +35,10 @@ module Dubbing
         path = File.join(speaker_dir, 'speaker.wav')
         Zipper.concat_audio(clips, path)
         text = reference_text(path, selections, transcriber)
-        raise "speaker #{speaker_id} has no reference transcript" if text.empty?
+        next if text.empty?
 
         [speaker_id, Reference.new(path: path, text: text)]
-      end
+      end.to_h
     end
 
     def select(sentences, min_duration, max_duration)

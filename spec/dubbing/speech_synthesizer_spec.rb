@@ -78,4 +78,29 @@ RSpec.describe Dubbing::SpeechSynthesizer do
     expect(updates.index('dubbing: preparing speaker voice 1/1')).to be < updates.index('dubbing: synthesizing 2/2')
     expect(updates.last).to eq('dubbing: rendering speech')
   end
+
+  it 'uses the default voice for a speaker without a usable reference' do
+    missing_reference_sentence = SymMash.new(
+      text: 'Voz padrão.', start: 4.0, end: 5.0, speaker_id: 'missing'
+    )
+    calls = []
+    allow(TTS).to receive(:supports?).and_return(false)
+    allow(TTS).to receive(:synthesize_batch) do |items:, **options|
+      calls << {items: items, options: options}
+      items.each { |item| File.write(item.fetch(:out_path), 'raw') }
+    end
+
+    described_class.new(
+      sentences:      sentences + [missing_reference_sentence],
+      references:     {'speaker' => reference},
+      opts:           SymMash.new,
+      target_lang:    'pt',
+      workdir:        dir,
+      video_duration: 5.0
+    ).render
+
+    expect(calls.size).to eq(2)
+    expect(calls.last.fetch(:items).map { |item| item.fetch(:text) }).to eq(['Voz padrão.'])
+    expect(calls.last.fetch(:options)).not_to include(:speaker_wav, :ref_text)
+  end
 end

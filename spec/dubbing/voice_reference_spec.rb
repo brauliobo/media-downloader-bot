@@ -99,6 +99,20 @@ RSpec.describe Dubbing::VoiceReference do
     expect(reference.text).to eq('Observed reference.')
   end
 
+  it 'skips a speaker whose extracted audio has no transcribed speech' do
+    transcriber = instance_double('VoiceReference::Transcriber', call: {segments: [{text: '  '}]})
+
+    references = described_class.extract_by_speaker(
+      input,
+      [segment(0, 3, speaker_id: 'SPEAKER_01')],
+      sentences: [sentence(0, 3, source_text: 'Hallucinated speech.', speaker_id: 'SPEAKER_01')],
+      dir: dir,
+      transcriber: transcriber
+    )
+
+    expect(references).to be_empty
+  end
+
   it 'uses bounded diarization turns when assigned transcript sentences are too long' do
     transcriber = instance_double('VoiceReference::Transcriber')
     allow(transcriber).to receive(:call).and_return(segments: [{text: 'Observed speaker turn.'}])
