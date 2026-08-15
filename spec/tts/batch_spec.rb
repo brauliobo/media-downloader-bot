@@ -62,7 +62,7 @@ RSpec.describe 'TTS batch synthesis' do
 
     TTS.synthesize_batch(items: 3.times.map { |idx| {text: idx.to_s, out_path: "#{idx}.wav"} })
 
-    expect(3.times.map { contexts.pop }).to all(eq([1, '2']))
+    expect(3.times.map { Timeout.timeout(1) { contexts.pop } }).to all(eq([1, '2']))
   end
 
   it 'runs single-item batches sequentially with one thread' do
