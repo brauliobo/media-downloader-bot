@@ -3,7 +3,7 @@ require 'timeout'
 
 RSpec.describe 'TTS batch synthesis' do
   around do |example|
-    keys = %w[THREADS TTS_CONCURRENCY]
+    keys = %w[THREADS]
     original = ENV.values_at(*keys)
     example.run
   ensure
@@ -12,7 +12,7 @@ RSpec.describe 'TTS batch synthesis' do
     end
   end
 
-  it 'defaults to four TTS threads instead of generic peach concurrency' do
+  it 'inherits the surrounding peach concurrency' do
     backend = Class.new do
       class << self
         attr_accessor :started, :release
@@ -30,16 +30,16 @@ RSpec.describe 'TTS batch synthesis' do
     result = Queue.new
     completed = Queue.new
 
-    ENV['THREADS'] = '10'
-    ENV.delete('TTS_CONCURRENCY')
     worker = Thread.new do
-      result << TTS.synthesize_batch(items: items, on_batch: ->(batch) { completed << batch.size })
+      Enumerable.with_peach_threads(2) do
+        result << TTS.synthesize_batch(items: items, on_batch: ->(batch) { completed << batch.size })
+      end
     end
 
-    expect(4.times.map { Timeout.timeout(1) { backend.started.pop } }).to eq([[1, 4]] * 4)
+    expect(2.times.map { Timeout.timeout(1) { backend.started.pop } }).to eq([[1, 2]] * 2)
     expect { Timeout.timeout(0.1) { backend.started.pop } }.to raise_error(Timeout::Error)
     backend.release << true
-    expect(Timeout.timeout(1) { backend.started.pop }).to eq([1, 4])
+    expect(Timeout.timeout(1) { backend.started.pop }).to eq([1, 2])
     4.times { backend.release << true }
     worker.join
     expect(result.pop).to eq(items.map { |item| item[:out_path] })
@@ -47,22 +47,6 @@ RSpec.describe 'TTS batch synthesis' do
   ensure
     5.times { backend&.release&.push(true) }
     worker&.join
-  end
-
-  it 'uses configured TTS concurrency' do
-    contexts = Queue.new
-    backend = Class.new do
-      define_singleton_method(:synthesize_batch) do |items:, **|
-        contexts << [items.size, Thread.current[Enumerable::PEACH_THREADS]]
-      end
-    end
-    stub_const('TTS::BACKEND', backend)
-    ENV['THREADS'] = '10'
-    ENV['TTS_CONCURRENCY'] = '2'
-
-    TTS.synthesize_batch(items: 3.times.map { |idx| {text: idx.to_s, out_path: "#{idx}.wav"} })
-
-    expect(3.times.map { Timeout.timeout(1) { contexts.pop } }).to all(eq([1, '2']))
   end
 
   it 'runs single-item batches sequentially with one thread' do
