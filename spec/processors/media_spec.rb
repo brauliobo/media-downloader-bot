@@ -160,46 +160,21 @@ RSpec.describe Processors::Media do
     end
 
     it 'dubs video inputs before the normal zipper conversion' do
-      i.opts = SymMash.new(dub: 1, slang: 'pt', alang: 'pt')
+      i.opts = SymMash.new(dub: 1, dub_lang: 'pt', sub_mode: 'language', sub_lang: 'pt')
       dubbed = File.join(dir, 'dubbed.mp4')
       allow(Zipper).to receive(:choose_format).and_return(SymMash.new(ext: :mp4, mime: 'video/mp4'))
-      allow(Dubbing::Pipeline).to receive(:apply).and_return(dubbed)
+      allow(Dubbing::Pipeline).to receive(:apply) do |_, opts:, **|
+        opts.sub_vtt = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nOlá.\n"
+        dubbed
+      end
       allow(Zipper).to receive(:zip_video).and_return(['', '', instance_double(Process::Status, success?: true)])
       allow(Output).to receive(:filename).and_return(File.join(dir, 'out.mp4'))
 
       processor.convert(i)
 
       expect(Dubbing::Pipeline).to have_received(:apply).with('/tmp/in.mp4', dir: dir, opts: i.opts, stl: stl, probe: nil)
-      expect(i.opts.slang).to be_nil
-      expect(i.opts.alang).to be_nil
+      expect(i.opts.sub_vtt).to include('Olá.')
       expect(Zipper).to have_received(:zip_video).with(dubbed, File.join(dir, 'out.mp4'), opts: i.opts, probe: nil, stl: stl, info: i.info)
-    end
-
-    it 'keeps dub language options when subtitles were explicitly requested too' do
-      opts = SymMash.new(dub: 1, slang: 'pt', alang: 'pt', subs: 1)
-
-      processor.send(:consume_dub_language!, opts)
-
-      expect(opts.slang).to eq('pt')
-      expect(opts.alang).to eq('pt')
-    end
-
-    it 'keeps dub language options for a language-valued sub option' do
-      opts = SymMash.new(dub: 1, slang: 'pt', alang: 'pt', sub: 'pt', sub_mode: 'language', sub_lang: 'pt')
-
-      processor.send(:consume_dub_language!, opts)
-
-      expect(opts.slang).to eq('pt')
-      expect(opts.alang).to eq('pt')
-    end
-
-    it 'does not keep dub language options for sub=none' do
-      opts = SymMash.new(dub: 1, slang: 'pt', alang: 'pt', sub: 'none', sub_mode: 'none')
-
-      processor.send(:consume_dub_language!, opts)
-
-      expect(opts.slang).to be_nil
-      expect(opts.alang).to be_nil
     end
 
     it 'does not dub audio inputs' do

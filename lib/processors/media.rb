@@ -140,7 +140,6 @@ module Processors
       fn_in = ::File.expand_path(i.fn_in)
       if dub_video?(i)
         fn_in = dub_video(i, fn_in)
-        consume_dub_language!(i.opts)
       end
 
       o, e, st = Zipper.send "zip_#{i.type.name}", fn_in, fn_out,
@@ -160,21 +159,6 @@ module Processors
 
     def dub_video(i, fn_in)
       Dubbing::Pipeline.apply(fn_in, dir: dir, opts: i.opts, stl: i.stl, probe: i.probe)
-    end
-
-    def consume_dub_language!(opts)
-      return if subtitle_options_requested?(opts)
-
-      opts.delete(:lang)
-      opts.delete(:slang)
-      opts.delete(:alang)
-    end
-
-    def subtitle_options_requested?(opts)
-      mode = opts.sub_mode.to_s
-      return false if mode == 'none'
-
-      opts.sub_mode.present? || opts.sub.present? || opts.subs || opts.gensubs || opts.onlysrt || opts.sub_vtt
     end
 
   end

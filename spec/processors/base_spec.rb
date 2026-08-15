@@ -62,19 +62,20 @@ RSpec.describe Processors::Base do
       expect(opts.alang).to eq('pt')
     end
 
-    it 'expands a language-valued dub option into dubbing and subtitles' do
+    it 'keeps a language-valued dub independent while requesting matching subtitles' do
       opts = SymMash.new
 
       described_class.add_opt(opts, 'dub=pt')
 
       expect(opts.dub).to eq(1)
-      expect(opts.slang).to eq('pt')
-      expect(opts.alang).to eq('pt')
+      expect(opts.dub_lang).to eq('pt')
+      expect(opts.slang).to be_nil
+      expect(opts.alang).to be_nil
       expect(opts.sub_mode).to eq('language')
       expect(opts.sub_lang).to eq('pt')
     end
 
-    it 'keeps an explicit language ahead of the dub shorthand language' do
+    it 'keeps explicit generic language selection independent from dubbing' do
       opts = SymMash.new
 
       described_class.add_opt(opts, 'lang=es')
@@ -82,7 +83,19 @@ RSpec.describe Processors::Base do
 
       expect(opts.slang).to eq('es')
       expect(opts.alang).to eq('es')
+      expect(opts.dub_lang).to eq('pt')
       expect(opts.sub_lang).to eq('pt')
+    end
+
+    it 'does not replace an explicit subtitle mode with dub shorthand' do
+      opts = SymMash.new
+
+      described_class.add_opt(opts, 'sub=source')
+      described_class.add_opt(opts, 'dub=pt')
+
+      expect(opts.dub_lang).to eq('pt')
+      expect(opts.sub_mode).to eq('source')
+      expect(opts.sub_lang).to be_nil
     end
 
     it 'keeps bare dub audio-only' do

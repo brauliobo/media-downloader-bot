@@ -146,7 +146,8 @@ class Zipper
       body  = Utils::HTTP.get_public(entry.url)
       vtt   = Subtitler::VTT.to_vtt body, entry.ext, ffmpeg: zipper.send(:ffmpeg_builder)
       zipper.stl&.update "subs:scraped:#{lang}"
-      [vtt, lang]
+      base_lang = lang.to_s.split(/[-_]/, 2).first
+      [vtt, Subtitler.normalize_lang(lang) || Subtitler.normalize_lang(base_lang) || lang]
     end
 
     def fetch_embedded(zipper)
@@ -164,8 +165,11 @@ class Zipper
     end
 
     def preferred_lang(zipper, subtitles)
-      candidates = [Subtitler.normalize_lang(zipper.opts.slang), :en, subtitles.keys.first].compact
-      candidates.find { |code| subtitles.key?(code) }
+      requested = Subtitler.normalize_lang(zipper.opts.slang)
+      keys      = subtitles.keys
+      exact     = keys.find { |code| requested && code.to_s.downcase == requested }
+      locale    = keys.find { |code| requested && code.to_s.downcase.split(/[-_]/, 2).first == requested }
+      exact || locale || keys.find { |code| code.to_s.downcase == 'en' } || keys.first
     end
 
     def subtitle_match?(desired, stream)

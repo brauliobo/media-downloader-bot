@@ -47,4 +47,38 @@ RSpec.describe Zipper::Subtitle do
       )
     }.to raise_error Sh::Error, 'srt conversion failed: invalid subtitle'
   end
+
+  it 'uses an authored locale variant without translating a base-language request' do
+    vtt  = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nOlá.\n"
+    info = SymMash.new(subtitles: {
+      en:      [{ext: 'vtt', url: 'https://example.com/en.vtt'}],
+      :'pt-BR' => [{ext: 'vtt', url: 'https://example.com/pt-BR.vtt'}],
+    })
+    opts = SymMash.new(slang: 'pt', format: Zipper::Types.video.h264)
+    ffmpeg = instance_double(FFmpeg)
+    zipper = Zipper.new(
+      'video.mp4', nil, info: info,
+      probe: SymMash.new(format: {duration: 1}, streams: []), opts: opts, ffmpeg: ffmpeg
+    )
+    allow(Utils::HTTP).to receive(:get_public).with('https://example.com/pt-BR.vtt').and_return(vtt)
+    allow(ffmpeg).to receive(:convert_subtitle).and_return(vtt)
+    expect(Subtitler::VTT).not_to receive(:translate)
+
+    fetched, lang, = described_class.prepare(zipper, translate_to: 'pt')
+
+    expect(fetched).to include('Olá.')
+    expect(lang).to eq('pt')
+  end
+
+  it 'keeps generated dubbing subtitles authoritative during final selection' do
+    generated = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nDublado.\n"
+    opts      = SymMash.new(sub_vtt: generated, sub_mode: 'language', sub_lang: 'pt')
+    zipper    = instance_double(Zipper, opts: opts)
+    expect(Utils::HTTP).not_to receive(:get_public)
+
+    selected, lang, = described_class.send(:source_vtt, zipper, translate_to: 'pt')
+
+    expect(selected).to include('Dublado.')
+    expect(lang).to eq('pt')
+  end
 end

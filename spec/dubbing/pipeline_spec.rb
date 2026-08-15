@@ -44,16 +44,15 @@ RSpec.describe Dubbing::Pipeline do
     instance_double(Process::Status, success?: true)
   end
 
-  it 'defaults dub target language to Portuguese' do
-    pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), probe: probe)
-
-    expect(pipeline.target_lang).to eq('pt')
-  end
-
-  it 'uses explicit lang option when present' do
-    pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1, slang: 'es'), probe: probe)
-
-    expect(pipeline.target_lang).to eq('es')
+  it 'resolves the dubbing target independently' do
+    {
+      {dub: 1}                              => 'pt',
+      {dub: 1, slang: 'es'}                 => 'es',
+      {dub: 1, dub_lang: 'pt', slang: 'es'} => 'pt',
+    }.each do |options, expected|
+      pipeline = described_class.new(input, dir: dir, opts: SymMash.new(options), probe: probe)
+      expect(pipeline.target_lang).to eq(expected)
+    end
   end
 
   it 'reuses translated sentences as generated subtitles' do
@@ -71,7 +70,7 @@ RSpec.describe Dubbing::Pipeline do
   end
 
   it 'generates target subtitles without gensubs for dub language shorthand' do
-    opts = SymMash.new(dub: 1, slang: 'pt', sub: 'pt', sub_mode: 'language', sub_lang: 'pt')
+    opts = SymMash.new(dub: 1, dub_lang: 'pt', sub: 'pt', sub_mode: 'language', sub_lang: 'pt')
     pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)
     pipeline.instance_variable_set(
       :@sentences,

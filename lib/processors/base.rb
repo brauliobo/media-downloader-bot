@@ -76,7 +76,7 @@ module Processors
     # Supports:
     # - flags: "audio" => opts.audio = 1
     # - key/values: "lang=pt" => opts.lang = "pt"
-    # - shorthand: "dub=pt" => full dubbing with target-language subtitles
+    # - shorthand: "dub=pt" => target-language dubbing and subtitles
     # - metadata: "meta.artist=Foo" / "metadata.title=Bar" / "artist=Foo" (common tags)
     def self.add_opt(opts, raw)
       return opts unless opts && raw
@@ -133,9 +133,9 @@ module Processors
       value = opts[:dub].to_s.strip.downcase
       return opts if value.empty? || DUB_FLAGS.include?(value)
 
-      opts.dub = 1
-      opts.lang ||= value
-      opts.sub  ||= value
+      opts.dub      = 1
+      opts.dub_lang = value
+      opts.sub     ||= value
       opts
     end
 
@@ -155,7 +155,7 @@ module Processors
 
     def self.expand_lang_opt(opts)
       lang = opts[:lang]
-      if lang.to_s.strip.empty? && opts[:slang].to_s.strip.empty? && opts[:alang].to_s.strip.empty? && opts[:sub_mode] == 'language'
+      if lang.to_s.strip.empty? && opts[:dub_lang].to_s.strip.empty? && opts[:slang].to_s.strip.empty? && opts[:alang].to_s.strip.empty? && opts[:sub_mode] == 'language'
         lang = opts[:sub_lang]
       end
       return opts unless lang.present?
