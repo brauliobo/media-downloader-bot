@@ -63,7 +63,7 @@ module Ewprs
     attr_reader :jobs
 
     def initialize(jobs: nil)
-      @jobs = Integer(jobs || ENV.fetch('HYMT2_CONCURRENCY', 8))
+      @jobs = Integer(jobs || ENV.fetch('HYMT2_CONCURRENCY', 4))
       raise ArgumentError, 'jobs must be positive' unless @jobs.positive?
 
       @request_semaphore = Concurrent::Semaphore.new(@jobs)

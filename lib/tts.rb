@@ -21,6 +21,7 @@ class TTS
   def self.synthesize_batch(items:, on_batch: nil, threads: nil, **args)
     batches = items.each_slice(BATCH_SIZE).to_a
     errors = Queue.new
+    threads = ENV.fetch('TTS_CONCURRENCY', 4) unless threads
 
     process_batch = lambda do |batch|
       Retriable.retriable(tries: 4, base_interval: 0.5, multiplier: 2.0) do
@@ -31,11 +32,7 @@ class TTS
       errors << error
     end
 
-    if threads
-      Enumerable.with_peach_threads(threads) { batches.peach(threads: threads, &process_batch) }
-    else
-      batches.peach(&process_batch)
-    end
+    Enumerable.with_peach_threads(threads) { batches.peach(threads: threads, &process_batch) }
 
     raise errors.pop unless errors.empty?
 

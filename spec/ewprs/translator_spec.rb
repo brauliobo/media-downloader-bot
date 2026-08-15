@@ -90,6 +90,18 @@ RSpec.describe Ewprs::Translator do
     expect(described_class.new(jobs: '40').jobs).to eq(40)
   end
 
+  it 'defaults to four translation jobs' do
+    ENV.delete('HYMT2_CONCURRENCY')
+
+    expect(described_class.new.jobs).to eq(4)
+  end
+
+  it 'uses configured translation concurrency' do
+    ENV['HYMT2_CONCURRENCY'] = '6'
+
+    expect(described_class.new.jobs).to eq(6)
+  end
+
   it 'limits concurrent requests across overlapping translation calls' do
     translator = described_class.new(jobs: 2)
     active = 0
