@@ -105,21 +105,7 @@ module Dubbing
 
       timed = SymMash.new(words: target_words)
       Subtitler::Translator.assign_tokens_to_words!(timed, Subtitler::Translator.tokenize_text(text))
-      expanded = timed.words.flat_map do |word|
-        tokens   = Subtitler::Translator.tokenize_text(word.word)
-        duration = word.end.to_f - word.start.to_f
-
-        tokens.map.with_index do |token, index|
-          start_time = word.start.to_f + duration * index / tokens.size
-          end_time   = if index == tokens.size - 1
-            word.end.to_f
-          else
-            word.start.to_f + duration * (index + 1) / tokens.size
-          end
-          SymMash.new(word.to_h.merge(word: token, start: start_time, end: end_time))
-        end
-      end
-      [source_words, expanded]
+      [source_words, timed.words]
     end
 
     def synthesize_timeline(workdir)
@@ -175,7 +161,7 @@ module Dubbing
         @opts.sub_vtt  = bilingual_subtitle_vtt
         @opts.sub_lang = 'mul'
       when 'language'
-        @opts.sub_vtt  = subtitle_target_lang == target_lang ? translated_subtitle_vtt : translated_source_subtitle_vtt
+        @opts.sub_vtt  = subtitle_target_lang == target_lang ? translated_subtitle_vtt : alternate_translated_subtitle_vtt
         @opts.sub_lang = subtitle_target_lang
       else
         @opts.sub_vtt  = translated_subtitle_vtt
@@ -191,8 +177,15 @@ module Dubbing
       build_subtitle_vtt(@transcript_output || SymMash.new(segments: []), normalize: false)
     end
 
-    def translated_source_subtitle_vtt
-      Subtitler::VTT.translate(source_subtitle_vtt, from: source_lang, to: subtitle_target_lang)
+    def alternate_translated_subtitle_vtt
+      scheduled = SymMash.new(segments: @sentences.deep_dup)
+      translated = Subtitler::Translator.translate(
+        scheduled,
+        from:           target_lang,
+        to:             subtitle_target_lang,
+        merge_adjacent: false
+      )
+      build_subtitle_vtt(translated)
     end
 
     def bilingual_subtitle_vtt

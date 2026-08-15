@@ -182,20 +182,40 @@ class Subtitler
     end
 
     def self.assign_tokens_to_words!(sent, tokens)
-      src_n = sent.words.size
-      trg_n = tokens.size
-      return sent.words.each_with_index { |w,i| w.word = tokens[i] } if src_n == trg_n
-      if trg_n < src_n
-        sent.words.each_with_index { |w,i| w.word = i < trg_n ? tokens[i] : "" }
-        sent.words.reject! { |w| w.word.to_s.strip.empty? }
+      source = Array(sent.words)
+      tokens = Array(tokens)
+      return sent.words = [] if source.empty? || tokens.empty?
+
+      if tokens.size == source.size
+        projected = source.zip(tokens).map do |word, token|
+          SymMash.new(word.to_h.merge(word: token))
+        end
+      elsif tokens.size > source.size
+        base, extra = tokens.size.divmod(source.size)
+        cursor = 0
+        projected = source.flat_map.with_index do |word, index|
+          count    = base + (index < extra ? 1 : 0)
+          duration = word.end.to_f - word.start.to_f
+          items    = tokens[cursor, count].map.with_index do |token, token_index|
+            start_time = word.start.to_f + duration * token_index / count
+            end_time   = token_index == count - 1 ? word.end : word.start.to_f + duration * (token_index + 1) / count
+            SymMash.new(word.to_h.merge(word: token, start: start_time, end: end_time))
+          end
+          cursor += count
+          items
+        end
       else
-        base, extra = trg_n.divmod(src_n)
-        sent.words.each_with_index do |w,i|
-          offset = i < extra ? i * (base + 1) : (extra * (base + 1)) + ((i - extra) * base)
-          count  = i < extra ? base + 1 : base
-          w.word = tokens[offset, count].join(' ')
+        base, extra = source.size.divmod(tokens.size)
+        cursor = 0
+        projected = tokens.map.with_index do |token, index|
+          count  = base + (index < extra ? 1 : 0)
+          words  = source[cursor, count]
+          cursor += count
+          SymMash.new(words.first.to_h.merge(word: token, start: words.first.start, end: words.last.end))
         end
       end
+
+      sent.words = projected
     end
   end
 end

@@ -21,6 +21,17 @@ RSpec.describe Subtitler::VTT do
       .to eq "WEBVTT\n\nConverted"
   end
 
+  it 'cleans native VTT without invoking FFmpeg or removing inline timings' do
+    ffmpeg = instance_double FFmpeg
+    expect(ffmpeg).not_to receive(:convert_subtitle)
+
+    body = "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHello <00:00:01.000>world\\Nagain\n"
+
+    expect(described_class.to_vtt(body, '.VTT', ffmpeg: ffmpeg)).to eq(
+      "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHello <00:00:01.000>world\nagain\n"
+    )
+  end
+
   it 'preserves external subtitle conversion errors' do
     ffmpeg = instance_double FFmpeg
     allow(ffmpeg).to receive(:convert_subtitle)
@@ -54,7 +65,7 @@ RSpec.describe Subtitler::VTT do
 
     allow(::Translator).to receive(:translate).and_return(['Olá.', long_translation])
 
-    translated = described_class.translate(vtt, from: 'en', to: 'pt')
+    translated = described_class.translate(vtt, from: 'en', to: 'pt', word_tags: false)
 
     expect(::Translator).to have_received(:translate).with(
       ['Hello.', 'This is a second sentence.'],
@@ -96,6 +107,58 @@ RSpec.describe Subtitler::VTT do
     expect(translated).to include(
       "00:00:00.240 --> 00:00:02.310\nA artrite está piorando."
     )
+  end
+
+  it 'decodes cue markup and projects translation over structural inline timings' do
+    vtt = <<~VTT
+      WEBVTT
+
+      00:00:00.000 --> 00:00:04.000
+      <b>Hello</b> there <00:00:02,000>Fran&ccedil;ais encore.
+    VTT
+    allow(::Translator).to receive(:translate).and_return(['Olá mundo espanhol agora.'])
+
+    translated = described_class.translate(vtt, from: 'en', to: 'pt')
+    plain = described_class.translate(vtt, from: 'en', to: 'pt', word_tags: false)
+
+    expect(::Translator).to have_received(:translate).twice.with(
+      ['Hello there Français encore.'],
+      from: 'en',
+      to:   'pt'
+    )
+    expect(translated).to include(
+      'Olá <00:00:01.000>mundo <00:00:02.000>espanhol <00:00:03.000>agora.'
+    )
+    expect(plain).to include('Olá mundo espanhol agora.')
+    expect(plain).not_to include('<00:00:')
+  end
+
+  it 'keeps clean cue text wordless when inline timing markers are invalid' do
+    [
+      'Hello <00:00:03.000>there <00:00:02.000>friend.',
+      'Hello <00:00:05.000>there friend.',
+      'Hello <00:00:bad>there friend.',
+    ].each do |text|
+      allow(::Translator).to receive(:translate).and_return(['Texto limpo.'])
+      vtt = "WEBVTT\n\n00:00:00.000 --> 00:00:04.000\n#{text}\n"
+
+      translated = described_class.translate(vtt, from: 'en', to: 'pt')
+
+      expect(translated).to include("00:00:00.000 --> 00:00:04.000\nTexto limpo.")
+      expect(translated).not_to include('<00:00:')
+    end
+  end
+
+  it 'uses nowords only to select VTT serialization during translation' do
+    vtt = "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHello <00:00:01.000>world.\n"
+    zipper = instance_double(Zipper, stl: nil, opts: SymMash.new(nowords: true))
+    allow(::Translator).to receive(:translate).and_return(['Olá mundo.'])
+
+    translated, lang, = described_class.translate_if_needed(zipper, vtt, nil, 'en', 'pt')
+
+    expect(lang).to eq('pt')
+    expect(translated).to include('Olá mundo.')
+    expect(translated).not_to include('<00:00:')
   end
 
   it 'does not merge normalized cues from different speakers' do

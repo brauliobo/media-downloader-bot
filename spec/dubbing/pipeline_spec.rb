@@ -158,6 +158,37 @@ RSpec.describe Dubbing::Pipeline do
     expect(opts.sub_vtt).to include('Hello.', 'Olá.')
   end
 
+  it 'translates alternate subtitles from scheduled dubbed sentences' do
+    opts = SymMash.new(dub: 'pt', sub: 'es', sub_mode: 'language', sub_lang: 'es')
+    pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)
+    sentence = SymMash.new(
+      text: 'Boa tarde.', start: 4.0, end: 6.0,
+      words: [
+        SymMash.new(word: 'Boa', start: 4.0, end: 5.0),
+        SymMash.new(word: 'tarde.', start: 5.0, end: 6.0),
+      ]
+    )
+    pipeline.instance_variable_set(:@sentences, [sentence])
+    pipeline.instance_variable_set(:@source_lang, 'en')
+    pipeline.instance_variable_set(
+      :@transcript_output,
+      SymMash.new(segments: [SymMash.new(text: 'Hello.', start: 0.0, end: 1.0, words: [])])
+    )
+    allow(::Translator).to receive(:translate).and_return(['Buenas tardes.'])
+    expect(pipeline).not_to receive(:source_subtitle_vtt)
+
+    pipeline.send(:prepare_translated_subtitles)
+
+    expect(::Translator).to have_received(:translate).with(['Boa tarde.'], from: 'pt', to: 'es')
+    expect(opts.sub_lang).to eq('es')
+    expect(opts.sub_vtt).to include(
+      '00:00:04.000 --> 00:00:06.000',
+      'Buenas <00:00:05.000>tardes.'
+    )
+    expect(sentence.text).to eq('Boa tarde.')
+    expect(sentence.words.map(&:word)).to eq(['Boa', 'tarde.'])
+  end
+
   it 'skips dubbing when source language already matches the target language' do
     allow(Subtitler).to receive(:transcribe).and_return(transcript(lang: 'pt'))
     expect(TTS).not_to receive(:synthesize)

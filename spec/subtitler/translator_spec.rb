@@ -43,7 +43,7 @@ RSpec.describe Subtitler::Translator do
     w0 = mash.segments[0].words
     expect(w0.map { |w| w.word }).to eq(['Olá', 'mundo!'])
     expect(w0.first.start).to eq(0.0)
-    expect(w0.last.end).to eq(0.8)
+    expect(w0.last.end).to eq(0.9)
     expect(mash.segments[0].start).to eq(0.0)
     expect(mash.segments[0].end).to eq(0.9) # preserves end from punctuation timing
 
@@ -62,7 +62,7 @@ RSpec.describe Subtitler::Translator do
     )
   end
 
-  it 'packs more translated tokens than source words across word slots' do
+  it 'subdivides source slots when translation has more tokens' do
     verbose_json = {
       segments: [
         { start: 0.0, end: 1.2, text: 'New York .', words: [
@@ -81,10 +81,13 @@ RSpec.describe Subtitler::Translator do
     expect(mash.segments.size).to eq(1)
     expect(mash.segments[0].text).to eq('Nova Iorque, Estados Unidos.')
     words = mash.segments[0].words
-    expect(words.map { |w| w.word }).to eq(['Nova Iorque,', 'Estados', 'Unidos.'])
+    expect(words.map { |w| w.word }).to eq(['Nova', 'Iorque,', 'Estados', 'Unidos.'])
+    expect(words.map { |w| [w.start, w.end] }).to eq([
+      [0.0, 0.2], [0.2, 0.4], [0.4, 0.9], [0.9, 1.2]
+    ])
   end
 
-  it 'drops extra source words when translation has fewer tokens' do
+  it 'groups consecutive source slots when translation has fewer tokens' do
     verbose_json = {
       segments: [
         { start: 0.0, end: 1.5, text: 'It is good .', words: [
@@ -104,6 +107,7 @@ RSpec.describe Subtitler::Translator do
     words = mash.segments[0].words
     expect(mash.segments[0].text).to eq('É bom.')
     expect(words.map { |w| w.word }).to eq(['É', 'bom.'])
+    expect(words.map { |w| [w.start, w.end] }).to eq([[0.0, 0.6], [0.6, 1.5]])
   end
 
   it 'handles segments without words by translating text only' do
@@ -335,7 +339,7 @@ RSpec.describe Subtitler::Translator do
     expect(vtt).to include('comprimento máximo.')
   end
 
-  it 'preserves per-word start/end timings after fuzzy token mapping' do
+  it 'preserves the complete source interval after token projection' do
     verbose_json = {
       segments: [
         { start: 0.0, end: 0.8, text: 'Hello world', words: [
@@ -350,11 +354,6 @@ RSpec.describe Subtitler::Translator do
       ]
     }
 
-    # Build expected timing slots using the same sentence builder (cast to SymMash)
-    sm_segments = verbose_json[:segments].map { |s| SymMash.new(s).tap { |m| m.words = Array(m.words).map { |w| SymMash.new(w) } } }
-    expected_sentences = TextHelpers.sentences_from_segments(sm_segments)
-    expected_timings = expected_sentences.map { |s| s.words.map { |w| [w.start, w.end] } }
-
     allow(::Translator).to receive(:translate).and_return([
       'Olá mundo incrível!)', # more tokens than slots
       'Ok.'                   # fewer tokens than slots
@@ -362,14 +361,11 @@ RSpec.describe Subtitler::Translator do
 
     mash = described_class.translate(verbose_json, from: 'en', to: 'pt')
 
-    # Check counts and timing preservation per sentence
-    expect(mash.segments.size).to eq(expected_sentences.size)
-
-    mash.segments.each_with_index do |seg, i|
-      got = seg.words.map { |w| [w.start, w.end] }
-      # When translation has fewer tokens, some source slots are dropped; compare prefix
-      expect(got).to eq(expected_timings[i].first(got.size))
-    end
+    expect(mash.segments.size).to eq(2)
+    expect(mash.segments.map { |segment| segment.words.map(&:word) })
+      .to eq([['Olá', 'mundo', 'incrível!)'], ['Ok.']])
+    expect(mash.segments.map { |segment| [segment.words.first.start, segment.words.last.end] })
+      .to eq([[0.0, 0.9], [2.1, 2.9]])
   end
 
   it 'keeps honorific abbreviations attached to the following name' do

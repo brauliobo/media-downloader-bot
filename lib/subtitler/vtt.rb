@@ -1,3 +1,4 @@
+require 'nokogiri'
 require 'tempfile'
 require_relative '../ffmpeg'
 require_relative '../utils/safety'
@@ -17,8 +18,8 @@ class Subtitler
         .gsub(/\\[Nn]/, "\n")
     end
 
-    def self.translate(vtt, to:, from: nil)
-      segments = segments_from_vtt(Subtitler.strip_word_tags(clean(vtt)))
+    def self.translate(vtt, to:, from: nil, word_tags: true)
+      segments = segments_from_vtt(clean(vtt))
       return vtt if segments.empty?
 
       translated = Subtitler::Translator.translate(
@@ -27,7 +28,7 @@ class Subtitler
         to:             to,
         merge_adjacent: false
       )
-      build(translated, normalize: false, word_tags: false)
+      build(translated, normalize: false, word_tags: word_tags)
     end
 
     def self.translate_if_needed(zipper, vtt, tsp, from_lang, to_lang)
@@ -47,7 +48,7 @@ class Subtitler
         )
         vtt = build(tsp, normalize: false, word_tags: !zipper.opts.nowords)
       else
-        vtt = translate(vtt, to: normalized_to, from: normalized_from)
+        vtt = translate(vtt, to: normalized_to, from: normalized_from, word_tags: !zipper.opts.nowords)
       end
 
       [vtt, normalized_to, tsp]
@@ -133,6 +134,8 @@ class Subtitler
 
     def self.to_vtt(body, ext, ffmpeg: FFmpeg.new)
       safe_ext = Utils::Safety.subtitle_ext(ext)
+      return clean(body) if safe_ext == 'vtt'
+
       Tempfile.create(['sub', ".#{safe_ext}"]) do |file|
         file.binmode
         file.write(body)
@@ -173,16 +176,66 @@ class Subtitler
         next unless timing_index
 
         start_text, end_text = cue.fetch(timing_index).strip.split('-->').map(&:strip)
-        text = cue[(timing_index + 1)..].map(&:strip).reject(&:empty?).join(' ')
+        raw_text = cue[(timing_index + 1)..].map(&:strip).reject(&:empty?).join(' ')
+        text = semantic_text(raw_text)
         next if text.empty?
+
+        start_time = hmsms_to_s(start_text)
+        end_time   = hmsms_to_s(end_text)
 
         SymMash.new(
           text:  text,
-          start: hmsms_to_s(start_text),
-          end:   hmsms_to_s(end_text),
-          words: []
+          start: start_time,
+          end:   end_time,
+          words: inline_timed_words(raw_text, start_time, end_time)
         )
       end
+    end
+
+    def self.inline_timed_words(text, cue_start, cue_end)
+      matches = text.to_enum(:scan, /<([^>]*)>/).map { Regexp.last_match }
+      malformed = matches.any? do |match|
+        match[1].match?(/\A\d{1,2}:\d{2}/) && hmsms_to_s_exact(match[1]).nil?
+      end
+      timed = matches.filter_map do |match|
+        time = hmsms_to_s_exact(match[1])
+        [match, time] if time
+      end
+      return [] if malformed || timed.empty? || !cue_start || !cue_end
+
+      times = timed.map(&:last)
+      return [] unless times.all? { |time| time >= cue_start && time <= cue_end }
+      return [] unless times.each_cons(2).all? { |left, right| right > left }
+
+      chunks = []
+      cursor = 0
+      timed.each do |match, _time|
+        chunks << text[cursor...match.begin(0)]
+        cursor = match.end(0)
+      end
+      chunks << text[cursor..]
+
+      boundaries = [cue_start, *times, cue_end]
+      chunks.flat_map.with_index do |chunk, index|
+        tokens = Translator.tokenize_text(semantic_text(chunk))
+        next [] if tokens.empty?
+
+        start_time = boundaries.fetch(index)
+        end_time   = boundaries.fetch(index + 1)
+        return [] unless end_time > start_time
+
+        duration = end_time - start_time
+        tokens.map.with_index do |token, token_index|
+          token_start = start_time + duration * token_index / tokens.size
+          token_end   = token_index == tokens.size - 1 ? end_time : start_time + duration * (token_index + 1) / tokens.size
+          SymMash.new(word: token, start: token_start, end: token_end)
+        end
+      end
+    end
+
+    def self.semantic_text(text)
+      plain = text.to_s.gsub(/<br\s*\/?\s*>/i, ' ').gsub(/<[^>]*>/, '')
+      Nokogiri::HTML5.fragment(plain).text.split.join(' ')
     end
 
     def self.flush_buffer(out, buffer)
@@ -205,6 +258,13 @@ class Subtitler
       base + match[4].to_i / 1000.0
     end
 
+    def self.hmsms_to_s_exact(hms)
+      match = hms&.match(TIMESTAMP)
+      return unless match && match[0].length == hms.length
+
+      hmsms_to_s(hms)
+    end
+
     def self.s_to_hmsms(sec)
       sec = sec.to_f
       hours = (sec / 3600).floor
@@ -225,8 +285,9 @@ class Subtitler
       end.join(' ')
     end
 
-    private_class_method :each_cue, :segments_from_vtt, :flush_buffer,
-                         :hms_to_s, :hmsms_to_s, :s_to_hmsms,
+    private_class_method :each_cue, :segments_from_vtt, :inline_timed_words,
+                         :semantic_text, :flush_buffer, :hms_to_s,
+                         :hmsms_to_s, :hmsms_to_s_exact, :s_to_hmsms,
                          :build_line
   end
 end
