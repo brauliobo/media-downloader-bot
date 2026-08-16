@@ -36,8 +36,6 @@ gem 'epub-parser'
 gem 'nokogiri'
 gem 'puppeteer-ruby'
 
-gem 'srt'
-
 if ENV['TD_BOT']
   gem 'tdlib-schema', source(github: 'brauliobo/tdlib-schema', dir: 'tdlib-schema')
   gem 'tdlib-ruby',   source(github: 'brauliobo/tdlib-ruby',   dir: 'tdlib-ruby')

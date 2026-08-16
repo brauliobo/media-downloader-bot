@@ -48,12 +48,6 @@ RSpec.describe Subtitler::Subtitle do
       expect(entry.words.first.metadata).to eq('probability' => 0.91, 'backend_token' => 41)
     end
 
-    it 'round-trips external end, word, confidence aliases, and unknown fields' do
-      subtitle = described_class.from_whisper_verbose_json(input)
-
-      expect(subtitle.to_whisper_verbose_hash).to eq(input)
-    end
-
     it 'rejects non-JSON key types and missing segment collections' do
       expect { described_class.from_whisper_verbose_json(language: 'en') }
         .to raise_error(ArgumentError, 'subtitle keys must be strings')
@@ -108,11 +102,6 @@ RSpec.describe Subtitler::Subtitle do
       expect(word.metadata).to eq('prob' => 0.8, 'token_id' => 9)
     end
 
-    it 'serializes canonical timing and text through transcribe.cpp adapters' do
-      subtitle = described_class.from_transcribe_cpp_json(input)
-
-      expect(subtitle.to_transcribe_cpp_hash).to eq(input)
-    end
   end
 
   describe 'subtitle formats' do
@@ -147,7 +136,7 @@ RSpec.describe Subtitler::Subtitle do
       subtitle = described_class.new(entries: [
         described_class::Entry.new(start: 1.0001, finish: 1.0004, text: 'One two', words: words),
       ])
-      before = subtitle.to_whisper_verbose_hash
+      before = subtitle.deep_copy
 
       expect(subtitle.to_vtt).to eq(
         "WEBVTT\n\n00:00:01.000 --> 00:00:01.001\nOne two\n\n"
@@ -155,7 +144,13 @@ RSpec.describe Subtitler::Subtitle do
       expect(subtitle.to_srt).to eq(
         "1\n00:00:01,000 --> 00:00:01,001\nOne <00:00:01,001>two\n\n"
       )
-      expect(subtitle.to_whisper_verbose_hash).to eq(before)
+      expect(subtitle.entries.first).to have_attributes(
+        start: before.entries.first.start,
+        finish: before.entries.first.finish,
+        text: before.entries.first.text
+      )
+      expect(subtitle.entries.first.words.map { |word| [word.text, word.start, word.finish] })
+        .to eq(before.entries.first.words.map { |word| [word.text, word.start, word.finish] })
     end
 
     it 'parses CRLF SRT, rejects model-level noise, and preserves cue identifiers and endings' do
@@ -261,7 +256,7 @@ RSpec.describe Subtitler::Subtitle do
       )
     end
 
-    it 'updates serialized confidence aliases after merging words' do
+    it 'keeps canonical confidence authoritative after merging words' do
       first = described_class::Word.new(
         text: ' test', start: 1, finish: 2, confidence: 0.9, metadata: {'probability' => 0.9}
       )
@@ -269,8 +264,8 @@ RSpec.describe Subtitler::Subtitle do
 
       first.merge!(suffix)
 
-      expect(first.to_whisper_hash['probability']).to eq(0.6)
-      expect(first.to_transcribe_cpp_hash['probability']).to eq(0.6)
+      expect(first.confidence).to eq(0.6)
+      expect(first.metadata).to eq('probability' => 0.9)
     end
 
     it 'deep-copies the complete mutable graph and keeps collection readers immutable' do
@@ -298,18 +293,6 @@ RSpec.describe Subtitler::Subtitle do
       expect(entry.source_words.map(&:text)).to eq(['Hello'])
       expect(source_word).to have_attributes(start: 1.0, finish: 2.0)
       expect(copy.source_words.first).to have_attributes(start: 3.0, finish: 5.0)
-    end
-
-    it 'serializes without mutating current or source values' do
-      before = subtitle.deep_copy
-
-      subtitle.to_whisper_verbose_hash
-      subtitle.to_transcribe_cpp_hash
-
-      expect(subtitle.text).to eq(before.text)
-      expect(subtitle.entries.first.text).to eq(before.entries.first.text)
-      expect(subtitle.entries.first.words.map(&:text)).to eq(before.entries.first.words.map(&:text))
-      expect(subtitle.entries.first.source_words.map(&:text)).to eq(before.entries.first.source_words.map(&:text))
     end
 
     it 'merges cross-entry suffixes, extends the owner timing, and removes emptied entries' do

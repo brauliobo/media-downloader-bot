@@ -192,7 +192,6 @@ GEM
     sequel (5.97.0)
       bigdecimal
     simpleidn (0.2.3)
-    srt (0.1.5)
     tzinfo (2.0.6)
       concurrent-ruby (~> 1.0)
     uri (1.1.1)
@@ -240,7 +239,6 @@ DEPENDENCIES
   roda
   rspec
   sequel
-  srt
   telegram-bot-ruby!
 
 RUBY VERSION

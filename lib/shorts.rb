@@ -1,6 +1,7 @@
 require 'json'
 require_relative 'ai/ollama'
 require_relative 'ai/json_schema'
+require_relative 'subtitler/subtitle'
 
 module Shorts
   module_function
@@ -16,7 +17,22 @@ module Shorts
   TITLE_SCHEMA = AI::JSONSchema.object(title: { type: 'string', minLength: 1 }).freeze
   MODEL = ENV['OLLAMA_SHORTS_MODEL'] || AI::Ollama::PROMPT_MODEL
 
-  def generate_cuts_from_srt(srt, language: nil)
+  Cut = Data.define(:start, :finish, :title) do
+    TIMESTAMP = /\A\d{2}:\d{2}:\d{2}\z/
+
+    def initialize(start:, finish:, title:)
+      start_time  = Subtitler.parse_timestamp(start) if start.is_a?(String) && start.match?(TIMESTAMP)
+      finish_time = Subtitler.parse_timestamp(finish) if finish.is_a?(String) && finish.match?(TIMESTAMP)
+      valid = start.is_a?(String) && finish.is_a?(String) && title.is_a?(String) &&
+        start_time && finish_time && finish_time > start_time
+      raise ArgumentError, 'short cut is malformed' unless valid
+
+      super
+    end
+  end
+
+  def generate_cuts(subtitle, language: nil)
+    require_subtitle!(subtitle)
     task = <<~PROMPT
       From the SRT transcript below, propose 4-10 short video cuts.
 
@@ -29,24 +45,26 @@ module Shorts
 
     arr = ask_json(task, CUT_SCHEMA, <<~INPUT)
       Transcript (SRT):
-      #{srt}
+      #{subtitle.to_srt}
     INPUT
     arr = [arr] if arr.is_a?(Hash)
     arr = [] unless arr.is_a?(Array)
     arr.filter_map do |h|
       next unless h.is_a?(Hash)
       s, e, t = h.values_at('start', 'end', 'title')
-      next if s.blank? || e.blank?
-      { start: s, end: e, title: normalize_title(t) }
+      Cut.new(start: s, finish: e, title: normalize_title(t))
+    rescue ArgumentError, TypeError
+      nil
     end
   end
 
-  def generate_titles_for_segments(_srt, _segments, language: nil, vtt_slices: nil)
-    Array(vtt_slices).map { |vtt| generate_title_for_segment_slice(vtt, language: language) }
+  def generate_titles(subtitles, language: nil)
+    subtitles.map { |subtitle| generate_title(subtitle, language: language) }
   end
 
-  def generate_title_for_segment_slice(vtt, language: nil)
-    snippet = vtt_to_text(vtt).to_s.strip
+  def generate_title(subtitle, language: nil)
+    require_subtitle!(subtitle)
+    snippet = subtitle.entries.map(&:text).join(' ').strip
     lang_instruction = language.to_s.strip.present? ? "Generate the title in: #{language}." : 'Generate the title in the subtitle language.'
 
     task = <<~PROMPT
@@ -80,18 +98,7 @@ module Shorts
     s[0, 120]
   end
 
-  def title_from_vtt(vtt)
-    return nil if vtt.to_s.strip.empty?
-    lines = vtt.each_line.map(&:strip).reject { |l| l.empty? || l.include?('-->') || l.start_with?('WEBVTT', 'NOTE', 'STYLE', 'REGION') }
-    text = lines.join(' ')
-    return nil if text.blank?
-    sentences = text.split(/(?<=[.!?])\s+/)
-    pick = sentences.find { |s| s.split.size.between?(4, 12) } || sentences.max_by(&:length)
-    return nil unless pick
-    pick.split.first(12).join(' ')
-  end
-
-  def vtt_to_text(vtt)
-    vtt.to_s.each_line.map(&:strip).reject { |l| l.empty? || l.include?('-->') || l.start_with?('WEBVTT', 'NOTE', 'STYLE', 'REGION') }.join(' ')
+  def require_subtitle!(subtitle)
+    raise TypeError, 'subtitle must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitler::Subtitle)
   end
 end

@@ -1,6 +1,7 @@
 require 'json'
 require 'cgi'
 require 'nokogiri'
+require 'securerandom'
 
 require_relative '../text_helpers'
 require_relative 'timestamps'
@@ -199,6 +200,65 @@ class Subtitler
       deep_copy.translate!(**options)
     end
 
+    def translate_srt!(from: nil, to:, translator: nil, batch_size: nil)
+      raise ArgumentError, 'subtitle source must be SRT' unless @metadata['source_format'] == 'srt'
+
+      lines = @entries.flat_map { |entry| entry.metadata.fetch('content_lines') }
+      masked, replacements, marker_pattern = protect_srt_timestamps(lines)
+      translated_lines = translate_texts(
+        masked, from: from, to: to, translator: translator, batch_size: batch_size
+      )
+      unless translated_lines.length == lines.length
+        raise "SRT translation result count mismatch: expected #{lines.length}, got #{translated_lines.length}"
+      end
+
+      translated_lines = translated_lines.zip(replacements).map do |text, line_replacements|
+        expected = line_replacements.map(&:first)
+        actual   = text.to_s.scan(marker_pattern)
+        unless actual == expected
+          raise "SRT translation corrupted inline timestamps: expected #{expected.join(', ')}"
+        end
+
+        values = line_replacements.to_h
+        text.to_s.gsub(marker_pattern) { |marker| values.fetch(marker) }
+      end
+
+      source_blocks = self.class.send(:mutable_copy, @metadata.fetch('source_blocks'))
+      cursor        = 0
+      @entries.each do |entry|
+        content_lines = translated_lines.slice(cursor, entry.metadata.fetch('content_lines').length)
+        cursor += content_lines.length
+        translated_text = self.class.send(:semantic_text, content_lines.join("\n"))
+        words = self.class.send(
+          :inline_timed_words, content_lines.join("\n"), entry.start, entry.finish, entry.cue_id
+        )
+        metadata = self.class.send(:mutable_copy, entry.metadata).merge(
+          'content_lines' => content_lines,
+          'ass_text'      => CGI.unescapeHTML(content_lines.join("\n")).gsub(Subtitler::INLINE_TIMESTAMP, ''),
+          'source_text'   => translated_text
+        )
+
+        entry.replace_text!(translated_text)
+          .replace_words!(words)
+          .replace_source!(text: translated_text, words: words.map(&:deep_copy))
+          .replace_metadata!(metadata)
+        block_index = entry.metadata.fetch('block_index')
+        block_end   = source_blocks.fetch(block_index)[/(?:\r?\n)+\z/].to_s
+        source_blocks[block_index] = original_srt_lines(entry).join(@metadata.fetch('line_ending')) + block_end
+      end
+      @metadata = self.class.send(
+        :immutable_hash,
+        self.class.send(:mutable_copy, @metadata).merge('source_blocks' => source_blocks),
+        'metadata'
+      )
+      replace_language!(to)
+      rebuild_text_from_entries!
+    end
+
+    def translated_srt(**options)
+      deep_copy.translate_srt!(**options)
+    end
+
     def reject_noise!
       rejected_blocks = Array(@metadata['source_blocks']).each_index.select do |index|
         noise_content_lines(@metadata['source_blocks'].fetch(index)).any? do |line|
@@ -259,23 +319,33 @@ class Subtitler
       )
     end
 
-    def to_whisper_verbose_hash
-      self.class.send(:mutable_copy, @metadata).merge(
-        'language' => @language,
-        'text'     => @text,
-        'segments' => @entries.map(&:to_whisper_hash)
-      )
-    end
-
-    def to_transcribe_cpp_hash
-      self.class.send(:mutable_copy, @metadata).merge(
-        'language' => @language,
-        'text'     => @text,
-        'segments' => @entries.map(&:to_transcribe_cpp_hash)
-      )
-    end
-
     private
+
+    def protect_srt_timestamps(lines)
+      prefix = nil
+      loop do
+        candidate = "__SRT_TS_#{SecureRandom.hex(8)}_"
+        unless lines.any? { |line| line.include?(candidate) }
+          prefix = candidate
+          break
+        end
+      end
+      marker_pattern = /#{Regexp.escape(prefix)}\d+__/
+      index = 0
+      replacements = []
+      masked = lines.map do |text|
+        line_replacements = []
+        protected_text = text.gsub(Subtitler::INLINE_TIMESTAMP) do |timestamp|
+          marker = "#{prefix}#{index}__"
+          index += 1
+          line_replacements << [marker, timestamp]
+          marker
+        end
+        replacements << line_replacements
+        protected_text
+      end
+      [masked, replacements, marker_pattern]
+    end
 
     def slice_entry(entry, range_start, range_finish)
       start_time  = [entry.start, range_start].max
@@ -760,30 +830,6 @@ class Subtitler
         )
       end
 
-      def to_whisper_hash
-        Subtitle.send(:mutable_copy, @metadata).merge(
-          'start' => @start,
-          'end'   => @finish,
-          'text'  => @text,
-          'words' => @words.map(&:to_whisper_hash)
-        ).tap do |data|
-          data['speaker_id'] = @speaker_id unless @speaker_id.nil?
-          data['cue_id']     = @cue_id unless @cue_id.nil?
-        end
-      end
-
-      def to_transcribe_cpp_hash
-        Subtitle.send(:mutable_copy, @metadata).merge(
-          't0_ms' => (@start * 1000).round,
-          't1_ms' => (@finish * 1000).round,
-          'text'  => @text,
-          'words' => @words.map(&:to_transcribe_cpp_hash)
-        ).tap do |data|
-          data['speaker_id'] = @speaker_id unless @speaker_id.nil?
-          data['cue_id']     = @cue_id unless @cue_id.nil?
-        end
-      end
-
       def self.milliseconds(value, field)
         Subtitle.send(:number, value, field) / 1000.0
       end
@@ -917,33 +963,12 @@ class Subtitler
         self
       end
 
-      def to_whisper_hash
-        external_hash('word', 'start', 'end', @start, @finish)
-      end
-
-      def to_transcribe_cpp_hash
-        external_hash('text', 't0_ms', 't1_ms', (@start * 1000).round, (@finish * 1000).round)
-      end
-
       def self.confidence_from(data)
         key = CONFIDENCE_KEYS.find { |candidate| data.key?(candidate) }
         key && data[key]
       end
       private_class_method :confidence_from
 
-      private
-
-      def external_hash(text_key, start_key, finish_key, start_value, finish_value)
-        Subtitle.send(:mutable_copy, @metadata).merge(
-          text_key   => @text,
-          start_key  => start_value,
-          finish_key => finish_value
-        ).tap do |data|
-          confidence_keys = CONFIDENCE_KEYS.select { |key| data.key?(key) }
-          confidence_keys = ['confidence'] if confidence_keys.empty? && !@confidence.nil?
-          confidence_keys.each { |key| data[key] = @confidence }
-        end
-      end
     end
 
     class << self

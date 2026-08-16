@@ -24,10 +24,11 @@ module Processors
       raise "unsupported target language: #{i.opts.slang}" unless to_lang
 
       srt_content = ::File.read(i.fn_in)
-      translated = Translator.translate_srt(srt_content, to: to_lang)
+      subtitle = Subtitler::Subtitle.from_srt(srt_content)
+      subtitle.translate_srt!(to: to_lang, translator: Translator)
 
       out_path = i.fn_in.sub(/\.srt\z/i, ".#{to_lang}.srt")
-      ::File.binwrite(out_path, "\uFEFF" + translated.encode('UTF-8'))
+      ::File.binwrite(out_path, "\uFEFF" + subtitle.to_srt.encode('UTF-8'))
 
       i.fn_out = out_path
       i.type = SymMash.new(name: :document)

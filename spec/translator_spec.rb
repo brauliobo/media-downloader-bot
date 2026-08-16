@@ -75,12 +75,24 @@ RSpec.describe Translator do
 
   it 'uses collision-free unbounded placeholder indexes' do
     lines = [(0..10_000).map { |index| "<00:00:01,000>w#{index}" }.join]
+    subtitle = Subtitler::Subtitle.new
 
-    protected, replacements, marker_pattern = described_class.send(:protect_srt_timestamps, lines)
+    protected, replacements, marker_pattern = subtitle.send(:protect_srt_timestamps, lines)
 
     markers = protected.first.scan(marker_pattern)
     expect(markers.size).to eq(10_001)
     expect(markers.last).to end_with('_10000__')
     expect(replacements.first.last.first).to eq(markers.last)
+  end
+
+  it 'exposes translation as a mutating Subtitle operation' do
+    subtitle = Subtitler::Subtitle.from_srt("1\n00:00:01,000 --> 00:00:02,000\nHello world\n")
+    expect(described_class).to receive(:translate).with(['Hello world'], from: nil, to: 'pt').and_return(['Olá mundo'])
+
+    result = subtitle.translate_srt!(to: 'pt', translator: described_class)
+
+    expect(result).to equal(subtitle)
+    expect(subtitle).to have_attributes(language: 'pt', text: 'Olá mundo')
+    expect(subtitle.to_srt).to include("00:00:01,000 --> 00:00:02,000\nOlá mundo")
   end
 end
