@@ -23,8 +23,7 @@ class Subtitler
       raise 'TRANSCRIBE_CPP_CLI is not configured' if cli.blank?
       raise 'TRANSCRIBE_CPP_MODEL is not configured' if model.blank?
 
-      output = normalize_result(run_cli(path, language: language), merge_words: merge_words)
-      SymMash.new(output: output, lang: Subtitler.normalize_lang(output[:language]))
+      normalize_result(run_cli(path, language: language), merge_words: merge_words)
     end
 
     private
@@ -57,6 +56,7 @@ class Subtitler
 
     def normalize_result(raw, merge_words:)
       subtitle = Subtitle.from_transcribe_cpp_json(raw)
+      subtitle.replace_language!(Subtitler.normalize_lang(subtitle.language))
       if merge_words
         subtitle.entries.each { |entry| mark_transcribe_word_boundaries!(entry) }
         subtitle.merge_split_words!
@@ -66,7 +66,7 @@ class Subtitler
         end
         subtitle.rebuild_text_from_entries!
       end
-      SymMash.new(subtitle.to_whisper_verbose_hash).to_h
+      subtitle
     end
 
     def mark_transcribe_word_boundaries!(entry)

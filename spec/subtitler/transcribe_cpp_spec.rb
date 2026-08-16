@@ -52,15 +52,11 @@ RSpec.describe Subtitler::TranscribeCpp do
 
     result = backend.transcribe('audio.wav')
 
-    expect(result.lang).to eq('en')
-    expect(result.output.segments.first).to include(
-      start: 0.4,
-      end: 1.2,
-      text: 'Hello world.'
-    )
-    expect(result.output.segments.first.words.map(&:to_h)).to eq([
-      { word: 'Hello', start: 0.4, end: 0.72 },
-      { word: 'world.', start: 0.8, end: 1.2 }
+    expect(result).to have_attributes(language: 'en', text: 'Hello world.')
+    expect(result.entries.first).to have_attributes(start: 0.4, finish: 1.2, text: 'Hello world.')
+    expect(result.entries.first.words.map { |word| [word.text, word.start, word.finish] }).to eq([
+      ['Hello', 0.4, 0.72],
+      ['world.', 0.8, 1.2]
     ])
   end
 
@@ -81,11 +77,11 @@ RSpec.describe Subtitler::TranscribeCpp do
     )
     allow(backend).to receive(:run_cli).and_return(split_result)
 
-    merged = backend.transcribe('audio.wav', merge_words: true).output.segments.first
-    unmerged = backend.transcribe('audio.wav', merge_words: false).output.segments.first
+    merged = backend.transcribe('audio.wav', merge_words: true).entries.first
+    unmerged = backend.transcribe('audio.wav', merge_words: false).entries.first
 
-    expect(merged.words.map(&:word)).to eq(%w[testing])
-    expect(unmerged.words.map(&:word)).to eq(%w[test ing])
+    expect(merged.words.map(&:text)).to eq(%w[testing])
+    expect(unmerged.words.map(&:text)).to eq(%w[test ing])
     expect(merged.text).to eq('testing')
     expect(unmerged.text).to eq('testing')
   end
@@ -93,7 +89,7 @@ RSpec.describe Subtitler::TranscribeCpp do
   it 'reuses the existing word-tagged SRT renderer' do
     allow(backend).to receive(:run_cli).and_return(raw_result)
 
-    output = backend.transcribe('audio.wav').output
+    output = backend.transcribe('audio.wav')
 
     expect(backend.srt_convert(output, normalize: false)).to include(
       "00:00:00,400 --> 00:00:01,200\nHello <00:00:00,800>world."
@@ -101,8 +97,8 @@ RSpec.describe Subtitler::TranscribeCpp do
   end
 
   it 'carries rounded milliseconds into the next SRT second' do
-    output = SymMash.new(segments: [
-      SymMash.new(text: 'Carry', start: 1.9996, end: 62.9996, words: []),
+    output = Subtitler::Subtitle.new(entries: [
+      Subtitler::Subtitle::Entry.new(text: 'Carry', start: 1.9996, finish: 62.9996),
     ])
 
     expect(backend.srt_convert(output, normalize: false)).to include(
@@ -133,7 +129,7 @@ RSpec.describe Subtitler::TranscribeCpp do
       ['', '', status]
     end
 
-    expect(backend.transcribe('audio.mp3').output.text).to eq 'Hello world.'
+    expect(backend.transcribe('audio.mp3').text).to eq 'Hello world.'
   end
 
   it 'propagates FFmpeg preprocessing failures without invoking transcribe.cpp' do

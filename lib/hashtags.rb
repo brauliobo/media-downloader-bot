@@ -1,5 +1,6 @@
 require 'active_support/core_ext/string/inflections'
 require_relative 'ai/codex'
+require_relative 'subtitler/subtitle'
 
 class Hashtags
   MODEL  = 'gpt-5.6-luna'.freeze
@@ -31,6 +32,7 @@ class Hashtags
     return '' if text.strip.empty?
 
     language = language || lang
+    language ||= transcription.language if transcription.is_a?(Subtitler::Subtitle)
     language_rule = if language.to_s.strip.empty?
       'Use the language of the transcript.'
     else
@@ -63,22 +65,15 @@ class Hashtags
 
   def transcription_text(transcription)
     return transcription.to_s if transcription.is_a?(String)
-    return '' unless transcription
+    raise TypeError, 'transcription must be a Subtitler::Subtitle or String' unless transcription.is_a?(Subtitler::Subtitle)
 
-    text = value_for(transcription, :text).to_s
+    text = transcription.text
     return text unless text.strip.empty?
 
-    Array(value_for(transcription, :segments)).filter_map do |segment|
-      segment_text = value_for(segment, :text).to_s.strip
+    transcription.entries.filter_map do |entry|
+      segment_text = entry.text.strip
       segment_text unless segment_text.empty?
     end.join(' ')
-  end
-
-  def value_for(value, key)
-    return value.public_send(key) if value.respond_to?(key)
-    return value[key] || value[key.to_s] if value.respond_to?(:[])
-
-    nil
   end
 
   def normalize(tags)

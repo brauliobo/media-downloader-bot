@@ -36,12 +36,12 @@ module Dubbing
       VoiceSeparator.with_stems(@input_path, dir: @dir) do |stems|
         @stl&.update 'dubbing: transcribing'
         transcript = Subtitler.transcribe(stems.vocals, separate_voice: false)
-        @transcript_output = transcript.output
-        @source_lang = Subtitler.normalize_lang(transcript.lang)
+        @transcript_output = transcript
+        @source_lang = transcript.language
         next @input_path if @source_lang.present? && @source_lang == target_lang
 
         @stl&.update 'dubbing: translating'
-        @sentences = translated_sentences(transcript.output)
+        @sentences = translated_sentences(transcript)
         next @input_path if @sentences.empty?
 
         Dir.mktmpdir('dub-', @dir) do |workdir|
@@ -71,9 +71,8 @@ module Dubbing
       Subtitler.normalize_lang(@opts.dub_lang || @opts.slang || @opts.lang) || DEFAULT_TARGET_LANG
     end
 
-    def translated_sentences(verbose_json)
-      source    = subtitle_model(verbose_json)
-      sentences = Subtitler::Translator.sentences_for(source)
+    def translated_sentences(subtitle)
+      sentences = Subtitler::Translator.sentences_for(subtitle)
       texts     = sentences.map(&:text)
       durations = sentences.map { |sentence| sentence.finish - sentence.start }
       translations = if ::Translator.respond_to?(:translate_for_dubbing)
@@ -201,7 +200,8 @@ module Dubbing
     end
 
     def build_subtitle_vtt(data, normalize: true)
-      Subtitler::VTT.build(data, normalize: normalize, word_tags: !@opts.nowords)
+      subtitle = data.is_a?(Subtitler::Subtitle) ? data : subtitle_model(data)
+      Subtitler::VTT.build(subtitle, normalize: normalize, word_tags: !@opts.nowords)
     end
 
     def subtitle_target_lang

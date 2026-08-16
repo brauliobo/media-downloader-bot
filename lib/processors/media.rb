@@ -105,10 +105,10 @@ module Processors
 
     def generate_hashtags(i)
       @stl&.update 'transcribing for hashtags'
-      result = Subtitler.transcribe(i.fn_in)
-      language = i.opts.lang || i.opts.slang || result.lang
+      subtitle = Subtitler.transcribe(i.fn_in)
+      language = i.opts.lang || i.opts.slang || subtitle.language
       @stl&.update 'generating hashtags'
-      i.info.hashtags = Hashtags.generate(result.output, lang: language)
+      i.info.hashtags = Hashtags.generate(subtitle, lang: language)
     end
 
     def tag i

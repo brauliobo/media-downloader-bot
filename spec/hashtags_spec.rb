@@ -10,10 +10,13 @@ RSpec.describe Hashtags do
       ['Mindfulness', 'mindfulness', 'Saúde', 'two words', 'three word term']
     end
 
-    result = described_class.new(backend: backend).call(
-      {segments: [{text: 'A transcript about mindfulness and health.'}]},
-      lang: 'pt',
+    subtitle = Subtitler::Subtitle.new(
+      language: 'pt',
+      entries: [Subtitler::Subtitle::Entry.new(
+        text: 'A transcript about mindfulness and health.', start: 0.0, finish: 1.0
+      )]
     )
+    result = described_class.new(backend: backend).call(subtitle)
 
     expect(result).to eq('#Mindfulness #Saúde #TwoWords')
     expect(captured[:kwargs]).to include(model: 'gpt-5.6-luna', effort: 'low', schema: described_class::HASHTAG_SCHEMA)
@@ -29,5 +32,10 @@ RSpec.describe Hashtags do
     expect(backend).not_to receive(:json_prompt)
 
     expect(described_class.new(backend: backend).call('   ')).to eq('')
+  end
+
+  it 'rejects generic structured values' do
+    expect { described_class.new(backend: double).call({text: 'Transcript'}) }
+      .to raise_error(TypeError, 'transcription must be a Subtitler::Subtitle or String')
   end
 end

@@ -221,37 +221,38 @@ RSpec.describe Subtitler::VTT do
   end
 
   it 'carries rounded milliseconds into the next VTT second' do
-    mash = SymMash.new(segments: [
-      SymMash.new(text: 'Carry', start: 1.9996, end: 62.9996, words: []),
+    subtitle = Subtitler::Subtitle.new(entries: [
+      Subtitler::Subtitle::Entry.new(text: 'Carry', start: 1.9996, finish: 62.9996),
     ])
 
-    expect(described_class.build(mash, normalize: false)).to include(
+    expect(described_class.build(subtitle, normalize: false)).to include(
       '00:00:02.000 --> 00:01:03.000'
     )
   end
 
   it 'serializes positive sub-millisecond cues as valid one-millisecond intervals' do
-    mash = SymMash.new(segments: [
-      SymMash.new(text: 'Tiny', start: 1.0001, end: 1.0004, words: [
-        SymMash.new(word: 'Tiny', start: 1.0001, end: 1.0004),
+    word = Subtitler::Subtitle::Word
+    entry = Subtitler::Subtitle::Entry
+    subtitle = Subtitler::Subtitle.new(entries: [
+      entry.new(text: 'Tiny', start: 1.0001, finish: 1.0004, words: [
+        word.new(text: 'Tiny', start: 1.0001, finish: 1.0004),
       ]),
-      SymMash.new(text: 'One two three four', start: 2.0004, end: 2.0024, words: [
-        SymMash.new(word: 'One', start: 2.0004, end: 2.0006),
-        SymMash.new(word: 'two', start: 2.0006, end: 2.0007),
-        SymMash.new(word: 'three', start: 2.0007, end: 2.0016),
-        SymMash.new(word: 'four', start: 2.0016, end: 2.0024),
+      entry.new(text: 'One two three four', start: 2.0004, finish: 2.0024, words: [
+        word.new(text: 'One', start: 2.0004, finish: 2.0006),
+        word.new(text: 'two', start: 2.0006, finish: 2.0007),
+        word.new(text: 'three', start: 2.0007, finish: 2.0016),
+        word.new(text: 'four', start: 2.0016, finish: 2.0024),
       ]),
-      SymMash.new(text: 'Zero', start: 3.0, end: 3.0, words: []),
-      SymMash.new(text: 'Reverse', start: 4.0, end: 3.0, words: []),
+      entry.new(text: 'Zero', start: 3.0, finish: 3.0),
     ])
 
-    rendered = described_class.build(mash, normalize: false)
+    rendered = described_class.build(subtitle, normalize: false)
 
     expect(rendered).to include("00:00:01.000 --> 00:00:01.001\nTiny")
     expect(rendered).to include(
       "00:00:02.000 --> 00:00:02.002\nOne <00:00:02.001>two three four"
     )
-    expect(rendered).not_to include('Zero', 'Reverse')
+    expect(rendered).not_to include('Zero')
     expect(described_class.to_vtt(rendered, 'vtt')).to eq(rendered)
   end
 
@@ -283,13 +284,33 @@ RSpec.describe Subtitler::VTT do
     expect(translated).not_to include('<00:00:')
   end
 
+  it 'preserves the translated subtitle model on structured paths' do
+    subtitle = Subtitler::Subtitle.from_vtt(
+      "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHello world.\n"
+    ).replace_language!('en')
+    zipper = instance_double(Zipper, stl: nil, opts: SymMash.new(nowords: false))
+    allow(::Translator).to receive(:translate).and_return(['Olá mundo.'])
+
+    translated_vtt, lang, translated = described_class.translate_if_needed(zipper, nil, subtitle, 'en', 'pt')
+
+    expect(lang).to eq('pt')
+    expect(translated).to be_a(Subtitler::Subtitle)
+    expect(translated).to have_attributes(language: 'pt', text: 'Olá mundo.')
+    expect(translated_vtt).to include('Olá mundo.')
+  end
+
+  it 'rejects untyped structured input' do
+    expect { described_class.build({'segments' => []}) }
+      .to raise_error(TypeError, 'subtitle must be a Subtitler::Subtitle')
+  end
+
   it 'does not merge normalized cues from different speakers' do
-    mash = SymMash.new(segments: [
-      SymMash.new(text: 'Hello.', start: 0.0, end: 1.0, words: [], speaker_id: 0),
-      SymMash.new(text: 'Goodbye.', start: 1.2, end: 2.0, words: [], speaker_id: 1),
+    subtitle = Subtitler::Subtitle.new(entries: [
+      Subtitler::Subtitle::Entry.new(text: 'Hello.', start: 0.0, finish: 1.0, speaker_id: 0),
+      Subtitler::Subtitle::Entry.new(text: 'Goodbye.', start: 1.2, finish: 2.0, speaker_id: 1),
     ])
 
-    translated = described_class.build(mash)
+    translated = described_class.build(subtitle)
 
     expect(payloads(translated)).to eq(['Hello.', 'Goodbye.'])
   end

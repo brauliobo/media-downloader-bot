@@ -1,6 +1,5 @@
 require_relative '../subtitler/ass'
 require_relative '../subtitler'
-require_relative '../translator'
 require_relative '../output'
 require_relative '../ffmpeg'
 
@@ -18,14 +17,15 @@ class Zipper
     def apply zipper
       return unless subtitles_requested?(zipper.opts)
 
-      vtt, lng, = source_vtt(zipper, translate_to: subtitle_translation_target(zipper.opts))
-      vtt = Subtitler::VTT.clean(vtt)
+      vtt, lng, subtitle = source_vtt(zipper, translate_to: subtitle_translation_target(zipper.opts))
+      vtt      = Subtitler::VTT.clean(vtt)
+      subtitle ||= Subtitler::Subtitle.from_vtt(vtt)
       zipper.stl&.update 'transcoding'
 
       stream = zipper.probe.streams.find { |s| s.codec_type == 'video' }
       portrait = stream.width < stream.height
       ass_mode = zipper.opts.nowords ? :plain : :instagram
-      ass_body = Subtitler::Ass.from_vtt(vtt, portrait:, mode: ass_mode, preset: zipper.opts.subpreset)
+      ass_body = subtitle.to_ass(portrait:, mode: ass_mode, preset: zipper.opts.subpreset)
 
       dir = File.dirname(zipper.outfile || zipper.infile)
       prefix = zipper.outfile ? File.basename(zipper.outfile, File.extname(zipper.outfile)) : 'sub'
@@ -41,22 +41,22 @@ class Zipper
     end
 
     # Prepare subtitles (download, transcribe, translate) and return
-    # [vtt_string, language_iso, whisper_json_or_nil]
+    # [vtt_string, language_iso, Subtitler::Subtitle or nil]. The model is nil
+    # only for downloaded, embedded, or explicitly provided VTT.
     def prepare(zipper, translate_to: nil)
-      vtt = lng = tsp = nil
+      vtt = lng = subtitle = nil
       vtt, lng = fetch(zipper) unless zipper.opts.gensubs
 
       if vtt.nil?
         zipper.stl&.update 'transcribing'
-        res = Subtitler.transcribe(zipper.infile)
-        tsp = res.output
-        lng = res.lang
-        vtt = Subtitler::VTT.build(tsp, word_tags: !zipper.opts.nowords)
+        subtitle = Subtitler.transcribe(zipper.infile)
+        lng = subtitle.language
+        vtt = Subtitler::VTT.build(subtitle, word_tags: !zipper.opts.nowords)
         zipper.info.language ||= lng if zipper.info.respond_to?(:language)
       end
 
-      vtt, lng, tsp = Subtitler::VTT.translate_if_needed(zipper, vtt, tsp, lng, translate_to)
-      [Subtitler::VTT.clean(vtt), lng, tsp]
+      vtt, lng, subtitle = Subtitler::VTT.translate_if_needed(zipper, vtt, subtitle, lng, translate_to)
+      [Subtitler::VTT.clean(vtt), lng, subtitle]
     end
 
     def prepare_subtitle infile, info:, probe:, stl:, opts:, ffmpeg: nil, ffmpeg_factory: nil
@@ -66,32 +66,29 @@ class Zipper
     end
 
     def generate_srt infile, dir:, info:, probe:, stl:, opts:, ffmpeg: nil
-      ffmpeg ||= FFmpeg.new
       opts ||= SymMash.new
       opts.format ||= Zipper::Types.audio.opus unless opts.respond_to?(:format) && opts.format
       opts.audio  ||= 1
 
-      vtt, lng, tsp = prepare_subtitle(
+      vtt, lng, subtitle = prepare_subtitle(
         infile, info: info, probe: probe, stl: stl, opts: opts, ffmpeg: ffmpeg
       )
 
       srt_path = Output.filename(info, dir: dir, ext: 'srt')
-      srt_content = if tsp
-        Subtitler.srt_convert(tsp, word_tags: (!opts.nowords && !opts.onlysrt))
-      else
-        vtt_for_conversion = opts.onlysrt ? Subtitler.strip_word_tags(vtt) : vtt
-        tmp_vtt = File.join(dir, 'sub.vtt')
-        File.write tmp_vtt, vtt_for_conversion
-        ffmpeg.convert_subtitle input: tmp_vtt, format: :srt, label: 'srt conversion failed'
-      end
+      subtitle ||= Subtitler::Subtitle.from_vtt(vtt)
 
       if (target_lang = Subtitler.normalize_lang(opts.slang)) && lng.to_s != target_lang.to_s
-        from_lang = lng if lng.present?
-        srt_content = Translator.translate_srt srt_content, from: from_lang, to: target_lang
+        subtitle = Subtitler::Translator.translate(
+          subtitle,
+          from:           lng.presence,
+          to:             target_lang,
+          merge_adjacent: false
+        )
         lng = target_lang
       end
 
-      srt_content = Subtitler::SRT.filter_noise(srt_content)
+      subtitle.reject_noise!
+      srt_content = subtitle.to_srt(word_tags: !opts.nowords && !opts.onlysrt)
       File.binwrite srt_path, "\uFEFF" + srt_content.encode('UTF-8')
       srt_path
     end

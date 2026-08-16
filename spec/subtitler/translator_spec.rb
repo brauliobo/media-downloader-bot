@@ -75,7 +75,7 @@ RSpec.describe Subtitler::Translator do
     expect(mash.entries[1].start).to eq(2.5)
     expect(mash.entries[1].finish).to eq(3.5)
 
-    vtt = backend.send(:vtt_convert, mash.to_whisper_verbose_hash, normalize: false, word_tags: false)
+    vtt = backend.send(:vtt_convert, mash, normalize: false, word_tags: false)
     expect(vtt).to eq(
       "WEBVTT\n\n" \
       "00:00:00.000 --> 00:00:00.900\n" \
@@ -309,7 +309,7 @@ RSpec.describe Subtitler::Translator do
     expect(mash.entries[1].start).to eq(4.0)
     expect(mash.entries[1].finish).to eq(6.8)
 
-    vtt = backend.send(:vtt_convert, mash.to_whisper_verbose_hash, normalize: false, word_tags: false)
+    vtt = backend.send(:vtt_convert, mash, normalize: false, word_tags: false)
     expect(vtt).to eq(
       "WEBVTT\n\n" \
       "00:00:00.000 --> 00:00:02.500\n" \
@@ -344,7 +344,7 @@ RSpec.describe Subtitler::Translator do
     expect(mash.entries[0].start).to eq(0.0)
     expect(mash.entries[0].finish).to eq(3.3)
 
-    vtt = backend.send(:vtt_convert, mash.to_whisper_verbose_hash, normalize: false, word_tags: false)
+    vtt = backend.send(:vtt_convert, mash, normalize: false, word_tags: false)
     expect(vtt).to eq(
       "WEBVTT\n\n" \
       "00:00:00.000 --> 00:00:03.300\n" \
@@ -386,7 +386,7 @@ RSpec.describe Subtitler::Translator do
     expect(mash.entries[2].start).to eq(2.5)
     expect(mash.entries[3].finish).to eq(4.1)
 
-    vtt = backend.send(:vtt_convert, mash.to_whisper_verbose_hash, normalize: false, word_tags: false)
+    vtt = backend.send(:vtt_convert, mash, normalize: false, word_tags: false)
     expect(vtt).to include('Primeira frase muito extensa')
     expect(vtt).to include('evitar mescla.')
     expect(vtt).to include('Segunda sentença igualmente extensa')
@@ -437,7 +437,7 @@ RSpec.describe Subtitler::Translator do
       [0.0, 0.5], [0.5, 1.0], [1.0, 2.0]
     ])
     expect(sentence.words).to all(satisfy { |word| word.finish > word.start })
-    rendered = Subtitler::VTT.build(Subtitler::Subtitle.new(entries: [sentence]).to_whisper_verbose_hash, normalize: false)
+    rendered = Subtitler::VTT.build(Subtitler::Subtitle.new(entries: [sentence]), normalize: false)
     expect(rendered.scan(/<[^>]+>/)).to eq(['<00:00:00.500>', '<00:00:01.000>'])
     expect(rendered).not_to include('<00:00:02.000>')
 

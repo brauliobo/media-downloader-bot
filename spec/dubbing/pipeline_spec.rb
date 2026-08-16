@@ -19,14 +19,12 @@ RSpec.describe Dubbing::Pipeline do
   after { FileUtils.remove_entry(dir) if Dir.exist?(dir) }
 
   def transcript(lang: 'en')
-    SymMash.new(
-      lang: lang,
-      output: SymMash.new(
-        segments: [
-          SymMash.new(text: 'Hello.', start: 0.0, end: 1.0, words: []),
-          SymMash.new(text: 'Bye.', start: 2.0, end: 3.0, words: []),
-        ]
-      )
+    Subtitler::Subtitle.new(
+      language: lang,
+      entries: [
+        Subtitler::Subtitle::Entry.new(text: 'Hello.', start: 0.0, finish: 1.0),
+        Subtitler::Subtitle::Entry.new(text: 'Bye.', start: 2.0, finish: 3.0),
+      ]
     )
   end
 
@@ -75,16 +73,14 @@ RSpec.describe Dubbing::Pipeline do
 
   it 'preserves scheduled word highlighting unless nowords is requested' do
     allow(::Translator).to receive(:translate_for_dubbing).and_return(['Muito bom dia, amigo.'])
-    source = SymMash.new(
-      segments: [
-        SymMash.new(
-          text: 'Hello world.', start: 0.0, end: 1.0,
-          words: [
-            SymMash.new(word: 'Hello', start: 0.0, end: 0.5),
-            SymMash.new(word: 'world.', start: 0.5, end: 1.0)
-          ]
-        )
-      ]
+    source = Subtitler::Subtitle.from_whisper_verbose_json(
+      'segments' => [{
+        'text' => 'Hello world.', 'start' => 0.0, 'end' => 1.0,
+        'words' => [
+          {'word' => 'Hello', 'start' => 0.0, 'end' => 0.5},
+          {'word' => 'world.', 'start' => 0.5, 'end' => 1.0},
+        ]
+      }]
     )
     speech = File.join(dir, 'speech.wav')
     write_silent_wav(speech, duration: 3.0)
@@ -134,7 +130,9 @@ RSpec.describe Dubbing::Pipeline do
     pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)
     pipeline.instance_variable_set(
       :@transcript_output,
-      SymMash.new(segments: [SymMash.new(text: 'Hello.', start: 0.0, end: 1.0, words: [])])
+      Subtitler::Subtitle.new(entries: [
+        Subtitler::Subtitle::Entry.new(text: 'Hello.', start: 0.0, finish: 1.0)
+      ])
     )
     pipeline.instance_variable_set(:@source_lang, 'en')
 
@@ -181,7 +179,9 @@ RSpec.describe Dubbing::Pipeline do
     pipeline.instance_variable_set(:@source_lang, 'en')
     pipeline.instance_variable_set(
       :@transcript_output,
-      SymMash.new(segments: [SymMash.new(text: 'Hello.', start: 0.0, end: 1.0, words: [])])
+      Subtitler::Subtitle.new(entries: [
+        Subtitler::Subtitle::Entry.new(text: 'Hello.', start: 0.0, finish: 1.0)
+      ])
     )
     allow(::Translator).to receive(:translate).and_return(['Buenas tardes.', '¿Todo bien?'])
     expect(pipeline).not_to receive(:source_subtitle_vtt)

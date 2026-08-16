@@ -19,7 +19,7 @@ RSpec.describe Subtitler::WhisperCpp do
     allow(Zipper).to receive(:with_audio_wav).with('audio.wav').and_yield('/tmp/audio.wav')
   end
 
-  it 'loads verbose JSON into the normalized result envelope' do
+  it 'loads verbose JSON into a normalized subtitle' do
     response = instance_double(Net::HTTPResponse, code: '200', body: JSON.generate(
       language: 'Portuguese',
       text: ' Olá mundo',
@@ -45,11 +45,11 @@ RSpec.describe Subtitler::WhisperCpp do
 
     result = backend.transcribe('audio.wav')
 
-    expect(result.lang).to eq('pt')
-    expect(result.output).to be_a(SymMash)
-    expect(result.output.segments.first.words.map(&:to_h)).to eq([
-      { word: ' Olá', start: 0.25, end: 0.7 },
-      { word: ' mundo', start: 0.8, end: 1.5 },
+    expect(result).to have_attributes(language: 'pt', text: 'Olá mundo')
+    expect(result).to be_a(Subtitler::Subtitle)
+    expect(result.entries.first.words.map { |word| [word.text, word.start, word.finish] }).to eq([
+      [' Olá', 0.25, 0.7],
+      [' mundo', 0.8, 1.5],
     ])
   end
 
@@ -72,11 +72,11 @@ RSpec.describe Subtitler::WhisperCpp do
     ))
     allow(Utils::HTTP).to receive(:post).and_return(response)
 
-    segment = backend.transcribe('audio.wav').output.segments.first
+    segment = backend.transcribe('audio.wav').entries.first
 
-    expect(segment.words.map(&:to_h)).to eq([
-      { word: ' testando.', start: 0.0, end: 1.0 },
-      { word: 'Outra', start: 1.1, end: 1.5 },
+    expect(segment.words.map { |word| [word.text, word.start, word.finish] }).to eq([
+      [' testando.', 0.0, 1.0],
+      ['Outra', 1.1, 1.5],
     ])
     expect(segment.text).to eq('testando. Outra')
   end
@@ -101,13 +101,13 @@ RSpec.describe Subtitler::WhisperCpp do
     ))
     allow(Utils::HTTP).to receive(:post).and_return(response)
 
-    segments = backend.transcribe('audio.wav').output.segments
+    segments = backend.transcribe('audio.wav').entries
 
-    expect(segments.first.words.map(&:to_h)).to eq([
-      { word: ' testando', start: 0.0, end: 1.0 },
+    expect(segments.first.words.map { |word| [word.text, word.start, word.finish] }).to eq([
+      [' testando', 0.0, 1.0],
     ])
     expect(segments.first.text).to eq('testando')
-    expect(segments.first.end).to eq(1.0)
+    expect(segments.first.finish).to eq(1.0)
     expect(segments.size).to eq(1)
   end
 
@@ -131,9 +131,9 @@ RSpec.describe Subtitler::WhisperCpp do
     ))
     allow(Utils::HTTP).to receive(:post).and_return(response)
 
-    segments = backend.transcribe('audio.wav').output.segments
+    segments = backend.transcribe('audio.wav').entries
 
-    expect(segments.map { |segment| segment.words.map(&:word) }).to eq([[' Done!'], ['Next']])
+    expect(segments.map { |segment| segment.words.map(&:text) }).to eq([[' Done!'], ['Next']])
     expect(segments.map(&:text)).to eq(['Done!', 'Next'])
   end
 
@@ -154,11 +154,11 @@ RSpec.describe Subtitler::WhisperCpp do
     ))
     allow(Utils::HTTP).to receive(:post).and_return(response)
 
-    segment = backend.transcribe('audio.wav', merge_words: false).output.segments.first
+    segment = backend.transcribe('audio.wav', merge_words: false).entries.first
 
-    expect(segment.words.map(&:to_h)).to eq([
-      { word: ' test', start: 0.0, end: 0.5 },
-      { word: 'ando', start: 0.5, end: 1.0 },
+    expect(segment.words.map { |word| [word.text, word.start, word.finish] }).to eq([
+      [' test', 0.0, 0.5],
+      ['ando', 0.5, 1.0],
     ])
     expect(segment.text).to eq(' original text')
   end
@@ -176,11 +176,23 @@ RSpec.describe Subtitler::WhisperCpp do
       ],
     }
 
-    expect(backend.srt_convert(verbose, normalize: false)).to eq(
+    subtitle = Subtitler::Subtitle.from_whisper_verbose_json(verbose)
+
+    expect(backend.srt_convert(subtitle, normalize: false)).to eq(
       "1\n00:00:00,000 --> 00:00:02,000\nOne <00:00:01,000>two\n\n"
     )
-    expect(backend.send(:vtt_convert, verbose, normalize: false)).to eq(
+    expect(backend.send(:vtt_convert, subtitle, normalize: false)).to eq(
       "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nOne <00:00:01.000>two\n\n"
     )
+  end
+
+  it 'returns raw text only when a non-JSON response format is requested' do
+    response = instance_double(Net::HTTPResponse, code: '200', body: 'plain transcript')
+    expect(Utils::HTTP).to receive(:post).with(
+      'http://whisper.test:8080/inference',
+      hash_including(response_format: 'text', language: 'auto')
+    ).and_return(response)
+
+    expect(backend.transcribe('audio.wav', format: 'text')).to eq('plain transcript')
   end
 end

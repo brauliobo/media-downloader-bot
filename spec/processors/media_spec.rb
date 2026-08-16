@@ -68,10 +68,10 @@ RSpec.describe Processors::Media do
 
   describe '#generate_hashtags' do
     it 'transcribes the input and uses an explicit language for hashtags' do
-      transcript = SymMash.new(output: SymMash.new(text: 'Mindfulness and health.'), lang: 'en')
+      transcript = Subtitler::Subtitle.new(language: 'en', text: 'Mindfulness and health.')
       i = input(fn_in: '/tmp/in.mp4', opts: SymMash.new(hashtags: 1, slang: 'pt'))
       allow(Subtitler).to receive(:transcribe).with(i.fn_in).and_return(transcript)
-      allow(Hashtags).to receive(:generate).with(transcript.output, lang: 'pt').and_return('#atencao')
+      allow(Hashtags).to receive(:generate).with(transcript, lang: 'pt').and_return('#atencao')
 
       processor.send(:generate_hashtags, i)
 

@@ -14,18 +14,13 @@ RSpec.describe Zipper::Subtitle do
     expect(safe).not_to be_empty
   end
 
-  it 'converts generated VTT to SRT through FFmpeg' do
+  it 'renders external VTT to SRT directly through the subtitle model' do
     ffmpeg = instance_double FFmpeg
     info   = SymMash.new title: 'Example'
     opts   = SymMash.new onlysrt: true, nowords: false
     allow(described_class).to receive(:prepare_subtitle)
-      .and_return ["WEBVTT\n\n<00:00:00.100>Hello", 'en', nil]
-    expect(ffmpeg).to receive(:convert_subtitle).with(
-      input: File.join(dir, 'sub.vtt'), format: :srt, label: 'srt conversion failed'
-    ) do |args|
-      expect(File.read(args[:input])).to eq("WEBVTT\n\nHello")
-      "1\n00:00:00,000 --> 00:00:01,000\nHello\n"
-    end
+      .and_return ["WEBVTT\n\n00:00:00.000 --> 00:00:01.000\n<00:00:00.100>Hello\n", 'en', nil]
+    expect(ffmpeg).not_to receive(:convert_subtitle)
 
     output = described_class.generate_srt(
       'video.mp4', dir: dir, info: info, probe: nil, stl: nil, opts: opts, ffmpeg: ffmpeg
@@ -35,20 +30,39 @@ RSpec.describe Zipper::Subtitle do
     expect(File.binread(output).bytes).to start_with 0xEF, 0xBB, 0xBF, 0x31, 0x0A
   end
 
-  it 'preserves SRT conversion errors' do
+  it 'preserves external VTT parse errors' do
     ffmpeg = instance_double FFmpeg
     info   = SymMash.new title: 'Example'
     opts   = SymMash.new onlysrt: true
     allow(described_class).to receive(:prepare_subtitle)
-      .and_return ["WEBVTT\n\nInvalid", 'en', nil]
-    allow(ffmpeg).to receive(:convert_subtitle)
-      .and_raise Sh::Error.new('srt conversion failed', 'invalid subtitle')
+      .and_return ["WEBVTT\n\n00:00:02.000 --> 00:00:01.000\nInvalid\n", 'en', nil]
 
     expect {
       described_class.generate_srt(
         'video.mp4', dir: dir, info: info, probe: nil, stl: nil, opts: opts, ffmpeg: ffmpeg
       )
-    }.to raise_error Sh::Error, 'srt conversion failed: invalid subtitle'
+    }.to raise_error ArgumentError, 'invalid WEBVTT cue range'
+  end
+
+  it 'keeps generated transcription as the tuple model and renders it directly' do
+    subtitle = Subtitler::Subtitle.new(
+      language: 'en', text: 'Hello.',
+      entries: [Subtitler::Subtitle::Entry.new(text: 'Hello.', start: 0.0, finish: 1.0)]
+    )
+    zipper = instance_double(
+      Zipper,
+      infile: 'video.mp4',
+      opts: SymMash.new(gensubs: true, nowords: false),
+      stl: nil,
+      info: SymMash.new
+    )
+    allow(Subtitler).to receive(:transcribe).with('video.mp4').and_return(subtitle)
+
+    vtt, lang, structured = described_class.prepare(zipper)
+
+    expect(vtt).to include('Hello.')
+    expect(lang).to eq('en')
+    expect(structured).to equal(subtitle)
   end
 
   it 'prefers exact and base-matching authored locales without translating them' do

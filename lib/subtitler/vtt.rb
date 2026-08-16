@@ -30,32 +30,35 @@ class Subtitler
       translated.to_vtt(word_tags: word_tags)
     end
 
-    def self.translate_if_needed(zipper, vtt, tsp, from_lang, to_lang)
+    def self.translate_if_needed(zipper, vtt, subtitle, from_lang, to_lang)
       normalized_from = Subtitler.normalize_lang(from_lang)
       normalized_to   = Subtitler.normalize_lang(to_lang)
-      return [vtt, normalized_from, tsp] unless normalized_to
-      return [vtt, normalized_from, tsp] if normalized_from && normalized_from == normalized_to
+      return [vtt, normalized_from, subtitle] unless normalized_to
+      return [vtt, normalized_from, subtitle] if normalized_from && normalized_from == normalized_to
 
       zipper&.stl&.update 'translating'
 
-      if tsp
+      if subtitle
+        raise TypeError, 'subtitle must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitle)
+
         translated = Subtitler::Translator.translate(
-          subtitle_from(tsp),
+          subtitle,
           from:           normalized_from,
           to:             normalized_to,
           merge_adjacent: false
         )
-        tsp = SymMash.new(translated.to_whisper_verbose_hash)
+        subtitle = translated
         vtt = translated.to_vtt(word_tags: !zipper.opts.nowords)
       else
         vtt = translate(vtt, to: normalized_to, from: normalized_from, word_tags: !zipper.opts.nowords)
       end
 
-      [vtt, normalized_to, tsp]
+      [vtt, normalized_to, subtitle]
     end
 
-    def self.build(verbose_json, normalize: true, word_tags: true, stdsub: nil)
-      subtitle = subtitle_from(verbose_json)
+    def self.build(subtitle, normalize: true, word_tags: true, stdsub: nil)
+      raise TypeError, 'subtitle must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitle)
+
       use_norm = stdsub.nil? ? normalize : stdsub
       if use_norm
         subtitle.split_long_entries!(max_chars: Subtitler::Translator::MAX_SUBTITLE_CHARS)
@@ -101,17 +104,6 @@ class Subtitler
       )
       clean(vtt)
     end
-
-    def self.subtitle_from(value)
-      return value if value.is_a?(Subtitle)
-
-      data = JSON.parse(JSON.generate(value))
-      data['segments'] = Array(data['segments']).reject do |segment|
-        segment['end'].to_f < segment['start'].to_f
-      end
-      Subtitle.from_whisper_verbose_json(data)
-    end
-    private_class_method :subtitle_from
 
     def self.validate_native_vtt!(vtt)
       Subtitle.from_vtt(vtt)

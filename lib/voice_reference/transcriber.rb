@@ -19,8 +19,8 @@ class VoiceReference
 
       options = {format: 'verbose_json', merge_words: false}
       options[:separate_voice] = false unless separate_voice
-      result = backend.transcribe(audio, **options)
-      transcript = normalize(result)
+      subtitle = backend.transcribe(audio, **options)
+      transcript = normalize(subtitle)
       File.write(cache, JSON.pretty_generate(transcript)) if cache
       transcript
     end
@@ -29,26 +29,24 @@ class VoiceReference
 
     attr_reader :backend, :cache_dir, :separate_voice
 
-    def normalize(result)
-      output = result.output
+    def normalize(subtitle)
+      raise TypeError, 'transcription must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitler::Subtitle)
+
       {
-        language: result.lang || Subtitler.normalize_lang(output.language),
-        segments: Array(output.segments).map { |segment| normalize_segment(segment) }
+        language: subtitle.language,
+        segments: subtitle.entries.map { |segment| normalize_segment(segment) }
       }
     end
 
     def normalize_segment(segment)
-      probabilities = Array(segment.words).filter_map do |word|
-        value = word.probability || word.probability_score || word.prob
-        value.to_f if value
-      end
-      if probabilities.empty? && segment.avg_logprob
-        probabilities = Array.new(segment.text.to_s.scan(/[[:alpha:]]+/).size, Math.exp(segment.avg_logprob.to_f))
+      probabilities = segment.words.filter_map(&:confidence)
+      if probabilities.empty? && segment.metadata['avg_logprob']
+        probabilities = Array.new(segment.text.scan(/[[:alpha:]]+/).size, Math.exp(segment.metadata['avg_logprob'].to_f))
       end
       {
         start:         segment.start.to_f,
-        finish:        segment.end.to_f,
-        text:          segment.text.to_s.strip,
+        finish:        segment.finish.to_f,
+        text:          segment.text.strip,
         probabilities: probabilities
       }
     end
