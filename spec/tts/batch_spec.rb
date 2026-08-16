@@ -36,20 +36,20 @@ RSpec.describe 'TTS batch synthesis' do
       end
     end
 
-    expect(2.times.map { Timeout.timeout(1) { backend.started.pop } }).to eq([[1, 2]] * 2)
+    expect(2.times.map { Timeout.timeout(1) { backend.started.pop } }).to eq([[2, 2]] * 2)
     expect { Timeout.timeout(0.1) { backend.started.pop } }.to raise_error(Timeout::Error)
     backend.release << true
     expect(Timeout.timeout(1) { backend.started.pop }).to eq([1, 2])
-    4.times { backend.release << true }
+    2.times { backend.release << true }
     worker.join
     expect(result.pop).to eq(items.map { |item| item[:out_path] })
-    expect(5.times.map { completed.pop }.sort).to eq([1, 1, 1, 1, 1])
+    expect(3.times.map { completed.pop }.sort).to eq([1, 2, 2])
   ensure
-    5.times { backend&.release&.push(true) }
+    3.times { backend&.release&.push(true) }
     worker&.join
   end
 
-  it 'runs single-item batches sequentially with one thread' do
+  it 'runs two-item batches sequentially with one thread' do
     backend = Class.new do
       class << self
         attr_accessor :started, :release
@@ -76,21 +76,17 @@ RSpec.describe 'TTS batch synthesis' do
       end
     end
 
-    expect(Timeout.timeout(1) { backend.started.pop }).to eq(1)
+    expect(Timeout.timeout(1) { backend.started.pop }).to eq(2)
     expect { Timeout.timeout(0.1) { backend.started.pop } }.to raise_error(Timeout::Error)
     backend.release << true
-    expect(Timeout.timeout(1) { backend.started.pop }).to eq(1)
-    backend.release << true
-    expect(Timeout.timeout(1) { backend.started.pop }).to eq(1)
-    backend.release << true
-    expect(Timeout.timeout(1) { backend.started.pop }).to eq(1)
+    expect(Timeout.timeout(1) { backend.started.pop }).to eq(2)
     backend.release << true
     worker.join
 
     expect(result.pop).to eq(items.map { |item| item[:out_path] })
-    expect(4.times.map { completed.pop }).to eq([1, 1, 1, 1])
+    expect(2.times.map { completed.pop }).to eq([2, 2])
   ensure
-    4.times { backend&.release&.push(true) }
+    2.times { backend&.release&.push(true) }
     worker&.join
   end
 
