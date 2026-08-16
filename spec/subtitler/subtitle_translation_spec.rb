@@ -36,6 +36,18 @@ RSpec.describe Subtitler::Subtitle, 'translation' do
       .to raise_error(TypeError, /Subtitle::Entry/)
   end
 
+  it 'renders translated VTT text in ASS instead of the authored source text' do
+    vtt = "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nBonjour <00:00:01.000>monde\n"
+    allow(::Translator).to receive(:translate).and_return(['Hello world'])
+
+    translated = described_class.from_vtt(vtt).translated(from: 'fr', to: 'en', merge_adjacent: false)
+    dialogue   = translated.to_ass(mode: :plain).lines.grep(/^Dialogue:/).join
+
+    expect(translated.to_vtt(word_tags: false)).to include('Hello world')
+    expect(dialogue).to include('Hello world')
+    expect(dialogue).not_to include('Bonjour', 'monde')
+  end
+
   it 'reconstructs sentences split across segments and translates properly' do
     verbose_json = {
       segments: [

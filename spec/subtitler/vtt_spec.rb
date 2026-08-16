@@ -179,6 +179,62 @@ RSpec.describe Subtitler::VTT do
     expect(translated).to include('Olá <00:00:02.000>mundo.')
   end
 
+  it 'round-trips untouched VTT presentation metadata and removes only markers when requested' do
+    vtt = <<~VTT
+      WEBVTT
+
+      cue-one
+      00:00:00.000 --> 00:00:02.000 align:start position:50%
+      Bonjour <00:00:01.000>world
+      authored second line
+    VTT
+    subtitle = Subtitler::Subtitle.from_vtt(vtt)
+
+    expect(subtitle.to_vtt).to eq(
+      "WEBVTT\n\n" \
+      "cue-one\n" \
+      "00:00:00.000 --> 00:00:02.000 align:start position:50%\n" \
+      "Bonjour <00:00:01.000>world\n" \
+      "authored second line\n\n"
+    )
+    expect(subtitle.to_vtt(word_tags: false)).to eq(
+      "WEBVTT\n\n" \
+      "cue-one\n" \
+      "00:00:00.000 --> 00:00:02.000 align:start position:50%\n" \
+      "Bonjour world\n" \
+      "authored second line\n\n"
+    )
+    expect(subtitle.to_vtt(word_tags: false)).not_to match(/<\d{2}:\d{2}/)
+  end
+
+  it 'does not reuse authored VTT content after semantic or word-timing changes' do
+    vtt = <<~VTT
+      WEBVTT
+
+      cue-one
+      00:00:00.000 --> 00:00:02.000 align:start
+      Bonjour <00:00:01.000>world
+      authored second line
+    VTT
+    subtitle = Subtitler::Subtitle.from_vtt(vtt)
+    subtitle.entries.first.project_text!('Hello world')
+
+    changed = subtitle.to_vtt(word_tags: false)
+
+    expect(changed).to include(
+      "cue-one\n00:00:00.000 --> 00:00:02.000 align:start\nHello world"
+    )
+    expect(changed).not_to include('Bonjour', 'authored second line', '<00:00:01.000>')
+
+    timed_vtt = "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nBonjour <00:00:01.000>world\n"
+    subtitle = Subtitler::Subtitle.from_vtt(timed_vtt)
+    subtitle.entries.first.words.last.replace_timing!(start: 1.5, finish: 2.0)
+    retimed = subtitle.to_vtt
+
+    expect(retimed).to include('Bonjour <00:00:01.500>world')
+    expect(retimed).not_to include('<00:00:01.000>')
+  end
+
   it 'decodes cue markup and projects translation over structural inline timings' do
     vtt = <<~VTT
       WEBVTT

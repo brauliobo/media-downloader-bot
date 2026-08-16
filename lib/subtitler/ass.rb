@@ -265,7 +265,14 @@ class Subtitler
     end
 
     def ass_text(entry)
-      entry.metadata.fetch('ass_text', entry.text).gsub(/\r?\n/, '\\N')
+      metadata = entry.metadata
+      text = if metadata.key?('ass_text') &&
+        (!metadata.key?('source_text') || metadata['source_text'] == entry.text)
+        metadata['ass_text']
+      else
+        entry.text
+      end
+      text.gsub(/\r?\n/, '\\N')
     end
 
     def word_groups(entry)

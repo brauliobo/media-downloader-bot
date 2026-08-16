@@ -202,6 +202,32 @@ RSpec.describe Subtitler::Subtitle do
       expect(entry.text).to eq('Hello world')
     end
 
+    it 'invalidates authored ASS text when entries change or are derived' do
+      entry = described_class::Entry.new(
+        start: 0, finish: 1, text: 'Original',
+        words: [described_class::Word.new(text: 'Changed', start: 0, finish: 1)],
+        metadata: {'ass_text' => 'Original'}
+      )
+
+      entry.rebuild_text_from_words!
+      expect(entry.metadata).not_to have_key('ass_text')
+
+      merged = described_class::Entry.new(
+        start: 0, finish: 1, text: 'Left', metadata: {'ass_text' => 'Left'}
+      )
+      merged.merge!(described_class::Entry.new(
+        start: 1, finish: 2, text: 'Right', metadata: {'ass_text' => 'Right'}
+      ))
+      expect(merged.metadata).not_to have_key('ass_text')
+
+      split = described_class.new(entries: [described_class::Entry.new(
+        start: 0, finish: 2, text: 'A long authored cue', metadata: {'ass_text' => 'A long authored cue'}
+      )])
+      split.split_long_entries!(max_chars: 5)
+
+      expect(split.entries).to all(satisfy { |candidate| !candidate.metadata.key?('ass_text') })
+    end
+
     it 'replaces language and entries and rebuilds or filters document text explicitly' do
       kept = described_class::Entry.new(start: 0, finish: 1, text: 'Kept')
       gone = described_class::Entry.new(start: 1, finish: 2, text: '')

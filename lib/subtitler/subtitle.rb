@@ -11,6 +11,11 @@ class Subtitler
     MAX_ENTRY_CHARS    = 84
     TRANSLATION_PREFIX = /\A(?:translation|translated(?:\s+text)?|answer|response)\s*:\s*/i
     NOISE_DOTS_LINE    = /\A\s*\d(?:\s*\.\s*\d){3,}\.??\s*\z/.freeze
+    FORMAT_TEXT_METADATA_KEYS = %w[ass_text source_signature].freeze
+    RAW_CUE_METADATA_KEYS      = %w[
+      ass_text source_signature content_lines timing_line prefix_lines
+      source_start source_finish source_text block_index
+    ].freeze
 
     attr_reader :language, :text, :entries, :metadata
 
@@ -161,7 +166,7 @@ class Subtitler
           TextHelpers.sentences_from_entries(run.map(&:deep_copy)).each do |entry|
             entry.assign_speaker!(run.first.speaker_id)
             entry.assign_cue!(run.first.cue_id)
-            entry.replace_metadata!(self.class.send(:mutable_copy, run.first.metadata))
+            entry.replace_metadata!(derived_metadata(run.first.metadata))
           end
         else
           run.flat_map { |entry| text_sentence_entries(entry) }
@@ -232,16 +237,14 @@ class Subtitler
         words = self.class.send(
           :inline_timed_words, content_lines.join("\n"), entry.start, entry.finish, entry.cue_id
         )
-        metadata = self.class.send(:mutable_copy, entry.metadata).merge(
-          'content_lines' => content_lines,
-          'ass_text'      => CGI.unescapeHTML(content_lines.join("\n")).gsub(Subtitler::INLINE_TIMESTAMP, ''),
-          'source_text'   => translated_text
-        )
-
         entry.replace_text!(translated_text)
           .replace_words!(words)
           .replace_source!(text: translated_text, words: words.map(&:deep_copy))
-          .replace_metadata!(metadata)
+        entry.replace_metadata!(self.class.send(:mutable_copy, entry.metadata).merge(
+          'content_lines' => content_lines,
+          'ass_text'      => CGI.unescapeHTML(content_lines.join("\n")).gsub(Subtitler::INLINE_TIMESTAMP, ''),
+          'source_text'   => translated_text
+        ))
         block_index = entry.metadata.fetch('block_index')
         block_end   = source_blocks.fetch(block_index)[/(?:\r?\n)+\z/].to_s
         source_blocks[block_index] = original_srt_lines(entry).join(@metadata.fetch('line_ending')) + block_end
@@ -368,7 +371,7 @@ class Subtitler
         words:      words,
         speaker_id: entry.speaker_id,
         cue_id:     entry.cue_id,
-        metadata:   self.class.send(:mutable_copy, entry.metadata).reject { |key, _| key == 'ass_text' }
+        metadata:   derived_metadata(entry.metadata)
       )
     end
 
@@ -395,9 +398,8 @@ class Subtitler
         start_time   = start_units / 1000.0
         finish_time  = finish_units / 1000.0
         lines        = []
-        identifier   = cue_identifier(entry, index, format)
-        lines << identifier if identifier
-        lines << "#{Subtitler.format_timestamp(start_time, decimal: decimal)} --> #{Subtitler.format_timestamp(finish_time, decimal: decimal)}"
+        lines.concat(cue_prefix_lines(entry, index, format))
+        lines << cue_timing_line(entry, start_time, finish_time, decimal, format)
         lines << render_entry_text(entry, start_time, finish_time, decimal, word_tags, format)
         lines.join(newline)
       end
@@ -412,6 +414,17 @@ class Subtitler
       out
     end
 
+    def cue_prefix_lines(entry, index, format)
+      if format == :vtt
+        return entry.metadata.fetch('prefix_lines') if entry.metadata.key?('prefix_lines')
+        return [(index + 1).to_s] if @metadata['numbered_cues']
+
+        return []
+      end
+
+      [cue_identifier(entry, index, format)].compact
+    end
+
     def cue_identifier(entry, index, format)
       return (index + 1).to_s if format == :srt && entry.cue_id.nil?
       return entry.cue_id.to_s if format == :srt
@@ -420,7 +433,21 @@ class Subtitler
       (index + 1).to_s
     end
 
+    def cue_timing_line(entry, start_time, finish_time, decimal, format)
+      if format == :vtt && original_vtt_entry?(entry)
+        return entry.metadata.fetch('timing_line')
+      end
+
+      settings = format == :vtt && @metadata['source_format'] == 'vtt' ? vtt_timing_settings(entry) : ''
+      "#{Subtitler.format_timestamp(start_time, decimal: decimal)} --> #{Subtitler.format_timestamp(finish_time, decimal: decimal)}#{settings}"
+    end
+
     def render_entry_text(entry, start_time, finish_time, decimal, word_tags, format)
+      if format == :vtt && original_vtt_entry?(entry)
+        content_lines = entry.metadata.fetch('content_lines')
+        content_lines = content_lines.map { |line| line.gsub(Subtitler::INLINE_TIMESTAMP, '') } unless word_tags
+        return content_lines.join("\n")
+      end
       if format == :vtt && @metadata['source_format'] == 'srt' && original_srt_entry?(entry)
         return entry.metadata.fetch('content_lines').join("\n").gsub(Subtitler::INLINE_TIMESTAMP) do |timestamp|
           timestamp.tr(',', '.')
@@ -451,6 +478,21 @@ class Subtitler
       end.join(' ')
     end
 
+    def original_vtt_entry?(entry)
+      @metadata['source_format'] == 'vtt' &&
+        entry.metadata['source_signature'] == self.class.send(:source_signature,
+          start: entry.start, finish: entry.finish, text: entry.text,
+          cue_id: entry.cue_id, words: entry.words)
+    end
+
+    def vtt_timing_settings(entry)
+      timing_line = entry.metadata['timing_line']
+      return '' unless timing_line
+
+      match = timing_line.match(/\A\s*#{Subtitler::TIMESTAMP_VALUE}\s+-->\s+#{Subtitler::TIMESTAMP_VALUE}(.*)\z/)
+      match ? match[1] : ''
+    end
+
     def original_srt_entry?(entry)
       entry.metadata['source_start'] == entry.start &&
         entry.metadata['source_finish'] == entry.finish &&
@@ -460,6 +502,16 @@ class Subtitler
     def original_srt_lines(entry)
       Array(entry.metadata['prefix_lines']) +
         [entry.metadata.fetch('timing_line')] + entry.metadata.fetch('content_lines')
+    end
+
+    def derived_entry_copy(entry)
+      entry.deep_copy.replace_metadata!(derived_metadata(entry.metadata))
+    end
+
+    def derived_metadata(metadata)
+      self.class.send(:mutable_copy, metadata).reject do |key, _|
+        RAW_CUE_METADATA_KEYS.include?(key.to_s)
+      end
     end
 
     def render_original_srt_document
@@ -518,7 +570,7 @@ class Subtitler
     def text_sentence_entries(entry)
       parts = TextHelpers.split_sentences(entry.text.strip)
       return [] if parts.empty?
-      return [entry.deep_copy] if parts.size == 1
+      return [derived_entry_copy(entry)] if parts.size == 1
 
       build_text_entries(entry, parts, partition_source: true)
     end
@@ -550,7 +602,7 @@ class Subtitler
         cue_id:       source.cue_id,
         source_text:  source.source_text,
         source_words: source.source_words.map(&:deep_copy),
-        metadata:     self.class.send(:mutable_copy, source.metadata)
+        metadata:     derived_metadata(source.metadata)
       )
     end
 
@@ -571,7 +623,7 @@ class Subtitler
           cue_id:       source.cue_id,
           source_text:  partition_source ? text : source.source_text,
           source_words: source.source_words.map(&:deep_copy),
-          metadata:     self.class.send(:mutable_copy, source.metadata)
+          metadata:     derived_metadata(source.metadata)
         )
         cursor = finish
         entry
@@ -692,7 +744,10 @@ class Subtitler
       end
 
       def replace_text!(text)
-        @text = Subtitle.send(:optional_text, text, 'text')
+        new_text = Subtitle.send(:optional_text, text, 'text')
+        changed = @text != new_text
+        @text = new_text
+        invalidate_format_text! if changed
         self
       end
 
@@ -713,7 +768,10 @@ class Subtitler
       end
 
       def rebuild_text_from_words!
-        @text = @words.map { |word| word.text.strip }.reject(&:empty?).join(' ').freeze
+        new_text = @words.map { |word| word.text.strip }.reject(&:empty?).join(' ').freeze
+        changed = @text != new_text
+        @text = new_text
+        invalidate_format_text! if changed
         self
       end
 
@@ -810,9 +868,11 @@ class Subtitler
         @source_text  = join_text(@source_text, other.source_text)
         @source_words = (@source_words + other.source_words.map(&:deep_copy)).freeze
         @speaker_id   = other.speaker_id if @speaker_id.nil?
-        @metadata     = Subtitle.send(:immutable_hash, Subtitle.send(:mutable_copy, @metadata).merge(
+        metadata = Subtitle.send(:mutable_copy, @metadata).merge(
           Subtitle.send(:mutable_copy, other.metadata)
-        ), 'metadata')
+        )
+        metadata.reject! { |key, _| Subtitle::RAW_CUE_METADATA_KEYS.include?(key.to_s) }
+        @metadata = Subtitle.send(:immutable_hash, metadata, 'metadata')
         self
       end
 
@@ -836,6 +896,12 @@ class Subtitler
       private_class_method :milliseconds
 
       private
+
+      def invalidate_format_text!
+        metadata = Subtitle.send(:mutable_copy, @metadata)
+        metadata.reject! { |key, _| Subtitle::FORMAT_TEXT_METADATA_KEYS.include?(key.to_s) }
+        replace_metadata!(metadata)
+      end
 
       def validate_timing!(start, finish)
         raise ArgumentError, 'finish must not precede start' if finish < start
@@ -1029,23 +1095,37 @@ class Subtitler
         cue_id = lines[0...timing_index].reverse.find { |line| !line.strip.empty? }
         cue_id = block_index if format == :vtt && cue_id.nil?
         words  = inline_timed_words(raw_text, start_time, finish_time, cue_id)
+        metadata = {
+          'content_lines' => content_lines,
+          'ass_text'      => CGI.unescapeHTML(raw_text).gsub(Subtitler::INLINE_TIMESTAMP, ''),
+          'source_start'  => start_time,
+          'source_finish' => finish_time,
+          'source_text'   => text,
+          'timing_line'   => lines.fetch(timing_index),
+          'prefix_lines'  => lines[0...timing_index],
+          'block_index'   => block_index,
+        }
+        metadata['source_signature'] = source_signature(
+          start: start_time, finish: finish_time, text: text, cue_id: cue_id, words: words
+        ) if format == :vtt
         Entry.new(
           start:  start_time,
           finish: finish_time,
           text:   text,
           words:  words,
           cue_id: cue_id,
-          metadata: {
-            'content_lines' => content_lines,
-            'ass_text'      => CGI.unescapeHTML(raw_text).gsub(Subtitler::INLINE_TIMESTAMP, ''),
-            'source_start'  => start_time,
-            'source_finish' => finish_time,
-            'source_text'   => text,
-            'timing_line'   => lines.fetch(timing_index),
-            'prefix_lines'  => lines[0...timing_index],
-            'block_index'   => block_index,
-          }
+          metadata: metadata
         )
+      end
+
+      def source_signature(start:, finish:, text:, cue_id:, words:)
+        [
+          start,
+          finish,
+          cue_id,
+          text,
+          words.map { |word| [word.text, word.start, word.finish] },
+        ]
       end
 
       def inline_timed_words(text, cue_start, cue_finish, cue_id)

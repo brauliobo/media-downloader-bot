@@ -94,5 +94,7 @@ RSpec.describe Translator do
     expect(result).to equal(subtitle)
     expect(subtitle).to have_attributes(language: 'pt', text: 'Olá mundo')
     expect(subtitle.to_srt).to include("00:00:01,000 --> 00:00:02,000\nOlá mundo")
+    expect(subtitle.to_ass(mode: :plain)).to include('Olá mundo')
+    expect(subtitle.to_ass(mode: :plain)).not_to include('Hello world')
   end
 end
