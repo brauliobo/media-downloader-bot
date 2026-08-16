@@ -162,4 +162,25 @@ RSpec.describe Subtitler::WhisperCpp do
     ])
     expect(segment.text).to eq(' original text')
   end
+
+  it 'renders SRT and VTT conversions through typed subtitle serializers' do
+    verbose = {
+      'segments' => [
+        {
+          'start' => 0.0, 'end' => 2.0, 'text' => ' One two',
+          'words' => [
+            {'word' => ' One', 'start' => 0.0, 'end' => 1.0},
+            {'word' => ' two', 'start' => 1.0, 'end' => 2.0},
+          ],
+        },
+      ],
+    }
+
+    expect(backend.srt_convert(verbose, normalize: false)).to eq(
+      "1\n00:00:00,000 --> 00:00:02,000\nOne <00:00:01,000>two\n\n"
+    )
+    expect(backend.send(:vtt_convert, verbose, normalize: false)).to eq(
+      "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nOne <00:00:01.000>two\n\n"
+    )
+  end
 end

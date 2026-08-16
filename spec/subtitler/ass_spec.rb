@@ -137,4 +137,54 @@ RSpec.describe Subtitler::Ass do
     expect(described_class.ass_time(0.999)).to eq('0:00:01.00')
     expect(described_class.ass_time(1.999)).to eq('0:00:02.00')
   end
+
+  describe Subtitler::Ass::Document do
+    it 'represents every V4+ style field and all event fields' do
+      expect(Subtitler::Ass::Style::DEFAULTS.keys).to eq(Subtitler::Ass::STYLE_FIELDS)
+
+      event = Subtitler::Ass::Event.new(
+        layer: 2, start: 1.25, finish: 2.5, style: 'Caption', name: 'speaker',
+        margin_l: 1, margin_r: 2, margin_v: 3, effect: 'scroll', text: 'Hello, world'
+      )
+
+      expect(event.serialize).to eq(
+        '2,0:00:01.25,0:00:02.50,Caption,speaker,1,2,3,scroll,Hello, world'
+      )
+    end
+
+    it 'serializes represented extension fields and unknown sections' do
+      style_fields = Subtitler::Ass::STYLE_FIELDS + ['Blur']
+      event_fields = Subtitler::Ass::EVENT_FIELDS + ['Source']
+      style = Subtitler::Ass::Style.new(fontname: 'Inter', extensions: {'Blur' => 3})
+      event = Subtitler::Ass::Event.new(
+        start: 0, finish: 1, text: 'Extended', extensions: {'Source' => 'model'}
+      )
+      document = described_class.new(
+        script_info: Subtitler::Ass::SCRIPT_INFO.merge('YCbCr Matrix' => 'TV.709'),
+        styles: [style], events: [event], style_fields: style_fields, event_fields: event_fields,
+        sections: {'Aegisub Project Garbage' => ['Last Style Storage: Default']}
+      )
+
+      expect(document.to_s).to include(
+        "YCbCr Matrix: TV.709\n",
+        "Format: #{style_fields.join(',')}\n",
+        'Style: Default,Inter,20,',
+        "#{event_fields.join(', ')}\n",
+        'Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,Extended,model',
+        "[Aegisub Project Garbage]\nLast Style Storage: Default\n"
+      )
+    end
+  end
+
+  it 'renders directly from typed entries without interpreting marker-like text' do
+    subtitle = Subtitler::Subtitle.new(entries: [
+      Subtitler::Subtitle::Entry.new(
+        start: 0, finish: 1, text: 'Literal <00:00:00.500> marker {\i1}kept{\i0}'
+      ),
+    ])
+
+    dialogue = subtitle.to_ass(mode: :plain).lines.grep(/^Dialogue:/).first
+
+    expect(dialogue).to end_with("Literal <00:00:00.500> marker {\\i1}kept{\\i0}\n")
+  end
 end

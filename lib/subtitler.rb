@@ -8,6 +8,7 @@ require_relative 'subtitler/whisper_cpp'
 require_relative 'subtitler/transcribe_cpp'
 require_relative 'subtitler/vtt'
 require_relative 'subtitler/srt'
+require_relative 'subtitler/ass'
 
 class Subtitler
 

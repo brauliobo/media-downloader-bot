@@ -1,11 +1,15 @@
 require 'json'
+require 'cgi'
+require 'nokogiri'
 
 require_relative '../text_helpers'
+require_relative 'timestamps'
 
 class Subtitler
   class Subtitle
     MAX_ENTRY_CHARS    = 84
     TRANSLATION_PREFIX = /\A(?:translation|translated(?:\s+text)?|answer|response)\s*:\s*/i
+    NOISE_DOTS_LINE    = /\A\s*\d(?:\s*\.\s*\d){3,}\.??\s*\z/.freeze
 
     attr_reader :language, :text, :entries, :metadata
 
@@ -29,6 +33,14 @@ class Subtitler
         entries:  fetch_array(data, 'segments').map { |entry| Entry.from_transcribe_cpp(entry) },
         metadata: metadata_from(data, %w[language text segments])
       )
+    end
+
+    def self.from_vtt(vtt)
+      parse_cues(vtt, format: :vtt)
+    end
+
+    def self.from_srt(srt)
+      parse_cues(srt, format: :srt)
     end
 
     def self.tokenize(text)
@@ -187,6 +199,57 @@ class Subtitler
       deep_copy.translate!(**options)
     end
 
+    def reject_noise!
+      rejected_blocks = Array(@metadata['source_blocks']).each_index.select do |index|
+        noise_content_lines(@metadata['source_blocks'].fetch(index)).any? do |line|
+          line.strip.match?(NOISE_DOTS_LINE)
+        end
+      end
+      reject_entries! do |entry|
+        lines = Array(entry.metadata['content_lines'])
+        lines.any? { |line| line.strip.match?(NOISE_DOTS_LINE) }
+      end
+      @metadata = self.class.send(
+        :immutable_hash,
+        self.class.send(:mutable_copy, @metadata).merge('rejected_block_indices' => rejected_blocks),
+        'metadata'
+      )
+      rebuild_text_from_entries!
+    end
+
+    def slice(from:, to:, rebase: true)
+      range_start  = self.class.send(:time_value, from, 'from')
+      range_finish = self.class.send(:time_value, to, 'to')
+      raise ArgumentError, 'to must be greater than from' unless range_finish > range_start
+
+      sliced = @entries.filter_map do |entry|
+        next unless entry.finish > range_start && entry.start < range_finish
+        next entry.deep_copy unless rebase
+
+        slice_entry(entry, range_start, range_finish)
+      end
+      self.class.new(
+        language: @language,
+        text:     sliced.map(&:text).join(' '),
+        entries:  sliced,
+        metadata: self.class.send(:mutable_copy, @metadata).merge('numbered_cues' => true)
+      )
+    end
+
+    def to_vtt(word_tags: true)
+      render_cues(format: :vtt, word_tags: word_tags)
+    end
+
+    def to_srt(word_tags: true)
+      render_cues(format: :srt, word_tags: word_tags)
+    end
+
+    def to_ass(portrait: false, mode: :instagram, preset: 'default')
+      require_relative 'ass'
+
+      Subtitler::Ass.document_for(self, portrait: portrait, mode: mode, preset: preset).to_s
+    end
+
     def deep_copy
       self.class.new(
         language: @language,
@@ -213,6 +276,140 @@ class Subtitler
     end
 
     private
+
+    def slice_entry(entry, range_start, range_finish)
+      start_time  = [entry.start, range_start].max
+      finish_time = [entry.finish, range_finish].min
+      words = entry.words.filter_map do |word|
+        next unless word.finish > range_start && word.start < range_finish
+
+        word.deep_copy.replace_timing!(
+          start:  [word.start, range_start].max - range_start,
+          finish: [word.finish, range_finish].min - range_start
+        )
+      end
+      return if entry.words.any? && words.empty?
+
+      text = words.empty? ? entry.text : words.map { |word| word.text.strip }.join(' ')
+      Entry.new(
+        start:      start_time - range_start,
+        finish:     finish_time - range_start,
+        text:       text,
+        words:      words,
+        speaker_id: entry.speaker_id,
+        cue_id:     entry.cue_id,
+        metadata:   self.class.send(:mutable_copy, entry.metadata).reject { |key, _| key == 'ass_text' }
+      )
+    end
+
+    def render_cues(format:, word_tags:)
+      decimal = format == :srt ? ',' : '.'
+      out     = format == :vtt ? +"WEBVTT\n\n" : +''
+      newline = format == :srt ? @metadata.fetch('line_ending', "\n") : "\n"
+      if format == :srt && word_tags && @metadata['source_blocks'] && @entries.all? { |entry| original_srt_entry?(entry) }
+        return render_original_srt_document
+      end
+
+      rendered = @entries.filter_map.with_index do |entry, index|
+        source_start  = entry.start
+        source_finish = entry.finish
+        next unless source_finish > source_start
+
+        if format == :srt && word_tags && original_srt_entry?(entry)
+          next original_srt_lines(entry).join(newline)
+        end
+
+        start_units  = Subtitler.timestamp_units(source_start)
+        finish_units = Subtitler.timestamp_units(source_finish)
+        finish_units = start_units + 1 if finish_units <= start_units
+        start_time   = start_units / 1000.0
+        finish_time  = finish_units / 1000.0
+        lines        = []
+        identifier   = cue_identifier(entry, index, format)
+        lines << identifier if identifier
+        lines << "#{Subtitler.format_timestamp(start_time, decimal: decimal)} --> #{Subtitler.format_timestamp(finish_time, decimal: decimal)}"
+        lines << render_entry_text(entry, start_time, finish_time, decimal, word_tags, format)
+        lines.join(newline)
+      end
+
+      if format == :vtt
+        out << rendered.join("\n\n")
+        out << "\n\n" unless rendered.empty?
+      else
+        out << rendered.join(newline * 2)
+        out << newline * @metadata.fetch('final_newlines', rendered.empty? ? 0 : 2)
+      end
+      out
+    end
+
+    def cue_identifier(entry, index, format)
+      return (index + 1).to_s if format == :srt && entry.cue_id.nil?
+      return entry.cue_id.to_s if format == :srt
+      return unless @metadata['numbered_cues']
+
+      (index + 1).to_s
+    end
+
+    def render_entry_text(entry, start_time, finish_time, decimal, word_tags, format)
+      if format == :vtt && @metadata['source_format'] == 'srt' && original_srt_entry?(entry)
+        return entry.metadata.fetch('content_lines').join("\n").gsub(Subtitler::INLINE_TIMESTAMP) do |timestamp|
+          timestamp.tr(',', '.')
+        end
+      end
+      return entry.text.strip if entry.words.empty?
+
+      last_marker = nil
+      preserve_markers = @metadata['source_format'] == 'srt'
+      entry.words.filter_map.with_index do |word, index|
+        token = word.text.strip
+        next if token.empty?
+
+        marker_units = Subtitler.timestamp_units(word.start)
+        marker_time  = marker_units / 1000.0
+        tagged = if preserve_markers
+          word_tags && word.metadata['marker']
+        elsif format == :srt
+          word_tags && index.positive?
+        else
+          word_tags && marker_time >= start_time &&
+            (index.positive? || marker_time > start_time) && marker_time < finish_time &&
+            (!last_marker || marker_time > last_marker)
+        end
+        last_marker = marker_time if tagged
+        marker = Subtitler.format_timestamp(marker_time, decimal: decimal)
+        tagged ? "<#{marker}>#{token}" : token
+      end.join(' ')
+    end
+
+    def original_srt_entry?(entry)
+      entry.metadata['source_start'] == entry.start &&
+        entry.metadata['source_finish'] == entry.finish &&
+        entry.metadata['source_text'] == entry.text
+    end
+
+    def original_srt_lines(entry)
+      Array(entry.metadata['prefix_lines']) +
+        [entry.metadata.fetch('timing_line')] + entry.metadata.fetch('content_lines')
+    end
+
+    def render_original_srt_document
+      kept_cues = @entries.map { |entry| entry.metadata.fetch('block_index') }
+      cue_blocks = @metadata.fetch('cue_block_indices')
+      rejected   = Array(@metadata['rejected_block_indices'])
+      @metadata.fetch('source_blocks').filter_map.with_index do |block, index|
+        next if rejected.include?(index)
+        next if cue_blocks.include?(index) && !kept_cues.include?(index)
+
+        block
+      end.join("\n\n")
+    end
+
+    def noise_content_lines(block)
+      block.lines.reject do |line|
+        stripped = line.strip
+        stripped.empty? || stripped.match?(/^\d+$/) || line.include?('-->')
+      end
+    end
 
     def merge_cross_entry_word?(previous, current)
       return false if previous.words.empty? || current.words.empty?
@@ -757,6 +954,160 @@ class Subtitler
         json_object(input, 'subtitle')
       rescue JSON::ParserError => error
         raise ArgumentError, "invalid subtitle JSON: #{error.message}"
+      end
+
+      def parse_cues(input, format:)
+        raise TypeError, "#{format} must be a String" unless input.is_a?(String)
+
+        newline        = input.include?("\r\n") ? "\r\n" : "\n"
+        normalized     = input.gsub(/\r\n?|\r/, "\n")
+        validate_cue_document!(normalized, format)
+        final_newlines = normalized[/\n*\z/].to_s.length
+        blocks         = normalized.split(/\n\n+/)
+        entries        = blocks.filter_map.with_index do |block, block_index|
+          cue_from_block(block, block_index, format)
+        end
+        metadata = {
+          'source_format'  => format.to_s,
+          'line_ending'    => newline,
+          'final_newlines' => final_newlines,
+        }
+        if format == :srt
+          source_blocks = input.split(/\r?\n\r?\n+/)
+          metadata.merge!(
+            'source_blocks'      => source_blocks,
+            'cue_block_indices'  => entries.map { |entry| entry.metadata.fetch('block_index') },
+          )
+        end
+        new(
+          text: entries.map(&:text).join(' '),
+          entries: entries,
+          metadata: metadata
+        )
+      end
+
+      def cue_from_block(block, block_index, format)
+        lines        = block.lines(chomp: true)
+        timing_index = lines.index { |line| line.include?('-->') }
+        return unless timing_index
+
+        timestamps = lines.fetch(timing_index).scan(Subtitler::TIMESTAMP_VALUE)
+        start_time = Subtitler.parse_timestamp(timestamps[0])
+        finish_time = Subtitler.parse_timestamp(timestamps[1])
+        return unless start_time && finish_time
+
+        content_lines = lines[(timing_index + 1)..] || []
+        raw_text      = content_lines.join("\n")
+        text          = semantic_text(raw_text)
+        return if text.empty?
+
+        cue_id = lines[0...timing_index].reverse.find { |line| !line.strip.empty? }
+        cue_id = block_index if format == :vtt && cue_id.nil?
+        words  = inline_timed_words(raw_text, start_time, finish_time, cue_id)
+        Entry.new(
+          start:  start_time,
+          finish: finish_time,
+          text:   text,
+          words:  words,
+          cue_id: cue_id,
+          metadata: {
+            'content_lines' => content_lines,
+            'ass_text'      => CGI.unescapeHTML(raw_text).gsub(Subtitler::INLINE_TIMESTAMP, ''),
+            'source_start'  => start_time,
+            'source_finish' => finish_time,
+            'source_text'   => text,
+            'timing_line'   => lines.fetch(timing_index),
+            'prefix_lines'  => lines[0...timing_index],
+            'block_index'   => block_index,
+          }
+        )
+      end
+
+      def inline_timed_words(text, cue_start, cue_finish, cue_id)
+        matches = text.to_enum(:scan, /<([^>]*)>/).map { Regexp.last_match }
+        malformed = matches.any? do |match|
+          match[1].match?(/\A\d{1,2}:\d{2}/) && Subtitler.parse_timestamp(match[1]).nil?
+        end
+        timed = text.to_enum(:scan, Subtitler::INLINE_TIMESTAMP).filter_map do
+          match = Regexp.last_match
+          time  = Subtitler.parse_timestamp(match[1])
+          [match, time] if time
+        end
+        return [] if malformed || timed.empty?
+
+        times = timed.map(&:last)
+        return [] unless times.all? { |time| time >= cue_start && time <= cue_finish }
+        return [] unless times.each_cons(2).all? { |left, right| right > left }
+
+        chunks = []
+        cursor = 0
+        timed.each do |match, _time|
+          chunks << text[cursor...match.begin(0)]
+          cursor = match.end(0)
+        end
+        chunks << text[cursor..]
+
+        boundaries = [cue_start, *times, cue_finish]
+        chunks.flat_map.with_index do |chunk, index|
+          tokens = semantic_text(chunk).split
+          next [] if tokens.empty?
+
+          start_time  = boundaries.fetch(index)
+          finish_time = boundaries.fetch(index + 1)
+          return [] unless finish_time > start_time
+
+          duration = finish_time - start_time
+          tokens.map.with_index do |token, token_index|
+            token_start  = start_time + duration * token_index / tokens.size
+            token_finish = token_index == tokens.size - 1 ? finish_time : start_time + duration * (token_index + 1) / tokens.size
+            Word.new(
+              text: token,
+              start: token_start,
+              finish: token_finish,
+              metadata: {'cue_id' => cue_id, 'marker' => index.positive? && token_index.zero?, 'marker_group' => index}
+            )
+          end
+        end
+      end
+
+      def validate_cue_document!(input, format)
+        if format == :vtt
+          header = input.each_line.first&.strip
+          raise ArgumentError, 'invalid WEBVTT header' unless header&.match?(/\A\uFEFF?WEBVTT(?:[ \t].*)?\z/)
+        end
+
+        timing_lines = input.each_line.select do |line|
+          if format == :vtt
+            line.include?('-->')
+          else
+            line.match?(/\A\s*#{Subtitler::TIMESTAMP_VALUE}\s+-->/)
+          end
+        end
+        timing_lines.each do |line|
+          label = format == :vtt ? 'WEBVTT' : 'SRT'
+          raise ArgumentError, "invalid #{label} cue timing" unless line.match?(Subtitler::CUE_TIMING)
+
+          start_text, finish_text = line.scan(Subtitler::TIMESTAMP_VALUE).first(2)
+          start_time  = Subtitler.parse_timestamp(start_text)
+          finish_time = Subtitler.parse_timestamp(finish_text)
+          unless start_time && finish_time && finish_time > start_time
+            raise ArgumentError, "invalid #{label} cue range"
+          end
+        end
+      end
+
+      def semantic_text(text)
+        plain = text.to_s.gsub(/<br\s*\/?\s*>/i, ' ').gsub(/<[^>]*>/, '')
+        Nokogiri::HTML5.fragment(plain).text.split.join(' ')
+      end
+
+      def time_value(value, field)
+        return number(value, field) if value.is_a?(Numeric)
+
+        parsed = Subtitler.parse_timestamp(value)
+        raise ArgumentError, "invalid #{field} timestamp" unless parsed
+
+        parsed
       end
 
       def json_object(value, field)

@@ -115,6 +115,76 @@ RSpec.describe Subtitler::Subtitle do
     end
   end
 
+  describe 'subtitle formats' do
+    it 'parses VTT cues into semantic entries and timed words' do
+      subtitle = described_class.from_vtt(<<~VTT)
+        WEBVTT
+
+        cue-one
+        00:00:00.000 --> 00:00:02.000 position:50%
+        <b>Hello</b> <00:00:01.000>world &amp; friends
+      VTT
+      entry = subtitle.entries.first
+
+      expect(entry).to have_attributes(
+        cue_id: 'cue-one', start: 0.0, finish: 2.0, text: 'Hello world & friends'
+      )
+      expect(entry.words.map(&:text)).to eq(['Hello', 'world', '&', 'friends'])
+      expect(entry.words.map { |word| [word.start, word.finish] }).to match([
+        [0.0, 1.0],
+        [1.0, be_within(1e-12).of(4.0 / 3)],
+        [be_within(1e-12).of(4.0 / 3), be_within(1e-12).of(5.0 / 3)],
+        [be_within(1e-12).of(5.0 / 3), 2.0],
+      ])
+      expect(entry.metadata['ass_text']).to eq('<b>Hello</b> world & friends')
+    end
+
+    it 'renders VTT and SRT with rounded valid ranges without mutating the model' do
+      words = [
+        described_class::Word.new(text: 'One', start: 1.0001, finish: 1.0006),
+        described_class::Word.new(text: 'two', start: 1.0006, finish: 1.0009),
+      ]
+      subtitle = described_class.new(entries: [
+        described_class::Entry.new(start: 1.0001, finish: 1.0004, text: 'One two', words: words),
+      ])
+      before = subtitle.to_whisper_verbose_hash
+
+      expect(subtitle.to_vtt).to eq(
+        "WEBVTT\n\n00:00:01.000 --> 00:00:01.001\nOne two\n\n"
+      )
+      expect(subtitle.to_srt).to eq(
+        "1\n00:00:01,000 --> 00:00:01,001\nOne <00:00:01,001>two\n\n"
+      )
+      expect(subtitle.to_whisper_verbose_hash).to eq(before)
+    end
+
+    it 'parses CRLF SRT, rejects model-level noise, and preserves cue identifiers and endings' do
+      srt = "7\r\n00:00:00,000 --> 00:00:01,000\r\n1.2.3.4\r\n\r\n" \
+            "9\r\n00:00:01,000 --> 00:00:02,000\r\nKept\r\n"
+
+      subtitle = described_class.from_srt(srt)
+      subtitle.reject_noise!
+
+      expect(subtitle.entries.map(&:cue_id)).to eq(['9'])
+      expect(subtitle.text).to eq('Kept')
+      expect(subtitle.to_srt).to eq("9\r\n00:00:01,000 --> 00:00:02,000\r\nKept\r\n")
+    end
+
+    it 'slices overlapping typed words with rebasing and leaves the source unchanged' do
+      source = described_class.from_vtt(
+        "WEBVTT\n\n00:00:01.000 --> 00:00:05.000\nOne <00:00:02.000>two <00:00:03.000>three\n"
+      )
+
+      sliced = source.slice(from: '00:00:02', to: '00:00:04')
+
+      expect(sliced.entries.first).to have_attributes(start: 0.0, finish: 2.0, text: 'two three')
+      expect(sliced.entries.first.words.map { |word| [word.text, word.start, word.finish] }).to eq([
+        ['two', 0.0, 1.0], ['three', 1.0, 2.0],
+      ])
+      expect(source.entries.first).to have_attributes(start: 1.0, finish: 5.0)
+    end
+  end
+
   describe 'domain mutation' do
     let(:first_word) do
       described_class::Word.new(text: 'Hello', start: 1, finish: 2, metadata: {'token' => {'id' => 1}})

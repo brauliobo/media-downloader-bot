@@ -44,4 +44,17 @@ RSpec.describe Subtitler::SRT do
       "2\r\n00:00:01,000 --> 00:00:02,000\r\nKept\r\n"
     )
   end
+
+  it 'preserves multiline markup and untimed blocks while filtering through the model' do
+    srt = <<~SRT
+      metadata block
+
+      3
+      00:01,000 --> 00:03,000
+      <i>First line</i>
+      second line
+    SRT
+
+    expect(described_class.filter_noise(srt)).to eq(srt)
+  end
 end

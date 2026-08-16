@@ -33,37 +33,8 @@ class Subtitler
     def srt_convert verbose_json, normalize: true, word_tags: true, stdsub: nil
       subtitle = Subtitle.from_whisper_verbose_json(JSON.parse(JSON.generate(verbose_json)))
       use_norm = stdsub.nil? ? normalize : stdsub
-      Segments.merge_adjacent!(subtitle) if use_norm
-      mash = SymMash.new(subtitle.to_whisper_verbose_hash)
-
-      ts = ->(time) { Subtitler.format_timestamp(time, decimal: ',') }
-
-      out = +""
-      mash.segments&.each_with_index do |seg, idx|
-        start = ts.call(seg.start)
-        finish = ts.call(seg.end)
-
-        words = seg.words || []
-        line = if words.empty?
-          seg.text.to_s.strip
-        else
-          words.each_with_index.map do |w,i|
-            word    = w.word.to_s.strip
-            w_start = ts.call(w.start)
-            if word_tags
-              i.zero? ? word : "<#{w_start}>#{word}"
-            else
-              word
-            end
-          end.join(' ')
-        end
-
-        out << "#{idx+1}\n"
-        out << "#{start} --> #{finish}\n"
-        out << "#{line}\n\n"
-      end
-
-      out
+      subtitle.merge_adjacent! if use_norm
+      subtitle.to_srt(word_tags: word_tags)
     end
 
     protected
@@ -111,7 +82,13 @@ class Subtitler
 
     # Delegate to centralized VTT converter
     def vtt_convert verbose_json, normalize: true, word_tags: true, stdsub: nil
-      Subtitler::VTT.build(verbose_json, normalize: normalize, word_tags: word_tags, stdsub: stdsub)
+      subtitle = Subtitle.from_whisper_verbose_json(JSON.parse(JSON.generate(verbose_json)))
+      use_norm = stdsub.nil? ? normalize : stdsub
+      if use_norm
+        subtitle.split_long_entries!(max_chars: Subtitler::Translator::MAX_SUBTITLE_CHARS)
+        subtitle.merge_adjacent!(max_chars: Subtitler::Translator::MAX_SUBTITLE_CHARS)
+      end
+      subtitle.to_vtt(word_tags: word_tags)
     end
 
     # Translate using sentence-aware regrouping handled by Subtitler::Translator
