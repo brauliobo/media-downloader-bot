@@ -25,15 +25,22 @@ class VoiceReference
       @on_status        = on_status
     end
 
-    def build(audio_files:, output:, transcripts: {})
-      recordings = Array(audio_files).map do |audio|
-        transcript = transcripts.fetch(audio) { transcriber.call(audio) }
+    def build(audio_files:, output:, transcripts: {}, source_files: nil)
+      audio_files  = Array(audio_files)
+      prepared     = !source_files.nil?
+      source_files = source_files ? Array(source_files) : audio_files
+      recordings = audio_files.zip(source_files).map do |audio, source|
+        transcript = transcripts.fetch(source) do
+          prepared ? transcriber.call(audio, cache_key: source, separate_voice: false) : transcriber.call(audio)
+        end
         transcript = transcript.merge(language: transcript[:language].presence || language)
         {audio: audio, transcript: transcript}
       end
-      candidate = validated_candidate(selector.rank(recordings), output)
+      sources   = audio_files.zip(source_files).to_h
+      candidate = validated_candidate(selector.rank(recordings), output, sources: sources, prepared: prepared)
       raise 'no voice reference candidate passed quality checks' unless candidate
 
+      candidate.audio = sources.fetch(candidate.audio)
       text_path   = sidecar(output, '.txt')
       report_path = sidecar(output, '.json')
       File.write(text_path, "#{candidate.text}\n")
@@ -54,15 +61,21 @@ class VoiceReference
       output.sub(/\.[^.]+\z/, extension)
     end
 
-    def validated_candidate(candidates, output)
+    def validated_candidate(candidates, output, sources:, prepared:)
       Dir.mktmpdir('voice-reference-validation-') do |dir|
         selected = Array(candidates).first(MAX_VALIDATION_CANDIDATES)
         selected.each_with_index do |candidate, index|
           on_status&.call("Validating voice reference #{index + 1}/#{selected.size}")
-          path = File.join(dir, "#{candidate_key(candidate)}.wav")
+          key  = candidate_key(candidate, sources.fetch(candidate.audio))
+          path = File.join(dir, "#{key}.wav")
           analyzer.extract(candidate, path, filter: reference_filter)
+          transcript = if prepared
+            transcriber.call(path, cache_key: "validation:#{reference_filter}:#{key}", separate_voice: false)
+          else
+            transcriber.call(path)
+          end
           validation = validation_report(
-            candidate.text, transcriber.call(path), analyzer.report(path), reference_filter: reference_filter
+            candidate.text, transcript, analyzer.report(path), reference_filter: reference_filter
           )
           next unless validation.fetch(:accepted)
 
@@ -76,8 +89,8 @@ class VoiceReference
       nil
     end
 
-    def candidate_key(candidate)
-      Digest::SHA256.hexdigest([candidate.audio, candidate.start, candidate.finish].join(':'))
+    def candidate_key(candidate, source)
+      Digest::SHA256.hexdigest([source, candidate.start, candidate.finish].join(':'))
     end
 
     def artifact(path)

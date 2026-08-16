@@ -1,5 +1,6 @@
 require 'fileutils'
 require 'json'
+require 'digest'
 
 require_relative '../subtitler'
 
@@ -12,8 +13,8 @@ class VoiceReference
       FileUtils.mkdir_p(@cache_dir) if @cache_dir
     end
 
-    def call(audio)
-      cache = cache_path(audio)
+    def call(audio, cache_key: nil, separate_voice: self.separate_voice)
+      cache = cache_path(audio, cache_key)
       return JSON.parse(File.read(cache), symbolize_names: true) if cache && File.exist?(cache)
 
       options = {format: 'verbose_json', merge_words: false}
@@ -52,10 +53,15 @@ class VoiceReference
       }
     end
 
-    def cache_path(audio)
+    def cache_path(audio, cache_key)
       return unless cache_dir
 
-      File.join(cache_dir, "#{File.basename(audio, File.extname(audio))}.json")
+      name = if cache_key
+        Digest::SHA256.hexdigest(cache_key.to_s)
+      else
+        File.basename(audio, File.extname(audio))
+      end
+      File.join(cache_dir, "#{name}.json")
     end
   end
 end

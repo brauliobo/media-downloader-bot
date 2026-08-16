@@ -33,10 +33,9 @@ else
 end
 transcriber = VoiceReference::Transcriber.new(cache_dir: opts[:cache])
 strict      = opts.key?(:strict) ? opts[:strict].to_s != '0' : filter == :raw
-selector    = VoiceReference::Selector.new(language: language, strict: strict)
-builder     = VoiceReference::Builder.new(
-  transcriber: transcriber, selector: selector, language: language, reference_filter: filter
-)
 
-candidate = builder.build(audio_files: audio_files, output: output)
+candidate = VoiceReference.from_files(
+  audio_files: audio_files, output: output, language: language, transcriber: transcriber,
+  reference_filter: filter, strict: strict
+)
 puts JSON.pretty_generate(candidate.to_h)

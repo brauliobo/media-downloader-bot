@@ -45,4 +45,21 @@ RSpec.describe VoiceReference::Transcriber do
       expect(described_class.new(backend: backend).call('/tmp/source.wav')[:language]).to eq(expected)
     end
   end
+
+  it 'caches prepared vocals by original source identity without nested separation' do
+    Dir.mktmpdir('voice-reference-transcriber-') do |dir|
+      source      = '/recordings/session/source.webm'
+      backend     = double(transcribe: SymMash.new(lang: 'en', output: {segments: []}))
+      transcriber = described_class.new(backend: backend, cache_dir: dir)
+
+      first  = transcriber.call('/tmp/first/vocals.wav', cache_key: source, separate_voice: false)
+      second = transcriber.call('/tmp/second/vocals.wav', cache_key: source, separate_voice: false)
+
+      expect(second).to eq(first)
+      expect(backend).to have_received(:transcribe).once.with(
+        '/tmp/first/vocals.wav', format: 'verbose_json', merge_words: false, separate_voice: false
+      )
+      expect(Dir.children(dir)).to eq(["#{Digest::SHA256.hexdigest(source)}.json"])
+    end
+  end
 end

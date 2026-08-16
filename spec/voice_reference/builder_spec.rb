@@ -51,15 +51,9 @@ RSpec.describe VoiceReference::Builder do
       output     = File.join(dir, 'reference.wav')
       source     = File.join(dir, 'source.webm')
       candidate  = VoiceReference::Candidate.new(text: 'The selected clear passage.')
-      transcript = {language: 'pt', segments: []}
       downloader = double(call: source)
-      transcriber = double(call: transcript)
-      selector   = instance_double(VoiceReference::Selector)
-      builder    = instance_double(described_class, build: candidate)
-      allow(VoiceReference::Selector).to receive(:new).with(language: 'pt', strict: true).and_return(selector)
-      allow(described_class).to receive(:new).with(
-        transcriber: transcriber, selector: selector, language: 'pt', reference_filter: :raw
-      ).and_return(builder)
+      transcriber = double
+      allow(VoiceReference).to receive(:from_files).and_return(candidate)
 
       result = VoiceReference.from_url(
         url: 'https://example.com/voice', output: output, downloader: downloader, transcriber: transcriber
@@ -67,9 +61,9 @@ RSpec.describe VoiceReference::Builder do
 
       expect(result).to eq(candidate)
       expect(downloader).to have_received(:call).with('https://example.com/voice', dir: dir)
-      expect(transcriber).to have_received(:call).with(source)
-      expect(builder).to have_received(:build).with(
-        audio_files: [source], output: output, transcripts: {source => transcript}
+      expect(VoiceReference).to have_received(:from_files).with(
+        audio_files: [source], output: output, language: nil, transcriber: transcriber,
+        reference_filter: :raw, on_status: nil
       )
     end
   end
@@ -81,11 +75,17 @@ RSpec.describe VoiceReference::Builder do
       transcript = {language: 'pt', segments: []}
       candidate  = VoiceReference::Candidate.new(text: 'Uma passagem clara.')
       downloader = double(call: source)
-      transcriber = double(call: transcript)
+      transcriber = double
       selector    = instance_double(VoiceReference::Selector)
       builder     = instance_double(described_class, build: candidate)
       statuses    = []
       on_status   = ->(status) { statuses << status }
+      allow(VoiceSeparator).to receive(:with_stems).with(source).and_yield(
+        VoiceSeparator::Stems.new(vocals: source, non_vocals: File.join(dir, 'no-vocals.wav'))
+      )
+      allow(transcriber).to receive(:call).with(
+        source, cache_key: source, separate_voice: false
+      ).and_return(transcript)
       allow(VoiceReference::Selector).to receive(:new).and_return(selector)
       allow(described_class).to receive(:new).with(
         transcriber: transcriber, selector: selector, language: 'pt', reference_filter: :raw,
@@ -93,7 +93,7 @@ RSpec.describe VoiceReference::Builder do
       ).and_return(builder)
 
       result = VoiceReference.from_url(
-        url: 'https://example.com/voice', output: output, language: 'pt',
+        url: 'https://example.com/voice', output: output,
         downloader: downloader, transcriber: transcriber, on_status: on_status
       )
 
@@ -104,6 +104,45 @@ RSpec.describe VoiceReference::Builder do
         'Selecting voice reference',
         'Voice reference ready'
       ])
+    end
+  end
+
+  it 'extracts and validates prepared vocals while reporting the original source' do
+    Dir.mktmpdir('voice-reference-prepared-') do |dir|
+      source      = '/recordings/source.webm'
+      vocals      = File.join(dir, 'vocals.wav')
+      output      = File.join(dir, 'reference.wav')
+      transcript  = {language: 'en', segments: []}
+      candidate   = VoiceReference::Candidate.new(
+        audio: vocals, start: 12, finish: 20, text: 'A complete prepared vocal reference.', confidence: 0.95
+      )
+      validation  = {
+        language: 'en',
+        segments: [{text: candidate.text, probabilities: Array.new(candidate.text.split.size, 0.95)}]
+      }
+      selector    = double(rank: [candidate])
+      transcriber = double
+      analyzer     = double(report: {accepted: true})
+      expected_key = Digest::SHA256.hexdigest([source, candidate.start, candidate.finish].join(':'))
+      allow(analyzer).to receive(:extract) do |selected, path, filter:|
+        expect(selected.audio).to eq(vocals)
+        expect(filter).to eq(:raw)
+        File.write(path, 'vocal clip')
+      end
+      allow(transcriber).to receive(:call).with(
+        kind_of(String), cache_key: "validation:raw:#{expected_key}", separate_voice: false
+      ).and_return(validation)
+
+      result = described_class.new(
+        transcriber: transcriber, selector: selector, analyzer: analyzer
+      ).build(
+        audio_files: [vocals], source_files: [source], output: output, transcripts: {source => transcript}
+      )
+
+      expect(selector).to have_received(:rank).with([{audio: vocals, transcript: transcript}])
+      expect(result.audio).to eq(source)
+      expect(JSON.parse(File.read(File.join(dir, 'reference.json'))).fetch('audio')).to eq(source)
+      expect(transcriber).to have_received(:call).once
     end
   end
 
