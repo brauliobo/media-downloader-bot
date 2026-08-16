@@ -64,7 +64,7 @@ RSpec.describe Subtitler::TranscribeCpp do
     ])
   end
 
-  it 'accepts merge_words without changing transcribe.cpp word boundaries' do
+  it 'uses segment spacing to merge transcribe.cpp split-word boundaries only when requested' do
     split_result = raw_result.merge(
       'text' => 'testing',
       'segments' => [
@@ -84,7 +84,7 @@ RSpec.describe Subtitler::TranscribeCpp do
     merged = backend.transcribe('audio.wav', merge_words: true).output.segments.first
     unmerged = backend.transcribe('audio.wav', merge_words: false).output.segments.first
 
-    expect(merged.words.map(&:word)).to eq(%w[test ing])
+    expect(merged.words.map(&:word)).to eq(%w[testing])
     expect(unmerged.words.map(&:word)).to eq(%w[test ing])
     expect(merged.text).to eq('testing')
     expect(unmerged.text).to eq('testing')

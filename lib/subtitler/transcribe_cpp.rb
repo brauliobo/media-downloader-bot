@@ -23,7 +23,7 @@ class Subtitler
       raise 'TRANSCRIBE_CPP_CLI is not configured' if cli.blank?
       raise 'TRANSCRIBE_CPP_MODEL is not configured' if model.blank?
 
-      output = normalize_result(run_cli(path, language: language))
+      output = normalize_result(run_cli(path, language: language), merge_words: merge_words)
       SymMash.new(output: output, lang: Subtitler.normalize_lang(output[:language]))
     end
 
@@ -55,25 +55,29 @@ class Subtitler
       result&.close!
     end
 
-    def normalize_result(raw)
-      {
-        language: raw.fetch('language'),
-        text: raw.fetch('text'),
-        segments: raw.fetch('segments').map do |segment|
-          {
-            start: segment.fetch('t0_ms') / 1000.0,
-            end: segment.fetch('t1_ms') / 1000.0,
-            text: segment.fetch('text'),
-            words: segment.fetch('words').map do |word|
-              {
-                word: word.fetch('text'),
-                start: word.fetch('t0_ms') / 1000.0,
-                end: word.fetch('t1_ms') / 1000.0
-              }
-            end
-          }
+    def normalize_result(raw, merge_words:)
+      subtitle = Subtitle.from_transcribe_cpp_json(raw)
+      if merge_words
+        subtitle.entries.each { |entry| mark_transcribe_word_boundaries!(entry) }
+        subtitle.merge_split_words!
+        subtitle.entries.each do |entry|
+          entry.words.each { |word| word.replace_text!(word.text.strip) }
+          entry.rebuild_text_from_words! unless entry.words.empty?
         end
-      }
+        subtitle.rebuild_text_from_entries!
+      end
+      SymMash.new(subtitle.to_whisper_verbose_hash).to_h
+    end
+
+    def mark_transcribe_word_boundaries!(entry)
+      cursor = 0
+      entry.words.each do |word|
+        raw   = word.text
+        index = entry.text.index(raw, cursor) || cursor
+        prefix = index > cursor && entry.text[cursor...index].match?(/\s/) ? ' ' : ''
+        word.replace_text!("#{prefix}#{raw}")
+        cursor = index + raw.length
+      end
     end
   end
 end

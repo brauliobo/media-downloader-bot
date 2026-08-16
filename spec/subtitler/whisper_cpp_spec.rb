@@ -81,7 +81,7 @@ RSpec.describe Subtitler::WhisperCpp do
     expect(segment.text).to eq('testando. Outra')
   end
 
-  it 'merges a leading split token across segments and leaves an empty following segment' do
+  it 'merges a leading split token across segments and removes the emptied following segment' do
     response = instance_double(Net::HTTPResponse, code: '200', body: JSON.generate(
       language: 'pt',
       segments: [
@@ -107,8 +107,8 @@ RSpec.describe Subtitler::WhisperCpp do
       { word: ' testando', start: 0.0, end: 1.0 },
     ])
     expect(segments.first.text).to eq('testando')
-    expect(segments.last.words).to be_empty
-    expect(segments.last.text).to eq('')
+    expect(segments.first.end).to eq(1.0)
+    expect(segments.size).to eq(1)
   end
 
   it 'does not merge a cross-segment token after sentence punctuation' do

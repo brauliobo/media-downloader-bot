@@ -31,9 +31,10 @@ class Subtitler
     # typical movie-style subtitles (max ~2 lines / similar length).
     # Backward-compat: legacy stdsub overrides normalize when provided.
     def srt_convert verbose_json, normalize: true, word_tags: true, stdsub: nil
-      mash = SymMash.new verbose_json
+      subtitle = Subtitle.from_whisper_verbose_json(JSON.parse(JSON.generate(verbose_json)))
       use_norm = stdsub.nil? ? normalize : stdsub
-      Segments.merge_adjacent!(mash) if use_norm
+      Segments.merge_adjacent!(subtitle) if use_norm
+      mash = SymMash.new(subtitle.to_whisper_verbose_hash)
 
       ts = ->(time) { Subtitler.format_timestamp(time, decimal: ',') }
 
@@ -84,11 +85,14 @@ class Subtitler
         res.body
       end
 
-      out = SymMash.new JSON.parse(out) if format.to_s.index('json')
+      if format.to_s.index('json')
+        parsed   = JSON.parse(out)
+        subtitle = Subtitle.from_whisper_verbose_json(parsed)
+        merge_split_words!(subtitle) if merge_words
+        out = SymMash.new(subtitle.to_whisper_verbose_hash)
+      end
 
       lang = detect_language(out, detect_lang) if out.is_a?(Hash) && out.language
-
-      merge_split_words!(out) if merge_words && out.respond_to?(:segments)
 
       SymMash.new output: out, lang: lang
     end
@@ -117,47 +121,10 @@ class Subtitler
 
     private
 
-    # Merge tokens that belong to the same word (current token doesn't start
-    # with whitespace). Updates word text, timing, and segment text.
-    def merge_split_words! mash
-      (mash.segments || []).each do |seg|
-        merged = []
-        orig_words = seg.words || []
-        had_words = orig_words.any?
-        orig_words.each do |w|
-          raw = w.word.to_s
-          if merged.empty? || raw.start_with?(' ')
-            merged << w
-          else
-            prev = merged.last
-            # Avoid merging across sentence boundaries (prev token ends with . ? or !)
-            if prev.word.to_s.strip.match?(/[.!?]$/)
-              merged << w
-            else
-              prev.word = "#{prev.word}#{raw}"
-              prev.end  = w.end
-            end
-          end
-        end
-        seg.words = merged
-        seg.text  = merged.map { |tw| tw.word.to_s.strip }.join(' ') if had_words
-      end
-      # Fix cross-segment splits: move leading non-space tokens of next segment to previous if appropriate
-      segs = mash.segments || []
-      (1...segs.size).each do |i|
-        prev = segs[i-1]
-        cur  = segs[i]
-        next if (prev.words || []).empty? || (cur.words || []).empty?
-        while cur.words.first && !cur.words.first.word.to_s.start_with?(' ') && !prev.words.last.word.to_s.strip.match?(/[.!?]$/)
-          w = cur.words.shift
-          last = prev.words.last
-          last.word = "#{last.word}#{w.word}"
-          last.end  = w.end
-        end
-        prev.text = (prev.words || []).map { |tw| tw.word.to_s.strip }.join(' ')
-        cur.text  = (cur.words  || []).map { |tw| tw.word.to_s.strip }.join(' ')
-      end
-      mash
+    def merge_split_words!(subtitle)
+      raise TypeError, 'subtitle must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitle)
+
+      subtitle.merge_split_words!
     end
   end
 end

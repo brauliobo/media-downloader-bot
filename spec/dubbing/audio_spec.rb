@@ -50,10 +50,12 @@ RSpec.describe Dubbing::Audio do
   end
 
   it 'keeps every sentence from a multi-sentence subtitle at or above natural speed' do
-    subtitle = SymMash.new(text: 'First sentence. Second sentence.', start: 1.0, end: 5.0, words: [])
+    subtitle = Subtitler::Subtitle::Entry.new(
+      text: 'First sentence. Second sentence.', start: 1.0, finish: 5.0, words: []
+    )
     sentences = Subtitler::Translator.sentences_for([subtitle])
     clips = sentences.map.with_index do |sentence, idx|
-      described_class::Clip.new(path: File.join(dir, "sentence-#{idx}.wav"), start: sentence.start, end: sentence.end)
+      described_class::Clip.new(path: File.join(dir, "sentence-#{idx}.wav"), start: sentence.start, end: sentence.finish)
     end
     clips.each do |clip|
       probe_duration clip.path, 0.5

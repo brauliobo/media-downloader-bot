@@ -22,7 +22,7 @@ class Subtitler
       return vtt if segments.empty?
 
       translated = Subtitler::Translator.translate(
-        {segments: segments},
+        subtitle_from(segments: segments),
         from:           from,
         to:             to,
         merge_adjacent: false
@@ -39,13 +39,14 @@ class Subtitler
       zipper&.stl&.update 'translating'
 
       if tsp
-        tsp = Subtitler::Translator.translate(
-          tsp,
+        translated = Subtitler::Translator.translate(
+          subtitle_from(tsp),
           from:           normalized_from,
           to:             normalized_to,
           merge_adjacent: false
         )
-        vtt = build(tsp, normalize: false, word_tags: !zipper.opts.nowords)
+        tsp = SymMash.new(translated.to_whisper_verbose_hash)
+        vtt = build(translated, normalize: false, word_tags: !zipper.opts.nowords)
       else
         vtt = translate(vtt, to: normalized_to, from: normalized_from, word_tags: !zipper.opts.nowords)
       end
@@ -54,12 +55,13 @@ class Subtitler
     end
 
     def self.build(verbose_json, normalize: true, word_tags: true, stdsub: nil)
-      mash = SymMash.new(verbose_json)
+      subtitle = subtitle_from(verbose_json)
       use_norm = stdsub.nil? ? normalize : stdsub
       if use_norm
-        Subtitler::Translator.split_long_segments!(mash, max_chars: Subtitler::Translator::MAX_SUBTITLE_CHARS)
-        Segments.merge_adjacent!(mash, max_chars: Subtitler::Translator::MAX_SUBTITLE_CHARS)
+        Subtitler::Translator.split_long_segments!(subtitle, max_chars: Subtitler::Translator::MAX_SUBTITLE_CHARS)
+        Segments.merge_adjacent!(subtitle, max_chars: Subtitler::Translator::MAX_SUBTITLE_CHARS)
       end
+      mash = SymMash.new(subtitle.to_whisper_verbose_hash)
 
       formatter = ->(time) { Subtitler.format_timestamp(time) }
 
@@ -86,6 +88,17 @@ class Subtitler
       end
       out
     end
+
+    def self.subtitle_from(value)
+      return value if value.is_a?(Subtitler::Subtitle)
+
+      data = JSON.parse(JSON.generate(value))
+      data['segments'] = Array(data['segments']).reject do |segment|
+        segment['end'].to_f < segment['start'].to_f
+      end
+      Subtitler::Subtitle.from_whisper_verbose_json(data)
+    end
+    private_class_method :subtitle_from
 
     def self.slice(vtt, from:, to:, rebase: true)
       from_s = hms_to_s(from)

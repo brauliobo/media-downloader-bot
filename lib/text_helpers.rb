@@ -112,14 +112,18 @@ module TextHelpers
     result
   end
 
-  def self.sentences_from_segments(segments)
+  def self.sentences_from_entries(entries)
+    unless entries.is_a?(Array) && entries.all? { |entry| entry.is_a?(Subtitler::Subtitle::Entry) }
+      raise TypeError, 'entries must contain only Subtitler::Subtitle::Entry objects'
+    end
+
     sentences, cur_words, eos_pending = [], [], false
-    each_word(segments) do |w|
-      raw = w.word.to_s
+    each_subtitle_word(entries) do |word|
+      raw = word.text
       next if raw.strip.empty?
       if eos_pending
         if closer_only?(raw)
-          attach_closer!(cur_words, w)
+          attach_closer!(cur_words, word)
           flush_sentence!(sentences, cur_words)
           eos_pending = false
           next
@@ -128,29 +132,27 @@ module TextHelpers
           eos_pending = false
         end
       end
-      cur_words << w
+      cur_words << word
       eos_pending = true if eos_punct?(raw) && !title_abbreviation?(raw)
     end
     flush_sentence!(sentences, cur_words)
     sentences
   end
 
-  def self.each_word(segments, &block)
-    Array(segments).each { |seg| Array(seg.words).each(&block) }
+  def self.each_subtitle_word(entries, &block)
+    entries.each { |entry| entry.words.each { |word| block.call(word.deep_copy) } }
   end
 
-  def self.attach_closer!(cur_words, w)
-    last = cur_words.last
-    last.word = "#{last.word}#{w.word}"
-    last.end  = w.end
+  def self.attach_closer!(cur_words, word)
+    cur_words.last.merge!(word)
   end
 
   def self.flush_sentence!(sentences, cur_words)
     return if cur_words.empty?
-    sentences << SymMash.new(
-      text: cur_words.map { |tw| tw.word.to_s.strip }.join(' '),
+    sentences << Subtitler::Subtitle::Entry.new(
+      text: cur_words.map { |word| word.text.strip }.join(' '),
       start: cur_words.first.start,
-      end: cur_words.last.end,
+      finish: cur_words.last.finish,
       words: cur_words.dup
     )
     cur_words.clear

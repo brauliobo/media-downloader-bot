@@ -72,10 +72,10 @@ module Dubbing
     end
 
     def translated_sentences(verbose_json)
-      source = SymMash.new(verbose_json)
-      sentences = Subtitler::Translator.sentences_for(Array(source.segments))
-      texts = sentences.map { |sentence| sentence.text.to_s }
-      durations = sentences.map { |sentence| sentence.end.to_f - sentence.start.to_f }
+      source    = subtitle_model(verbose_json)
+      sentences = Subtitler::Translator.sentences_for(source)
+      texts     = sentences.map(&:text)
+      durations = sentences.map { |sentence| sentence.finish - sentence.start }
       translations = if ::Translator.respond_to?(:translate_for_dubbing)
         Array(::Translator.translate_for_dubbing(texts, from: source_lang, to: target_lang, durations: durations))
       else
@@ -89,23 +89,23 @@ module Dubbing
         source_words, target_words = translated_word_timings(sentence, text)
         SymMash.new(
           text:         text,
-          source_text:  sentence.text.to_s.strip,
+          source_text:  sentence.text.strip,
           source_words: source_words,
           start:        sentence.start.to_f,
-          end:          sentence.end.to_f,
+          end:          sentence.finish,
           words:        target_words
         )
       end
     end
 
     def translated_word_timings(sentence, text)
-      source_words = Array(sentence.words).map { |word| SymMash.new(word.to_h) }
-      target_words = source_words.map { |word| SymMash.new(word.to_h) }
-      return [source_words, target_words] if target_words.empty?
+      source_words = sentence.words.map { |word| SymMash.new(word.to_whisper_hash) }
+      return [source_words, []] if source_words.empty?
 
-      timed = SymMash.new(words: target_words)
+      timed = sentence.deep_copy
       Subtitler::Translator.assign_tokens_to_words!(timed, Subtitler::Translator.tokenize_text(text))
-      [source_words, timed.words]
+      target_words = timed.words.map { |word| SymMash.new(word.to_whisper_hash) }
+      [source_words, target_words]
     end
 
     def synthesize_timeline(workdir)
@@ -180,12 +180,16 @@ module Dubbing
     def alternate_translated_subtitle_vtt
       scheduled = SymMash.new(segments: @sentences.deep_dup)
       translated = Subtitler::Translator.translate(
-        scheduled,
+        subtitle_model(scheduled),
         from:           target_lang,
         to:             subtitle_target_lang,
         merge_adjacent: false
       )
       build_subtitle_vtt(translated, normalize: false)
+    end
+
+    def subtitle_model(data)
+      Subtitler::Subtitle.from_whisper_verbose_json(JSON.parse(JSON.generate(data)))
     end
 
     def bilingual_subtitle_vtt

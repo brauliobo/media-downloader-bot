@@ -54,11 +54,20 @@ RSpec.describe Subtitler::Subtitle do
       expect(subtitle.to_whisper_verbose_hash).to eq(input)
     end
 
-    it 'rejects non-JSON key types and missing required fields' do
+    it 'rejects non-JSON key types and missing segment collections' do
       expect { described_class.from_whisper_verbose_json(language: 'en') }
         .to raise_error(ArgumentError, 'subtitle keys must be strings')
       expect { described_class.from_whisper_verbose_json('language' => 'en') }
-        .to raise_error(KeyError, /text/)
+        .to raise_error(KeyError, /segments/)
+    end
+
+    it 'normalizes optional language, text, and words at ingress' do
+      subtitle = described_class.from_whisper_verbose_json(
+        'segments' => [{'start' => 0, 'end' => 1, 'words' => nil}]
+      )
+
+      expect(subtitle).to have_attributes(language: nil, text: '')
+      expect(subtitle.entries.first).to have_attributes(text: '', words: [])
     end
   end
 
@@ -128,6 +137,17 @@ RSpec.describe Subtitler::Subtitle do
       expect(entry.text).to eq('Hello world')
     end
 
+    it 'replaces language and entries and rebuilds or filters document text explicitly' do
+      kept = described_class::Entry.new(start: 0, finish: 1, text: 'Kept')
+      gone = described_class::Entry.new(start: 1, finish: 2, text: '')
+
+      subtitle.replace_language!('pt').replace_entries!([kept, gone])
+      subtitle.reject_entries! { |candidate| candidate.text.empty? }
+      subtitle.rebuild_text_from_entries!
+
+      expect(subtitle).to have_attributes(language: 'pt', text: 'Kept', entries: [kept])
+    end
+
     it 'retimes nested words proportionally and scales all document timing' do
       entry.retime!(start: 3, finish: 7)
 
@@ -171,6 +191,18 @@ RSpec.describe Subtitler::Subtitle do
       )
     end
 
+    it 'updates serialized confidence aliases after merging words' do
+      first = described_class::Word.new(
+        text: ' test', start: 1, finish: 2, confidence: 0.9, metadata: {'probability' => 0.9}
+      )
+      suffix = described_class::Word.new(text: 'ing', start: 2, finish: 3, confidence: 0.6)
+
+      first.merge!(suffix)
+
+      expect(first.to_whisper_hash['probability']).to eq(0.6)
+      expect(first.to_transcribe_cpp_hash['probability']).to eq(0.6)
+    end
+
     it 'deep-copies the complete mutable graph and keeps collection readers immutable' do
       copy = subtitle.deep_copy
 
@@ -183,6 +215,51 @@ RSpec.describe Subtitler::Subtitle do
       expect(first_word.text).to eq('Hello')
       expect { subtitle.entries << entry }.to raise_error(FrozenError)
       expect { first_word.metadata['token']['id'] = 2 }.to raise_error(FrozenError)
+    end
+
+    it 'keeps first-class source text and words independent through copies and retiming' do
+      source_word = entry.source_words.first
+      copy        = entry.deep_copy
+
+      entry.replace_text!('Translated').replace_words!([])
+      copy.retime!(start: 3, finish: 7)
+
+      expect(entry).to have_attributes(source_text: 'Original')
+      expect(entry.source_words.map(&:text)).to eq(['Hello'])
+      expect(source_word).to have_attributes(start: 1.0, finish: 2.0)
+      expect(copy.source_words.first).to have_attributes(start: 3.0, finish: 5.0)
+    end
+
+    it 'serializes without mutating current or source values' do
+      before = subtitle.deep_copy
+
+      subtitle.to_whisper_verbose_hash
+      subtitle.to_transcribe_cpp_hash
+
+      expect(subtitle.text).to eq(before.text)
+      expect(subtitle.entries.first.text).to eq(before.entries.first.text)
+      expect(subtitle.entries.first.words.map(&:text)).to eq(before.entries.first.words.map(&:text))
+      expect(subtitle.entries.first.source_words.map(&:text)).to eq(before.entries.first.source_words.map(&:text))
+    end
+
+    it 'merges cross-entry suffixes, extends the owner timing, and removes emptied entries' do
+      prefix = described_class::Entry.new(
+        start: 0, finish: 0.5, text: 'test',
+        words: [described_class::Word.new(text: ' test', start: 0, finish: 0.5)]
+      )
+      suffix = described_class::Entry.new(
+        start: 0.5, finish: 1, text: 'ing',
+        words: [described_class::Word.new(text: 'ing', start: 0.5, finish: 1)]
+      )
+      split = described_class.new(entries: [prefix, suffix])
+
+      split.merge_split_words!
+
+      expect(split.entries.size).to eq(1)
+      expect(split.entries.first).to have_attributes(start: 0.0, finish: 1.0, text: 'testing')
+      expect(split.entries.first.words.first).to have_attributes(text: ' testing', finish: 1.0)
+      expect(split.entries.first).to have_attributes(source_text: 'testing')
+      expect(split.entries.first.source_words.map(&:text)).to eq([' test', 'ing'])
     end
 
     it 'assigns a speaker to every entry explicitly' do

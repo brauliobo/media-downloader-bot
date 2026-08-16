@@ -11,6 +11,29 @@ RSpec.describe Subtitler::Translator do
     { word: text, start: s, end: e }
   end
 
+  def subtitle(data)
+    json_data = JSON.parse(JSON.generate(data))
+    Subtitler::Subtitle.from_whisper_verbose_json(json_data)
+  end
+
+  it 'accepts only typed subtitles and leaves the source graph unchanged' do
+    source = subtitle(
+      language: 'en', text: 'Hello.',
+      segments: [{start: 0, end: 1, text: 'Hello.', words: [word('Hello.', 0, 1)]}]
+    )
+    allow(::Translator).to receive(:translate).and_return(['Olá.'])
+
+    translated = described_class.translate(source, from: 'en', to: 'pt')
+
+    expect(source).to have_attributes(language: 'en', text: 'Hello.')
+    expect(source.entries.first.words.map(&:text)).to eq(['Hello.'])
+    expect(translated).to have_attributes(language: 'pt', text: 'Olá.')
+    expect(translated.entries.first).to have_attributes(source_text: 'Hello.')
+    expect(translated.entries.first.source_words.map(&:text)).to eq(['Hello.'])
+    expect { described_class.translate({segments: []}, from: 'en', to: 'pt') }
+      .to raise_error(TypeError, /Subtitler::Subtitle/)
+  end
+
   it 'reconstructs sentences split across segments and translates properly' do
     verbose_json = {
       segments: [
@@ -34,25 +57,25 @@ RSpec.describe Subtitler::Translator do
       'Isto é um teste.'
     ])
 
-    mash = described_class.translate(verbose_json, from: 'en', to: 'pt')
+    mash = described_class.translate(subtitle(verbose_json), from: 'en', to: 'pt')
 
-    expect(mash.segments.size).to eq(2)
-    expect(mash.segments[0].text).to eq('Olá mundo!')
-    expect(mash.segments[1].text).to eq('Isto é um teste.')
+    expect(mash.entries.size).to eq(2)
+    expect(mash.entries[0].text).to eq('Olá mundo!')
+    expect(mash.entries[1].text).to eq('Isto é um teste.')
 
-    w0 = mash.segments[0].words
-    expect(w0.map { |w| w.word }).to eq(['Olá', 'mundo!'])
+    w0 = mash.entries[0].words
+    expect(w0.map(&:text)).to eq(['Olá', 'mundo!'])
     expect(w0.first.start).to eq(0.0)
-    expect(w0.last.end).to eq(0.8)
-    expect(mash.segments[0].start).to eq(0.0)
-    expect(mash.segments[0].end).to eq(0.9)
+    expect(w0.last.finish).to eq(0.8)
+    expect(mash.entries[0].start).to eq(0.0)
+    expect(mash.entries[0].finish).to eq(0.9)
 
-    w1 = mash.segments[1].words
-    expect(w1.map { |w| w.word }.join(' ')).to eq('Isto é um teste.')
-    expect(mash.segments[1].start).to eq(2.5)
-    expect(mash.segments[1].end).to eq(3.5)
+    w1 = mash.entries[1].words
+    expect(w1.map(&:text).join(' ')).to eq('Isto é um teste.')
+    expect(mash.entries[1].start).to eq(2.5)
+    expect(mash.entries[1].finish).to eq(3.5)
 
-    vtt = backend.send(:vtt_convert, mash, normalize: false, word_tags: false)
+    vtt = backend.send(:vtt_convert, mash.to_whisper_verbose_hash, normalize: false, word_tags: false)
     expect(vtt).to eq(
       "WEBVTT\n\n" \
       "00:00:00.000 --> 00:00:00.900\n" \
@@ -77,12 +100,12 @@ RSpec.describe Subtitler::Translator do
       'Nova Iorque, Estados Unidos.'
     ])
 
-    mash = described_class.translate(verbose_json, from: 'en', to: 'pt')
-    expect(mash.segments.size).to eq(1)
-    expect(mash.segments[0].text).to eq('Nova Iorque, Estados Unidos.')
-    words = mash.segments[0].words
-    expect(words.map { |w| w.word }).to eq(['Nova', 'Iorque,', 'Estados', 'Unidos.'])
-    expect(words.map { |w| [w.start, w.end] }).to eq([
+    mash = described_class.translate(subtitle(verbose_json), from: 'en', to: 'pt')
+    expect(mash.entries.size).to eq(1)
+    expect(mash.entries[0].text).to eq('Nova Iorque, Estados Unidos.')
+    words = mash.entries[0].words
+    expect(words.map(&:text)).to eq(['Nova', 'Iorque,', 'Estados', 'Unidos.'])
+    expect(words.map { |w| [w.start, w.finish] }).to eq([
       [0.0, 0.2], [0.2, 0.4], [0.4, 0.9], [0.9, 1.2]
     ])
   end
@@ -103,11 +126,11 @@ RSpec.describe Subtitler::Translator do
       'É bom.'
     ])
 
-    mash = described_class.translate(verbose_json, from: 'en', to: 'pt')
-    words = mash.segments[0].words
-    expect(mash.segments[0].text).to eq('É bom.')
-    expect(words.map { |w| w.word }).to eq(['É', 'bom.'])
-    expect(words.map { |w| [w.start, w.end] }).to eq([[0.0, 0.6], [0.6, 1.5]])
+    mash = described_class.translate(subtitle(verbose_json), from: 'en', to: 'pt')
+    words = mash.entries[0].words
+    expect(mash.entries[0].text).to eq('É bom.')
+    expect(words.map(&:text)).to eq(['É', 'bom.'])
+    expect(words.map { |w| [w.start, w.finish] }).to eq([[0.0, 0.6], [0.6, 1.5]])
   end
 
   it 'handles segments without words by translating text only' do
@@ -122,10 +145,10 @@ RSpec.describe Subtitler::Translator do
       'Olá.', 'Tchau.'
     ])
 
-    mash = described_class.translate(verbose_json, from: 'en', to: 'pt')
-    expect(mash.segments.size).to eq(2)
-    expect(mash.segments.map(&:text)).to eq(['Olá.', 'Tchau.'])
-    expect(mash.segments.all? { |s| Array(s.words).empty? }).to eq(true)
+    mash = described_class.translate(subtitle(verbose_json), from: 'en', to: 'pt')
+    expect(mash.entries.size).to eq(2)
+    expect(mash.entries.map(&:text)).to eq(['Olá.', 'Tchau.'])
+    expect(mash.entries.all? { |entry| entry.words.empty? }).to eq(true)
   end
 
   it 'processes contiguous timed and text-only runs without crossing representation boundaries' do
@@ -137,7 +160,7 @@ RSpec.describe Subtitler::Translator do
       SymMash.new(start: 4.0, end: 5.0, text: 'Timed again.', words: [SymMash.new(word('Timed', 4.0, 4.5)), SymMash.new(word('again.', 4.5, 5.0))]),
     ]
 
-    sentences = described_class.sentences_for(segments)
+    sentences = described_class.sentences_for(subtitle(segments: segments))
 
     expect(sentences.map(&:text)).to eq(['Timed start continues.', 'Text only continues', 'without punctuation', 'Timed again.'])
     expect(sentences.map { |sentence| Array(sentence.words).any? }).to eq([true, false, false, true])
@@ -151,7 +174,7 @@ RSpec.describe Subtitler::Translator do
     ]
     original_words = segments.map { |segment| segment.words.map(&:to_h) }
 
-    sentences = described_class.sentences_for(segments)
+    sentences = described_class.sentences_for(subtitle(segments: segments))
 
     expect(sentences.map(&:text)).to eq(['First', 'cue', 'Speaker'])
     expect(sentences.map(&:cue_id)).to eq([1, 2, 2])
@@ -166,10 +189,10 @@ RSpec.describe Subtitler::Translator do
       SymMash.new(start: 1.0, end: 2.0, words: [SymMash.new(word: 'Goodbye.', start: 1.0, end: 2.0)]),
     ]
 
-    sentences = described_class.sentences_for(segments)
+    sentences = described_class.sentences_for(subtitle(segments: segments))
 
     expect(sentences.map(&:text)).to eq(['Hello.', 'Goodbye.'])
-    expect(sentences).to all(satisfy { |sentence| sentence.end > sentence.start })
+    expect(sentences).to all(satisfy { |sentence| sentence.finish > sentence.start })
   end
 
   it 'splits wordless text into timed sentences before translating' do
@@ -181,11 +204,11 @@ RSpec.describe Subtitler::Translator do
 
     allow(::Translator).to receive(:translate).and_return(['Olá.', 'Esta é uma segunda frase.'])
 
-    mash = described_class.translate(verbose_json, from: 'en', to: 'pt')
+    mash = described_class.translate(subtitle(verbose_json), from: 'en', to: 'pt')
 
     expect(::Translator).to have_received(:translate).with(['Hello.', 'This is a second sentence.'], from: 'en', to: 'pt')
-    expect(mash.segments.map(&:text)).to eq(['Olá. Esta é uma segunda frase.'])
-    expect([mash.segments.first.start, mash.segments.last.end]).to eq([0.0, 4.0])
+    expect(mash.entries.map(&:text)).to eq(['Olá. Esta é uma segunda frase.'])
+    expect([mash.entries.first.start, mash.entries.last.finish]).to eq([0.0, 4.0])
   end
 
   it 'removes a model translation label without removing legitimate dialogue' do
@@ -198,15 +221,15 @@ RSpec.describe Subtitler::Translator do
 
     allow(::Translator).to receive(:translate).and_return(['Translation: Olá.', 'Claro.'])
 
-    mash = described_class.translate(verbose_json, from: 'en', to: 'pt')
+    mash = described_class.translate(subtitle(verbose_json), from: 'en', to: 'pt')
 
-    expect(mash.segments.map(&:text)).to eq(['Olá.', 'Claro.'])
+    expect(mash.entries.map(&:text)).to eq(['Olá.', 'Claro.'])
   end
 
   it 'keeps honorifics together when splitting wordless text into sentences' do
     segments = [SymMash.new(start: 0.0, end: 2.0, text: 'You must be Mr. Wang. Welcome.', words: nil)]
 
-    expect(described_class.sentences_for(segments).map(&:text)).to eq([
+    expect(described_class.sentences_for(subtitle(segments: segments)).map(&:text)).to eq([
       'You must be Mr. Wang.',
       'Welcome.',
     ])
@@ -224,11 +247,11 @@ RSpec.describe Subtitler::Translator do
       'Oi tudo bem.'
     ])
 
-    mash = described_class.translate(verbose_json, from: 'en', to: 'pt')
-    expect(mash.segments.size).to eq(1)
-    expect(mash.segments[0].text).to eq('Oi tudo bem.')
-    expect(mash.segments[0].start).to eq(0.0)
-    expect(mash.segments[0].end).to eq(1.6)
+    mash = described_class.translate(subtitle(verbose_json), from: 'en', to: 'pt')
+    expect(mash.entries.size).to eq(1)
+    expect(mash.entries[0].text).to eq('Oi tudo bem.')
+    expect(mash.entries[0].start).to eq(0.0)
+    expect(mash.entries[0].finish).to eq(1.6)
   end
 
   it 'keeps trailing closers attached to the sentence when split into tokens' do
@@ -247,9 +270,9 @@ RSpec.describe Subtitler::Translator do
       'Olá mundo!)'
     ])
 
-    mash = described_class.translate(verbose_json, from: 'en', to: 'pt')
-    expect(mash.segments.size).to eq(1)
-    expect(mash.segments[0].text).to eq('Olá mundo!)')
+    mash = described_class.translate(subtitle(verbose_json), from: 'en', to: 'pt')
+    expect(mash.entries.size).to eq(1)
+    expect(mash.entries[0].text).to eq('Olá mundo!)')
   end
 
   it 'groups multiple segments per sentence into separate sentence segments' do
@@ -275,18 +298,18 @@ RSpec.describe Subtitler::Translator do
       'Segunda frase também longa para manter separação.'
     ])
 
-    mash = described_class.translate(verbose_json, from: 'en', to: 'pt')
-    expect(mash.segments.size).to eq(2)
-    expect(mash.segments.map(&:text)).to eq([
+    mash = described_class.translate(subtitle(verbose_json), from: 'en', to: 'pt')
+    expect(mash.entries.size).to eq(2)
+    expect(mash.entries.map(&:text)).to eq([
       'Primeira frase longa com muitas palavras para não mesclar.',
       'Segunda frase também longa para manter separação.'
     ])
-    expect(mash.segments[0].start).to eq(0.0)
-    expect(mash.segments[0].end).to eq(2.5)
-    expect(mash.segments[1].start).to eq(4.0)
-    expect(mash.segments[1].end).to eq(6.8)
+    expect(mash.entries[0].start).to eq(0.0)
+    expect(mash.entries[0].finish).to eq(2.5)
+    expect(mash.entries[1].start).to eq(4.0)
+    expect(mash.entries[1].finish).to eq(6.8)
 
-    vtt = backend.send(:vtt_convert, mash, normalize: false, word_tags: false)
+    vtt = backend.send(:vtt_convert, mash.to_whisper_verbose_hash, normalize: false, word_tags: false)
     expect(vtt).to eq(
       "WEBVTT\n\n" \
       "00:00:00.000 --> 00:00:02.500\n" \
@@ -315,13 +338,13 @@ RSpec.describe Subtitler::Translator do
       'Esta é uma frase muito longa que atravessa vários segmentos.'
     ])
 
-    mash = described_class.translate(verbose_json, from: 'en', to: 'pt')
-    expect(mash.segments.size).to eq(1)
-    expect(mash.segments[0].text).to eq('Esta é uma frase muito longa que atravessa vários segmentos.')
-    expect(mash.segments[0].start).to eq(0.0)
-    expect(mash.segments[0].end).to eq(3.3)
+    mash = described_class.translate(subtitle(verbose_json), from: 'en', to: 'pt')
+    expect(mash.entries.size).to eq(1)
+    expect(mash.entries[0].text).to eq('Esta é uma frase muito longa que atravessa vários segmentos.')
+    expect(mash.entries[0].start).to eq(0.0)
+    expect(mash.entries[0].finish).to eq(3.3)
 
-    vtt = backend.send(:vtt_convert, mash, normalize: false, word_tags: false)
+    vtt = backend.send(:vtt_convert, mash.to_whisper_verbose_hash, normalize: false, word_tags: false)
     expect(vtt).to eq(
       "WEBVTT\n\n" \
       "00:00:00.000 --> 00:00:03.300\n" \
@@ -354,16 +377,16 @@ RSpec.describe Subtitler::Translator do
     long2 = 'Segunda sentença igualmente extensa e detalhada, composta para permanecer separada por exceder o comprimento máximo.'
     allow(::Translator).to receive(:translate).and_return([long1, long2])
 
-    mash = described_class.translate(verbose_json, from: 'en', to: 'pt')
-    expect(mash.segments.size).to eq(4)
-    expect((mash.segments[0].text + ' ' + mash.segments[1].text).strip).to eq(long1)
-    expect((mash.segments[2].text + ' ' + mash.segments[3].text).strip).to eq(long2)
-    expect(mash.segments[0].start).to eq(0.0)
-    expect(mash.segments[1].end).to eq(2.3)
-    expect(mash.segments[2].start).to eq(2.5)
-    expect(mash.segments[3].end).to eq(4.1)
+    mash = described_class.translate(subtitle(verbose_json), from: 'en', to: 'pt')
+    expect(mash.entries.size).to eq(4)
+    expect((mash.entries[0].text + ' ' + mash.entries[1].text).strip).to eq(long1)
+    expect((mash.entries[2].text + ' ' + mash.entries[3].text).strip).to eq(long2)
+    expect(mash.entries[0].start).to eq(0.0)
+    expect(mash.entries[1].finish).to eq(2.3)
+    expect(mash.entries[2].start).to eq(2.5)
+    expect(mash.entries[3].finish).to eq(4.1)
 
-    vtt = backend.send(:vtt_convert, mash, normalize: false, word_tags: false)
+    vtt = backend.send(:vtt_convert, mash.to_whisper_verbose_hash, normalize: false, word_tags: false)
     expect(vtt).to include('Primeira frase muito extensa')
     expect(vtt).to include('evitar mescla.')
     expect(vtt).to include('Segunda sentença igualmente extensa')
@@ -390,42 +413,42 @@ RSpec.describe Subtitler::Translator do
       'Ok.'                   # fewer tokens than slots
     ])
 
-    mash = described_class.translate(verbose_json, from: 'en', to: 'pt')
+    mash = described_class.translate(subtitle(verbose_json), from: 'en', to: 'pt')
 
-    expect(mash.segments.size).to eq(2)
-    expect(mash.segments.map { |segment| segment.words.map(&:word) })
+    expect(mash.entries.size).to eq(2)
+    expect(mash.entries.map { |entry| entry.words.map(&:text) })
       .to eq([['Olá', 'mundo', 'incrível!)'], ['Ok.']])
-    expect(mash.segments.map { |segment| [segment.words.first.start, segment.words.last.end] })
+    expect(mash.entries.map { |entry| [entry.words.first.start, entry.words.last.finish] })
       .to eq([[0.0, 0.9], [2.1, 2.9]])
   end
 
   it 'projects lexical tokens only onto positive-duration source slots' do
-    sentence = SymMash.new(start: 0.0, end: 2.0, words: [
+    sentence = subtitle(segments: [{start: 0.0, end: 2.0, words: [
       SymMash.new(word('zero', 0.0, 0.0)),
       SymMash.new(word('first', 0.0, 1.0)),
       SymMash.new(word('zero', 1.0, 1.0)),
       SymMash.new(word('last', 1.0, 2.0)),
-    ])
+    ]}]).entries.first
 
     described_class.send(:assign_tokens_to_words!, sentence, ['um', 'dois', 'três'])
 
-    expect(sentence.words.map(&:word)).to eq(['um', 'dois', 'três'])
-    expect(sentence.words.map { |word| [word.start, word.end] }).to eq([
+    expect(sentence.words.map(&:text)).to eq(['um', 'dois', 'três'])
+    expect(sentence.words.map { |word| [word.start, word.finish] }).to eq([
       [0.0, 0.5], [0.5, 1.0], [1.0, 2.0]
     ])
-    expect(sentence.words).to all(satisfy { |word| word.end > word.start })
-    rendered = Subtitler::VTT.build(SymMash.new(segments: [sentence]), normalize: false)
+    expect(sentence.words).to all(satisfy { |word| word.finish > word.start })
+    rendered = Subtitler::VTT.build(Subtitler::Subtitle.new(entries: [sentence]).to_whisper_verbose_hash, normalize: false)
     expect(rendered.scan(/<[^>]+>/)).to eq(['<00:00:00.500>', '<00:00:01.000>'])
     expect(rendered).not_to include('<00:00:02.000>')
 
-    wordless = SymMash.new(words: [SymMash.new(word('zero', 1.0, 1.0))])
+    wordless = subtitle(segments: [{start: 1.0, end: 1.0, words: [word('zero', 1.0, 1.0)]}]).entries.first
     described_class.send(:assign_tokens_to_words!, wordless, ['texto'])
     expect(wordless.words).to eq([])
   end
 
   it 'keeps honorific abbreviations attached to the following name' do
     segments = [
-      SymMash.new(words: [
+      SymMash.new(start: 0.0, end: 1.8, words: [
         SymMash.new(word('You', 0.0, 0.2)),
         SymMash.new(word('must', 0.2, 0.4)),
         SymMash.new(word('be', 0.4, 0.5)),
@@ -435,9 +458,9 @@ RSpec.describe Subtitler::Translator do
       ])
     ]
 
-    sentences = described_class.sentences_for(segments)
+    sentences = described_class.sentences_for(subtitle(segments: segments))
 
     expect(sentences.map(&:text)).to eq(['You must be Mr. Wang.', 'Welcome.'])
-    expect(sentences.first.end).to eq(1.0)
+    expect(sentences.first.finish).to eq(1.0)
   end
 end
