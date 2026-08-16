@@ -19,7 +19,7 @@ RSpec.describe VoiceReference::Transcriber do
     transcript = described_class.new(backend: backend).call('/tmp/source.wav')
 
     expect(backend).to have_received(:transcribe).with(
-      '/tmp/source.wav', format: 'verbose_json', merge_words: false
+      '/tmp/source.wav', merge_words: false
     )
     expect(transcript).to be_a(Subtitler::Subtitle)
     expect(transcript.language).to eq('en')
@@ -64,7 +64,7 @@ RSpec.describe VoiceReference::Transcriber do
       expect(second.entries.first.words.first.confidence).to eq(0.91)
       expect(second.entries.first.words.first.metadata).to eq('token' => 7)
       expect(backend).to have_received(:transcribe).once.with(
-        '/tmp/first/vocals.wav', format: 'verbose_json', merge_words: false, separate_voice: false
+        '/tmp/first/vocals.wav', merge_words: false, separate_voice: false
       )
       cache = File.join(dir, "#{Digest::SHA256.hexdigest(source)}.json")
       expect(Dir.children(dir)).to eq([File.basename(cache)])

@@ -19,7 +19,7 @@ class VoiceReference
       cache = cache_path(audio, cache_key)
       return read_cache(cache) if cache && File.exist?(cache)
 
-      options = {format: 'verbose_json', merge_words: false}
+      options = {merge_words: false}
       options[:separate_voice] = false unless separate_voice
       subtitle = backend.transcribe(audio, **options)
       raise TypeError, 'transcription must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitler::Subtitle)

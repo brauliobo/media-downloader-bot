@@ -1,6 +1,10 @@
 require 'spec_helper'
 
 RSpec.describe Subtitler::Ass do
+  def render(vtt, **options)
+    Subtitler::Subtitle.from_vtt(vtt).to_ass(**options)
+  end
+
   let(:timed_vtt) do
     <<~VTT
       WEBVTT
@@ -11,7 +15,7 @@ RSpec.describe Subtitler::Ass do
   end
 
   it 'renders plain cues as one dialogue without inline timestamps' do
-    dialogue = described_class.from_vtt(timed_vtt, mode: :plain).lines.grep(/^Dialogue:/)
+    dialogue = render(timed_vtt, mode: :plain).lines.grep(/^Dialogue:/)
 
     expect(dialogue).to eq([
       "Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,One two\n",
@@ -19,7 +23,7 @@ RSpec.describe Subtitler::Ass do
   end
 
   it 'renders instagram cues as one precisely bounded event per highlighted word' do
-    dialogues = described_class.from_vtt(timed_vtt, mode: :instagram).lines.grep(/^Dialogue:/)
+    dialogues = render(timed_vtt, mode: :instagram).lines.grep(/^Dialogue:/)
 
     expect(dialogues).to eq([
       "Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,{\\1c&Hffffff&}One{\\1c&HC0C0C0&} two\n",
@@ -28,7 +32,7 @@ RSpec.describe Subtitler::Ass do
   end
 
   it 'renders karaoke cues as one event with rounded centisecond durations' do
-    dialogue = described_class.from_vtt(timed_vtt, mode: :karaoke).lines.grep(/^Dialogue:/)
+    dialogue = render(timed_vtt, mode: :karaoke).lines.grep(/^Dialogue:/)
 
     expect(dialogue).to eq([
       "Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,{\\k100}One {\\k100}two\n",
@@ -52,7 +56,7 @@ RSpec.describe Subtitler::Ass do
     }
 
     expectations.each do |preset, expected|
-      ass = described_class.from_vtt(timed_vtt, preset: preset)
+      ass = render(timed_vtt, preset: preset)
 
       expect(ass).to include("Style: Default,#{expected[:style]}")
       expect(ass).to include(expected[:highlight])
@@ -60,14 +64,14 @@ RSpec.describe Subtitler::Ass do
   end
 
   it 'falls back to the default preset for an unknown name' do
-    fallback = described_class.from_vtt(timed_vtt, preset: 'missing')
-    default = described_class.from_vtt(timed_vtt, preset: 'default')
+    fallback = render(timed_vtt, preset: 'missing')
+    default = render(timed_vtt, preset: 'default')
 
     expect(fallback).to eq(default)
   end
 
   it 'scales only the preset font size for portrait output' do
-    portrait = described_class.from_vtt(timed_vtt, portrait: true)
+    portrait = render(timed_vtt, portrait: true)
 
     expect(portrait).to include('Style: Default,Roboto Medium,12,')
     expect(portrait).to include(',2,10,10,32,1')
@@ -83,7 +87,7 @@ RSpec.describe Subtitler::Ass do
       on two lines
     VTT
 
-    dialogues = described_class.from_vtt(vtt).lines.grep(/^Dialogue:/)
+    dialogues = render(vtt).lines.grep(/^Dialogue:/)
 
     expect(dialogues).to eq([
       "Dialogue: 0,0:00:03.00,0:00:04.50,Default,,0,0,0,,Whole cue\\Non two lines\n",
@@ -93,12 +97,12 @@ RSpec.describe Subtitler::Ass do
   it 'drops blocks that have no cue timing line' do
     vtt = "WEBVTT\n\nNOTE this block is untimed\nIgnored text\n"
 
-    expect(described_class.from_vtt(vtt).lines.grep(/^Dialogue:/)).to be_empty
+    expect(render(vtt).lines.grep(/^Dialogue:/)).to be_empty
   end
 
   it 'writes the standard dialogue fields and preserves commas in the text field' do
     vtt = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello, world\n"
-    dialogue = described_class.from_vtt(vtt).lines.grep(/^Dialogue:/).first.chomp
+    dialogue = render(vtt).lines.grep(/^Dialogue:/).first.chomp
 
     expect(dialogue.split(',', 10)).to eq([
       'Dialogue: 0', '0:00:00.00', '0:00:01.00', 'Default', '', '0', '0', '0', '', 'Hello, world',
@@ -113,7 +117,7 @@ RSpec.describe Subtitler::Ass do
       Tom &amp; Jerry {\i1}italic{\i0}
     VTT
 
-    dialogue = described_class.from_vtt(vtt).lines.grep(/^Dialogue:/).first
+    dialogue = render(vtt).lines.grep(/^Dialogue:/).first
 
     expect(dialogue).to end_with("Tom & Jerry {\\i1}italic{\\i0}\n")
   end
@@ -126,7 +130,7 @@ RSpec.describe Subtitler::Ass do
       First <00:01,000>second
     VTT
 
-    dialogues = described_class.from_vtt(vtt).lines.grep(/^Dialogue:/)
+    dialogues = render(vtt).lines.grep(/^Dialogue:/)
 
     expect(dialogues.size).to eq(2)
     expect(dialogues.join).to include('First', 'second')

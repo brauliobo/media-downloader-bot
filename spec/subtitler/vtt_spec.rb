@@ -11,6 +11,16 @@ RSpec.describe Subtitler::VTT do
     end
   end
 
+  def translate(vtt, from:, to:, word_tags: true)
+    Subtitler::Subtitle.from_vtt(described_class.clean(vtt))
+      .translated(from: from, to: to, merge_adjacent: false)
+      .to_vtt(word_tags: word_tags)
+  end
+
+  def slice(vtt, **range)
+    Subtitler::Subtitle.from_vtt(vtt).slice(**range).to_vtt
+  end
+
   it 'converts external subtitles through FFmpeg' do
     ffmpeg = instance_double FFmpeg
     expect(ffmpeg).to receive(:convert_subtitle).with(
@@ -32,7 +42,7 @@ RSpec.describe Subtitler::VTT do
       "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nOlá <00:00:01.000>mundo\nnovamente\n"
     )
     allow(::Translator).to receive(:translate).and_return(['Hola mundo nuevamente.'])
-    described_class.translate(canonical, from: 'pt', to: 'es')
+    translate(canonical, from: 'pt', to: 'es')
     expect(::Translator).to have_received(:translate).with(['Olá mundo novamente'], from: 'pt', to: 'es')
   end
 
@@ -45,7 +55,7 @@ RSpec.describe Subtitler::VTT do
     VTT
 
     canonical = described_class.to_vtt(body, 'vtt')
-    ass = Subtitler::Ass.from_vtt(canonical)
+    ass = Subtitler::Subtitle.from_vtt(canonical).to_ass
 
     expect(canonical).to include(
       "00:00.000 --> 00:02.000\nWait, 1,000 <00:01.000>units"
@@ -116,7 +126,7 @@ RSpec.describe Subtitler::VTT do
 
     allow(::Translator).to receive(:translate).and_return(['Olá.', long_translation])
 
-    translated = described_class.translate(vtt, from: 'en', to: 'pt', word_tags: false)
+    translated = translate(vtt, from: 'en', to: 'pt', word_tags: false)
 
     expect(::Translator).to have_received(:translate).with(
       ['Hello.', 'This is a second sentence.'],
@@ -138,7 +148,7 @@ RSpec.describe Subtitler::VTT do
 
     allow(::Translator).to receive(:translate).and_return(['Olá.', 'Esta é outra frase.'])
 
-    translated = described_class.translate(vtt, from: 'en', to: 'pt')
+    translated = translate(vtt, from: 'en', to: 'pt')
 
     expect(payloads(translated)).to eq(['Olá.', 'Esta é outra frase.'])
   end
@@ -153,7 +163,7 @@ RSpec.describe Subtitler::VTT do
 
     allow(::Translator).to receive(:translate).and_return(['A artrite está piorando.'])
 
-    translated = described_class.translate(vtt, from: 'en', to: 'pt')
+    translated = translate(vtt, from: 'en', to: 'pt')
 
     expect(translated).to include(
       "00:00:00.240 --> 00:00:02.310\nA artrite está piorando."
@@ -164,7 +174,7 @@ RSpec.describe Subtitler::VTT do
     vtt = "WEBVTT\n\n00:00.000 --> 00:04.000\nHello <00:02.000>there.\n"
     allow(::Translator).to receive(:translate).and_return(['Olá mundo.'])
 
-    translated = described_class.translate(vtt, from: 'en', to: 'pt')
+    translated = translate(vtt, from: 'en', to: 'pt')
 
     expect(translated).to include('Olá <00:00:02.000>mundo.')
   end
@@ -178,8 +188,8 @@ RSpec.describe Subtitler::VTT do
     VTT
     allow(::Translator).to receive(:translate).and_return(['Olá mundo espanhol agora.'])
 
-    translated = described_class.translate(vtt, from: 'en', to: 'pt')
-    plain = described_class.translate(vtt, from: 'en', to: 'pt', word_tags: false)
+    translated = translate(vtt, from: 'en', to: 'pt')
+    plain = translate(vtt, from: 'en', to: 'pt', word_tags: false)
 
     expect(::Translator).to have_received(:translate).twice.with(
       ['Hello there Français encore.'],
@@ -197,7 +207,7 @@ RSpec.describe Subtitler::VTT do
     vtt = "WEBVTT\n\n00:00:00.000 --> 00:00:03.000\nencore &amp; toujours <00:00:02.000>ici\n"
     allow(::Translator).to receive(:translate).and_return(['ainda e sempre aqui'])
 
-    described_class.translate(vtt, from: 'fr', to: 'pt')
+    translate(vtt, from: 'fr', to: 'pt')
 
     expect(::Translator).to have_received(:translate).with(['encore & toujours ici'], from: 'fr', to: 'pt')
   end
@@ -214,7 +224,7 @@ RSpec.describe Subtitler::VTT do
     VTT
     allow(::Translator).to receive(:translate).and_return(['Olá', 'aí'])
 
-    translated = described_class.translate(vtt, from: 'en', to: 'pt')
+    translated = translate(vtt, from: 'en', to: 'pt')
 
     expect(::Translator).to have_received(:translate).with(['Hello', 'there'], from: 'en', to: 'pt')
     expect(payloads(translated)).to eq(['Olá', 'aí'])
@@ -265,7 +275,7 @@ RSpec.describe Subtitler::VTT do
       allow(::Translator).to receive(:translate).and_return(['Texto limpo.'])
       vtt = "WEBVTT\n\n00:00:00.000 --> 00:00:04.000\n#{text}\n"
 
-      translated = described_class.translate(vtt, from: 'en', to: 'pt')
+      translated = translate(vtt, from: 'en', to: 'pt')
 
       expect(translated).to include("00:00:00.000 --> 00:00:04.000\nTexto limpo.")
       expect(translated).not_to include('<00:00:')
@@ -295,7 +305,7 @@ RSpec.describe Subtitler::VTT do
     end
 
     it 'retains overlapping words and rebases inline timings inside the range' do
-      sliced = described_class.slice(vtt, from: '00:00:02', to: '00:00:04')
+      sliced = slice(vtt, from: '00:00:02', to: '00:00:04')
 
       expect(sliced).to include("00:00:00.000 --> 00:00:02.000\ntwo <00:00:01.000>three")
       expect(sliced).not_to include('One', 'four')
@@ -303,20 +313,20 @@ RSpec.describe Subtitler::VTT do
 
     it 'keeps a word active at the left boundary as the first untagged word' do
       active = "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nOne alpha beta <00:00:03.000>last\n"
-      sliced = described_class.slice(active, from: '00:00:02', to: '00:00:03')
+      sliced = slice(active, from: '00:00:02', to: '00:00:03')
 
       expect(sliced).to include("00:00:00.000 --> 00:00:01.000\nalpha <00:00:00.333>beta")
       expect(sliced).not_to include('<00:00:00.000>')
     end
 
     it 'excludes words ending at the left edge and starting at the right edge' do
-      sliced = described_class.slice(vtt, from: '00:00:02', to: '00:00:03')
+      sliced = slice(vtt, from: '00:00:02', to: '00:00:03')
 
       expect(payloads(sliced)).to eq(['two'])
     end
 
     it 'leaves cue bounds and inline text unchanged without rebasing' do
-      sliced = described_class.slice(vtt, from: '00:00:02', to: '00:00:04', rebase: false)
+      sliced = slice(vtt, from: '00:00:02', to: '00:00:04', rebase: false)
 
       expect(sliced).to include("00:00:01.000 --> 00:00:05.000\nOne <00:00:02.000>two <00:00:03.000>three <00:00:04.000>four")
     end
@@ -324,7 +334,7 @@ RSpec.describe Subtitler::VTT do
     it 'keeps the existing behavior for untagged cues' do
       plain = "WEBVTT\n\n00:00:01.000 --> 00:00:05.000\nWhole cue text\n"
 
-      expect(described_class.slice(plain, from: '00:00:02', to: '00:00:04'))
+      expect(slice(plain, from: '00:00:02', to: '00:00:04'))
         .to include("00:00:00.000 --> 00:00:02.000\nWhole cue text")
     end
 
@@ -335,7 +345,7 @@ RSpec.describe Subtitler::VTT do
         'One <00:00:03.000>two <00:00:02.000>three',
       ].each do |text|
         source = "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\n#{text}\n"
-        sliced = described_class.slice(source, from: '00:00:01', to: '00:00:04')
+        sliced = slice(source, from: '00:00:01', to: '00:00:04')
 
         expect(payloads(sliced)).to eq([text.gsub(/<[^>]*>/, '').split.join(' ')])
         expect(sliced).not_to match(/<\d{2}:\d{2}/)
@@ -345,7 +355,7 @@ RSpec.describe Subtitler::VTT do
     it 'marks an intentional gap before the first retained word' do
       source = "WEBVTT\n\n00:00:01.000 --> 00:00:05.000\n<00:00:02.000>late <00:00:03.000>word\n"
 
-      sliced = described_class.slice(source, from: '00:00:01', to: '00:00:04')
+      sliced = slice(source, from: '00:00:01', to: '00:00:04')
 
       expect(sliced).to include("00:00:00.000 --> 00:00:03.000\n<00:00:01.000>late <00:00:02.000>word")
     end
@@ -359,7 +369,7 @@ RSpec.describe Subtitler::VTT do
         Wait, this costs 1,000 <00:00:02,250>units --> really.
       SRT
 
-      expect(described_class.srt_to_vtt(srt)).to include(
+      expect(Subtitler::Subtitle.from_srt(srt).to_vtt).to include(
         "00:00:01.000 --> 00:00:03.500\nWait, this costs 1,000 <00:00:02.250>units --> really."
       )
     end

@@ -13,27 +13,25 @@ class Subtitler
     # Transcribe an audio file using whisper.cpp.
     # Params:
     #   path        – path to audio file
-    #   format:     – whisper.cpp response_format (default: 'verbose_json').
-    #                 JSON formats return Subtitle; non-JSON formats return String.
     #   merge_words – when true (default) contiguous tokens without a leading
     #                 space are merged into a single word and their timings
     #                 are combined (start of first, end of last). This fixes
     #                 whisper.cpp artefact where a single Portuguese word is
     #                 emitted as two tokens (e.g. " test" + "ando").
     #   **extra     – passed directly to whisper.cpp
-    def transcribe path, format: 'verbose_json', merge_words: true, **extra
-      transcribe_with_params(path, format: format, merge_words: merge_words, language: 'auto', **extra)
+    def transcribe path, merge_words: true, **extra
+      transcribe_with_params(path, merge_words: merge_words, language: 'auto', **extra)
     end
 
     protected
 
-    def transcribe_with_params path, format:, merge_words:, language: nil, **extra
+    def transcribe_with_params path, merge_words:, language: nil, **extra
       out = Zipper.with_audio_wav(path) do |file|
         params = {
-          file:             file,
-          temperature:      '0.0',
-          response_format:  format,
-          **extra
+          file:            file,
+          temperature:     '0.0',
+          **extra,
+          response_format: 'verbose_json'
         }
         params[:language] = language if language
 
@@ -43,8 +41,6 @@ class Subtitler
 
         res.body
       end
-
-      return out unless format.to_s.include?('json')
 
       subtitle = Subtitle.from_whisper_verbose_json(out)
       subtitle.replace_language!(Subtitler.normalize_lang(subtitle.language))

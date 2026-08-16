@@ -6,21 +6,19 @@ RSpec.describe Subtitler do
     transcript = Subtitler::Subtitle.new(language: 'en')
     allow(VoiceSeparator).to receive(:with_stems).and_yield(stems)
     expect(described_class).to receive(:transcribe_with_backend)
-      .with(stems.vocals, format: 'verbose_json')
+      .with(stems.vocals)
       .and_return(transcript)
 
-    expect(described_class.transcribe('/tmp/input.mp4', format: 'verbose_json')).to equal(transcript)
+    expect(described_class.transcribe('/tmp/input.mp4')).to equal(transcript)
   end
 
   it 'can reuse an already separated vocal stem' do
     transcript = Subtitler::Subtitle.new(language: 'en')
     expect(VoiceSeparator).not_to receive(:with_stems)
     expect(described_class).to receive(:transcribe_with_backend)
-      .with('/tmp/vocals.wav', format: 'verbose_json')
+      .with('/tmp/vocals.wav')
       .and_return(transcript)
 
-    expect(described_class.transcribe(
-      '/tmp/vocals.wav', format: 'verbose_json', separate_voice: false
-    )).to equal(transcript)
+    expect(described_class.transcribe('/tmp/vocals.wav', separate_voice: false)).to equal(transcript)
   end
 end

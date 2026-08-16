@@ -203,10 +203,6 @@ class Subtitler
       Subtitler.format_timestamp(seconds, precision: 2, hour_digits: 1)
     end
 
-    def from_vtt(vtt, portrait: false, mode: :instagram, preset: 'default')
-      Subtitler::Subtitle.from_vtt(vtt).to_ass(portrait: portrait, mode: mode, preset: preset)
-    end
-
     def document_for(subtitle, portrait: false, mode: :instagram, preset: 'default')
       raise TypeError, 'subtitle must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitler::Subtitle)
 

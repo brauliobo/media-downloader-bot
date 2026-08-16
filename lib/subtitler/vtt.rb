@@ -16,26 +16,6 @@ class Subtitler
         .gsub(/\\[Nn]/, "\n")
     end
 
-    def self.translate(vtt, to:, from: nil, word_tags: true)
-      subtitle = Subtitle.from_vtt(clean(vtt))
-      return vtt if subtitle.entries.empty?
-
-      translated = subtitle.translated(
-        from:           from,
-        to:             to,
-        merge_adjacent: false
-      )
-      translated.to_vtt(word_tags: word_tags)
-    end
-
-    def self.slice(vtt, from:, to:, rebase: true)
-      Subtitle.from_vtt(vtt).slice(from: from, to: to, rebase: rebase).to_vtt
-    end
-
-    def self.srt_to_vtt(srt)
-      Subtitle.from_srt(srt).to_vtt
-    end
-
     def self.to_vtt(body, ext, ffmpeg: FFmpeg.new)
       safe_ext = Utils::Safety.subtitle_ext(ext)
       if safe_ext == 'vtt'

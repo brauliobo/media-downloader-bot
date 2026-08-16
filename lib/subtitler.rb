@@ -8,7 +8,6 @@ require_relative 'subtitler/whisper_cpp'
 require_relative 'subtitler/whisper_x'
 require_relative 'subtitler/transcribe_cpp'
 require_relative 'subtitler/vtt'
-require_relative 'subtitler/srt'
 require_relative 'subtitler/ass'
 
 class Subtitler
@@ -23,10 +22,6 @@ class Subtitler
     VoiceSeparator.with_stems(path) do |stems|
       transcribe_with_backend(stems.vocals, **options)
     end
-  end
-
-  def self.strip_word_tags str
-    str.gsub(INLINE_TIMESTAMP, '')
   end
 
   def self.normalize_lang(lang)

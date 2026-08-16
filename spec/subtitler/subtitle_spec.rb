@@ -92,7 +92,7 @@ RSpec.describe Subtitler::Subtitle do
     end
 
     it 'converts millisecond timing to float seconds and retains metadata' do
-      subtitle = described_class.from_transcribe_cpp_json(input)
+      subtitle = described_class.from_transcribe_cpp_json(JSON.generate(input))
       entry    = subtitle.entries.first
       word     = entry.words.first
 

@@ -411,7 +411,7 @@ RSpec.describe Dubbing::Pipeline do
     pipeline.send(:apply_scheduled_timings!, clips)
     translated_subtitle = pipeline.send(:target_subtitle)
     translated_vtt = translated_subtitle.to_vtt
-    translated_ass = Subtitler::Ass.from_vtt(translated_vtt)
+    translated_ass = Subtitler::Subtitle.from_vtt(translated_vtt).to_ass
     pipeline.send(:prepare_translated_subtitles)
 
     expect(pipeline.sentences).to contain_exactly(sentences.first)

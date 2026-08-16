@@ -186,13 +186,4 @@ RSpec.describe Subtitler::WhisperCpp do
     )
   end
 
-  it 'returns raw text only when a non-JSON response format is requested' do
-    response = instance_double(Net::HTTPResponse, code: '200', body: 'plain transcript')
-    expect(Utils::HTTP).to receive(:post).with(
-      'http://whisper.test:8080/inference',
-      hash_including(response_format: 'text', language: 'auto')
-    ).and_return(response)
-
-    expect(backend.transcribe('audio.wav', format: 'text')).to eq('plain transcript')
-  end
 end
