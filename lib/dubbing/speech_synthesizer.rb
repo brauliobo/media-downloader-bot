@@ -1,5 +1,6 @@
 require 'thread'
 
+require_relative '../subtitler/subtitle'
 require_relative '../tts'
 require_relative '../tts/options'
 require_relative '../utils/progress_counter'
@@ -8,6 +9,10 @@ require_relative 'audio'
 module Dubbing
   class SpeechSynthesizer
     def initialize(sentences:, references:, opts:, target_lang:, workdir:, video_duration:, stl: nil)
+      unless sentences.is_a?(Array) && sentences.all? { |sentence| sentence.is_a?(Subtitler::Subtitle::Entry) }
+        raise TypeError, 'sentences must be an Array of Subtitler::Subtitle::Entry objects'
+      end
+
       @sentences       = sentences
       @references      = references
       @opts            = opts
@@ -92,7 +97,7 @@ module Dubbing
         fit = File.join(@workdir, format('sentence-%04d.fit.wav', idx + 1))
         Audio.normalize(job.fetch(:out_path), fit)
         sentence = @sentences.fetch(idx)
-        clips[idx] = Audio::Clip.new(path: fit, start: sentence.start.to_f, end: sentence.end.to_f)
+        clips[idx] = Audio::Clip.new(path: fit, start: sentence.start.to_f, end: sentence.finish.to_f)
         progress.advance
       end
     end

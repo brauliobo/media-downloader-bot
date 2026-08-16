@@ -9,11 +9,14 @@ RSpec.describe Dubbing::VoiceReference do
   after { FileUtils.remove_entry(dir) if Dir.exist?(dir) }
 
   def sentence(start, finish, source_text:, source_words: [], speaker_id: 0)
-    SymMash.new(start: start, end: finish, source_text: source_text, source_words: source_words, speaker_id: speaker_id)
+    Subtitler::Subtitle::Entry.new(
+      start: start, finish: finish, text: source_text, source_text: source_text,
+      source_words: source_words, speaker_id: speaker_id
+    )
   end
 
   def segment(start, finish, speaker_id: 0)
-    SymMash.new(start: start, end: finish, speaker_id: speaker_id)
+    Diarizer::Segment.new(start: start, finish: finish, speaker_id: speaker_id)
   end
 
   def ok_status
@@ -30,6 +33,12 @@ RSpec.describe Dubbing::VoiceReference do
       File.write(output, clips.join("\n"))
       output
     end
+  end
+
+  it 'rejects subtitle hashes' do
+    expect do
+      described_class.extract_by_speaker(input, [segment(0, 1)], sentences: [{text: 'Hello.'}], dir: dir)
+    end.to raise_error(TypeError, /Subtitle::Entry/)
   end
 
   it 'builds an independent reference for every detected speaker turn' do

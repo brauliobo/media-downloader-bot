@@ -8,12 +8,12 @@ RSpec.describe Diarizer do
 
   it 'assigns each sentence to the speaker segment with the greatest overlap' do
     sentences = [
-      SymMash.new(start: 0.0, end: 2.0),
-      SymMash.new(start: 2.0, end: 4.0),
+      Subtitler::Subtitle::Entry.new(start: 0.0, finish: 2.0),
+      Subtitler::Subtitle::Entry.new(start: 2.0, finish: 4.0),
     ]
     speakers = [
-      SymMash.new(start: 0.0, end: 1.5, speaker_id: 3),
-      SymMash.new(start: 1.5, end: 4.0, speaker_id: 8),
+      Diarizer::Segment.new(start: 0.0, finish: 1.5, speaker_id: 3),
+      Diarizer::Segment.new(start: 1.5, finish: 4.0, speaker_id: 8),
     ]
 
     described_class.assign_speakers!(sentences, speakers)
@@ -22,10 +22,10 @@ RSpec.describe Diarizer do
   end
 
   it 'assigns a sentence to the nearest speaker when diarization has a gap' do
-    sentence = SymMash.new(start: 10.0, end: 11.0)
+    sentence = Subtitler::Subtitle::Entry.new(start: 10.0, finish: 11.0)
     speakers = [
-      SymMash.new(start: 0.0, end: 1.0, speaker_id: 0),
-      SymMash.new(start: 5.0, end: 6.0, speaker_id: 1),
+      Diarizer::Segment.new(start: 0.0, finish: 1.0, speaker_id: 0),
+      Diarizer::Segment.new(start: 5.0, finish: 6.0, speaker_id: 1),
     ]
 
     described_class.assign_speakers!([sentence], speakers)
@@ -36,5 +36,10 @@ RSpec.describe Diarizer do
   it 'rejects empty diarization output' do
     expect { described_class.assign_speakers!([], []) }
       .to raise_error(/no speaker segments/)
+  end
+
+  it 'rejects subtitle hashes instead of mutating them' do
+    expect { described_class.assign_speakers!([{start: 0.0, end: 1.0}], []) }
+      .to raise_error(TypeError, /Subtitle::Entry/)
   end
 end

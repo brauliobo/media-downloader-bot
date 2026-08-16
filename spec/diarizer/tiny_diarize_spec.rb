@@ -27,7 +27,7 @@ RSpec.describe Diarizer::TinyDiarize do
     double(code: '200', body: body)
   end
 
-  it 'uses a unique ID for each uninterrupted turn by default' do
+  it 'parses segments without root text or word arrays and assigns a unique ID to each turn' do
     response = response_with_turns
 
     expect(Utils::HTTP).to receive(:post) do |url, params|
@@ -38,7 +38,12 @@ RSpec.describe Diarizer::TinyDiarize do
 
     output = described_class.diarize(input)
 
+    expect(output).to be_a(Diarizer::Result)
+    expect(output.segments).to all(be_a(Diarizer::Segment))
     expect(output.segments.map(&:speaker_id)).to eq([0, 1, 2, 3])
+    expect(output.segments.map { |segment| [segment.start, segment.finish] }).to eq(
+      [[0.0, 1.0], [1.0, 2.0], [2.0, 3.0], [3.0, 4.0]]
+    )
     expect(File.exist?(wav)).to be(false)
   end
 
@@ -59,5 +64,11 @@ RSpec.describe Diarizer::TinyDiarize do
     allow(Utils::HTTP).to receive(:post).and_return(response)
 
     expect { described_class.diarize(input) }.to raise_error(/did not return speaker_turn_next/)
+  end
+
+  it 'preserves HTTP failure errors' do
+    allow(Utils::HTTP).to receive(:post).and_return(double(code: '503'))
+
+    expect { described_class.diarize(input) }.to raise_error('diarization failed: 503')
   end
 end

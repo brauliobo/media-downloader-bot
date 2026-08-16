@@ -28,6 +28,24 @@ RSpec.describe Dubbing::Pipeline do
     )
   end
 
+  def subtitle_entry(text:, start:, finish:, source_text: text, words: [], speaker_id: nil)
+    Subtitler::Subtitle::Entry.new(
+      text: text, start: start, finish: finish, source_text: source_text, words: words, speaker_id: speaker_id
+    )
+  end
+
+  def subtitle_word(text, start, finish)
+    Subtitler::Subtitle::Word.new(text: text, start: start, finish: finish)
+  end
+
+  def diarization(*segments)
+    Diarizer::Result.new(segments: segments)
+  end
+
+  def speaker_segment(start, finish, speaker_id)
+    Diarizer::Segment.new(start: start, finish: finish, speaker_id: speaker_id)
+  end
+
   def write_silent_wav(path, duration:)
     sample_rate = 8_000
     data_size   = (duration * sample_rate * 2).to_i
@@ -62,13 +80,20 @@ RSpec.describe Dubbing::Pipeline do
     pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)
     pipeline.instance_variable_set(
       :@sentences,
-      [SymMash.new(text: 'Boa tarde.', start: 0.5, end: 1.5)]
+      [subtitle_entry(text: 'Boa tarde.', start: 0.5, finish: 1.5)]
     )
 
     pipeline.send(:prepare_translated_subtitles)
 
     expect(opts.sub_lang).to eq('pt')
     expect(opts.sub_vtt).to include('00:00:00.500 --> 00:00:01.500', 'Boa tarde.')
+  end
+
+  it 'rejects non-model sentence collections' do
+    pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), probe: probe)
+
+    expect { pipeline.send(:replace_sentences!, [{text: 'Boa tarde.'}]) }
+      .to raise_error(TypeError, /Subtitle::Entry/)
   end
 
   it 'preserves scheduled word highlighting unless nowords is requested' do
@@ -104,12 +129,14 @@ RSpec.describe Dubbing::Pipeline do
     default = results.fetch(false)
     plain   = results.fetch(true)
 
-    expect(results.values.map { |result| result[:sentence].source_words.map(&:word) })
+    expect(results.values.map { |result| result[:sentence].source_words.map(&:text) })
       .to all(eq(['Hello', 'world.']))
-    expect(results.values.map { |result| result[:sentence].words.map(&:word) })
+    expect(results.values.map { |result| result[:sentence].words.map(&:text) })
       .to all(eq(['Muito', 'bom', 'dia,', 'amigo.']))
-    expect(results.values.map { |result| result[:sentence].words.map { |word| [word.start, word.end] } })
+    expect(results.values.map { |result| result[:sentence].words.map { |word| [word.start, word.finish] } })
       .to all(eq([[0.0, 0.375], [0.375, 0.75], [0.75, 1.125], [1.125, 1.5]]))
+    expect(results.values.map { |result| result[:sentence].source_words.map { |word| [word.start, word.finish] } })
+      .to all(eq([[0.0, 0.75], [0.75, 1.5]]))
     expect(default[:vtt]).to include(
       '00:00:00.000 --> 00:00:01.500',
       'Muito <00:00:00.375>bom <00:00:00.750>dia, <00:00:01.125>amigo.'
@@ -147,7 +174,7 @@ RSpec.describe Dubbing::Pipeline do
     pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)
     pipeline.instance_variable_set(
       :@sentences,
-      [SymMash.new(source_text: 'Hello.', text: 'Olá.', start: 0.0, end: 1.0)]
+      [subtitle_entry(source_text: 'Hello.', text: 'Olá.', start: 0.0, finish: 1.0)]
     )
 
     pipeline.send(:prepare_translated_subtitles)
@@ -160,18 +187,18 @@ RSpec.describe Dubbing::Pipeline do
     opts = SymMash.new(dub: 'pt', sub: 'es', sub_mode: 'language', sub_lang: 'es')
     pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)
     sentences = [
-      SymMash.new(
-        text: 'Boa tarde.', start: 4.0, end: 6.0, speaker_id: 0,
+      subtitle_entry(
+        text: 'Boa tarde.', start: 4.0, finish: 6.0, speaker_id: 0,
         words: [
-          SymMash.new(word: 'Boa', start: 4.0, end: 5.0),
-          SymMash.new(word: 'tarde.', start: 5.0, end: 6.0),
+          subtitle_word('Boa', 4.0, 5.0),
+          subtitle_word('tarde.', 5.0, 6.0),
         ]
       ),
-      SymMash.new(
-        text: 'Tudo bem?', start: 6.2, end: 7.2, speaker_id: 1,
+      subtitle_entry(
+        text: 'Tudo bem?', start: 6.2, finish: 7.2, speaker_id: 1,
         words: [
-          SymMash.new(word: 'Tudo', start: 6.2, end: 6.7),
-          SymMash.new(word: 'bem?', start: 6.7, end: 7.2),
+          subtitle_word('Tudo', 6.2, 6.7),
+          subtitle_word('bem?', 6.7, 7.2),
         ]
       ),
     ]
@@ -184,7 +211,7 @@ RSpec.describe Dubbing::Pipeline do
       ])
     )
     allow(::Translator).to receive(:translate).and_return(['Buenas tardes.', '¿Todo bien?'])
-    expect(pipeline).not_to receive(:source_subtitle_vtt)
+    expect(pipeline).not_to receive(:source_subtitle)
 
     pipeline.send(:prepare_translated_subtitles)
 
@@ -198,7 +225,7 @@ RSpec.describe Dubbing::Pipeline do
     )
     expect(opts.sub_vtt.scan('-->').size).to eq(2)
     expect(sentences.map(&:text)).to eq(['Boa tarde.', 'Tudo bem?'])
-    expect(sentences.map { |sentence| sentence.words.map(&:word) }).to eq([['Boa', 'tarde.'], ['Tudo', 'bem?']])
+    expect(sentences.map { |sentence| sentence.words.map(&:text) }).to eq([['Boa', 'tarde.'], ['Tudo', 'bem?']])
   end
 
   it 'skips dubbing when source language already matches the target language' do
@@ -221,10 +248,10 @@ RSpec.describe Dubbing::Pipeline do
       0 => Dubbing::VoiceReference::Reference.new(path: speaker_paths.fetch(0), text: 'Hello.'),
       1 => Dubbing::VoiceReference::Reference.new(path: speaker_paths.fetch(1), text: 'Bye.'),
     }
-    diarization = SymMash.new(segments: [
-      SymMash.new(start: 0.0, end: 1.0, speaker_id: 0),
-      SymMash.new(start: 2.0, end: 3.0, speaker_id: 1),
-    ])
+    diarization = diarization(
+      speaker_segment(0.0, 1.0, 0),
+      speaker_segment(2.0, 3.0, 1)
+    )
 
     opts = SymMash.new(dub: 1)
     pipeline = described_class.new(input, dir: dir, opts: opts, stl: status, probe: probe)
@@ -275,10 +302,10 @@ RSpec.describe Dubbing::Pipeline do
     speaker_path = File.join(dir, 'speaker-0.wav')
     File.write(speaker_path, 'speaker')
     reference = Dubbing::VoiceReference::Reference.new(path: speaker_path, text: 'Hello.')
-    diarization = SymMash.new(segments: [
-      SymMash.new(start: 0.0, end: 1.0, speaker_id: 0),
-      SymMash.new(start: 2.0, end: 3.0, speaker_id: 1),
-    ])
+    diarization = diarization(
+      speaker_segment(0.0, 1.0, 0),
+      speaker_segment(2.0, 3.0, 1)
+    )
     pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), probe: probe)
     allow(Subtitler).to receive(:transcribe).and_return(transcript)
     allow(::Translator).to receive(:translate_for_dubbing).and_return(['Olá.', 'Tchau.'])
@@ -312,7 +339,7 @@ RSpec.describe Dubbing::Pipeline do
   end
 
   it 'dubs every sentence with the default voice when no speaker has a usable reference' do
-    diarization = SymMash.new(segments: [SymMash.new(start: 0.0, end: 3.0, speaker_id: 0)])
+    diarization = diarization(speaker_segment(0.0, 3.0, 0))
     pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), probe: probe)
     allow(Subtitler).to receive(:transcribe).and_return(transcript)
     allow(::Translator).to receive(:translate_for_dubbing).and_return(['Olá.', 'Tchau.'])
@@ -343,8 +370,8 @@ RSpec.describe Dubbing::Pipeline do
   it 'fails when scheduled clips do not match translated sentences' do
     pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), probe: probe)
     sentences = [
-      SymMash.new(text: 'Olá.', start: 0.0, end: 1.0, words: []),
-      SymMash.new(text: 'Tchau.', start: 2.0, end: 3.0, words: [])
+      subtitle_entry(text: 'Olá.', start: 0.0, finish: 1.0),
+      subtitle_entry(text: 'Tchau.', start: 2.0, finish: 3.0)
     ]
     clips = [Dubbing::Audio::ScheduledClip.new(path: 'clip.wav', start: 0.0, end: 1.0, speed: 1.0)]
     pipeline.instance_variable_set(:@sentences, sentences)
@@ -357,13 +384,13 @@ RSpec.describe Dubbing::Pipeline do
     opts = SymMash.new(dub: 'pt', sub_mode: 'both')
     pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)
     sentences = [
-      SymMash.new(
-        text: 'Olá.', source_text: 'Hello.', start: 1.0, end: 2.0,
-        words: [SymMash.new(word: 'Olá.', start: 1.0, end: 2.0)]
+      subtitle_entry(
+        text: 'Olá.', source_text: 'Hello.', start: 1.0, finish: 2.0,
+        words: [subtitle_word('Olá.', 1.0, 2.0)]
       ),
-      SymMash.new(
-        text: 'Tchau.', source_text: 'Bye.', start: 2.0, end: 3.0,
-        words: [SymMash.new(word: 'Tchau.', start: 2.0, end: 3.0)]
+      subtitle_entry(
+        text: 'Tchau.', source_text: 'Bye.', start: 2.0, finish: 3.0,
+        words: [subtitle_word('Tchau.', 2.0, 3.0)]
       )
     ]
     clips = [
@@ -378,7 +405,7 @@ RSpec.describe Dubbing::Pipeline do
     pipeline.send(:prepare_translated_subtitles)
 
     expect(pipeline.sentences).to contain_exactly(sentences.first)
-    expect(pipeline.sentences.first.words.map { |word| [word.start, word.end] }).to eq([[0.0, 2.0]])
+    expect(pipeline.sentences.first.words.map { |word| [word.start, word.finish] }).to eq([[0.0, 2.0]])
     expect(translated_vtt).to include('00:00:00.000 --> 00:00:02.000', 'Olá.')
     expect(translated_vtt).not_to include('Tchau.', '00:00:03.000 --> 00:00:03.000')
     expect(translated_ass.lines.grep(/^Dialogue:/)).to contain_exactly(
@@ -393,10 +420,10 @@ RSpec.describe Dubbing::Pipeline do
     pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)
     pipeline.instance_variable_set(
       :@sentences,
-      [SymMash.new(
+      [subtitle_entry(
         text: 'Esta é uma frase muito longa com palavras suficientes para exigir a divisão em mais de uma legenda legível.',
         start: 0.0,
-        end: 4.0,
+        finish: 4.0,
         speaker_id: 0
       )]
     )

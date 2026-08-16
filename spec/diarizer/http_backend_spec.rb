@@ -31,7 +31,10 @@ RSpec.describe Diarizer::HTTPBackend do
 
     output = described_class.diarize(api, input, speakers: 2)
 
-    expect(output.segments.first.speaker_id).to eq('SPEAKER_00')
+    expect(output).to be_a(Diarizer::Result)
+    expect(output.segments.first).to have_attributes(
+      start: 0.1, finish: 1.2, speaker_id: 'SPEAKER_00'
+    )
     expect(File.exist?(wav)).to be(false)
   end
 

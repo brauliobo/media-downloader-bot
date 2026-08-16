@@ -1,6 +1,8 @@
 require 'json'
 require 'uri'
 
+require_relative 'result'
+require_relative '../subtitler/subtitle'
 require_relative '../utils/http'
 require_relative '../zipper'
 
@@ -23,22 +25,23 @@ class Diarizer
         )
         raise "diarization failed: #{response.code}" unless response.code == '200'
 
-        output = SymMash.new(JSON.parse(response.body))
-        segments = Array(output.segments)
-        unless segments.all? { |segment| segment.key?(:speaker_turn_next) }
+        subtitle = Subtitler::Subtitle.from_whisper_verbose_json(response.body)
+        unless subtitle.entries.all? { |entry| entry.metadata.key?('speaker_turn_next') }
           raise 'TinyDiarize service did not return speaker_turn_next'
         end
 
-        assign_speaker_ids(segments, speakers)
-        output
+        assign_speaker_ids(subtitle.entries, speakers)
+        Result.new(segments: subtitle.entries.map do |entry|
+          Segment.new(start: entry.start, finish: entry.finish, speaker_id: entry.speaker_id)
+        end)
       end
     end
 
     def assign_speaker_ids(segments, speaker_count)
       speaker_id = 0
-      Array(segments).each do |segment|
-        segment.speaker_id = speaker_id
-        next unless segment.speaker_turn_next
+      segments.each do |segment|
+        segment.assign_speaker!(speaker_id)
+        next unless segment.metadata.fetch('speaker_turn_next')
 
         speaker_id += 1
         speaker_id %= speaker_count if speaker_count.to_i.positive?

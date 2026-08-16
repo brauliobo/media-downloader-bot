@@ -6,9 +6,15 @@ RSpec.describe Dubbing::SpeechSynthesizer do
   let(:reference) { Dubbing::VoiceReference::Reference.new(path: File.join(dir, 'source.wav'), text: 'English reference.') }
   let(:sentences) do
     [
-      SymMash.new(text: 'Sim.', start: 0.0, end: 1.0, speaker_id: 'speaker'),
-      SymMash.new(text: 'Esta é uma frase longa para aquecer a voz.', start: 1.5, end: 4.0, speaker_id: 'speaker')
+      sentence('Sim.', 0.0, 1.0, 'speaker'),
+      sentence('Esta é uma frase longa para aquecer a voz.', 1.5, 4.0, 'speaker')
     ]
+  end
+
+  def sentence(text, start, finish, speaker_id)
+    Subtitler::Subtitle::Entry.new(
+      text: text, start: start, finish: finish, speaker_id: speaker_id
+    )
   end
 
   before do
@@ -24,6 +30,15 @@ RSpec.describe Dubbing::SpeechSynthesizer do
 
   after do
     FileUtils.remove_entry(dir) if Dir.exist?(dir)
+  end
+
+  it 'rejects subtitle hashes' do
+    expect do
+      described_class.new(
+        sentences: [{text: 'Sim.'}], references: {}, opts: SymMash.new,
+        target_lang: 'pt', workdir: dir, video_duration: 1.0
+      )
+    end.to raise_error(TypeError, /Subtitle::Entry/)
   end
 
   it 'warms each speaker with target-language audio before synthesizing jobs' do
@@ -80,9 +95,7 @@ RSpec.describe Dubbing::SpeechSynthesizer do
   end
 
   it 'uses the default voice for a speaker without a usable reference' do
-    missing_reference_sentence = SymMash.new(
-      text: 'Voz padrão.', start: 4.0, end: 5.0, speaker_id: 'missing'
-    )
+    missing_reference_sentence = sentence('Voz padrão.', 4.0, 5.0, 'missing')
     calls = []
     allow(TTS).to receive(:supports?).and_return(false)
     allow(TTS).to receive(:synthesize_batch) do |items:, **options|

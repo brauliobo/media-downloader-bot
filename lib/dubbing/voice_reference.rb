@@ -1,5 +1,7 @@
 require 'fileutils'
 
+require_relative '../diarizer/result'
+require_relative '../subtitler/subtitle'
 require_relative '../voice_reference/audio_analyzer'
 require_relative '../voice_reference/transcriber'
 require_relative '../zipper'
@@ -19,6 +21,10 @@ module Dubbing
     module_function
 
     def extract_by_speaker(input_path, segments, sentences:, dir:, min_duration: MIN_DURATION, max_duration: MAX_DURATION, filter: :raw, pad_duration: nil, transcriber: nil)
+      unless sentences.is_a?(Array) && sentences.all? { |sentence| sentence.is_a?(Subtitler::Subtitle::Entry) }
+        raise TypeError, 'sentences must be an Array of Subtitler::Subtitle::Entry objects'
+      end
+
       segments_by_speaker = Array(segments).group_by(&:speaker_id)
       Array(sentences).group_by(&:speaker_id).each_with_index.filter_map do |(speaker_id, speaker_sentences), index|
         speaker_dir = File.join(dir, format('speaker-%04d', index))
@@ -45,7 +51,7 @@ module Dubbing
       available = Array(sentences).filter_map do |sentence|
         text = sentence.source_text.to_s.strip
         start = sentence.start.to_f
-        finish = sentence.end.to_f
+        finish = sentence.finish.to_f
         next if text.empty? || finish <= start || finish - start > max_duration
 
         Selection.new(start: start, duration: finish - start, text: text)
@@ -56,7 +62,7 @@ module Dubbing
     def select_segments(segments, min_duration, max_duration)
       available = Array(segments).filter_map do |segment|
         start = segment.start.to_f
-        finish = segment.end.to_f
+        finish = segment.finish.to_f
         next if finish <= start
 
         Selection.new(start: start, duration: [finish - start, max_duration].min, text: '')

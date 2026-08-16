@@ -1,5 +1,6 @@
 require 'json'
 
+require_relative 'result'
 require_relative '../utils/http'
 require_relative '../zipper'
 
@@ -14,21 +15,8 @@ class Diarizer
         response = Utils::HTTP.post("#{api.to_s.delete_suffix('/')}/v1/diarize", params)
         raise "diarization failed: #{response.code}" unless response.code == '200'
 
-        output = SymMash.new(JSON.parse(response.body))
-        validate!(output.segments)
-        output
+        Result.from_json(response.body)
       end
-    end
-
-    def validate!(segments)
-      valid = Array(segments).all? do |segment|
-        start  = segment[:start]
-        finish = segment[:end]
-        start.is_a?(Numeric) && start.finite? &&
-          finish.is_a?(Numeric) && finish.finite? && finish > start &&
-          segment[:speaker_id].present?
-      end
-      raise 'diarization returned malformed speaker segments' unless valid
     end
   end
 end

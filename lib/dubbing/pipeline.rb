@@ -41,7 +41,7 @@ module Dubbing
         next @input_path if @source_lang.present? && @source_lang == target_lang
 
         @stl&.update 'dubbing: translating'
-        @sentences = translated_sentences(transcript)
+        replace_sentences!(translated_sentences(transcript))
         next @input_path if @sentences.empty?
 
         Dir.mktmpdir('dub-', @dir) do |workdir|
@@ -85,26 +85,14 @@ module Dubbing
         text = Subtitler::Translator.clean_translation(translated)
         next if text.empty?
 
-        source_words, target_words = translated_word_timings(sentence, text)
-        SymMash.new(
-          text:         text,
-          source_text:  sentence.text.strip,
-          source_words: source_words,
-          start:        sentence.start.to_f,
-          end:          sentence.finish,
-          words:        target_words
-        )
+        translated_entry(sentence, text)
       end
     end
 
-    def translated_word_timings(sentence, text)
-      source_words = sentence.words.map { |word| SymMash.new(word.to_whisper_hash) }
-      return [source_words, []] if source_words.empty?
-
-      timed = sentence.deep_copy
-      Subtitler::Translator.assign_tokens_to_words!(timed, Subtitler::Translator.tokenize_text(text))
-      target_words = timed.words.map { |word| SymMash.new(word.to_whisper_hash) }
-      [source_words, target_words]
+    def translated_entry(sentence, text)
+      sentence.deep_copy
+        .replace_source!(text: sentence.text.strip, words: sentence.words.map(&:deep_copy))
+        .project_text!(text)
     end
 
     def synthesize_timeline(workdir)
@@ -124,27 +112,15 @@ module Dubbing
         raise "dubbed timeline clip count mismatch: expected #{@sentences.size}, got #{clips.size}"
       end
 
-      @sentences = @sentences.zip(clips).filter_map do |sentence, clip|
-        source_start    = sentence.start.to_f
-        source_end      = sentence.end.to_f
+      scheduled = @sentences.zip(clips).filter_map do |sentence, clip|
         target_start    = clip.start.to_f
         target_end      = clip.end.to_f
-        source_duration = source_end - source_start
         target_duration = target_end - target_start
         next unless target_duration.positive?
 
-        if source_duration.positive?
-          scale = target_duration / source_duration
-          Array(sentence.words).each do |word|
-            word.start = target_start + (word.start.to_f - source_start) * scale
-            word.end   = target_start + (word.end.to_f - source_start) * scale
-          end
-        end
-
-        sentence.start = target_start
-        sentence.end   = target_end
-        sentence
+        sentence.retime!(start: target_start, finish: target_end)
       end
+      replace_sentences!(scheduled)
     end
 
     def prepare_translated_subtitles
@@ -154,54 +130,63 @@ module Dubbing
 
       case mode
       when 'source'
-        @opts.sub_vtt  = source_subtitle_vtt
+        @opts.sub_vtt  = render_subtitle(source_subtitle, normalize: false)
         @opts.sub_lang = source_lang
       when 'both'
-        @opts.sub_vtt  = bilingual_subtitle_vtt
+        @opts.sub_vtt  = render_subtitle(bilingual_subtitle, normalize: false)
         @opts.sub_lang = 'mul'
       when 'language'
-        @opts.sub_vtt  = subtitle_target_lang == target_lang ? translated_subtitle_vtt : alternate_translated_subtitle_vtt
+        target_language = subtitle_target_lang == target_lang
+        subtitle        = target_language ? target_subtitle : alternate_subtitle
+        @opts.sub_vtt  = render_subtitle(subtitle, normalize: target_language)
         @opts.sub_lang = subtitle_target_lang
       else
-        @opts.sub_vtt  = translated_subtitle_vtt
+        @opts.sub_vtt  = render_subtitle(target_subtitle)
         @opts.sub_lang = target_lang
       end
     end
 
     def translated_subtitle_vtt
-      build_subtitle_vtt(SymMash.new(segments: @sentences))
+      render_subtitle(target_subtitle)
     end
 
-    def source_subtitle_vtt
-      build_subtitle_vtt(@transcript_output || SymMash.new(segments: []), normalize: false)
+    def target_subtitle
+      Subtitler::Subtitle.new(language: target_lang, entries: @sentences.map(&:deep_copy))
     end
 
-    def alternate_translated_subtitle_vtt
-      scheduled = SymMash.new(segments: @sentences.deep_dup)
-      translated = Subtitler::Translator.translate(
-        subtitle_model(scheduled),
+    def source_subtitle
+      (@transcript_output || Subtitler::Subtitle.new).deep_copy
+    end
+
+    def alternate_subtitle
+      Subtitler::Translator.translate(
+        target_subtitle,
         from:           target_lang,
         to:             subtitle_target_lang,
         merge_adjacent: false
       )
-      build_subtitle_vtt(translated, normalize: false)
     end
 
-    def subtitle_model(data)
-      Subtitler::Subtitle.from_whisper_verbose_json(JSON.parse(JSON.generate(data)))
-    end
-
-    def bilingual_subtitle_vtt
-      segments = @sentences.map do |sentence|
+    def bilingual_subtitle
+      entries = @sentences.map do |sentence|
         texts = [sentence.source_text, sentence.text].map { |text| text.to_s.strip }.reject(&:empty?).uniq
-        SymMash.new(text: texts.join("\n"), start: sentence.start, end: sentence.end, words: [])
+        Subtitler::Subtitle::Entry.new(
+          text: texts.join("\n"), start: sentence.start, finish: sentence.finish, speaker_id: sentence.speaker_id
+        )
       end
-      build_subtitle_vtt(SymMash.new(segments: segments), normalize: false)
+      Subtitler::Subtitle.new(language: 'mul', entries: entries)
     end
 
-    def build_subtitle_vtt(data, normalize: true)
-      subtitle = data.is_a?(Subtitler::Subtitle) ? data : subtitle_model(data)
+    def render_subtitle(subtitle, normalize: true)
       Subtitler::VTT.build(subtitle, normalize: normalize, word_tags: !@opts.nowords)
+    end
+
+    def replace_sentences!(sentences)
+      unless sentences.is_a?(Array) && sentences.all? { |sentence| sentence.is_a?(Subtitler::Subtitle::Entry) }
+        raise TypeError, 'sentences must be an Array of Subtitler::Subtitle::Entry objects'
+      end
+
+      @sentences = sentences
     end
 
     def subtitle_target_lang
