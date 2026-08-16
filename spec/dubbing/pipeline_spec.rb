@@ -250,12 +250,19 @@ RSpec.describe Dubbing::Pipeline do
     }
     diarization = diarization(
       speaker_segment(0.0, 1.0, 0),
-      speaker_segment(2.0, 3.0, 1)
+      speaker_segment(1.0, 2.0, 1)
+    )
+    source = Subtitler::Subtitle.new(
+      language: 'en',
+      entries: [subtitle_entry(
+        text: 'Hello. Bye.', start: 0.0, finish: 2.0,
+        words: [subtitle_word('Hello.', 0.0, 1.0), subtitle_word('Bye.', 1.0, 2.0)]
+      )]
     )
 
     opts = SymMash.new(dub: 1)
     pipeline = described_class.new(input, dir: dir, opts: opts, stl: status, probe: probe)
-    allow(Subtitler).to receive(:transcribe).and_return(transcript)
+    allow(Subtitler).to receive(:transcribe).and_return(source)
     allow(::Translator).to receive(:translate_for_dubbing).and_return(['Olá.', 'Tchau.'])
     allow(Diarizer).to receive(:diarize).and_return(diarization)
     allow(Dubbing::VoiceReference).to receive(:extract_by_speaker).and_return(speakers)
@@ -295,6 +302,7 @@ RSpec.describe Dubbing::Pipeline do
       )
     expect(pipeline.sentences.map(&:speaker_id)).to eq([0, 1])
     expect(pipeline.sentences.map(&:source_text)).to eq(['Hello.', 'Bye.'])
+    expect(pipeline.sentences.map(&:text)).to eq(['Olá.', 'Tchau.'])
     expect(Diarizer).to have_received(:diarize).with(vocals, speakers: nil)
   end
 

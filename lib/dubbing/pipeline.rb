@@ -40,14 +40,15 @@ module Dubbing
         @source_lang = transcript.language
         next @input_path if @source_lang.present? && @source_lang == target_lang
 
+        @stl&.update 'dubbing: diarizing'
+        diarization = Diarizer.diarize(stems.vocals, speakers: @opts.speakers&.to_i)
+        Diarizer.assign_speakers!(transcript, diarization.segments)
+
         @stl&.update 'dubbing: translating'
         replace_sentences!(translated_sentences(transcript))
         next @input_path if @sentences.empty?
 
         Dir.mktmpdir('dub-', @dir) do |workdir|
-          @stl&.update 'dubbing: diarizing'
-          diarization = Diarizer.diarize(stems.vocals, speakers: @opts.speakers&.to_i)
-          Diarizer.assign_speakers!(@sentences, diarization.segments)
           @speaker_references = VoiceReference.extract_by_speaker(
             stems.vocals,
             diarization.segments,
