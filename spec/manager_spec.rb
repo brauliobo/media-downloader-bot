@@ -28,11 +28,42 @@ RSpec.describe Manager do
   end
 
   describe '#react' do
-    it 'handles /stop without enqueueing it as a job' do
-      manager = described_class.new
-      bot     = double
-      msg     = SymMash.new(from: {id: 123}, chat: {id: 456}, text: '/stop')
+    let(:manager) { described_class.new }
+    let(:bot)     { double }
+
+    before do
       manager.instance_variable_set(:@bot, bot)
+    end
+
+    it 'enqueues unsupported private text' do
+      manager.react(SymMash.new(from: {id: 123}, chat: {id: 123}, text: 'hello'))
+
+      expect(manager.queue_size).to eq(1)
+    end
+
+    it 'ignores unsupported group text' do
+      manager.react(SymMash.new(from: {id: 123}, chat: {id: -456}, text: 'hello'))
+
+      expect(manager.queue_size).to eq(0)
+    end
+
+    it 'enqueues group URLs' do
+      manager.react(SymMash.new(from: {id: 123}, chat: {id: -456}, text: 'https://example.com/video'))
+
+      expect(manager.queue_size).to eq(1)
+    end
+
+    it 'enqueues group media' do
+      media = {video: Object.new, audio: Object.new, document: SymMash.new(file_name: 'file.pdf')}
+      media.each do |type, value|
+        manager.react(SymMash.new(from: {id: 123}, chat: {id: -456}, text: '', type => value))
+      end
+
+      expect(manager.queue_size).to eq(3)
+    end
+
+    it 'handles /stop without enqueueing it as a job' do
+      msg     = SymMash.new(from: {id: 123}, chat: {id: 456}, text: '/stop')
       job       = manager.jobs.submit(SymMash.new(from: {id: 123}, chat: {id: 456}, text: 'url'))
       other_job = manager.jobs.submit(SymMash.new(from: {id: 123}, chat: {id: 789}, text: 'url'))
 
@@ -46,10 +77,7 @@ RSpec.describe Manager do
     end
 
     it 'reports when /stop has no active jobs' do
-      manager = described_class.new
-      bot     = double
       msg     = SymMash.new(from: {id: 123}, chat: {id: 456}, text: '/stop@media_bot')
-      manager.instance_variable_set(:@bot, bot)
 
       expect(bot).to receive(:send_message).with(msg, Bot::MsgHelpers.me('No active jobs to stop.'))
 

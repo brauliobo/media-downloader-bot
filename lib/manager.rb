@@ -121,6 +121,7 @@ EOS
     cmd_text = Utils::InputParser.message_text(msg).presence
     return stop_jobs(msg) if Bot::Jobs.stop_command?(cmd_text)
     return Commands::Cookie.new(bot, msg).process if cmd_text&.starts_with?('/cookies') || (msg.document&.file_name&.downcase == 'cookies.txt')
+    return if Bot::MsgHelpers.in_group?(msg) && !Utils::InputParser.line_has_url?(cmd_text) && msg.video.blank? && msg.audio.blank? && msg.document.blank?
 
     enqueue_message msg
   rescue => e

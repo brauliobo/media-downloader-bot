@@ -25,7 +25,7 @@ module Bot
       msg.chat.id == REPORT_CHAT_ID
     end
     def in_group? msg = self.msg
-      msg.from.id == msg.chat.id
+      msg.from.id != msg.chat.id
     end
 
     MARKDOWN_NON_FORMAT = %w[\# / [ ] ( ) ' " ~ # + - = | { } . ! ? < >]
