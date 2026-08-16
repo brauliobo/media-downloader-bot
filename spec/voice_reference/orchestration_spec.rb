@@ -4,14 +4,15 @@ require_relative '../../lib/voice_reference'
 RSpec.describe VoiceReference do
   it 'separates unique sources once, preserves order, and keeps stems through selection' do
     Dir.mktmpdir('voice-reference-sources-') do |dir|
-      sources     = %w[first.webm second.webm first.webm]
-      output      = File.join(dir, 'reference.wav')
-      separated   = []
-      vocal_paths = []
-      candidate   = VoiceReference::Candidate.new(audio: 'first.webm', text: 'Selected voice reference.')
-      transcriber = double
-      selector    = instance_double(VoiceReference::Selector)
-      builder     = instance_double(VoiceReference::Builder)
+      sources         = %w[first.webm second.webm first.webm]
+      output          = File.join(dir, 'reference.wav')
+      separated       = []
+      vocal_paths     = []
+      non_vocal_paths = []
+      candidate       = VoiceReference::Candidate.new(audio: 'first.webm', text: 'Selected voice reference.')
+      transcriber     = double
+      selector        = instance_double(VoiceReference::Selector)
+      builder         = instance_double(VoiceReference::Builder)
       allow(VoiceSeparator).to receive(:separate) do |source, dir:|
         vocals     = File.join(dir, 'vocals.wav')
         non_vocals = File.join(dir, 'no-vocals.wav')
@@ -19,9 +20,11 @@ RSpec.describe VoiceReference do
         File.write(non_vocals, 'music')
         separated << source
         vocal_paths << vocals
+        non_vocal_paths << non_vocals
         VoiceSeparator::Stems.new(vocals: vocals, non_vocals: non_vocals)
       end
       allow(transcriber).to receive(:call) do |vocals, cache_key:, separate_voice:|
+        expect(non_vocal_paths).to all(satisfy { |path| !File.exist?(path) })
         expect(File.read(vocals)).to eq(cache_key)
         expect(separate_voice).to eq(false)
         {language: 'en', segments: []}
@@ -32,6 +35,7 @@ RSpec.describe VoiceReference do
       ).and_return(builder)
       allow(builder).to receive(:build) do |audio_files:, source_files:, **|
         expect(source_files).to eq(sources)
+        expect(non_vocal_paths).to all(satisfy { |path| !File.exist?(path) })
         expect(audio_files.map { |path| File.read(path) }).to eq(sources)
         expect(audio_files).to all(satisfy { |path| File.exist?(path) })
         candidate
@@ -43,8 +47,30 @@ RSpec.describe VoiceReference do
 
       expect(result).to eq(candidate)
       expect(separated).to eq(%w[first.webm second.webm])
+      expect(vocal_paths.map { |path| File.dirname(path) }.uniq.size).to eq(2)
       expect(vocal_paths).to all(satisfy { |path| !File.exist?(path) })
     end
+  end
+
+  it 'iterates a large source list without nested stem acquisition' do
+    sources     = 2_000.times.map { |index| "source-#{index}.webm" }
+    separated   = []
+    candidate   = VoiceReference::Candidate.new(audio: sources.first, text: 'Selected voice reference.')
+    transcriber = double(call: {language: 'en', segments: []})
+    builder     = instance_double(VoiceReference::Builder, build: candidate)
+    allow(VoiceSeparator).to receive(:separate) do |source, dir:|
+      non_vocals = File.join(dir, 'no-vocals.wav')
+      File.write(non_vocals, 'music')
+      separated << source
+      VoiceSeparator::Stems.new(vocals: File.join(dir, 'vocals.wav'), non_vocals: non_vocals)
+    end
+    allow(VoiceReference::Builder).to receive(:new).and_return(builder)
+
+    expect(VoiceSeparator).not_to receive(:with_stems)
+    expect do
+      described_class.from_files(audio_files: sources, output: 'reference.wav', transcriber: transcriber)
+    end.not_to raise_error
+    expect(separated).to eq(sources)
   end
 
   it 'cleans every prepared stem when selection fails' do

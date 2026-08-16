@@ -1,3 +1,6 @@
+require 'fileutils'
+require 'tmpdir'
+
 class VoiceReference
   def self.from_files(
     audio_files:, output:, language: 'en', transcriber: Transcriber.new, reference_filter: :raw, strict: nil,
@@ -6,18 +9,17 @@ class VoiceReference
     sources        = Array(audio_files)
     unique_sources = sources.uniq
     vocals         = {}
-    separate       = lambda do |remaining, &block|
-      return block.call(sources.map { |source| vocals.fetch(source) }) if remaining.empty?
-
-      source = remaining.first
-      VoiceSeparator.with_stems(source) do |stems|
-        vocals[source] = stems.vocals
-        separate.call(remaining.drop(1), &block)
-      end
-    end
 
     on_status&.call('Transcribing voice reference')
-    separate.call(unique_sources) do |vocal_files|
+    Dir.mktmpdir('voice-reference-sources-') do |dir|
+      unique_sources.each_with_index do |source, index|
+        source_dir = File.join(dir, index.to_s)
+        FileUtils.mkdir_p(source_dir)
+        stems = VoiceSeparator.separate(source, dir: source_dir)
+        vocals[source] = stems.vocals
+        File.delete(stems.non_vocals)
+      end
+
       transcripts = unique_sources.to_h do |source|
         [source, transcriber.call(vocals.fetch(source), cache_key: source, separate_voice: false)]
       end
@@ -32,7 +34,8 @@ class VoiceReference
       builder_options[:on_status] = on_status if on_status
       on_status&.call('Selecting voice reference')
       reference = Builder.new(**builder_options).build(
-        audio_files: vocal_files, source_files: sources, output: output, transcripts: transcripts
+        audio_files: sources.map { |source| vocals.fetch(source) }, source_files: sources,
+        output: output, transcripts: transcripts
       )
       on_status&.call('Voice reference ready')
       reference

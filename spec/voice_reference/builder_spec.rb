@@ -80,11 +80,15 @@ RSpec.describe VoiceReference::Builder do
       builder     = instance_double(described_class, build: candidate)
       statuses    = []
       on_status   = ->(status) { statuses << status }
-      allow(VoiceSeparator).to receive(:with_stems).with(source).and_yield(
-        VoiceSeparator::Stems.new(vocals: source, non_vocals: File.join(dir, 'no-vocals.wav'))
-      )
+      allow(VoiceSeparator).to receive(:separate).with(source, dir: kind_of(String)) do |_source, dir:|
+        vocals     = File.join(dir, 'vocals.wav')
+        non_vocals = File.join(dir, 'no-vocals.wav')
+        File.write(vocals, 'voice')
+        File.write(non_vocals, 'music')
+        VoiceSeparator::Stems.new(vocals: vocals, non_vocals: non_vocals)
+      end
       allow(transcriber).to receive(:call).with(
-        source, cache_key: source, separate_voice: false
+        kind_of(String), cache_key: source, separate_voice: false
       ).and_return(transcript)
       allow(VoiceReference::Selector).to receive(:new).and_return(selector)
       allow(described_class).to receive(:new).with(
