@@ -14,6 +14,7 @@ RSpec.describe VoiceReference do
       selector        = instance_double(VoiceReference::Selector)
       builder         = instance_double(VoiceReference::Builder)
       allow(VoiceSeparator).to receive(:separate) do |source, dir:|
+        expect(non_vocal_paths).to all(satisfy { |path| !File.exist?(path) })
         vocals     = File.join(dir, 'vocals.wav')
         non_vocals = File.join(dir, 'no-vocals.wav')
         File.write(vocals, source)
