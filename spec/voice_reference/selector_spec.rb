@@ -34,16 +34,33 @@ RSpec.describe VoiceReference::Selector do
     expect(selected).to be_nil
   end
 
+  it 'requires typed transcripts' do
+    expect do
+      described_class.new(analyzer: analyzer).rank([{audio: 'legacy.wav', transcript: {language: 'en'}}])
+    end.to raise_error(TypeError, 'transcript must be a Subtitler::Subtitle')
+  end
+
+  it 'uses entry avg_logprob when word confidence is unavailable' do
+    text = 'Clear amber voices carry distinct phrases across quiet mountain valleys.'
+    entry = Subtitler::Subtitle::Entry.new(
+      start: 0, finish: 8, text: text, words: [], metadata: {'avg_logprob' => -0.01}
+    )
+
+    selected = described_class.new(analyzer: analyzer).select([
+      {audio: 'clean.webm', transcript: subtitle(entry)}
+    ])
+
+    expect(selected).not_to be_nil
+    expect(selected.confidence).to be_within(0.0001).of(Math.exp(-0.02))
+  end
+
   it 'combines adjacent Whisper segments into a reference-length passage' do
     selector = described_class.new(analyzer: analyzer)
-    transcript = {
-      language: 'en',
-      segments: [
+    transcript = subtitle(
         segment(0, 4, 'The supreme goal is the hub of the universe'),
         segment(4, 8, 'that controls everything and is above movements.'),
         segment(8, 30, 'This segment falls beyond the maximum reference duration and must not be included.')
-      ]
-    }
+    )
 
     selected = selector.select([{audio: 'clean.webm', transcript: transcript}])
 
@@ -56,14 +73,11 @@ RSpec.describe VoiceReference::Selector do
 
   it 'does not append the next sentence to a complete reference passage' do
     selector = described_class.new(analyzer: analyzer)
-    transcript = {
-      language: 'en',
-      segments: [
+    transcript = subtitle(
         segment(0, 4, 'This clean reference sentence begins with enough distinct words'),
         segment(4, 8, 'and reaches a natural ending.'),
         segment(8, 10, 'Unrelated closing words follow immediately afterward.')
-      ]
-    }
+    )
 
     selected = selector.select([{audio: 'clean.webm', transcript: transcript}])
 
@@ -73,10 +87,7 @@ RSpec.describe VoiceReference::Selector do
 
   it 'caps selected passages at eight seconds' do
     selector = described_class.new(analyzer: analyzer)
-    transcript = {
-      language: 'en',
-      segments: [segment(0, 9, 'This passage is clear but exceeds the maximum reference duration.')]
-    }
+    transcript = subtitle(segment(0, 9, 'This passage is clear but exceeds the maximum reference duration.'))
 
     expect(selector.select([{audio: 'clean.webm', transcript: transcript}])).to be_nil
   end
@@ -86,10 +97,12 @@ RSpec.describe VoiceReference::Selector do
     noisy_segments = 6.times.map do |index|
       segment(index * 9, index * 9 + 8, "Sentence #{index} has enough distinct English words for candidate selection.")
     end
-    noisy_segments.each { |segment| segment[:probabilities] = Array.new(12, 0.99) }
+    noisy_segments = noisy_segments.map do |entry|
+      segment(entry.start, entry.finish, entry.text, probability: 0.99)
+    end
 
     selected = selector.select([
-      {audio: 'noisy.webm', transcript: {language: 'en', segments: noisy_segments}},
+      {audio: 'noisy.webm', transcript: subtitle(*noisy_segments)},
       recording('clean.webm', probability: 0.9)
     ])
 
@@ -115,36 +128,29 @@ RSpec.describe VoiceReference::Selector do
       segment(index * 9, index * 9 + 8, text)
     end
 
-    ranked = selector.rank([{audio: 'source.webm', transcript: {language: 'en', segments: segments}}])
+    ranked = selector.rank([{audio: 'source.webm', transcript: subtitle(*segments)}])
 
     expect(ranked.size).to eq(6)
   end
 
   it 'rejects passages that start or end inside a sentence' do
     selector = described_class.new(analyzer: analyzer)
-    transcript = {
-      language: 'en',
-      segments: [
+    transcript = subtitle(
         segment(0, 15, 'The sentence begins here with several distinct words and continues,'),
         segment(15, 25, 'then it may create something good or something bad for the universe.')
-      ]
-    }
+    )
 
     expect(selector.select([{audio: 'clean.webm', transcript: transcript}])).to be_nil
   end
 
   it 'trims a low-confidence leading clause from an otherwise clean passage' do
     selector = described_class.new(analyzer: analyzer)
-    weak = segment(0, 7, 'Due to geographical conditions,')
-    weak[:probabilities][0] = 0.1
-    transcript = {
-      language: 'en',
-      segments: [
+    weak = segment(0, 7, 'Due to geographical conditions,', probabilities: [0.1, 0.95, 0.95])
+    transcript = subtitle(
         weak,
         segment(7, 10, 'due to historical facts,'),
         segment(10, 14, 'there are differences in color.')
-      ]
-    }
+    )
 
     selected = selector.select([{audio: 'clean.webm', transcript: transcript}])
 
@@ -155,15 +161,11 @@ RSpec.describe VoiceReference::Selector do
 
   it 'rejects a passage when trimming its noisy ending leaves an incomplete phrase' do
     selector = described_class.new(analyzer: analyzer)
-    weak = segment(7, 12, 'good parties.')
-    weak[:probabilities][0] = 0.1
-    transcript = {
-      language: 'en',
-      segments: [
+    weak = segment(7, 12, 'good parties.', probabilities: [0.1, 0.95])
+    transcript = subtitle(
         segment(0, 7, 'But for providing security to good ideas, good thoughts and'),
         weak
-      ]
-    }
+    )
 
     expect(selector.select([{audio: 'clean.webm', transcript: transcript}])).to be_nil
   end
@@ -172,23 +174,27 @@ RSpec.describe VoiceReference::Selector do
     text ||= 'This clear English reference passage contains enough distinct words for reliable reuse.'
     {
       audio: audio,
-      transcript: {
-        language: language,
-        segments: [{
-          start: 0,
-          finish: 8,
-          text: text,
-          probabilities: Array.new(text.split.size, probability)
-        }]
-      }
+      transcript: subtitle(segment(0, 8, text, probability: probability), language: language)
     }
   end
-  def segment(start, finish, text)
-    {
+
+  def subtitle(*entries, language: 'en')
+    Subtitler::Subtitle.new(language: language, entries: entries)
+  end
+
+  def segment(start, finish, text, probability: 0.95, probabilities: nil, metadata: {})
+    probabilities ||= Array.new(text.split.size, probability)
+    words = text.split.zip(probabilities).map do |word, confidence|
+      Subtitler::Subtitle::Word.new(
+        text: word, start: start, finish: finish, confidence: confidence
+      )
+    end
+    Subtitler::Subtitle::Entry.new(
       start: start,
       finish: finish,
       text: text,
-      probabilities: Array.new(text.split.size, 0.95)
-    }
+      words: words,
+      metadata: metadata
+    )
   end
 end

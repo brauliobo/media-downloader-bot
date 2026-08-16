@@ -6,6 +6,8 @@ require_relative '../subtitler'
 
 class VoiceReference
   class Transcriber
+    CACHE_VERSION = 1
+
     def initialize(backend: Subtitler, cache_dir: nil, separate_voice: true)
       @backend        = backend
       @cache_dir      = File.expand_path(cache_dir) if cache_dir
@@ -15,40 +17,100 @@ class VoiceReference
 
     def call(audio, cache_key: nil, separate_voice: self.separate_voice)
       cache = cache_path(audio, cache_key)
-      return JSON.parse(File.read(cache), symbolize_names: true) if cache && File.exist?(cache)
+      return read_cache(cache) if cache && File.exist?(cache)
 
       options = {format: 'verbose_json', merge_words: false}
       options[:separate_voice] = false unless separate_voice
       subtitle = backend.transcribe(audio, **options)
-      transcript = normalize(subtitle)
-      File.write(cache, JSON.pretty_generate(transcript)) if cache
-      transcript
+      raise TypeError, 'transcription must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitler::Subtitle)
+
+      File.write(cache, JSON.pretty_generate(cache_payload(subtitle))) if cache
+      subtitle
     end
 
     private
 
     attr_reader :backend, :cache_dir, :separate_voice
 
-    def normalize(subtitle)
-      raise TypeError, 'transcription must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitler::Subtitle)
+    def read_cache(path)
+      payload = JSON.parse(File.read(path))
+      version = payload.fetch('version') do
+        raise ArgumentError, 'voice reference transcript cache is missing a version'
+      end
+      unless version == CACHE_VERSION
+        raise ArgumentError, "unsupported voice reference transcript cache version: #{version.inspect}"
+      end
 
+      subtitle_from_cache(payload.fetch('subtitle'))
+    end
+
+    def cache_payload(subtitle)
       {
-        language: subtitle.language,
-        segments: subtitle.entries.map { |segment| normalize_segment(segment) }
+        version:  CACHE_VERSION,
+        subtitle: {
+          language: subtitle.language,
+          text:     subtitle.text,
+          entries:  subtitle.entries.map { |entry| cache_entry(entry) },
+          metadata: subtitle.metadata
+        }
       }
     end
 
-    def normalize_segment(segment)
-      probabilities = segment.words.filter_map(&:confidence)
-      if probabilities.empty? && segment.metadata['avg_logprob']
-        probabilities = Array.new(segment.text.scan(/[[:alpha:]]+/).size, Math.exp(segment.metadata['avg_logprob'].to_f))
-      end
+    def cache_entry(entry)
       {
-        start:         segment.start.to_f,
-        finish:        segment.finish.to_f,
-        text:          segment.text.strip,
-        probabilities: probabilities
+        start:        entry.start,
+        finish:       entry.finish,
+        text:         entry.text,
+        words:        entry.words.map { |word| cache_word(word) },
+        speaker_id:   entry.speaker_id,
+        cue_id:       entry.cue_id,
+        source_text:  entry.source_text,
+        source_words: entry.source_words.map { |word| cache_word(word) },
+        metadata:     entry.metadata
       }
+    end
+
+    def cache_word(word)
+      {
+        text:       word.text,
+        start:      word.start,
+        finish:     word.finish,
+        confidence: word.confidence,
+        metadata:   word.metadata
+      }
+    end
+
+    def subtitle_from_cache(data)
+      Subtitler::Subtitle.new(
+        language: data.fetch('language'),
+        text:     data.fetch('text'),
+        entries:  data.fetch('entries').map { |entry| entry_from_cache(entry) },
+        metadata: data.fetch('metadata')
+      )
+    end
+
+    def entry_from_cache(data)
+      Subtitler::Subtitle::Entry.new(
+        start:        data.fetch('start'),
+        finish:       data.fetch('finish'),
+        text:         data.fetch('text'),
+        words:        data.fetch('words').map { |word| word_from_cache(word) },
+        speaker_id:   data.fetch('speaker_id'),
+        cue_id:       data.fetch('cue_id'),
+        source_text:  data.fetch('source_text'),
+        source_words: data.fetch('source_words').map { |word| word_from_cache(word) },
+        metadata:     data.fetch('metadata')
+      )
+    end
+
+    def word_from_cache(data)
+      Subtitler::Subtitle::Word.new(
+        text:       data.fetch('text'),
+        start:      data.fetch('start'),
+        finish:     data.fetch('finish'),
+        confidence: data.fetch('confidence'),
+        metadata:   data.fetch('metadata')
+      )
     end
 
     def cache_path(audio, cache_key)

@@ -28,7 +28,7 @@ RSpec.describe VoiceReference do
         expect(non_vocal_paths).to all(satisfy { |path| !File.exist?(path) })
         expect(File.read(vocals)).to eq(cache_key)
         expect(separate_voice).to eq(false)
-        {language: 'en', segments: []}
+        Subtitler::Subtitle.new(language: 'en')
       end
       allow(VoiceReference::Selector).to receive(:new).with(language: 'en', strict: true).and_return(selector)
       allow(VoiceReference::Builder).to receive(:new).with(
@@ -57,7 +57,7 @@ RSpec.describe VoiceReference do
     sources     = 2_000.times.map { |index| "source-#{index}.webm" }
     separated   = []
     candidate   = VoiceReference::Candidate.new(audio: sources.first, text: 'Selected voice reference.')
-    transcriber = double(call: {language: 'en', segments: []})
+    transcriber = double(call: Subtitler::Subtitle.new(language: 'en'))
     builder     = instance_double(VoiceReference::Builder, build: candidate)
     allow(VoiceSeparator).to receive(:separate) do |source, dir:|
       non_vocals = File.join(dir, 'no-vocals.wav')
@@ -84,7 +84,7 @@ RSpec.describe VoiceReference do
       paths.concat([vocals, non_vocals])
       VoiceSeparator::Stems.new(vocals: vocals, non_vocals: non_vocals)
     end
-    transcriber = double(call: {language: 'en', segments: []})
+    transcriber = double(call: Subtitler::Subtitle.new(language: 'en'))
     allow(VoiceReference::Builder).to receive(:new).and_raise('selection failed')
 
     expect do

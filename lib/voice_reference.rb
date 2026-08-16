@@ -21,9 +21,12 @@ class VoiceReference
       end
 
       transcripts = unique_sources.to_h do |source|
-        [source, transcriber.call(vocals.fetch(source), cache_key: source, separate_voice: false)]
+        transcript = transcriber.call(vocals.fetch(source), cache_key: source, separate_voice: false)
+        raise TypeError, 'transcript must be a Subtitler::Subtitle' unless transcript.is_a?(Subtitler::Subtitle)
+
+        [source, transcript]
       end
-      language ||= transcripts.fetch(sources.first).fetch(:language) if sources.any?
+      language ||= transcripts.fetch(sources.first).language if sources.any?
       selector = Selector.new(
         language: language,
         strict: strict.nil? ? reference_filter.to_sym == :raw : strict

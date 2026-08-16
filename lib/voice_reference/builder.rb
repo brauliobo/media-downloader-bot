@@ -33,7 +33,9 @@ class VoiceReference
         transcript = transcripts.fetch(source) do
           prepared ? transcriber.call(audio, cache_key: source, separate_voice: false) : transcriber.call(audio)
         end
-        transcript = transcript.merge(language: transcript[:language].presence || language)
+        raise TypeError, 'transcript must be a Subtitler::Subtitle' unless transcript.is_a?(Subtitler::Subtitle)
+
+        transcript = transcript.deep_copy.replace_language!(language) if transcript.language.blank?
         {audio: audio, transcript: transcript}
       end
       sources   = audio_files.zip(source_files).to_h
@@ -98,13 +100,14 @@ class VoiceReference
     end
 
     def validation_report(expected, transcript, audio, reference_filter: :clone)
-      segments      = transcript.fetch(:segments)
-      probabilities = segments.flat_map { |segment| segment.fetch(:probabilities) }
+      raise TypeError, 'transcript must be a Subtitler::Subtitle' unless transcript.is_a?(Subtitler::Subtitle)
+
+      probabilities = transcript.entries.flat_map { |entry| TranscriptQuality.word_confidences(entry) }
       average       = probabilities.empty? ? 0 : probabilities.sum.fdiv(probabilities.size)
       p10           = probabilities.empty? ? 0 : probabilities.sort[(probabilities.size * 0.1).floor]
-      observed      = segments.map { |segment| segment.fetch(:text) }.join(' ')
+      observed      = transcript.entries.map(&:text).join(' ')
       similarity    = VoiceReference::TranscriptQuality.word_similarity(expected, observed)
-      transcript_language = transcript[:language].presence || language
+      transcript_language = transcript.language.presence || language
       transcript_ok = transcript_language == language &&
         average >= MIN_AVERAGE_PROBABILITY && p10 >= MIN_P10_PROBABILITY &&
         similarity >= MIN_TRANSCRIPT_SIMILARITY

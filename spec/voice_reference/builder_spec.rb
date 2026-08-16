@@ -5,7 +5,7 @@ RSpec.describe VoiceReference::Builder do
   it 'transcribes recordings and writes the selected reference with sidecars' do
     Dir.mktmpdir('voice-reference-builder-') do |dir|
       output     = File.join(dir, 'reference.wav')
-      transcript = {language: 'en', segments: []}
+      transcript = subtitle(language: 'en')
       candidate  = VoiceReference::Candidate.new(
         audio: 'source.webm', start: 12, finish: 24,
         text: 'A complete reference sentence.', confidence: 0.95,
@@ -13,13 +13,7 @@ RSpec.describe VoiceReference::Builder do
       )
       transcriber = double
       allow(transcriber).to receive(:call) do |path|
-        path == 'source.webm' ? transcript : {
-          language: 'en',
-          segments: [{
-            text: candidate.text,
-            probabilities: Array.new(candidate.text.split.size, 0.95)
-          }]
-        }
+        path == 'source.webm' ? transcript : subtitle(text: candidate.text, language: 'en')
       end
       selector = double(rank: [candidate])
       analyzer    = double
@@ -72,7 +66,7 @@ RSpec.describe VoiceReference::Builder do
     Dir.mktmpdir('voice-reference-status-') do |dir|
       source     = File.join(dir, 'source.webm')
       output     = File.join(dir, 'reference.wav')
-      transcript = {language: 'pt', segments: []}
+      transcript = subtitle(language: 'pt')
       candidate  = VoiceReference::Candidate.new(text: 'Uma passagem clara.')
       downloader = double(call: source)
       transcriber = double
@@ -116,14 +110,11 @@ RSpec.describe VoiceReference::Builder do
       source      = '/recordings/source.webm'
       vocals      = File.join(dir, 'vocals.wav')
       output      = File.join(dir, 'reference.wav')
-      transcript  = {language: 'en', segments: []}
+      transcript  = subtitle(language: 'en')
       candidate   = VoiceReference::Candidate.new(
         audio: vocals, start: 12, finish: 20, text: 'A complete prepared vocal reference.', confidence: 0.95
       )
-      validation  = {
-        language: 'en',
-        segments: [{text: candidate.text, probabilities: Array.new(candidate.text.split.size, 0.95)}]
-      }
+      validation  = subtitle(text: candidate.text, language: 'en')
       selector    = double(rank: [candidate])
       transcriber = double
       analyzer     = double(report: {accepted: true})
@@ -156,10 +147,7 @@ RSpec.describe VoiceReference::Builder do
     report  = builder.send(
       :validation_report,
       text,
-      {
-        language: 'pt',
-        segments: [{text: text, probabilities: Array.new(text.split.size, 0.95)}]
-      },
+      subtitle(text: text, language: 'pt'),
       {accepted: true}
     )
 
@@ -168,7 +156,7 @@ RSpec.describe VoiceReference::Builder do
   end
 
   it 'uses the configured language when transcription omits detection' do
-    transcript = {language: nil, segments: []}
+    transcript = subtitle
     selector   = double(rank: [])
     builder    = described_class.new(transcriber: double(call: transcript), selector: selector, language: 'es')
 
@@ -177,8 +165,11 @@ RSpec.describe VoiceReference::Builder do
     end.to raise_error(RuntimeError, /no voice reference candidate/)
 
     expect(selector).to have_received(:rank).with([
-      {audio: 'source.opus', transcript: {language: 'es', segments: []}}
+      {audio: 'source.opus', transcript: satisfy { |value|
+        value.is_a?(Subtitler::Subtitle) && value.language == 'es' && value.entries.empty?
+      }}
     ])
+    expect(transcript.language).to be_nil
   end
 
   it 'uses the configured language when clip validation omits detection' do
@@ -187,14 +178,22 @@ RSpec.describe VoiceReference::Builder do
     report  = builder.send(
       :validation_report,
       text,
-      {
-        language: nil,
-        segments: [{text: text, probabilities: Array.new(text.split.size, 0.95)}]
-      },
+      subtitle(text: text),
       {accepted: true}
     )
 
     expect(report[:accepted]).to eq(true)
     expect(report.dig(:transcript, :language)).to eq('es')
+  end
+  def subtitle(text: nil, language: nil, probability: 0.95, metadata: {})
+    entries = if text
+      words = text.split.map do |word|
+        Subtitler::Subtitle::Word.new(text: word, start: 0, finish: 8, confidence: probability)
+      end
+      [Subtitler::Subtitle::Entry.new(start: 0, finish: 8, text: text, words: words, metadata: metadata)]
+    else
+      []
+    end
+    Subtitler::Subtitle.new(language: language, text: text, entries: entries)
   end
 end

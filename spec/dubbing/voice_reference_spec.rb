@@ -19,6 +19,13 @@ RSpec.describe Dubbing::VoiceReference do
     Diarizer::Segment.new(start: start, finish: finish, speaker_id: speaker_id)
   end
 
+  def transcript(*texts)
+    entries = texts.each_with_index.map do |text, index|
+      Subtitler::Subtitle::Entry.new(start: index, finish: index + 1, text: text)
+    end
+    Subtitler::Subtitle.new(entries: entries)
+  end
+
   def ok_status
     instance_double(Process::Status, success?: true)
   end
@@ -93,9 +100,7 @@ RSpec.describe Dubbing::VoiceReference do
   end
 
   it 'uses the extracted audio transcript when one is provided' do
-    transcriber = instance_double('VoiceReference::Transcriber', call: {
-      segments: [{text: 'Observed reference.'}]
-    })
+    transcriber = instance_double('VoiceReference::Transcriber', call: transcript('Observed reference.'))
 
     reference = described_class.extract_by_speaker(
       input,
@@ -109,7 +114,7 @@ RSpec.describe Dubbing::VoiceReference do
   end
 
   it 'skips a speaker whose extracted audio has no transcribed speech' do
-    transcriber = instance_double('VoiceReference::Transcriber', call: {segments: [{text: '  '}]})
+    transcriber = instance_double('VoiceReference::Transcriber', call: transcript('  '))
 
     references = described_class.extract_by_speaker(
       input,
@@ -124,7 +129,7 @@ RSpec.describe Dubbing::VoiceReference do
 
   it 'uses bounded diarization turns when assigned transcript sentences are too long' do
     transcriber = instance_double('VoiceReference::Transcriber')
-    allow(transcriber).to receive(:call).and_return(segments: [{text: 'Observed speaker turn.'}])
+    allow(transcriber).to receive(:call).and_return(transcript('Observed speaker turn.'))
 
     reference = described_class.extract_by_speaker(
       input,

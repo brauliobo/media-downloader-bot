@@ -115,7 +115,10 @@ module Dubbing
     def reference_text(path, selections, transcriber)
       return selections.map(&:text).reject(&:empty?).join(' ') unless transcriber
 
-      transcriber.call(path).fetch(:segments).map { |segment| segment.fetch(:text).to_s.strip }
+      transcript = transcriber.call(path)
+      raise TypeError, 'transcript must be a Subtitler::Subtitle' unless transcript.is_a?(Subtitler::Subtitle)
+
+      transcript.entries.map { |entry| entry.text.strip }
         .reject(&:empty?).join(' ')
     end
   end

@@ -1,3 +1,4 @@
+require_relative '../subtitler/subtitle'
 require_relative '../voice_reference/transcript_quality'
 
 class VoiceClone
@@ -8,12 +9,13 @@ class VoiceClone
     end
 
     def call(expected:, transcript:)
-      segments = Array(fetch(transcript, :segments))
-      observed = segments.map { |segment| fetch(segment, :text).to_s.strip }.reject(&:empty?).join(' ')
+      raise TypeError, 'transcript must be a Subtitler::Subtitle' unless transcript.is_a?(Subtitler::Subtitle)
+
+      observed = transcript.entries.map { |entry| entry.text.strip }.reject(&:empty?).join(' ')
       expected_words = VoiceReference::TranscriptQuality.words(expected)
       observed_words = VoiceReference::TranscriptQuality.words(observed)
-      probabilities = segments.flat_map { |segment| Array(fetch(segment, :probabilities)).filter_map { |value| Float(value) rescue nil } }
-      detected_language = fetch(transcript, :language)&.to_s
+      probabilities = transcript.entries.flat_map { |entry| VoiceReference::TranscriptQuality.word_confidences(entry) }
+      detected_language = transcript.language&.to_s
       similarity = VoiceReference::TranscriptQuality.word_similarity(expected, observed)
       language_match = @language.nil? || detected_language == @language
 
@@ -34,10 +36,6 @@ class VoiceClone
     end
 
     private
-
-    def fetch(value, key)
-      value[key] || value[key.to_s]
-    end
 
     def mean(values)
       values.empty? ? nil : values.sum.fdiv(values.size)

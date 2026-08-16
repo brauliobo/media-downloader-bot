@@ -9,7 +9,11 @@ RSpec.describe VoiceClone::Evaluator do
       allow(synthesizer).to receive(:synthesize) do |**options|
         File.write(options.fetch(:out_path), 'wav')
       end
-      transcriber = double(call: {language: 'pt', segments: [{text: 'Texto de teste.', probabilities: [0.9]}]})
+      transcript = Subtitler::Subtitle.new(
+        language: 'pt',
+        entries: [Subtitler::Subtitle::Entry.new(start: 0, finish: 1, text: 'Texto de teste.')]
+      )
+      transcriber = double(call: transcript)
       transcript_scorer = double(call: {match_rate: 1.0, word_error_rate: 0.0})
       embedding_scorer = double(call: {cosine_similarity: 0.87})
 

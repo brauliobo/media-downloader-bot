@@ -25,5 +25,17 @@ class VoiceReference
       end
       previous.last.fdiv([left.size, right.size].max)
     end
+
+    def word_confidences(entry)
+      unless entry.is_a?(Subtitler::Subtitle::Entry)
+        raise TypeError, 'entry must be a Subtitler::Subtitle::Entry'
+      end
+
+      confidences = entry.words.filter_map(&:confidence)
+      return confidences unless confidences.empty?
+      return [] unless entry.metadata.key?('avg_logprob')
+
+      Array.new(words(entry.text).size, Math.exp(entry.metadata.fetch('avg_logprob').to_f))
+    end
   end
 end

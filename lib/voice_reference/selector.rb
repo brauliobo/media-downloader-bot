@@ -36,20 +36,21 @@ class VoiceReference
     attr_reader :language, :analyzer, :strict
 
     def transcript_candidates(audio, transcript)
-      return [] unless transcript.fetch(:language) == language
+      raise TypeError, 'transcript must be a Subtitler::Subtitle' unless transcript.is_a?(Subtitler::Subtitle)
+      return [] unless transcript.language == language
       return [] if unique_trigram_ratio(transcription_text(transcript)) < MIN_RECORDING_UNIQUE_RATIO
 
-      segment_windows(transcript.fetch(:segments)).filter_map do |segments|
+      segment_windows(transcript.entries).filter_map do |segments|
         segments = trim_noisy_edge_segments(segments)
         next unless segments
 
-        start  = segments.first.fetch(:start).to_f
-        finish = segments.last.fetch(:finish).to_f
-        text   = segments.map { |segment| segment.fetch(:text).strip }.join(' ')
+        start  = segments.first.start.to_f
+        finish = segments.last.finish.to_f
+        text   = segments.map { |segment| segment.text.strip }.join(' ')
         words  = text.scan(/[[:alpha:]]+/)
         next unless REFINED_DURATION_RANGE.cover?(finish - start) && REFINED_WORD_RANGE.cover?(words.size)
 
-        probabilities = segments.flat_map { |segment| segment.fetch(:probabilities) }
+        probabilities = segments.flat_map { |segment| TranscriptQuality.word_confidences(segment) }
         next if probabilities.empty?
 
         average = probabilities.sum / probabilities.size
@@ -74,7 +75,7 @@ class VoiceReference
     end
 
     def segment_p10_probability(segment)
-      probabilities = segment.fetch(:probabilities).sort
+      probabilities = TranscriptQuality.word_confidences(segment).sort
       return 0 if probabilities.empty?
 
       probabilities[(probabilities.size * 0.1).floor]
@@ -89,7 +90,7 @@ class VoiceReference
         windows = []
         segments.drop(start_index).each do |segment|
           window << segment
-          duration = window.last.fetch(:finish).to_f - window.first.fetch(:start).to_f
+          duration = window.last.finish.to_f - window.first.start.to_f
           break if duration > DURATION_RANGE.max
 
           if duration >= DURATION_RANGE.min && sentence_ending?(segment)
@@ -102,11 +103,11 @@ class VoiceReference
     end
 
     def sentence_ending?(segment)
-      segment.fetch(:text).strip.end_with?('.', '?', '!')
+      segment.text.strip.end_with?('.', '?', '!')
     end
 
     def transcription_text(transcript)
-      transcript.fetch(:segments).map { |segment| segment.fetch(:text) }.join(' ')
+      transcript.entries.map(&:text).join(' ')
     end
 
     def unique_trigram_ratio(text)
