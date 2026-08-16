@@ -3,6 +3,7 @@ require 'iso-639'
 require_relative 'voice_separator'
 
 require_relative 'subtitler/timestamps'
+require_relative 'subtitler/subtitle'
 require_relative 'subtitler/whisper_cpp'
 require_relative 'subtitler/transcribe_cpp'
 require_relative 'subtitler/vtt'
