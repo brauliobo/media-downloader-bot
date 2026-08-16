@@ -38,6 +38,7 @@ module Dubbing
         @transcript_output = transcript
         @source_lang = transcript.language
         next @input_path if @source_lang.present? && @source_lang == target_lang
+        next @input_path if transcript.sentence_entries.empty?
 
         @stl&.update 'dubbing: diarizing'
         diarization = Diarizer.diarize(stems.vocals, speakers: @opts.speakers&.to_i)

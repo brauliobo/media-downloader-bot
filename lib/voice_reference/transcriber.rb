@@ -17,7 +17,10 @@ class VoiceReference
 
     def call(audio, cache_key: nil, separate_voice: self.separate_voice)
       cache = cache_path(audio, cache_key)
-      return read_cache(cache) if cache && File.exist?(cache)
+      if cache && File.exist?(cache)
+        cached = read_cache(cache)
+        return cached if cached
+      end
 
       options = {merge_words: false}
       options[:separate_voice] = false unless separate_voice
@@ -34,6 +37,11 @@ class VoiceReference
 
     def read_cache(path)
       payload = JSON.parse(File.read(path))
+      if legacy_cache?(payload)
+        FileUtils.rm(path)
+        return
+      end
+
       version = payload.fetch('version') do
         raise ArgumentError, 'voice reference transcript cache is missing a version'
       end
@@ -42,6 +50,10 @@ class VoiceReference
       end
 
       subtitle_from_cache(payload.fetch('subtitle'))
+    end
+
+    def legacy_cache?(payload)
+      payload.is_a?(Hash) && !payload.key?('version') && payload.key?('language') && payload.key?('segments')
     end
 
     def cache_payload(subtitle)

@@ -78,12 +78,17 @@ RSpec.describe VoiceReference::Transcriber do
     end
   end
 
-  it 'rejects legacy unversioned cache files' do
+  it 'retranscribes legacy unversioned cache files into the versioned cache' do
     Dir.mktmpdir('voice-reference-transcriber-') do |dir|
       File.write(File.join(dir, 'source.json'), JSON.generate(language: 'en', segments: []))
+      subtitle = Subtitler::Subtitle.new(language: 'en')
+      backend = double(transcribe: subtitle)
 
-      expect { described_class.new(backend: double, cache_dir: dir).call('/tmp/source.wav') }
-        .to raise_error(ArgumentError, 'voice reference transcript cache is missing a version')
+      result = described_class.new(backend: backend, cache_dir: dir).call('/tmp/source.wav')
+
+      expect(result).to equal(subtitle)
+      expect(backend).to have_received(:transcribe).once.with('/tmp/source.wav', merge_words: false)
+      expect(JSON.parse(File.read(File.join(dir, 'source.json')))).to include('version' => 1)
     end
   end
 

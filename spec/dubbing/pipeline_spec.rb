@@ -239,6 +239,18 @@ RSpec.describe Dubbing::Pipeline do
     expect(Subtitler).to have_received(:transcribe).with(vocals, separate_voice: false)
   end
 
+  it 'skips diarization when the source transcript has no usable entries' do
+    allow(Subtitler).to receive(:transcribe).and_return(Subtitler::Subtitle.new(language: 'en'))
+    allow(Diarizer).to receive(:diarize)
+    allow(::Translator).to receive(:translate_for_dubbing)
+
+    output = described_class.apply(input, dir: dir, opts: SymMash.new(dub: 1), probe: probe)
+
+    expect(output).to eq(input)
+    expect(Diarizer).not_to have_received(:diarize)
+    expect(::Translator).not_to have_received(:translate_for_dubbing)
+  end
+
   it 'translates and batch synthesizes with each extracted speaker reference' do
     speaker_paths = {
       0 => File.join(dir, 'speaker-0.wav'),
