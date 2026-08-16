@@ -1,6 +1,5 @@
 require 'spec_helper'
 require_relative '../../lib/dubbing/audio'
-require_relative '../../lib/subtitler/translator'
 
 RSpec.describe Dubbing::Audio do
   let(:dir) { Dir.mktmpdir('dub-audio-spec-') }
@@ -53,7 +52,7 @@ RSpec.describe Dubbing::Audio do
     subtitle = Subtitler::Subtitle::Entry.new(
       text: 'First sentence. Second sentence.', start: 1.0, finish: 5.0, words: []
     )
-    sentences = Subtitler::Translator.sentences_for([subtitle])
+    sentences = Subtitler::Subtitle.new(entries: [subtitle]).sentence_entries
     clips = sentences.map.with_index do |sentence, idx|
       described_class::Clip.new(path: File.join(dir, "sentence-#{idx}.wav"), start: sentence.start, end: sentence.finish)
     end

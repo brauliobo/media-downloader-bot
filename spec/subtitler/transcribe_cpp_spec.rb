@@ -91,7 +91,7 @@ RSpec.describe Subtitler::TranscribeCpp do
 
     output = backend.transcribe('audio.wav')
 
-    expect(backend.srt_convert(output, normalize: false)).to include(
+    expect(output.to_srt).to include(
       "00:00:00,400 --> 00:00:01,200\nHello <00:00:00,800>world."
     )
   end
@@ -101,7 +101,7 @@ RSpec.describe Subtitler::TranscribeCpp do
       Subtitler::Subtitle::Entry.new(text: 'Carry', start: 1.9996, finish: 62.9996),
     ])
 
-    expect(backend.srt_convert(output, normalize: false)).to include(
+    expect(output.to_srt).to include(
       '00:00:02,000 --> 00:01:03,000'
     )
   end

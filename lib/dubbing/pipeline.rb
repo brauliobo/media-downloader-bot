@@ -5,7 +5,6 @@ require 'tmpdir'
 require_relative '../diarizer'
 require_relative '../prober'
 require_relative '../subtitler'
-require_relative '../subtitler/translator'
 require_relative '../translator'
 require_relative '../voice_separator'
 require_relative 'audio'
@@ -73,7 +72,7 @@ module Dubbing
     end
 
     def translated_sentences(subtitle)
-      sentences = Subtitler::Translator.sentences_for(subtitle)
+      sentences = subtitle.sentence_entries
       texts     = sentences.map(&:text)
       durations = sentences.map { |sentence| sentence.finish - sentence.start }
       translations = if ::Translator.respond_to?(:translate_for_dubbing)
@@ -83,7 +82,7 @@ module Dubbing
       end
 
       sentences.zip(translations).filter_map do |sentence, translated|
-        text = Subtitler::Translator.clean_translation(translated)
+        text = Subtitler::Subtitle.clean_translation(translated)
         next if text.empty?
 
         translated_entry(sentence, text)
@@ -131,24 +130,20 @@ module Dubbing
 
       case mode
       when 'source'
-        @opts.sub_vtt  = render_subtitle(source_subtitle, normalize: false)
+        @opts.subtitle = source_subtitle
         @opts.sub_lang = source_lang
       when 'both'
-        @opts.sub_vtt  = render_subtitle(bilingual_subtitle, normalize: false)
+        @opts.subtitle = bilingual_subtitle
         @opts.sub_lang = 'mul'
       when 'language'
         target_language = subtitle_target_lang == target_lang
         subtitle        = target_language ? target_subtitle : alternate_subtitle
-        @opts.sub_vtt  = render_subtitle(subtitle, normalize: target_language)
+        @opts.subtitle = prepare_subtitle(subtitle, normalize: target_language)
         @opts.sub_lang = subtitle_target_lang
       else
-        @opts.sub_vtt  = render_subtitle(target_subtitle)
+        @opts.subtitle = prepare_subtitle(target_subtitle)
         @opts.sub_lang = target_lang
       end
-    end
-
-    def translated_subtitle_vtt
-      render_subtitle(target_subtitle)
     end
 
     def target_subtitle
@@ -160,8 +155,7 @@ module Dubbing
     end
 
     def alternate_subtitle
-      Subtitler::Translator.translate(
-        target_subtitle,
+      target_subtitle.translated(
         from:           target_lang,
         to:             subtitle_target_lang,
         merge_adjacent: false
@@ -178,8 +172,9 @@ module Dubbing
       Subtitler::Subtitle.new(language: 'mul', entries: entries)
     end
 
-    def render_subtitle(subtitle, normalize: true)
-      Subtitler::VTT.build(subtitle, normalize: normalize, word_tags: !@opts.nowords)
+    def prepare_subtitle(subtitle, normalize: true)
+      subtitle.normalize_entries! if normalize
+      subtitle
     end
 
     def replace_sentences!(sentences)

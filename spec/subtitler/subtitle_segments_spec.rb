@@ -1,6 +1,6 @@
 require 'spec_helper'
 
-RSpec.describe Subtitler::Segments do
+RSpec.describe Subtitler::Subtitle, 'segment normalization' do
   def word(text, start, finish)
     Subtitler::Subtitle::Word.new(text: text, start: start, finish: finish)
   end
@@ -16,7 +16,7 @@ RSpec.describe Subtitler::Segments do
     right    = segment('world', 1.0, 1.6, words: [word('world', 1.0, 1.6)])
     subtitle = Subtitler::Subtitle.new(entries: [left, right])
 
-    described_class.merge_adjacent!(subtitle)
+    subtitle.merge_adjacent!
 
     expect(subtitle.entries.map(&:text)).to eq(['Hello world'])
     expect(subtitle.entries.first.finish).to eq(1.6)
@@ -27,8 +27,8 @@ RSpec.describe Subtitler::Segments do
     distant = Subtitler::Subtitle.new(entries: [segment('one', 0.0, 1.0), segment('two', 2.1, 3.0)])
     long    = Subtitler::Subtitle.new(entries: [segment('1234', 0.0, 1.0), segment('5678', 1.1, 2.0)])
 
-    described_class.merge_adjacent!(distant, gap_threshold: 1.0)
-    described_class.merge_adjacent!(long, max_chars: 8)
+    distant.merge_adjacent!(gap_threshold: 1.0)
+    long.merge_adjacent!(max_chars: 8)
 
     expect(distant.entries.size).to eq(2)
     expect(long.entries.size).to eq(2)
@@ -40,7 +40,7 @@ RSpec.describe Subtitler::Segments do
       segment('world', 1.0, 1.6, speaker_id: 1),
     ])
 
-    described_class.merge_adjacent!(subtitle)
+    subtitle.merge_adjacent!
 
     expect(subtitle.entries.map(&:text)).to eq(%w[Hello world])
   end

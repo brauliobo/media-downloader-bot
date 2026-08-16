@@ -86,7 +86,7 @@ RSpec.describe Dubbing::Pipeline do
     pipeline.send(:prepare_translated_subtitles)
 
     expect(opts.sub_lang).to eq('pt')
-    expect(opts.sub_vtt).to include('00:00:00.500 --> 00:00:01.500', 'Boa tarde.')
+    expect(opts.subtitle.to_vtt).to include('00:00:00.500 --> 00:00:01.500', 'Boa tarde.')
   end
 
   it 'rejects non-model sentence collections' do
@@ -121,9 +121,10 @@ RSpec.describe Dubbing::Pipeline do
       pipeline.instance_variable_set(:@sentences, sentences)
       pipeline.send(:apply_scheduled_timings!, timeline.clips)
       pipeline.send(:prepare_translated_subtitles)
-      ass = Subtitler::Ass.from_vtt(opts.sub_vtt, mode: nowords ? :plain : :instagram)
+      vtt = opts.subtitle.to_vtt(word_tags: !nowords)
+      ass = opts.subtitle.to_ass(mode: nowords ? :plain : :instagram)
 
-      [nowords, {sentence: sentences.first, vtt: opts.sub_vtt, ass: ass}]
+      [nowords, {sentence: sentences.first, vtt: vtt, ass: ass}]
     end
 
     default = results.fetch(false)
@@ -166,7 +167,7 @@ RSpec.describe Dubbing::Pipeline do
     pipeline.send(:prepare_translated_subtitles)
 
     expect(opts.sub_lang).to eq('en')
-    expect(opts.sub_vtt).to include('00:00:00.000 --> 00:00:01.000', 'Hello.')
+    expect(opts.subtitle.to_vtt).to include('00:00:00.000 --> 00:00:01.000', 'Hello.')
   end
 
   it 'builds bilingual subtitles for sub=both' do
@@ -180,7 +181,7 @@ RSpec.describe Dubbing::Pipeline do
     pipeline.send(:prepare_translated_subtitles)
 
     expect(opts.sub_lang).to eq('mul')
-    expect(opts.sub_vtt).to include('Hello.', 'Olá.')
+    expect(opts.subtitle.to_vtt).to include('Hello.', 'Olá.')
   end
 
   it 'translates alternate subtitles from scheduled dubbed sentences' do
@@ -217,13 +218,13 @@ RSpec.describe Dubbing::Pipeline do
 
     expect(::Translator).to have_received(:translate).with(['Boa tarde.', 'Tudo bem?'], from: 'pt', to: 'es')
     expect(opts.sub_lang).to eq('es')
-    expect(opts.sub_vtt).to include(
+    expect(opts.subtitle.to_vtt).to include(
       '00:00:04.000 --> 00:00:06.000',
       'Buenas <00:00:05.000>tardes.',
       '00:00:06.200 --> 00:00:07.200',
       '¿ <00:00:06.450>Todo <00:00:06.700>bien?'
     )
-    expect(opts.sub_vtt.scan('-->').size).to eq(2)
+    expect(opts.subtitle.to_vtt.scan('-->').size).to eq(2)
     expect(sentences.map(&:text)).to eq(['Boa tarde.', 'Tudo bem?'])
     expect(sentences.map { |sentence| sentence.words.map(&:text) }).to eq([['Boa', 'tarde.'], ['Tudo', 'bem?']])
   end
@@ -408,7 +409,8 @@ RSpec.describe Dubbing::Pipeline do
     pipeline.instance_variable_set(:@sentences, sentences)
 
     pipeline.send(:apply_scheduled_timings!, clips)
-    translated_vtt = pipeline.send(:translated_subtitle_vtt)
+    translated_subtitle = pipeline.send(:target_subtitle)
+    translated_vtt = translated_subtitle.to_vtt
     translated_ass = Subtitler::Ass.from_vtt(translated_vtt)
     pipeline.send(:prepare_translated_subtitles)
 
@@ -419,8 +421,8 @@ RSpec.describe Dubbing::Pipeline do
     expect(translated_ass.lines.grep(/^Dialogue:/)).to contain_exactly(
       include('0:00:00.00,0:00:02.00', 'Olá.')
     )
-    expect(opts.sub_vtt).to include('Hello.', 'Olá.')
-    expect(opts.sub_vtt).not_to include('Bye.', 'Tchau.', '00:00:03.000 --> 00:00:03.000')
+    expect(opts.subtitle.to_vtt).to include('Hello.', 'Olá.')
+    expect(opts.subtitle.to_vtt).not_to include('Bye.', 'Tchau.', '00:00:03.000 --> 00:00:03.000')
   end
 
   it 'keeps generated subtitle cues within the shared maximum length' do
@@ -438,16 +440,10 @@ RSpec.describe Dubbing::Pipeline do
 
     pipeline.send(:prepare_translated_subtitles)
 
-    payloads = opts.sub_vtt.split(/\n\s*\n/).filter_map do |cue|
-      lines = cue.lines.map(&:strip)
-      timing = lines.find { |line| line.include?('-->') }
-      next unless timing
-
-      lines[(lines.index(timing) + 1)..].join(' ')
-    end
-
-    expect(payloads).not_to be_empty
-    expect(payloads).to all(have_attributes(length: be <= Subtitler::Translator::MAX_SUBTITLE_CHARS))
+    expect(opts.subtitle.entries).not_to be_empty
+    expect(opts.subtitle.entries).to all(have_attributes(text: satisfy { |text|
+      text.length <= Subtitler::Subtitle::MAX_ENTRY_CHARS
+    }))
   end
 
   it 'writes an opt-in timing score for future evaluations' do

@@ -17,9 +17,7 @@ class Zipper
     def apply zipper
       return unless subtitles_requested?(zipper.opts)
 
-      vtt, lng, subtitle = source_vtt(zipper, translate_to: subtitle_translation_target(zipper.opts))
-      vtt      = Subtitler::VTT.clean(vtt)
-      subtitle ||= Subtitler::Subtitle.from_vtt(vtt)
+      subtitle = prepare(zipper, translate_to: subtitle_translation_target(zipper.opts))
       zipper.stl&.update 'transcoding'
 
       stream = zipper.probe.streams.find { |s| s.codec_type == 'video' }
@@ -35,28 +33,25 @@ class Zipper
 
       if zipper.opts.speed == 1
         vtt_path = File.join(dir, "#{prefix}.vtt")
-        File.write vtt_path, vtt
-        zipper.add_subtitle_input vtt_path, language: lng
+        File.write vtt_path, subtitle.to_vtt(word_tags: !zipper.opts.nowords)
+        zipper.add_subtitle_input vtt_path, language: subtitle.language
       end
     end
 
-    # Prepare subtitles (download, transcribe, translate) and return
-    # [vtt_string, language_iso, Subtitler::Subtitle or nil]. The model is nil
-    # only for downloaded, embedded, or explicitly provided VTT.
+    # Prepare subtitles by downloading or transcribing, then translating when requested.
     def prepare(zipper, translate_to: nil)
-      vtt = lng = subtitle = nil
-      vtt, lng = fetch(zipper) unless zipper.opts.gensubs
+      subtitle = provided_subtitle(zipper)
+      subtitle ||= fetch(zipper) unless zipper.opts.gensubs
 
-      if vtt.nil?
+      unless subtitle
         zipper.stl&.update 'transcribing'
         subtitle = Subtitler.transcribe(zipper.infile)
-        lng = subtitle.language
-        vtt = Subtitler::VTT.build(subtitle, word_tags: !zipper.opts.nowords)
-        zipper.info.language ||= lng if zipper.info.respond_to?(:language)
+        normalize_language!(subtitle)
+        subtitle.normalize_entries!
+        zipper.info.language ||= subtitle.language if zipper.info.respond_to?(:language)
       end
 
-      vtt, lng, subtitle = Subtitler::VTT.translate_if_needed(zipper, vtt, subtitle, lng, translate_to)
-      [Subtitler::VTT.clean(vtt), lng, subtitle]
+      translate_if_needed(zipper, subtitle, translate_to)
     end
 
     def prepare_subtitle infile, info:, probe:, stl:, opts:, ffmpeg: nil, ffmpeg_factory: nil
@@ -70,21 +65,18 @@ class Zipper
       opts.format ||= Zipper::Types.audio.opus unless opts.respond_to?(:format) && opts.format
       opts.audio  ||= 1
 
-      vtt, lng, subtitle = prepare_subtitle(
+      subtitle = prepare_subtitle(
         infile, info: info, probe: probe, stl: stl, opts: opts, ffmpeg: ffmpeg
       )
 
       srt_path = Output.filename(info, dir: dir, ext: 'srt')
-      subtitle ||= Subtitler::Subtitle.from_vtt(vtt)
 
-      if (target_lang = Subtitler.normalize_lang(opts.slang)) && lng.to_s != target_lang.to_s
-        subtitle = Subtitler::Translator.translate(
-          subtitle,
-          from:           lng.presence,
+      if (target_lang = Subtitler.normalize_lang(opts.slang)) && subtitle.language.to_s != target_lang.to_s
+        subtitle = subtitle.translated(
+          from:           subtitle.language.presence,
           to:             target_lang,
           merge_adjacent: false
         )
-        lng = target_lang
       end
 
       subtitle.reject_noise!
@@ -96,7 +88,8 @@ class Zipper
     def subtitles_requested?(opts)
       return false if subtitle_mode(opts) == 'none'
 
-      opts.slang || opts.sub_mode.present? || opts.sub.present? || opts.subs || opts.gensubs || opts.onlysrt || opts.sub_vtt
+      opts.slang || opts.sub_mode.present? || opts.sub.present? || opts.subs || opts.gensubs || opts.onlysrt ||
+        opts.subtitle || opts.sub_vtt
     end
 
     def sanitize_vtt vtt
@@ -117,15 +110,21 @@ class Zipper
       opts.sub_lang.presence || opts.slang
     end
 
-    def source_vtt(zipper, translate_to:)
-      if (provided = zipper.opts.sub_vtt).present?
-        initial = Subtitler::VTT.clean(provided.to_s)
-        return [initial, zipper.opts.sub_lang.presence || 'mul', nil] if subtitle_mode(zipper.opts) == 'both'
-
-        Subtitler::VTT.translate_if_needed(zipper, initial, nil, zipper.opts.sub_lang || zipper.opts.slang, translate_to)
+    def provided_subtitle(zipper)
+      if (provided = zipper.opts.subtitle)
+        unless provided.is_a?(Subtitler::Subtitle)
+          raise TypeError, 'opts.subtitle must be a Subtitler::Subtitle'
+        end
+        subtitle = provided
+      elsif (provided = zipper.opts.sub_vtt).present?
+        subtitle = Subtitler::Subtitle.from_vtt(Subtitler::VTT.clean(provided.to_s))
+        subtitle.replace_language!(zipper.opts.sub_lang.presence || zipper.opts.slang || 'mul')
       else
-        prepare(zipper, translate_to: translate_to)
+        return
       end
+
+      normalize_language!(subtitle)
+      subtitle
     end
 
     def fetch(zipper)
@@ -137,28 +136,28 @@ class Zipper
 
     def fetch_scraped(zipper, subtitles)
       lang = preferred_lang(zipper, subtitles)
-      return [nil, nil] unless lang
+      return unless lang
 
       entry = subtitles[lang].find { |sub| sub.ext == 'vtt' } || subtitles[lang].first
       body  = Utils::HTTP.get_public(entry.url)
       vtt   = Subtitler::VTT.to_vtt body, entry.ext, ffmpeg: zipper.send(:ffmpeg_builder)
       zipper.stl&.update "subs:scraped:#{lang}"
-      [vtt, Subtitler.normalize_lang(lang) || lang]
+      Subtitler::Subtitle.from_vtt(vtt).replace_language!(Subtitler.normalize_lang(lang) || lang.to_s)
     end
 
     def fetch_embedded(zipper)
       streams = zipper.probe.streams.select { |s| s.codec_type == 'subtitle' }
-      return [nil, nil] if streams.blank?
+      return if streams.blank?
 
       streams.each { |stream| stream.lang = ISO_639.find_by_code(stream.tags.language)&.alpha2 }
       requested = zipper.opts.sub_lang.presence || zipper.opts.slang
       index = streams.index { |stream| subtitle_match?(requested, stream) }
-      return [nil, nil] unless index
+      return unless index
 
       vtt = Subtitler::VTT.extract_embedded zipper, index, ffmpeg: zipper.send(:ffmpeg_builder)
       lang = streams[index].lang
       zipper.stl&.update "subs:embedded:#{lang}"
-      [vtt, lang]
+      Subtitler::Subtitle.from_vtt(vtt).replace_language!(lang)
     end
 
     def preferred_lang(zipper, subtitles)
@@ -174,8 +173,23 @@ class Zipper
       desired.present? && desired.in?([stream.lang, stream.tags.language, stream.tags.title])
     end
 
-    private :subtitles_requested?, :source_vtt, :fetch, :fetch_scraped,
-            :fetch_embedded, :preferred_lang, :subtitle_match?
+    def normalize_language!(subtitle)
+      language = Subtitler.normalize_lang(subtitle.language) || subtitle.language
+      subtitle.replace_language!(language)
+    end
+
+    def translate_if_needed(zipper, subtitle, target_language)
+      from = Subtitler.normalize_lang(subtitle.language)
+      to   = Subtitler.normalize_lang(target_language)
+      return subtitle unless to
+      return subtitle if from && from == to
+
+      zipper.stl&.update 'translating'
+      subtitle.translated(from: from, to: to, merge_adjacent: false)
+    end
+
+    private :subtitles_requested?, :provided_subtitle, :fetch, :fetch_scraped,
+            :fetch_embedded, :preferred_lang, :subtitle_match?, :normalize_language!, :translate_if_needed
     private :safe_ass_prefix
   end
 end

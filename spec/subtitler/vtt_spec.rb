@@ -125,7 +125,7 @@ RSpec.describe Subtitler::VTT do
     )
     expect(payloads(translated)).to include('Olá.')
     expect(payloads(translated).join(' ')).to include(long_translation)
-    expect(payloads(translated)).to all(have_attributes(length: be <= Subtitler::Translator::MAX_SUBTITLE_CHARS))
+    expect(payloads(translated)).to all(have_attributes(length: be <= Subtitler::Subtitle::MAX_ENTRY_CHARS))
   end
 
   it 'keeps short translated sentences separate instead of prepending the next sentence' do
@@ -225,7 +225,7 @@ RSpec.describe Subtitler::VTT do
       Subtitler::Subtitle::Entry.new(text: 'Carry', start: 1.9996, finish: 62.9996),
     ])
 
-    expect(described_class.build(subtitle, normalize: false)).to include(
+    expect(subtitle.to_vtt).to include(
       '00:00:02.000 --> 00:01:03.000'
     )
   end
@@ -246,7 +246,7 @@ RSpec.describe Subtitler::VTT do
       entry.new(text: 'Zero', start: 3.0, finish: 3.0),
     ])
 
-    rendered = described_class.build(subtitle, normalize: false)
+    rendered = subtitle.to_vtt
 
     expect(rendered).to include("00:00:01.000 --> 00:00:01.001\nTiny")
     expect(rendered).to include(
@@ -272,45 +272,14 @@ RSpec.describe Subtitler::VTT do
     end
   end
 
-  it 'uses nowords only to select VTT serialization during translation' do
-    vtt = "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHello <00:00:01.000>world.\n"
-    zipper = instance_double(Zipper, stl: nil, opts: SymMash.new(nowords: true))
-    allow(::Translator).to receive(:translate).and_return(['Olá mundo.'])
-
-    translated, lang, = described_class.translate_if_needed(zipper, vtt, nil, 'en', 'pt')
-
-    expect(lang).to eq('pt')
-    expect(translated).to include('Olá mundo.')
-    expect(translated).not_to include('<00:00:')
-  end
-
-  it 'preserves the translated subtitle model on structured paths' do
-    subtitle = Subtitler::Subtitle.from_vtt(
-      "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHello world.\n"
-    ).replace_language!('en')
-    zipper = instance_double(Zipper, stl: nil, opts: SymMash.new(nowords: false))
-    allow(::Translator).to receive(:translate).and_return(['Olá mundo.'])
-
-    translated_vtt, lang, translated = described_class.translate_if_needed(zipper, nil, subtitle, 'en', 'pt')
-
-    expect(lang).to eq('pt')
-    expect(translated).to be_a(Subtitler::Subtitle)
-    expect(translated).to have_attributes(language: 'pt', text: 'Olá mundo.')
-    expect(translated_vtt).to include('Olá mundo.')
-  end
-
-  it 'rejects untyped structured input' do
-    expect { described_class.build({'segments' => []}) }
-      .to raise_error(TypeError, 'subtitle must be a Subtitler::Subtitle')
-  end
-
   it 'does not merge normalized cues from different speakers' do
     subtitle = Subtitler::Subtitle.new(entries: [
       Subtitler::Subtitle::Entry.new(text: 'Hello.', start: 0.0, finish: 1.0, speaker_id: 0),
       Subtitler::Subtitle::Entry.new(text: 'Goodbye.', start: 1.2, finish: 2.0, speaker_id: 1),
     ])
 
-    translated = described_class.build(subtitle)
+    subtitle.normalize_entries!
+    translated = subtitle.to_vtt
 
     expect(payloads(translated)).to eq(['Hello.', 'Goodbye.'])
   end

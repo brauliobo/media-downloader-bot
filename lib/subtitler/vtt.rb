@@ -3,7 +3,6 @@ require 'tempfile'
 require_relative '../ffmpeg'
 require_relative '../utils/safety'
 require_relative 'subtitle'
-require_relative 'translator'
 
 class Subtitler
   class VTT
@@ -21,50 +20,12 @@ class Subtitler
       subtitle = Subtitle.from_vtt(clean(vtt))
       return vtt if subtitle.entries.empty?
 
-      translated = Subtitler::Translator.translate(
-        subtitle,
+      translated = subtitle.translated(
         from:           from,
         to:             to,
         merge_adjacent: false
       )
       translated.to_vtt(word_tags: word_tags)
-    end
-
-    def self.translate_if_needed(zipper, vtt, subtitle, from_lang, to_lang)
-      normalized_from = Subtitler.normalize_lang(from_lang)
-      normalized_to   = Subtitler.normalize_lang(to_lang)
-      return [vtt, normalized_from, subtitle] unless normalized_to
-      return [vtt, normalized_from, subtitle] if normalized_from && normalized_from == normalized_to
-
-      zipper&.stl&.update 'translating'
-
-      if subtitle
-        raise TypeError, 'subtitle must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitle)
-
-        translated = Subtitler::Translator.translate(
-          subtitle,
-          from:           normalized_from,
-          to:             normalized_to,
-          merge_adjacent: false
-        )
-        subtitle = translated
-        vtt = translated.to_vtt(word_tags: !zipper.opts.nowords)
-      else
-        vtt = translate(vtt, to: normalized_to, from: normalized_from, word_tags: !zipper.opts.nowords)
-      end
-
-      [vtt, normalized_to, subtitle]
-    end
-
-    def self.build(subtitle, normalize: true, word_tags: true, stdsub: nil)
-      raise TypeError, 'subtitle must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitle)
-
-      use_norm = stdsub.nil? ? normalize : stdsub
-      if use_norm
-        subtitle.split_long_entries!(max_chars: Subtitler::Translator::MAX_SUBTITLE_CHARS)
-        subtitle.merge_adjacent!(max_chars: Subtitler::Translator::MAX_SUBTITLE_CHARS)
-      end
-      subtitle.to_vtt(word_tags: word_tags)
     end
 
     def self.slice(vtt, from:, to:, rebase: true)

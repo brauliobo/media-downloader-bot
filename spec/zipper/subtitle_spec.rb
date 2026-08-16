@@ -19,7 +19,9 @@ RSpec.describe Zipper::Subtitle do
     info   = SymMash.new title: 'Example'
     opts   = SymMash.new onlysrt: true, nowords: false
     allow(described_class).to receive(:prepare_subtitle)
-      .and_return ["WEBVTT\n\n00:00:00.000 --> 00:00:01.000\n<00:00:00.100>Hello\n", 'en', nil]
+      .and_return Subtitler::Subtitle.from_vtt(
+        "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\n<00:00:00.100>Hello\n"
+      ).replace_language!('en')
     expect(ffmpeg).not_to receive(:convert_subtitle)
 
     output = described_class.generate_srt(
@@ -34,17 +36,17 @@ RSpec.describe Zipper::Subtitle do
     ffmpeg = instance_double FFmpeg
     info   = SymMash.new title: 'Example'
     opts   = SymMash.new onlysrt: true
-    allow(described_class).to receive(:prepare_subtitle)
-      .and_return ["WEBVTT\n\n00:00:02.000 --> 00:00:01.000\nInvalid\n", 'en', nil]
+    probe  = SymMash.new(format: {duration: 1}, streams: [])
+    opts.sub_vtt = "WEBVTT\n\n00:00:02.000 --> 00:00:01.000\nInvalid\n"
 
     expect {
       described_class.generate_srt(
-        'video.mp4', dir: dir, info: info, probe: nil, stl: nil, opts: opts, ffmpeg: ffmpeg
+        'video.mp4', dir: dir, info: info, probe: probe, stl: nil, opts: opts, ffmpeg: ffmpeg
       )
     }.to raise_error ArgumentError, 'invalid WEBVTT cue range'
   end
 
-  it 'keeps generated transcription as the tuple model and renders it directly' do
+  it 'keeps generated transcription as the subtitle model' do
     subtitle = Subtitler::Subtitle.new(
       language: 'en', text: 'Hello.',
       entries: [Subtitler::Subtitle::Entry.new(text: 'Hello.', start: 0.0, finish: 1.0)]
@@ -58,11 +60,10 @@ RSpec.describe Zipper::Subtitle do
     )
     allow(Subtitler).to receive(:transcribe).with('video.mp4').and_return(subtitle)
 
-    vtt, lang, structured = described_class.prepare(zipper)
+    structured = described_class.prepare(zipper)
 
-    expect(vtt).to include('Hello.')
-    expect(lang).to eq('en')
     expect(structured).to equal(subtitle)
+    expect(structured).to have_attributes(language: 'en', text: 'Hello.')
   end
 
   it 'prefers exact and base-matching authored locales without translating them' do
@@ -86,12 +87,11 @@ RSpec.describe Zipper::Subtitle do
         probe: SymMash.new(format: {duration: 1}, streams: []), opts: opts, ffmpeg: ffmpeg
       )
 
-      fetched, lang, = described_class.prepare(
+      fetched = described_class.prepare(
         zipper, translate_to: described_class.subtitle_translation_target(opts)
       )
 
-      expect(fetched).to include('Olá.')
-      expect(lang).to eq('pt')
+      expect(fetched).to have_attributes(language: 'pt', text: 'Olá.')
     end
   end
 
@@ -101,10 +101,9 @@ RSpec.describe Zipper::Subtitle do
     zipper    = instance_double(Zipper, opts: opts)
     expect(Utils::HTTP).not_to receive(:get_public)
 
-    selected, lang, = described_class.send(:source_vtt, zipper, translate_to: 'pt')
+    selected = described_class.prepare(zipper, translate_to: 'pt')
 
-    expect(selected).to include('Dublado.')
-    expect(lang).to eq('pt')
+    expect(selected).to have_attributes(language: 'pt', text: 'Dublado.')
   end
 
   it 'selects embedded subtitles using the standalone subtitle language' do
@@ -118,12 +117,13 @@ RSpec.describe Zipper::Subtitle do
       ]
     )
     zipper = Zipper.new('video.mkv', nil, info: SymMash.new, probe: probe, opts: opts)
-    allow(Subtitler::VTT).to receive(:extract_embedded).and_return("WEBVTT\n\nOlá.")
+    allow(Subtitler::VTT).to receive(:extract_embedded).and_return(
+      "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nOlá.\n"
+    )
 
-    vtt, lang = described_class.send(:fetch_embedded, zipper)
+    subtitle = described_class.send(:fetch_embedded, zipper)
 
-    expect(vtt).to include('Olá.')
-    expect(lang).to eq('pt')
+    expect(subtitle).to have_attributes(language: 'pt', text: 'Olá.')
     expect(Subtitler::VTT).to have_received(:extract_embedded).with(zipper, 1, ffmpeg: anything)
   end
 end

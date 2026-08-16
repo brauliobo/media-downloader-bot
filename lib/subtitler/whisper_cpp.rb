@@ -1,9 +1,8 @@
 require 'tempfile'
 
 require_relative '../zipper'
-require_relative 'segments'
+require_relative 'subtitle'
 require_relative 'timestamps'
-require_relative 'translator'
 
 class Subtitler
   module WhisperCpp
@@ -24,18 +23,6 @@ class Subtitler
     #   **extra     – passed directly to whisper.cpp
     def transcribe path, format: 'verbose_json', merge_words: true, **extra
       transcribe_with_params(path, format: format, merge_words: merge_words, language: 'auto', **extra)
-    end
-
-    # Convert verbose_json into SRT with inline per-word timings.
-    # When normalize: true (default), adjacent short segments are merged to produce
-    # typical movie-style subtitles (max ~2 lines / similar length).
-    # Backward-compat: legacy stdsub overrides normalize when provided.
-    def srt_convert subtitle, normalize: true, word_tags: true, stdsub: nil
-      raise TypeError, 'subtitle must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitle)
-
-      use_norm = stdsub.nil? ? normalize : stdsub
-      subtitle.merge_adjacent! if use_norm
-      subtitle.to_srt(word_tags: word_tags)
     end
 
     protected
@@ -63,23 +50,6 @@ class Subtitler
       subtitle.replace_language!(Subtitler.normalize_lang(subtitle.language))
       merge_split_words!(subtitle) if merge_words
       subtitle
-    end
-
-    # Delegate to centralized VTT converter
-    def vtt_convert subtitle, normalize: true, word_tags: true, stdsub: nil
-      raise TypeError, 'subtitle must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitle)
-
-      use_norm = stdsub.nil? ? normalize : stdsub
-      if use_norm
-        subtitle.split_long_entries!(max_chars: Subtitler::Translator::MAX_SUBTITLE_CHARS)
-        subtitle.merge_adjacent!(max_chars: Subtitler::Translator::MAX_SUBTITLE_CHARS)
-      end
-      subtitle.to_vtt(word_tags: word_tags)
-    end
-
-    # Translate using sentence-aware regrouping handled by Subtitler::Translator
-    def translate subtitle, from:, to:
-      Subtitler::Translator.translate subtitle, from: from, to: to
     end
 
     private

@@ -33,7 +33,7 @@ THREADS=1 TTS=OmniVoice /home/braulio/.rvm/wrappers/ruby-3.4.4/ruby bin/zip \
 ## transcribe.cpp Subtitles
 
 The `TranscribeCpp` subtitle backend runs the local CLI and maps its segment and
-word timestamps into the same structure used by the existing Whisper renderer:
+word timestamps directly into the shared `Subtitler::Subtitle` model:
 
 ```bash
 SUBTITLER=TranscribeCpp \
