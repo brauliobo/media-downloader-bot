@@ -64,6 +64,32 @@ RSpec.describe Subtitler::TranscribeCpp do
     ])
   end
 
+  it 'accepts merge_words without changing transcribe.cpp word boundaries' do
+    split_result = raw_result.merge(
+      'text' => 'testing',
+      'segments' => [
+        {
+          't0_ms' => 0,
+          't1_ms' => 900,
+          'text' => 'testing',
+          'words' => [
+            { 't0_ms' => 0, 't1_ms' => 400, 'text' => 'test' },
+            { 't0_ms' => 400, 't1_ms' => 900, 'text' => 'ing' },
+          ],
+        },
+      ]
+    )
+    allow(backend).to receive(:run_cli).and_return(split_result)
+
+    merged = backend.transcribe('audio.wav', merge_words: true).output.segments.first
+    unmerged = backend.transcribe('audio.wav', merge_words: false).output.segments.first
+
+    expect(merged.words.map(&:word)).to eq(%w[test ing])
+    expect(unmerged.words.map(&:word)).to eq(%w[test ing])
+    expect(merged.text).to eq('testing')
+    expect(unmerged.text).to eq('testing')
+  end
+
   it 'reuses the existing word-tagged SRT renderer' do
     allow(backend).to receive(:run_cli).and_return(raw_result)
 
