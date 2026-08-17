@@ -251,7 +251,9 @@ class Subtitler
               text
             end
           end.join(' ')
-          Event.new(start: group[:start], finish: group[:finish], text: highlighted)
+          start_time  = index.zero? ? entry.start : group[:start]
+          finish_time = groups[index + 1]&.fetch(:start) || entry.finish
+          Event.new(start: start_time, finish: finish_time, text: highlighted)
         end
       when :karaoke
         text = groups.map do |group|
