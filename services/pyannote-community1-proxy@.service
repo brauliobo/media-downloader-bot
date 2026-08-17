@@ -6,7 +6,7 @@ After=pyannote-community1@%i.service
 
 [Service]
 SyslogIdentifier=pyannote-proxy-gpu%i
-ExecStart=@/usr/lib/systemd/systemd-socket-proxyd pyannote-proxy-gpu%i --exit-idle-time=30min 127.0.0.1:840%i
+ExecStart=@/usr/lib/systemd/systemd-socket-proxyd pyannote-proxy-gpu%i --exit-idle-time=10min 127.0.0.1:840%i
 DynamicUser=yes
 NoNewPrivileges=yes
 PrivateTmp=yes

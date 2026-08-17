@@ -5,7 +5,7 @@ After=llamacpp-hymt2@%i.service
 
 [Service]
 SyslogIdentifier=hymt2-proxy-gpu%i
-ExecStart=@/usr/lib/systemd/systemd-socket-proxyd hymt2-proxy-gpu%i --exit-idle-time=30min 127.0.0.1:1202%i
+ExecStart=@/usr/lib/systemd/systemd-socket-proxyd hymt2-proxy-gpu%i --exit-idle-time=10min 127.0.0.1:1202%i
 DynamicUser=yes
 NoNewPrivileges=yes
 PrivateTmp=yes
