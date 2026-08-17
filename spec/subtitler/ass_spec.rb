@@ -47,6 +47,22 @@ RSpec.describe Subtitler::Ass do
     ])
   end
 
+  it 'keeps instagram events inside the cue when word timings fall outside it' do
+    subtitle = Subtitler::Subtitle.new(entries: [
+      Subtitler::Subtitle::Entry.new(
+        start: 1, finish: 2, text: 'One two three', words: [
+          Subtitler::Subtitle::Word.new(text: 'One', start: 0.5, finish: 0.8),
+          Subtitler::Subtitle::Word.new(text: 'two', start: 0.7, finish: 1.2),
+          Subtitler::Subtitle::Word.new(text: 'three', start: 2.2, finish: 2.5),
+        ]
+      ),
+    ])
+
+    expect(subtitle.to_ass.lines.grep(/^Dialogue:/)).to eq([
+      "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,One {\\1c&Hffffff&}two{\\1c&HC0C0C0&} three\n",
+    ])
+  end
+
   it 'renders karaoke cues as one event with rounded centisecond durations' do
     dialogue = render(timed_vtt, mode: :karaoke).lines.grep(/^Dialogue:/)
 

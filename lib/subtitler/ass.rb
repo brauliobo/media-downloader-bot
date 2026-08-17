@@ -240,19 +240,15 @@ class Subtitler
       return [Event.new(start: entry.start, finish: entry.finish, text: ass_text(entry))] if mode == :plain || entry.words.empty?
 
       groups = word_groups(entry)
-      words  = groups.map { |group| group[:text] }
       case mode
       when :instagram
-        groups.map.with_index do |group, index|
+        words = groups.map { |group| group[:text] }
+        event_bounds(entry, groups).each_cons(2).with_index.filter_map do |(start_time, finish_time), index|
+          next unless finish_time > start_time
+
           highlighted = words.map.with_index do |text, word_index|
-            if word_index == index
-              "#{HIGHLIGHT_STYLES.fetch(preset)}#{text}#{RESET_COLOUR.fetch(preset)}"
-            else
-              text
-            end
+            word_index == index ? "#{HIGHLIGHT_STYLES.fetch(preset)}#{text}#{RESET_COLOUR.fetch(preset)}" : text
           end.join(' ')
-          start_time  = index.zero? ? entry.start : group[:start]
-          finish_time = groups[index + 1]&.fetch(:start) || entry.finish
           Event.new(start: start_time, finish: finish_time, text: highlighted)
         end
       when :karaoke
@@ -290,6 +286,13 @@ class Subtitler
       end
     end
 
-    private_class_method :style_for, :events_for, :ass_text, :word_groups
+    def event_bounds(entry, groups)
+      times = [entry.start, *groups.drop(1).map { |group| group[:start] }, entry.finish]
+      times.map! { |time| time.clamp(entry.start, entry.finish) }
+      times.each_index { |i| times[i] = times[i - 1] if i.positive? && times[i] < times[i - 1] }
+      times
+    end
+
+    private_class_method :style_for, :events_for, :ass_text, :word_groups, :event_bounds
   end
 end
