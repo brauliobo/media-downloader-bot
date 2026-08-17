@@ -53,6 +53,22 @@ still requires a chunking layer. Canary word timestamps do not include
 confidence scores and therefore cannot be used by the separate voice-reference
 quality selector.
 
+### Semantic subtitle comparison
+
+Compare two SRT or VTT files by parsed cue text, timing, words, speakers, and
+VTT presentation metadata:
+
+The reusable API is `Subtitler::Subtitle::SemanticDiff.compare(before, after, ...)`.
+
+```bash
+bundle exec ruby bin/subtitle_semantic_diff before.srt after.srt \
+  --time-tolerance 0.01 --max-details 5
+```
+
+Use `--format vtt` when the filename extension is unavailable, `--json` for a
+machine-readable report, and `--fail-on-difference` to return status 1 when
+meaningful differences are found. Input and usage errors return status 2.
+
 ## Transcription hashtags
 
 Append Codex-generated Instagram-style hashtags to the media caption with any of
