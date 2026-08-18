@@ -83,7 +83,6 @@ module Dubbing
       TTS.synthesize_batch(
         items:    jobs,
         on_batch: on_batch,
-        threads:  1,
         **options.merge(reference_options)
       )
     end

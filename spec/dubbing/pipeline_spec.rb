@@ -289,14 +289,12 @@ RSpec.describe Dubbing::Pipeline do
     expect(TTS).to receive(:synthesize_batch).with(
       items: [hash_including(text: 'Olá.', lang: 'pt', out_path: kind_of(String))],
       on_batch: kind_of(Proc),
-      threads: 1,
       speaker_wav: speaker_paths.fetch(0),
       ref_text: 'Hello.'
     ) { |items:, **_| items.each { |item| File.write(item.fetch(:out_path), 'raw') } }
     expect(TTS).to receive(:synthesize_batch).with(
       items: [hash_including(text: 'Tchau.', lang: 'pt', out_path: kind_of(String))],
       on_batch: kind_of(Proc),
-      threads: 1,
       speaker_wav: speaker_paths.fetch(1),
       ref_text: 'Bye.'
     ) { |items:, **_| items.each { |item| File.write(item.fetch(:out_path), 'raw') } }
@@ -348,14 +346,12 @@ RSpec.describe Dubbing::Pipeline do
     expect(TTS).to have_received(:synthesize_batch).with(
       items: [hash_including(text: 'Olá.')],
       on_batch: kind_of(Proc),
-      threads: 1,
       speaker_wav: speaker_path,
       ref_text: 'Hello.'
     )
     expect(TTS).to have_received(:synthesize_batch).with(
       items: [hash_including(text: 'Tchau.')],
-      on_batch: kind_of(Proc),
-      threads: 1
+      on_batch: kind_of(Proc)
     )
   end
 
@@ -383,8 +379,7 @@ RSpec.describe Dubbing::Pipeline do
     expect(pipeline.sentences.map(&:text)).to eq(['Olá.', 'Tchau.'])
     expect(TTS).to have_received(:synthesize_batch).with(
       items: [hash_including(text: 'Olá.'), hash_including(text: 'Tchau.')],
-      on_batch: kind_of(Proc),
-      threads: 1
+      on_batch: kind_of(Proc)
     )
   end
 

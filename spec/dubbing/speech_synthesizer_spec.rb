@@ -62,6 +62,7 @@ RSpec.describe Dubbing::SpeechSynthesizer do
     expect(calls.first.fetch(:options)).to include(speaker_wav: reference.path, ref_text: reference.text)
     expect(calls.last.fetch(:items).map { |item| item.fetch(:text) }).to eq(sentences.map(&:text))
     expect(calls.last.fetch(:options)).to include(ref_text: sentences.last.text)
+    expect(calls.last.fetch(:options)).not_to include(:threads)
     expect(calls.last.fetch(:options).fetch(:speaker_wav)).to end_with('speaker-0000.target-reference.wav')
   end
 
