@@ -84,7 +84,7 @@ module Processors
       locopts.sub_vtt = subtitle.to_vtt
       locopts.sub_lang = lang if lang
 
-      s_dur = Utils::Duration.new(cut.finish) - Utils::Duration.new(cut.start)
+      s_dur = Utils::Duration.parse(cut.finish) - Utils::Duration.parse(cut.start)
       s_dur = 60 if s_dur <= 0
       locopts.delete(:format)
       chosen = Zipper.choose_format(Zipper::Types.video, locopts, s_dur)

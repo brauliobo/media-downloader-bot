@@ -1,5 +1,6 @@
 require_relative 'base'
 require_relative '../utils/cookie_jar'
+require_relative '../utils/duration'
 require_relative '../utils/http'
 require_relative '../utils/url'
 require_relative '../prober'
@@ -46,11 +47,8 @@ module Downloaders
       raise(want_video ? "can't find video stream" : "can't find file") unless i.fn_in && File.exist?(i.fn_in)
 
       # --download-sections already cut the file; timestamps start at 0.
-      # Clear ss/to so the zipper doesn't double-cut or miscalculate duration.
-      opts.ss = nil if opts.ss
-      opts.to = nil if opts.to
-      i.opts.ss = nil if i.opts.ss
-      i.opts.to = nil if i.opts.to
+      # Clear ss/to/t so the zipper doesn't double-cut or miscalculate duration.
+      Utils::Duration.clear_cut!(opts, i.opts)
       true
     end
 
@@ -110,10 +108,9 @@ module Downloaders
         end
 
         # Download only the requested section (cuts during download, saves bandwidth)
-        if opts.ss || opts.to
-          from = opts.ss || '0'
-          to   = opts.to || 'inf'
-          cmd << "--download-sections #{Sh.escape("*#{from}-#{to}")}"
+        if Utils::Duration.cut?(opts)
+          cut = Utils::Duration.from_opts(opts)
+          cmd << "--download-sections #{Sh.escape("*#{cut.start}-#{cut.finish || 'inf'}")}"
         end
 
         cmd << "-f #{Sh.escape(format_selector)}"
@@ -142,7 +139,7 @@ module Downloaders
     end
 
     def apply_playlist_options(cmd)
-      return cmd << '--no-playlist' if opts.ss || opts.to
+      return cmd << '--no-playlist' if Utils::Duration.cut?(opts)
       return cmd << '--no-playlist' unless admin?
 
       opts.limit ||= (opts.audio ? nil : 10) if opts.after

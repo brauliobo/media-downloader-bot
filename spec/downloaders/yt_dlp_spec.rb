@@ -44,9 +44,21 @@ RSpec.describe Downloaders::YtDlp do
 
       downloader.download
 
-      expect(captured).to include('--download-sections \*14:57-20:00')
+      expect(captured).to include('--download-sections \*897.0-1200.0')
       expect(captured).to include('--no-playlist')
       expect(captured).not_to include('--playlist-end')
+    end
+
+    it 'converts period forms and t into absolute download sections' do
+      opts.ss = '1m'
+      opts.t  = '30s'
+      captured = nil
+      allow(Sh).to receive(:run) { |cmd, **_| captured = cmd; ['', '', 0] }
+
+      downloader.download
+
+      expect(captured).to include('--download-sections \*60.0-90.0')
+      expect(captured).to include('--no-playlist')
     end
 
     it 'enables generic extractor browser impersonation' do
@@ -135,8 +147,8 @@ RSpec.describe Downloaders::YtDlp do
     it 'clears per-input cuts after yt-dlp downloads a section' do
       file = File.join(tmp, 'input-1.mp4')
       File.write(file, '')
-      opts.ss = '14:57'
-      opts.to = '20:00'
+      opts.ss = '1m'
+      opts.t  = '30s'
       i.opts = opts.deep_dup
       allow(Sh).to receive(:run).and_return(['', '', 0])
       allow(Prober).to receive(:for).and_return(SymMash.new(streams: [SymMash.new(codec_type: 'video')]))
@@ -145,8 +157,10 @@ RSpec.describe Downloaders::YtDlp do
 
       expect(opts.ss).to be_nil
       expect(opts.to).to be_nil
+      expect(opts.t).to be_nil
       expect(i.opts.ss).to be_nil
       expect(i.opts.to).to be_nil
+      expect(i.opts.t).to be_nil
     end
 
     it 'rejects audio download when no audio stream present' do

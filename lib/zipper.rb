@@ -7,6 +7,7 @@ require 'json'
 require_relative 'ffmpeg'
 require_relative 'prober'
 require_relative 'utils/safety'
+require_relative 'utils/duration'
 require_relative 'utils/time_ranges'
 require_relative 'subtitler/ass'
 require_relative 'zipper/formats'
@@ -258,6 +259,7 @@ class Zipper
     @fgraph << Utils::Safety.safe_filter(opts.vf) if opts.vf.present?
     @input_seek = nil
     @output_end = nil
+    @output_duration = nil
     @output_frame_rate = nil
     @audio_sample_rate = nil
     @audio_channels = nil
@@ -343,7 +345,7 @@ class Zipper
     apply_video_size builder, size
     apply_video_audio builder
     apply_metadata builder
-    builder.end_at output_end if output_end
+    apply_output_bounds builder
     builder.output outfile
     builder.capture
   end
@@ -368,7 +370,7 @@ class Zipper
     audio_filters.each { |filter| builder.add_filter filter, stream: :audio }
     builder.encode_audio format_name, bitrate: opts.bitrate
     apply_metadata builder
-    builder.end_at output_end if output_end
+    apply_output_bounds builder
     builder.output outfile
     builder.capture
   end
@@ -479,6 +481,10 @@ class Zipper
 
   def output_end
     @output_end
+  end
+
+  def output_duration
+    @output_duration
   end
 
   def output_frame_rate
@@ -620,8 +626,17 @@ class Zipper
   end
 
   def apply_cut
-    @input_seek = opts.ss if Utils::Safety.safe_time? opts.ss
-    @output_end = opts.to if Utils::Safety.safe_time? opts.to
+    return unless Utils::Duration.cut?(opts)
+
+    cut = Utils::Duration.from_opts(opts)
+    @input_seek      = cut.start if opts.ss
+    @output_end      = cut.finish if opts.to
+    @output_duration = cut.duration if opts.t
+  end
+
+  def apply_output_bounds(builder)
+    builder.end_at output_end if output_end
+    builder.duration output_duration if output_duration
   end
 
   def apply_audio_size_limit

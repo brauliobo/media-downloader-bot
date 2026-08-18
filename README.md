@@ -87,12 +87,23 @@ and only combines two words when they form a meaningful concept.
 ## Media edits
 
 Use comma-separated time intervals to silence audio or remove sections from
-audio and video. Timestamps accept seconds, `MM:SS`, or `HH:MM:SS`, with up to
-three decimal places:
+audio and video. The same flexible timestamps work for `ss=`, `to=`, `t=`,
+`cuts=`, and `silences=`:
+
+- seconds: `90`, `90.5`
+- clock (`M:SS` or `H:MM:SS`), with padding/zeros optional: `1:30`, `1:5`,
+  `:30`, `1:`, `1::`, `1::5`, `01:30:00.123`
+- compact periods: `90s`, `1m30s`, `1h30m`, `1.5m`
+
+`ss=` starts at that offset. `to=` is an absolute end. `t=` is a duration
+after `ss=` (or from 0); do not combine `t=` with `to=`.
 
 ```bash
+bundle exec ruby bin/zip input.mp4 ss=1m30s t=30s
+bundle exec ruby bin/zip input.mp4 ss=1:30 to=2:00
 bundle exec ruby bin/zip input.mp4 silences=10-20,1:00-1:05
 bundle exec ruby bin/zip input.mp4 cuts=30-40,1:30.5-1:45
+bundle exec ruby bin/zip input.mp4 cuts=1m-2m,:30-45
 ```
 
 `silences=` preserves the media duration. `cuts=` removes each interval from

@@ -17,7 +17,7 @@ RSpec.describe Zipper do
       input seek probe disable output_frame_rate output_sample_rate output_channels frame_rate_mode
       add_filter add_map map_stream scale preserve_resolution_scale metadata codec encode_video maxrate buffer_size
       rate_control bitrate no_audio copy_audio encode_audio metadata_policy movflags
-      end_at output capture create_silence concat_audio add_audio_floor speed_audio
+      end_at duration output capture create_silence concat_audio add_audio_floor speed_audio
       audio_to_wav convert_subtitle subtitle_codec
     ]
     methods.each { |method| allow(ffmpeg).to receive(method) }
@@ -200,6 +200,40 @@ RSpec.describe Zipper do
     expect(ffmpeg).to have_received(:add_filter).with(
       "select='not(between(t\\,10\\,20))'", stream: :video
     )
+  end
+
+  it 'applies ss and to as numeric ffmpeg seek bounds' do
+    ffmpeg = ffmpeg_double
+    opts = video_options(ss: '1m30s', to: '2:00')
+
+    described_class.new(
+      '/tmp/in.mp4', '/tmp/out.mp4', probe: video_probe, opts: opts, ffmpeg: ffmpeg
+    ).zip_video
+
+    expect(ffmpeg).to have_received(:seek).with(90.0)
+    expect(ffmpeg).to have_received(:end_at).with(120.0)
+    expect(ffmpeg).not_to have_received(:duration)
+  end
+
+  it 'applies t as an ffmpeg duration after ss' do
+    ffmpeg = ffmpeg_double
+    opts = video_options(ss: '1:', t: '30s')
+
+    described_class.new(
+      '/tmp/in.mp4', '/tmp/out.mp4', probe: video_probe, opts: opts, ffmpeg: ffmpeg
+    ).zip_video
+
+    expect(ffmpeg).to have_received(:seek).with(60.0)
+    expect(ffmpeg).to have_received(:duration).with(30.0)
+    expect(ffmpeg).not_to have_received(:end_at)
+  end
+
+  it 'rejects combining t with to' do
+    expect do
+      described_class.new(
+        '/tmp/in.mp4', '/tmp/out.mp4', probe: video_probe, opts: video_options(to: '2m', t: '30s')
+      ).zip_video
+    end.to raise_error(ArgumentError, /cannot combine with to/)
   end
 
   it 'delegates semantic filter construction to FFmpeg' do

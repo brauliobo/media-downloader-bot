@@ -7,7 +7,6 @@ module Utils
   module Safety
     SUBTITLE_EXTS = %w[ass srt ssa sbv srv1 srv2 srv3 json3 ttml vtt].freeze
     FILTER_RE     = /\A[0-9A-Za-z_=:.+,\-]+\z/.freeze
-    TIME_RE       = /\A(?:(?:\d{1,2}:)?\d{1,2}:)?\d{1,2}(?:\.\d{1,3})?\z/.freeze
     TESS_LANG_RE  = /\A[a-z]{2,3}(?:\+[a-z]{2,3})*\z/.freeze
 
     PRIVATE_NETS = %w[
@@ -60,10 +59,6 @@ module Utils
       value = value.to_s
       raise ArgumentError, "unsafe video filter: #{value.inspect}" unless value.match?(FILTER_RE)
       value
-    end
-
-    def safe_time?(value)
-      value.to_s.match?(TIME_RE)
     end
 
     def subtitle_ext(value)

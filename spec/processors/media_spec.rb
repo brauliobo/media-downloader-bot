@@ -64,6 +64,28 @@ RSpec.describe Processors::Media do
 
       expect(i.durat).to eq(45.0)
     end
+
+    it 'uses ss and to as an absolute clip window' do
+      i = input(fn_in: '/tmp/in.mp3', opts: SymMash.new(ss: '10s', to: '20'))
+      allow(Prober).to receive(:for).and_return(
+        SymMash.new(format: SymMash.new(duration: 60), streams: [SymMash.new(codec_type: 'audio')])
+      )
+
+      described_class.probe(i)
+
+      expect(i.durat).to eq(10.0)
+    end
+
+    it 'uses ss and t as a duration window' do
+      i = input(fn_in: '/tmp/in.mp3', opts: SymMash.new(ss: '1m', t: '30s'))
+      allow(Prober).to receive(:for).and_return(
+        SymMash.new(format: SymMash.new(duration: 120), streams: [SymMash.new(codec_type: 'audio')])
+      )
+
+      described_class.probe(i)
+
+      expect(i.durat).to eq(30.0)
+    end
   end
 
   describe '#generate_hashtags' do

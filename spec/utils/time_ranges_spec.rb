@@ -12,6 +12,16 @@ RSpec.describe Utils::TimeRanges do
     expect(ranges.total_duration).to eq(60.0)
   end
 
+  it 'parses period and flexible clock endpoints' do
+    ranges = described_class.parse('10s-20s,1m-2m,:30-45', option: :cuts)
+
+    expect(ranges.intervals).to eq([
+      described_class::Interval.new(start: 10.0, finish: 20.0),
+      described_class::Interval.new(start: 30.0, finish: 45.0),
+      described_class::Interval.new(start: 60.0, finish: 120.0),
+    ])
+  end
+
   it 'rejects points, descending intervals, and invalid clock components' do
     expect { described_class.parse('10', option: :cuts) }.to raise_error(ArgumentError, /invalid cuts option/)
     expect { described_class.parse('20-10', option: :cuts) }.to raise_error(ArgumentError, /invalid cuts option/)

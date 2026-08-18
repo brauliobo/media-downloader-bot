@@ -1,26 +1,15 @@
 require_relative 'range_list'
+require_relative 'duration'
 
 module Utils
   class TimeRanges
     Interval = Data.define(:start, :finish)
-    TIME_PATTERN = /\A(?:\d+(?::\d{1,2}){0,2})(?:\.\d{1,3})?\z/
 
     attr_reader :intervals
 
     def self.parse(value, option:)
-      spans = RangeList.parse(value, option: option, allow_single: false) { |part| timestamp(part) }
+      spans = RangeList.parse(value, option: option, allow_single: false) { |part| Duration.parse(part) }
       new(Array(spans).map { |span| Interval.new(start: span.first, finish: span.last) }, option: option)
-    end
-
-    def self.timestamp(value)
-      source = value.to_s
-      raise ArgumentError unless source.match?(TIME_PATTERN)
-
-      parts = source.split(':').map(&:to_f)
-      raise ArgumentError if parts.size > 1 && parts.last >= 60
-      raise ArgumentError if parts.size == 3 && parts[1] >= 60
-
-      parts.reverse.each_with_index.sum { |part, index| part * (60**index) }
     end
 
     def initialize(intervals, option:)
