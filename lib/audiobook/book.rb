@@ -32,7 +32,7 @@ module Audiobook
     MAX_STRUCTURED_BYTES = ENV.fetch('MAX_STRUCTURED_DOCUMENT_BYTES', 20 * 1024 * 1024).to_i
     CHINESE_MAX_SENTENCE_CHARS = 30
 
-    attr_reader :metadata, :pages
+    attr_reader :metadata, :pages, :translated
 
     # Alias for backward compatibility
     def items
@@ -53,7 +53,7 @@ module Audiobook
     end
 
     def self.detect_language(input_path, opts: nil, stl: nil)
-      lang = explicit_language(opts)
+      lang = source_language(opts)
       return lang if lang
 
       format = SourceFormats.format_for_path(input_path)
@@ -77,10 +77,16 @@ module Audiobook
       public_send(parser, input_path, stl: stl, opts: opts)
     end
 
-    def self.explicit_language(opts)
-      lang = opts&.alang || opts&.slang || opts&.lang
-      lang.to_s.strip.presence
+    def self.lang_code(value) = value.to_s.strip.presence
+
+    # alang = source override. slang/lang = speech target.
+    # lang= expands to matching alang+slang; that pair is a target, not a source.
+    def self.source_language(opts)
+      alang = lang_code(opts&.alang)
+      alang unless alang && alang == speech_language(opts)
     end
+
+    def self.speech_language(opts) = lang_code(opts&.slang) || lang_code(opts&.lang)
 
     def self.url_kindle?(input_path)
       s = input_path.to_s
@@ -147,6 +153,7 @@ module Audiobook
       # Support both new format (no metadata) and legacy format (with metadata)
       metadata = data.metadata || SymMash.new
       metadata.language ||= data.language
+      metadata.language ||= source_language(opts)
       
       # Parse pages or legacy items
       pages = if data.pages
@@ -169,8 +176,7 @@ module Audiobook
       obj.instance_variable_set(:@stl, stl)
       obj.instance_variable_set(:@lang, metadata.language || 'en')
       obj.instance_variable_set(:@pages, pages)
-      obj.send(:select_pages!)
-      obj.send(:filter_repeated_page_boundaries!) unless obj.send(:include_all?)
+      obj.send(:finish_pages!)
       obj
     end
 
@@ -241,7 +247,7 @@ module Audiobook
       @metadata = @data.metadata || SymMash.new
       @opts = opts || SymMash.new
       @stl = stl
-      @metadata.language ||= self.class.explicit_language(@opts)
+      @metadata.language ||= self.class.source_language(@opts)
       
       # Detect language from the first content pages before TTS options are chosen.
       detect_language_from_first_pages
@@ -254,10 +260,7 @@ module Audiobook
         @pages = pages_from_paragraphs
       end
 
-      select_pages!
-      filter_repeated_page_boundaries! unless include_all?
-      
-      translate! if translation_needed?
+      finish_pages!
     end
 
     # Write YAML file following class hierarchy representation
@@ -445,7 +448,7 @@ module Audiobook
         page_num = entry.page
         item.sentences.each do |sent|
           new_text, ids = TextHelpers.strip_inline_markers(sent.text)
-          sent.instance_variable_set(:@text, new_text) if new_text != sent.text
+          sent.text = new_text if new_text != sent.text
           if ids.any?
             ids.each do |id|
               ref = ref_map[page_num][id] ||= Reference.new(id)
@@ -543,7 +546,7 @@ module Audiobook
               if (entry_info = queue.find { |info| info.ref.equal?(ref) })
                 entry_info.min_idx = idx + 1
               end
-              item.sentences.first.instance_variable_set(:@text, leading_match[2])
+              item.sentences.first.text = leading_match[2]
               ref.add_sentences(item.sentences)
               pending_refs[page_num].reject! { |info| info.ref.equal?(ref) && info.min_idx <= idx }
               last_ref_by_page[page_num] = ref
@@ -596,7 +599,7 @@ module Audiobook
                   next_first = item.sentences.first
                   if prev_last && next_first
                     merged_text = [prev_last.text, next_first.text].join(' ').gsub(/\s+/, ' ').strip
-                    prev_last.instance_variable_set(:@text, merged_text)
+                    prev_last.text = merged_text
                     Array(next_first.references).each { |r| prev_last.add_reference(r) }
                     # append remaining sentences from the next paragraph
                     prev_item.sentences.concat(item.sentences.drop(1))
@@ -684,6 +687,12 @@ module Audiobook
 
     def include_all?
       !!(@opts&.includeall || @data&.opts&.includeall)
+    end
+
+    def finish_pages!
+      select_pages!
+      filter_repeated_page_boundaries! unless include_all?
+      translate! if translation_needed?
     end
 
     def select_pages!
@@ -886,24 +895,24 @@ module Audiobook
     end
 
 
-    # ---------- translation ----------
+    def speech_language = self.class.speech_language(@opts)
+
     def translation_needed?
-      return false unless @opts&.lang
-      @opts.slang.to_s != @lang.to_s
+      (target = speech_language) && target != @lang.to_s
     end
 
     def translate!
+      target = speech_language
       @stl&.update 'Translating pages'
       @pages.each_with_index do |page, pidx|
         page.all_sentences.each_with_index do |sent, sidx|
           @stl&.update "Translating page #{pidx+1}/#{@pages.size} sentence #{sidx+1}"
-          sent_text = Translator.translate(sent.text, from: @lang, to: @opts.slang)
-          sent.instance_variable_set(:@text, sent_text)
-          sent.language = @opts.slang.to_s
+          sent.text     = Translator.translate(sent.text, from: sent.language.presence || @lang, to: target)
+          sent.language = target
         end
       end
-      @lang = @opts.slang.to_s
-      @metadata.language = @lang
+      @lang = @metadata.language = target
+      @translated = true
     end
   end
 end

@@ -52,7 +52,7 @@ RSpec.describe Audiobook::Parsers::Txt do
       expect(data.metadata.page_count).to eq(2)
       expect(data.opts.includeall).to eq(true)
 
-      book = Audiobook::Book.from_input(path, opts: SymMash.new(alang: 'en', slang: 'en'))
+      book = Audiobook::Book.from_input(path, opts: SymMash.new(alang: 'en'))
       sentences = book.items.grep(Audiobook::Paragraph).flat_map(&:sentences).map(&:text)
       expect(sentences).to include('Next page starts here.')
       expect(book.metadata.language).to eq('en')
@@ -84,7 +84,7 @@ RSpec.describe Audiobook::Parsers::Txt do
   it 'generates the audiobook and YAML sidecar through the shared runner' do
     with_txt('A complete audiobook sentence.') do |path|
       output = File.join(File.dirname(path), 'book.aac')
-      opts = SymMash.new(alang: 'en', slang: 'en')
+      opts = SymMash.new(alang: 'en')
       runner = instance_double(Audiobook::Runner)
       allow(Audiobook::Runner).to receive(:new).and_return(runner)
       allow(runner).to receive(:process_to_audio).and_return(output)

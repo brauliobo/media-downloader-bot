@@ -2,7 +2,7 @@ require 'spec_helper'
 
 RSpec.describe 'Page paragraph cross-page merge' do
   def fixture_path(name) = File.expand_path("../fixtures/#{name}", __dir__)
-  def fixture_book = Audiobook::Book.from_input(fixture_path('page-paragraphs-merge.pdf'), opts: SymMash.new(slang: 'pt'))
+  def fixture_book = Audiobook::Book.from_input(fixture_path('page-paragraphs-merge.pdf'), opts: SymMash.new(alang: 'pt'))
   def paragraph_text(para)
     para.sentences.map(&:text).join(' ').gsub(/\s+/, ' ').strip
   end

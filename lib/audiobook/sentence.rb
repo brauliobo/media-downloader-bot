@@ -10,9 +10,8 @@ module Audiobook
     PAUSE = Pauses::SENTENCE
     PUNCTUATION_ONLY = /\A[\p{P}\p{S}\s]+\z/u
 
-    attr_reader :text
+    attr_accessor :text, :source_sentence, :font_size, :language
     attr_writer :references
-    attr_accessor :source_sentence, :font_size, :language
 
     def initialize(text, language: nil)
       super()

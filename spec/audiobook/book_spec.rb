@@ -2,13 +2,77 @@ require 'spec_helper'
 require_relative '../../lib/audiobook/book'
 
 RSpec.describe Audiobook::Book do
-  describe '.detect_language' do
-    it 'uses explicit language options before automatic detection' do
+  describe 'language options' do
+    it 'uses alang as the source-language override' do
       expect(Language).not_to receive(:detect)
+      expect(described_class.detect_language('/does/not/exist.pdf', opts: SymMash.new(alang: 'pt'))).to eq('pt')
+    end
 
-      lang = described_class.detect_language('/does/not/exist.pdf', opts: SymMash.new(slang: 'pt'))
+    it 'treats lang= as the speech target, not the source' do
+      opts = SymMash.new(lang: 'pt')
+      Processors::Base.normalize_options(opts)
 
-      expect(lang).to eq('pt')
+      expect(described_class.source_language(opts)).to be_nil
+      expect(described_class.speech_language(opts)).to eq('pt')
+    end
+  end
+
+  describe 'translation' do
+    def english_book_data
+      SymMash.new(
+        metadata: {page_count: 1, language: 'en'},
+        opts:     {includeall: true},
+        content:  {
+          lines: [
+            {text: 'Chapter One', font_size: 18, page: 1, section_level: 1},
+            {text: 'Hello world.', font_size: 12, page: 1},
+            {text: 'Another sentence.', font_size: 12, page: 1},
+          ],
+          images: [],
+        },
+      )
+    end
+
+    before { allow(Translator).to receive(:translate) { |text, from:, to:| "PT(#{from}->#{to}):#{text}" } }
+
+    it 'translates every sentence to lang=' do
+      book = described_class.new(data: english_book_data, opts: SymMash.new(lang: 'pt', includeall: true))
+
+      expect(book.pages.flat_map(&:all_sentences).map(&:text)).to contain_exactly(
+        'PT(en->pt):Chapter One', 'PT(en->pt):Hello world.', 'PT(en->pt):Another sentence.'
+      )
+      expect(book.metadata.language).to eq('pt')
+      expect(book.translated).to be(true)
+    end
+
+    it 'translates every YAML sentence to slang=' do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, 'book.yml')
+        File.write(path, YAML.dump(
+          'language' => 'en',
+          'pages' => [{
+            'page' => {
+              'number' => 1,
+              'items' => [
+                {'heading' => {'text' => 'Title'}},
+                {'paragraph' => {'sentences' => [
+                  {'text' => 'First sentence.'},
+                  {'text' => 'Second sentence.', 'references' => [
+                    {'reference' => {'id' => '1', 'sentences' => [{'text' => 'A footnote.'}]}}
+                  ]},
+                ]}},
+              ],
+            },
+          }],
+        ))
+        book = described_class.from_yaml(path, opts: SymMash.new(slang: 'pt'))
+
+        expect(book.pages.flat_map(&:all_sentences).map(&:text)).to contain_exactly(
+          'PT(en->pt):Title', 'PT(en->pt):First sentence.',
+          'PT(en->pt):Second sentence.', 'PT(en->pt):A footnote.'
+        )
+        expect(book.metadata.language).to eq('pt')
+      end
     end
   end
 

@@ -30,13 +30,14 @@ module Audiobook
     yaml_path = SourceFormats.yaml_path(input_path, out_audio)
 
     book.write(yaml_path)
+    translation_pdf = write_translation_pdf(book, input_path, yaml_path, stl)
 
     # If Book came from Kindle capture, it may carry the compiled PDF path in metadata
     pdf_path = book.metadata['kindle_pdf'] || book.metadata[:kindle_pdf]
-    return SymMash.new(yaml: yaml_path, pdf: pdf_path, book: book) if opts.onlyyml
+    return SymMash.new(yaml: yaml_path, pdf: pdf_path, translation_pdf: translation_pdf, book: book) if opts.onlyyml
 
     final_audio = Runner.new(book, stl, opts).process_to_audio(out_audio)
-    SymMash.new(yaml: yaml_path, audio: final_audio, pdf: pdf_path, book: book)
+    SymMash.new(yaml: yaml_path, audio: final_audio, pdf: pdf_path, translation_pdf: translation_pdf, book: book)
   end
 
   # Unified helper to generate audiobook and return ready-to-upload entries
@@ -45,39 +46,48 @@ module Audiobook
     audio_format = Zipper::Types.audio.aac
     audio_out = File.join(dir, "#{base}.#{audio_format.ext}")
     result = generate(source, audio_out, stl: stl, opts: opts)
-    yaml_upload = SymMash.new(
-      fn_out: result.yaml,
-      type: SymMash.new(name: :document),
-      info: SymMash.new(title: base, uploader: ''),
-      mime: 'application/x-yaml',
-      opts: SymMash.new(format: SymMash.new(mime: 'application/x-yaml'))
-    )
-    return [yaml_upload] if opts.onlyyml
+    uploads = [document_upload(result.yaml, base, 'application/x-yaml')]
+    return uploads if opts.onlyyml
 
-    book = result.book
-    thumbnail_path = book.thumb(dir: dir, base: base)
-
-    uploads = [
-      yaml_upload,
-      SymMash.new(
-        fn_out: result.audio,
-        type: SymMash.new(name: :audio),
-        info: SymMash.new(title: base, uploader: ''),
-        thumb: thumbnail_path,
-        mime: audio_format.mime,
-        opts: SymMash.new(format: audio_format)
-      )
-    ]
-
-    begin
-      uploads[1].oprobe = Prober.for(result.audio)
-    rescue => e
-      STDERR.puts "[AUDIOBOOK] probe failed: #{e.class}: #{e.message}"
-    end
-
+    uploads << document_upload(result.translation_pdf, base, 'application/pdf') if result.translation_pdf
+    uploads << audio_upload(result, dir, base, audio_format)
     uploads
   ensure
     cleanup_kindle_capture(result&.pdf)
+  end
+
+  def self.document_upload(path, base, mime)
+    SymMash.new(
+      fn_out: path,
+      type:   SymMash.new(name: :document),
+      info:   SymMash.new(title: base, uploader: ''),
+      mime:   mime,
+      opts:   SymMash.new(format: SymMash.new(mime: mime))
+    )
+  end
+
+  def self.audio_upload(result, dir, base, audio_format)
+    upload = SymMash.new(
+      fn_out: result.audio,
+      type:   SymMash.new(name: :audio),
+      info:   SymMash.new(title: base, uploader: ''),
+      thumb:  result.book.thumb(dir: dir, base: base),
+      mime:   audio_format.mime,
+      opts:   SymMash.new(format: audio_format)
+    )
+    upload.oprobe = Prober.for(result.audio)
+    upload
+  rescue => e
+    STDERR.puts "[AUDIOBOOK] probe failed: #{e.class}: #{e.message}"
+    upload
+  end
+
+  def self.write_translation_pdf(book, input_path, yaml_path, stl)
+    return unless book.translated
+    return unless SourceFormats.format_for_path(input_path)&.[](:parser) == :parse_pdf
+
+    lang = book.metadata['language'] || book.metadata[:language]
+    TextPdf.generate(book, yaml_path.sub(/\.yml\z/i, ".#{lang}.pdf"), stl: stl)
   end
 
   def self.cleanup_kindle_capture(pdf_path)

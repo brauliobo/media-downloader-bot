@@ -96,6 +96,62 @@ RSpec.describe 'Audiobook OCR language detection' do
     expect(uploads.last.fn_out).to eq('book.m4a')
   end
 
+  it 'uploads a translation PDF with the yaml and audiobook' do
+    book = instance_double(Audiobook::Book)
+    allow(book).to receive(:thumb).with(dir: 'tmp', base: 'book').and_return(nil)
+    allow(Audiobook).to receive(:base_from_source).and_return('book')
+    allow(Audiobook).to receive(:generate).and_return(
+      SymMash.new(yaml: 'book.yml', audio: 'book.m4a', translation_pdf: 'book.pt.pdf', book: book)
+    )
+    allow(Prober).to receive(:for)
+
+    uploads = Audiobook.generate_uploads('book.pdf', dir: 'tmp', stl: nil)
+
+    expect(uploads.map { |upload| [upload.fn_out, upload.mime] }).to eq([
+      ['book.yml', 'application/x-yaml'],
+      ['book.pt.pdf', 'application/pdf'],
+      ['book.m4a', 'audio/aac'],
+    ])
+  end
+
+  it 'writes a translation PDF next to the yaml for a translated PDF' do
+    Dir.mktmpdir do |dir|
+      path  = File.join(dir, 'book.pdf')
+      audio = File.join(dir, 'book.aac')
+      File.write(path, '%PDF-1.4')
+      book = instance_double(Audiobook::Book, translated: true, metadata: {'language' => 'pt'})
+      allow(Audiobook::Book).to receive(:from_input).and_return(book)
+      allow(book).to receive(:write)
+      allow(Audiobook::TextPdf).to receive(:generate).and_return(File.join(dir, 'book.pt.pdf'))
+      allow(Audiobook::Runner).to receive(:new)
+        .and_return(instance_double(Audiobook::Runner, process_to_audio: audio))
+
+      result = Audiobook.generate(path, audio, opts: SymMash.new(lang: 'pt'))
+
+      expect(Audiobook::TextPdf).to have_received(:generate).with(book, File.join(dir, 'book.pt.pdf'), stl: nil)
+      expect(result.translation_pdf).to eq(File.join(dir, 'book.pt.pdf'))
+    end
+  end
+
+  it 'does not write a translation PDF for a translated text file' do
+    Dir.mktmpdir do |dir|
+      path  = File.join(dir, 'book.txt')
+      audio = File.join(dir, 'book.aac')
+      File.write(path, 'Hello.')
+      book = instance_double(Audiobook::Book, translated: true, metadata: {'language' => 'pt'})
+      allow(Audiobook::Book).to receive(:from_input).and_return(book)
+      allow(book).to receive(:write)
+      allow(Audiobook::TextPdf).to receive(:generate)
+      allow(Audiobook::Runner).to receive(:new)
+        .and_return(instance_double(Audiobook::Runner, process_to_audio: audio))
+
+      result = Audiobook.generate(path, audio, opts: SymMash.new(lang: 'pt'))
+
+      expect(Audiobook::TextPdf).not_to have_received(:generate)
+      expect(result.translation_pdf).to be_nil
+    end
+  end
+
   it 'loads the top-level language written by the audiobook YAML format' do
     Dir.mktmpdir do |dir|
       path = File.join(dir, 'book.yml')
