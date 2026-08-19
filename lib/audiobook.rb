@@ -45,31 +45,32 @@ module Audiobook
     audio_format = Zipper::Types.audio.aac
     audio_out = File.join(dir, "#{base}.#{audio_format.ext}")
     result = generate(source, audio_out, stl: stl, opts: opts)
-    uploads = [document_upload(result.yaml, base, 'application/x-yaml')]
+    title   = upload_title(result.book, base)
+    uploads = [document_upload(result.yaml, title, 'application/x-yaml')]
     return uploads if opts.onlyyml
 
-    uploads << document_upload(result.translation_pdf, base, 'application/pdf') if result.translation_pdf
-    uploads << audio_upload(result, dir, base, audio_format)
+    uploads << document_upload(result.translation_pdf, title, 'application/pdf') if result.translation_pdf
+    uploads << audio_upload(result, dir, base, audio_format, title: title)
     uploads
   ensure
     cleanup_kindle_capture(result&.pdf)
   end
 
-  def self.document_upload(path, base, mime)
+  def self.document_upload(path, title, mime)
     SymMash.new(
       fn_out: path,
       type:   SymMash.new(name: :document),
-      info:   SymMash.new(title: base, uploader: ''),
+      info:   SymMash.new(title: title, uploader: ''),
       mime:   mime,
       opts:   SymMash.new(format: SymMash.new(mime: mime))
     )
   end
 
-  def self.audio_upload(result, dir, base, audio_format)
+  def self.audio_upload(result, dir, base, audio_format, title: base)
     upload = SymMash.new(
       fn_out: result.audio,
       type:   SymMash.new(name: :audio),
-      info:   SymMash.new(title: base, uploader: ''),
+      info:   SymMash.new(title: title, uploader: ''),
       thumb:  result.book.thumb(dir: dir, base: base),
       mime:   audio_format.mime,
       opts:   SymMash.new(format: audio_format)
@@ -86,7 +87,11 @@ module Audiobook
     return unless SourceFormats.format_for_path(input_path)&.[](:parser) == :parse_pdf
 
     lang = book.metadata['language'] || book.metadata[:language]
-    TextPdf.generate(book, yaml_path.sub(/\.yml\z/i, ".#{lang}.pdf"), stl: stl)
+    TextPdf.generate(book, yaml_path.sub(/\.yml\z/i, ".#{lang}.pdf"), stl: stl, source_pdf: input_path)
+  end
+
+  def self.upload_title(book, fallback)
+    book&.metadata&.[](:title).presence || book&.metadata&.[]('title').presence || fallback
   end
 
   def self.cleanup_kindle_capture(pdf_path)

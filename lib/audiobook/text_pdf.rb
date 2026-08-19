@@ -1,11 +1,14 @@
 require 'cgi'
 require_relative 'book'
+require_relative 'cover'
+require_relative 'ocr_text'
 require_relative '../utils/sh'
 
 module Audiobook
   class TextPdf
-    OCR_THRESHOLD = 80
-    CHROMIUM_BINS = %w[chromium google-chrome-stable google-chrome chromium-browser].freeze
+    OCR_THRESHOLD     = 80
+    MIN_FIGURE_AREA   = 0.002
+    CHROMIUM_BINS     = %w[chromium google-chrome-stable google-chrome chromium-browser].freeze
 
     def self.ocr_percentage(book)
       total_pages = book.pages.size
@@ -24,40 +27,36 @@ module Audiobook
       ocr_percentage(book) > OCR_THRESHOLD
     end
 
-    def self.generate(book, pdf_path, stl: nil)
-      new(book, stl: stl).generate(pdf_path)
+    def self.generate(book, pdf_path, stl: nil, source_pdf: nil)
+      new(book, stl: stl, source_pdf: source_pdf).generate(pdf_path)
     end
 
-    def initialize(book, stl: nil)
-      @book = book
-      @stl = stl
+    def initialize(book, stl: nil, source_pdf: nil)
+      @book       = book
+      @stl        = stl
+      @source_pdf = source_pdf
+      @assets     = nil
     end
 
     def generate(pdf_path)
       @stl&.update 'Generating PDF from text'
-      
-      html_content = build_html
-      html_path = pdf_path.sub(/\.pdf$/, '.html')
-      File.write(html_path, html_content)
-      
-      convert_html_to_pdf(html_path, pdf_path)
-      File.delete(html_path) if File.exist?(html_path)
-      
+      Dir.mktmpdir('text-pdf-') do |dir|
+        @assets   = dir
+        html_path = File.join(dir, 'book.html')
+        File.write(html_path, build_html)
+        convert_html_to_pdf(html_path, pdf_path)
+      end
       raise 'Failed to generate PDF' unless File.exist?(pdf_path)
       pdf_path
     end
 
-    private
-
     def build_html
-      title = @book.metadata['title'] || 'Audiobook'
-      lang = @book.metadata['language'] || 'en'
-      
-      html = html_header(title, lang)
-      html << html_body
-      html << html_footer
-      html
+      title = @book.metadata['title'].presence || @book.metadata[:title].presence
+      lang  = @book.metadata['language'] || @book.metadata[:language] || 'en'
+      html_header(title, lang) + html_body + html_footer
     end
+
+    private
 
     def html_header(title, lang)
       <<~HTML
@@ -65,56 +64,187 @@ module Audiobook
         <html lang="#{lang}">
         <head>
           <meta charset="UTF-8">
-          <title>#{CGI.escapeHTML(title)}</title>
+          <title>#{CGI.escapeHTML(title.to_s)}</title>
           #{html_styles}
         </head>
         <body>
-          <h1>#{CGI.escapeHTML(title)}</h1>
       HTML
     end
 
     def html_styles
       <<~CSS
         <style>
-          body { font-family: serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }
-          h1 { page-break-after: avoid; }
-          p { margin: 1em 0; text-align: justify; }
+          @page { size: A4; margin: 14mm; }
+          body { font-family: serif; line-height: 1.55; margin: 0; }
+          h1, h2, h3, h4, h5, h6 { page-break-after: avoid; margin: 0 0 0.8em; }
+          p { margin: 0 0 1em; text-align: justify; }
+          aside.reference { font-size: 0.9em; margin: 0.4em 0 0; }
+          .page { break-after: page; page-break-after: always; }
+          .page:last-child { break-after: auto; page-break-after: auto; }
+          img.cover, img.page-image { display: block; width: 100%; height: auto; }
+          img.figure { display: block; max-width: 100%; height: auto; margin: 1em auto; }
         </style>
       CSS
     end
 
     def html_body
-      html = ''
-      @book.pages.each do |page|
-        page.items.each do |item|
-          html << render_item(item)
-        end
-      end
+      html = +''
+      html << cover_html
+      @book.pages.each { |page| html << render_page(page) }
+      html
+    end
+
+    def cover_html
+      src = rasterize_page(cover_page, 'cover')
+      src ? %(<div class="page"><img class="cover" src="#{src}" alt=""></div>\n) : ''
+    end
+
+    def render_page(page)
+      return '' if page.empty?
+      return '' if cover_page && page.number == cover_page && image_only?(page)
+
+      inner = image_only?(page) ? render_image_page(page) : render_text_page(page)
+      return '' if inner.empty?
+
+      %(<div class="page">\n#{inner}</div>\n)
+    end
+
+    def render_image_page(page)
+      src = rasterize_page(page.number, "page-#{page.number}")
+      return %(<img class="page-image" src="#{src}" alt="">\n) if src
+
+      page.items.grep(Image).map { |item| render_paragraph(item) }.join
+    end
+
+    def render_text_page(page)
+      html = page.items.map { |item| render_item(item) }.join
+      html << references_html(page)
+      html << figures_html(page.number) unless cover_page && page.number == cover_page
       html
     end
 
     def render_item(item)
       case item
-      when Audiobook::Heading
-        "<h2>#{CGI.escapeHTML(item.text)}</h2>\n"
-      when Audiobook::Paragraph, Audiobook::Image
-        item.sentences.map { |s| render_sentence(s) }.join
-      else
-        ''
+      when Section   then heading_html(item.level + 1, item.text)
+      when Heading   then heading_html(2, item.text)
+      when Image     then ''
+      when Reference then render_reference(item)
+      when Paragraph then render_paragraph(item)
+      else ''
       end
     end
 
-    def render_sentence(sentence)
-      text = CGI.escapeHTML(sentence.text)
-      if sentence.references&.any?
-        ref_ids = sentence.references.map(&:id).join(', ')
-        text += " [#{CGI.escapeHTML(ref_ids)}]"
-      end
-      "<p>#{text}</p>\n"
+    def heading_html(level, text)
+      tag = "h#{level.clamp(1, 6)}"
+      "<#{tag}>#{escape_text(text)}</#{tag}>\n"
+    end
+
+    def render_reference(item)
+      body = item.sentences.filter_map { |sentence| sentence_html(sentence) }.join(' ')
+      return '' if body.empty?
+
+      %(<aside class="reference"><sup>#{escape_text(item.id)}</sup> #{body}</aside>\n)
+    end
+
+    def references_html(page)
+      page_references(page).map { |item| render_reference(item) }.join
+    end
+
+    def page_references(page)
+      page.items.flat_map { |item| attached_references(item) }.uniq
+    end
+
+    def attached_references(item)
+      return [] if item.is_a?(Reference)
+      return item.references || [] if item.is_a?(Sentence)
+      return [] unless item.respond_to?(:sentences)
+
+      item.sentences.flat_map { |sentence| sentence.references || [] }
+    end
+
+    def render_paragraph(item)
+      parts = item.sentences.filter_map { |sentence| sentence_html(sentence) }
+      parts.empty? ? '' : "<p>#{parts.join(' ')}</p>\n"
+    end
+
+    def sentence_html(sentence)
+      text = escape_text(sentence.text)
+      return if text.empty?
+
+      refs = sentence.references&.map(&:id)&.join(', ')
+      refs.present? ? "#{text} [#{escape_text(refs)}]" : text
+    end
+
+    def figures_html(page_num)
+      extract_figures(page_num).map { |src| %(<img class="figure" src="#{src}" alt="">\n) }.join
     end
 
     def html_footer
-      "</body></html>"
+      '</body></html>'
+    end
+
+    def image_only?(page)
+      page.items.any? && page.items.all? { |item| item.is_a?(Image) }
+    end
+
+    def cover
+      @cover ||= @book.metadata.cover || @book.metadata[:cover]
+    end
+
+    def cover_page
+      cover&.page_number
+    end
+
+    def source_pdf
+      @source_pdf ||= cover&.source_path || infer_source_pdf
+    end
+
+    def infer_source_pdf
+      @book.pages.flat_map(&:items).grep(Image).map(&:path).find { |path|
+        path.to_s =~ /\.pdf#page=/i
+      }&.sub(/#page=\d+\z/i, '')
+    end
+
+    def rasterize_page(page_num, name)
+      return unless source_pdf && page_num && @assets && File.exist?(source_pdf)
+
+      base = File.join(@assets, name)
+      png  = OcrText.rasterize_pdf_page(source_pdf, page_num, base)
+      File.basename(png) if png && File.exist?(png)
+    end
+
+    def extract_figures(page_num)
+      return [] unless source_pdf && @assets && File.exist?(source_pdf)
+
+      images = listed_images(page_num)
+      keep   = images.reject(&:large?).select { |metrics| metrics.area_coverage >= MIN_FIGURE_AREA }
+      return [] if keep.empty?
+
+      prefix = File.join(@assets, "p#{page_num}-fig")
+      Sh.run ['pdfimages', '-png', '-f', page_num.to_s, '-l', page_num.to_s, source_pdf, prefix]
+      Dir["#{prefix}*.png"].sort.zip(images).filter_map do |path, metrics|
+        File.basename(path) if path && keep.include?(metrics)
+      end
+    end
+
+    def listed_images(page_num)
+      output, stderr, status = Sh.run [
+        'pdfimages', '-f', page_num.to_s, '-l', page_num.to_s, '-list', source_pdf
+      ]
+      Sh.assert_success!('PDF image list failed', stderr, status: status)
+      output.lines.filter_map { |line| Cover.image_metrics(line, page_box) }
+    end
+
+    def page_box
+      @page_box ||= begin
+        output, = Sh.run ['pdfinfo', source_pdf]
+        width, height = output.to_s.match(/Page size:\s+([\d.]+)\s+x\s+([\d.]+)/)&.captures
+        SymMash.new(width: width&.to_f || 612.0, height: height&.to_f || 792.0)
+      end
+    end
+
+    def escape_text(text)
+      CGI.escapeHTML(text.to_s)
     end
 
     def convert_html_to_pdf(html_path, pdf_path)

@@ -401,9 +401,7 @@ module Audiobook
 
     # Build pages from Line objects (new format with font metadata)
     def pages_from_lines(lines_data, images_data = [])
-      # Filter headers/footers unless includeall option is set
-      include_all = @data.opts&.includeall
-      filtered_lines = include_all ? lines_data : filter_headers_footers(lines_data)
+      filtered_lines = include_all? ? lines_data : filter_headers_footers(lines_data)
       
       # Create Line objects
       lines = filtered_lines.map do |l|
@@ -696,7 +694,7 @@ module Audiobook
     end
 
     def include_all?
-      !!(@opts&.includeall || @data&.opts&.includeall)
+      !!(@opts&.includeall || @data&.opts&.includeall || translation_needed?)
     end
 
     def finish_pages!(translate: true)
@@ -893,9 +891,8 @@ module Audiobook
         [first_text, last_text].compact.map(&norm).each { |l| hdrf_counts[l] ||= 0; hdrf_counts[l] += 1 }
       end
       
-      # If a line appears on >30% of pages, it's likely a header/footer
-      threshold = (pages_hash.size * 0.3).ceil
-      hdrf_set = hdrf_counts.select { |_, c| c >= threshold }.keys
+      threshold = [(pages_hash.size * 0.3).ceil, 3].max
+      hdrf_set = hdrf_counts.select { |_, count| count >= threshold }.keys
       
       # Filter out detected headers/footers
       lines_data.reject do |l|

@@ -82,5 +82,6 @@ RSpec.describe 'Image handling in PDFs with text' do
     expect(images.size).to eq(1)
     # Image should have OCR'd content
     expect(images.first.sentences).not_to be_empty
+    expect(images.first.to_h['image']['path']).to end_with('#page=1')
   end
 end

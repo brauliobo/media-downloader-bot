@@ -17,7 +17,9 @@ module Audiobook
     end
 
     def to_h
-      { 'image' => { 'sentences' => sentences.map(&:to_h) } }
+      data = { 'sentences' => sentences.map(&:to_h) }
+      data['path'] = path if path.present?
+      { 'image' => data }
     end
 
     private

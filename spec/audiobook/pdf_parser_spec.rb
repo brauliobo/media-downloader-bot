@@ -27,6 +27,7 @@ RSpec.describe Audiobook::Parsers::Pdf do
     data = described_class.extract_data(fixture_path('image-text-handler.pdf'))
 
     expect(data.metadata.page_count).to eq(3)
+    expect(data.metadata.title).to eq('image-text-handler')
     expect(data.metadata.has_ocr_pages).to eq(true)
     expect(data.content.images.map(&:page)).to eq([1])
     expect(data.content.lines.map(&:page).uniq).to eq([2, 3])

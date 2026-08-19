@@ -83,6 +83,5 @@ module Audiobook
         page_height:    page.height.to_f,
       )
     end
-    private_class_method :image_metrics
   end
 end

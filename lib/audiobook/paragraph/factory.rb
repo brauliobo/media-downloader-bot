@@ -47,8 +47,8 @@ module Audiobook
         prev_font = nil
 
         @lines.each do |line|
-          if prev_font && line.font_size && (line.font_size != prev_font || line.text.match?(/^\d+$/))
-            groups << current_group unless current_group.empty?
+          if current_group.any? && split_group?(current_group, line, prev_font)
+            groups << current_group
             current_group = [line]
           else
             current_group << line
@@ -57,6 +57,13 @@ module Audiobook
         end
         groups << current_group unless current_group.empty?
         groups
+      end
+
+      def split_group?(group, line, prev_font)
+        return true if prev_font && line.font_size && line.font_size != prev_font
+        return true if line.text.match?(/^\d+$/)
+
+        self.class.heading_like?(line.text) || self.class.heading_like?(group.first.text)
       end
 
       def normalize_group_text(group)

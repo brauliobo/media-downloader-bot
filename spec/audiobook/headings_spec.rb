@@ -9,14 +9,13 @@ RSpec.describe 'Heading extraction from PDF' do
     book = Audiobook::Book.from_input(fixture_path('headings.pdf'), opts: SymMash.new(alang: 'pt'))
     items = book.pages.first.items
 
-    title_paragraph = items.grep(Audiobook::Paragraph).first
-    intro_heading = items.grep(Audiobook::Heading).first
+    texts = items.flat_map { |item| item.is_a?(Audiobook::Heading) ? [item.text] : item.sentences.map(&:text) }
 
-    expect(title_paragraph).not_to be_nil
-    expect(title_paragraph.sentences.map(&:text)).to eq(['AUTOR: ROBERT A.', 'JOHNSON EDITORA: MERCURYO'])
-
-    expect(intro_heading).not_to be_nil
-    expect(intro_heading.text).to eq('INTRODUÇÃO')
+    expect(texts).to include('HE - A CHAVE DO ENTENDIMENTO DA PSICOLOGIA MASCULINA')
+    expect(texts).to include('INTRODUÇÃO')
+    expect(texts.join(' ')).to include('AUTOR: ROBERT A.')
+    expect(texts.join(' ')).to include('EDITORA: MERCURYO')
+    expect(items.grep(Audiobook::Heading).map(&:text)).to include('INTRODUÇÃO')
   end
 
 end

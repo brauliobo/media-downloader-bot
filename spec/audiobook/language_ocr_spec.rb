@@ -82,7 +82,7 @@ RSpec.describe 'Audiobook OCR language detection' do
   it 'uses the book cover as the audio thumbnail' do
     book = instance_double(Audiobook::Book)
     allow(book).to receive(:thumb).with(dir: 'tmp', base: 'book').and_return('/tmp/book-cover.jpg')
-    allow(book).to receive(:metadata).and_return(SymMash.new)
+    allow(book).to receive(:metadata).and_return(SymMash.new(title: 'Book Title'))
     allow(Audiobook).to receive(:base_from_source).and_return('book')
     allow(Audiobook).to receive(:generate).and_return(
       SymMash.new(yaml: 'book.yml', audio: 'book.m4a', book: book)
@@ -94,11 +94,13 @@ RSpec.describe 'Audiobook OCR language detection' do
     expect(uploads.last.thumb).to eq('/tmp/book-cover.jpg')
     expect(uploads.last.mime).to eq('audio/aac')
     expect(uploads.last.fn_out).to eq('book.m4a')
+    expect(uploads.map { |upload| upload.info.title }.uniq).to eq(['Book Title'])
   end
 
   it 'uploads a translation PDF with the yaml and audiobook' do
     book = instance_double(Audiobook::Book)
     allow(book).to receive(:thumb).with(dir: 'tmp', base: 'book').and_return(nil)
+    allow(book).to receive(:metadata).and_return(SymMash.new)
     allow(Audiobook).to receive(:base_from_source).and_return('book')
     allow(Audiobook).to receive(:generate).and_return(
       SymMash.new(yaml: 'book.yml', audio: 'book.m4a', translation_pdf: 'book.pt.pdf', book: book)
@@ -128,7 +130,7 @@ RSpec.describe 'Audiobook OCR language detection' do
 
       result = Audiobook.generate(path, audio, opts: SymMash.new(lang: 'pt'))
 
-      expect(Audiobook::TextPdf).to have_received(:generate).with(book, File.join(dir, 'book.pt.pdf'), stl: nil)
+      expect(Audiobook::TextPdf).to have_received(:generate).with(book, File.join(dir, 'book.pt.pdf'), stl: nil, source_pdf: path)
       expect(result.translation_pdf).to eq(File.join(dir, 'book.pt.pdf'))
     end
   end

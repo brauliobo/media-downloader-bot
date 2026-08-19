@@ -93,6 +93,23 @@ RSpec.describe Audiobook::Book do
     expect(book.pages.first.all_sentences.map(&:text)).to include('DADOS DE COPYRIGHT')
   end
 
+  it 'keeps headings and unique page lines on a short PDF' do
+    path = File.expand_path('../fixtures/image-text-handler.pdf', __dir__)
+    book = described_class.from_input(path, opts: SymMash.new(alang: 'pt'), translate: false)
+
+    expect(book.pages.flat_map(&:all_sentences).map(&:text)).to include('DADOS DE COPYRIGHT')
+  end
+
+  it 'keeps headings and footers when translating' do
+    allow(Translator).to receive(:translate) { |text, **| text }
+    allow(Ocr).to receive(:transcribe).and_return(SymMash.new(content: {text: 'OCR cover dump'}))
+    path = File.expand_path('../fixtures/image-text-handler.pdf', __dir__)
+    book = described_class.from_input(path, opts: SymMash.new(alang: 'pt', lang: 'en'))
+
+    expect(book.translated).to be(true)
+    expect(book.pages.flat_map(&:all_sentences).map(&:text)).to include('DADOS DE COPYRIGHT')
+  end
+
   it 'splits translated CJK paragraph text before audiobook generation' do
     line = Audiobook::Line.new('第一句。 第二句！第三句？', font_size: 12, page_number: 1)
 

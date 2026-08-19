@@ -13,11 +13,12 @@ module Audiobook
         all_lines = []
         image_pages = []
 
+        info           = extract_pdfinfo(pdf_path)
+        page_count     = info.pages
         selected_pages = PageSelection.parse(opts&.pages)
         if selected_pages
           raise ArgumentError, "too many selected pages (maximum #{MAX_PAGES})" if selected_pages.size > MAX_PAGES
 
-          page_count = extract_page_count(pdf_path)
           missing = selected_pages.reject { |page| page <= page_count }
           raise ArgumentError, "pages not found: #{missing.join(', ')}" if missing.any?
 
@@ -44,6 +45,7 @@ module Audiobook
 
         SymMash.new(
           metadata: SymMash.new(
+            title:          info.title.presence || File.basename(pdf_path, '.*'),
             cover:          cover,
             has_ocr_pages:  image_pages.any?,
             page_count:     page_count,
@@ -117,13 +119,19 @@ module Audiobook
         pages
       end
 
-      def self.extract_page_count(pdf_path)
+      def self.extract_pdfinfo(pdf_path)
         output, stderr, status = Sh.run ['pdfinfo', pdf_path]
         Sh.assert_success!('PDF page count failed', stderr, status: status)
         count = output[/^Pages:\s+(\d+)$/i, 1]&.to_i
         raise 'PDF page count missing' unless count&.positive?
 
-        count
+        title = output[/^Title:\s+(.+)$/i, 1]&.strip
+        title = nil if title.blank? || title == '-'
+        SymMash.new(pages: count, title: title)
+      end
+
+      def self.extract_page_count(pdf_path)
+        extract_pdfinfo(pdf_path).pages
       end
 
       def self.consecutive_ranges(page_numbers)
