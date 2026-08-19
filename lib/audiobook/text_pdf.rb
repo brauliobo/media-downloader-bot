@@ -1,9 +1,11 @@
 require 'cgi'
 require_relative 'book'
+require_relative '../utils/sh'
 
 module Audiobook
   class TextPdf
     OCR_THRESHOLD = 80
+    CHROMIUM_BINS = %w[chromium google-chrome-stable google-chrome chromium-browser].freeze
 
     def self.ocr_percentage(book)
       total_pages = book.pages.size
@@ -116,13 +118,19 @@ module Audiobook
     end
 
     def convert_html_to_pdf(html_path, pdf_path)
-      if wkhtmltopdf_available?
+      if (chrome = chromium_bin)
+        chromium_convert(chrome, html_path, pdf_path)
+      elsif wkhtmltopdf_available?
         wkhtmltopdf_convert(html_path, pdf_path)
       elsif pandoc_available?
         pandoc_convert(html_path, pdf_path)
       else
-        raise 'No PDF generation tool available (wkhtmltopdf or pandoc required)'
+        raise 'No PDF generation tool available (chromium, wkhtmltopdf or pandoc required)'
       end
+    end
+
+    def chromium_bin
+      CHROMIUM_BINS.find { system('which', _1, out: File::NULL, err: File::NULL) }
     end
 
     def wkhtmltopdf_available?
@@ -133,21 +141,40 @@ module Audiobook
       system('which', 'pandoc', out: File::NULL, err: File::NULL)
     end
 
+    def chromium_convert(chrome, html_path, pdf_path)
+      Dir.mktmpdir('chrome-pdf-') do |dir|
+        run_pdf!(
+          [
+            chrome, '--headless', '--disable-gpu', '--no-pdf-header-footer',
+            "--user-data-dir=#{dir}", "--print-to-pdf=#{pdf_path}",
+            "file://#{File.expand_path(html_path)}"
+          ],
+          'chromium pdf',
+          pdf_path
+        )
+      end
+    end
+
     def wkhtmltopdf_convert(html_path, pdf_path)
-      system(
+      run_pdf!(
+        [
+          'wkhtmltopdf', '--page-size', 'A4',
+          '--margin-top', '20mm', '--margin-bottom', '20mm',
+          '--margin-left', '20mm', '--margin-right', '20mm',
+          html_path, pdf_path
+        ],
         'wkhtmltopdf',
-        '--page-size', 'A4',
-        '--margin-top', '20mm',
-        '--margin-bottom', '20mm',
-        '--margin-left', '20mm',
-        '--margin-right', '20mm',
-        html_path,
         pdf_path
-      ) || raise('wkhtmltopdf conversion failed')
+      )
     end
 
     def pandoc_convert(html_path, pdf_path)
-      system('pandoc', '-f', 'html', '-t', 'pdf', '-o', pdf_path, html_path) || raise('pandoc conversion failed')
+      run_pdf!(['pandoc', '-f', 'html', '-t', 'pdf', '-o', pdf_path, html_path], 'pandoc pdf', pdf_path)
+    end
+
+    def run_pdf!(cmd, label, pdf_path)
+      _out, err, status = Sh.run(cmd)
+      Sh.assert_success!(label, err, status: status, output: pdf_path)
     end
   end
 end
