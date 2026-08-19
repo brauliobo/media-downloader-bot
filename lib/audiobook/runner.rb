@@ -6,6 +6,7 @@ require_relative '../tts/options'
 require_relative '../language'
 require_relative '../voice_reference'
 require_relative '../utils/progress_counter'
+require_relative '../pipeline'
 
 module Audiobook
   class Runner
@@ -37,9 +38,14 @@ module Audiobook
 
         wavs = Array.new(pages.size)
         total_pages = pages.size
+        apply_translation!
         speech_options = tts_options(dir)
         prepare_pages(pages, dir, para_offsets, total_paras, total_pages, speech_options)
-        batch_synthesize_pages(pages, dir, speech_options) if backend_supports?(:batch_synthesis)
+        if backend_supports?(:batch_synthesis)
+          process_speech_jobs(pages, dir, speech_options)
+        elsif @book.try(:translation_needed?) && !@book.translated
+          @book.translate!
+        end
 
         errors = Queue.new
         pages.each.with_index.peach do |page, idx|
@@ -181,9 +187,13 @@ module Audiobook
       end
     end
 
-    def batch_synthesize_pages(pages, dir, speech_options)
+    def apply_translation!
+      @lang = @book.speech_language if @book.try(:translation_needed?)
+    end
+
+    def process_speech_jobs(pages, dir, speech_options, lang = @lang)
       jobs = pages.each_with_index.flat_map do |page, idx|
-        page.speech_jobs(dir, format('%04d', idx + 1), @lang)
+        page.speech_jobs(dir, format('%04d', idx + 1), lang)
       end
       return if jobs.empty?
 
@@ -191,8 +201,39 @@ module Audiobook
       progress = Utils::ProgressCounter.new(total: jobs.size, status: @stl) do |completed, total|
         "#{jobs[completed - 1][:status]}, audio #{completed}/#{total}"
       end
-      TTS.synthesize_batch(items: jobs, on_batch: progress.batch_callback, **options)
+      synthesize_speech_jobs(jobs, options, progress)
       AudioFiles.speed_all(jobs.map { |job| job[:out_path] }, speed)
+    end
+
+    def synthesize_speech_jobs(jobs, options, progress)
+      if @book.try(:translation_needed?) && !@book.translated
+        pipeline_speech_jobs(jobs, options, progress)
+      else
+        TTS.synthesize_batch(items: jobs, on_batch: progress.batch_callback, **options)
+      end
+    end
+
+    def pipeline_speech_jobs(jobs, options, progress)
+      target = @book.speech_language
+      Pipeline.each(
+        jobs, tasks: 2, batch: TTS::BATCH_SIZE,
+        perform: ->(job) { translate_speech_job(job, target) }
+      ) do |batch|
+        TTS.synthesize_batch(items: batch, on_batch: progress.batch_callback, **options)
+      end
+      @book.translate!
+    end
+
+    def translate_speech_job(job, target)
+      sent = job[:sentence]
+      Book.translate_sentences([sent], from: sent.language.presence || book_language, to: target)
+      job[:text] = sent.spoken_text
+      job[:lang] = sent.language
+      job
+    end
+
+    def batch_synthesize_pages(pages, dir, speech_options)
+      process_speech_jobs(pages, dir, speech_options)
     end
 
     def audio_speed
@@ -215,6 +256,8 @@ module Audiobook
     end
 
     def source_voice_reference_text
+      return if @book.try(:translation_needed?) && !@book.translated
+
       @book.pages.flat_map(&:all_sentences).filter_map do |sentence|
         text = sentence.text.to_s.strip
         words = text.split

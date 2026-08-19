@@ -21,7 +21,7 @@ RSpec.describe Audiobook::Runner do
 
   it 'propagates page synthesis failures instead of encoding a silent audiobook' do
     page = instance_double(Audiobook::Page, items: [], all_sentences: [])
-    book = instance_double(Audiobook::Book, metadata: {}, pages: [page])
+    book = instance_double(Audiobook::Book, metadata: {}, pages: [page], translation_needed?: false)
     runner = described_class.new(book)
 
     allow(Language).to receive(:voice_reference_text).with('en').and_return(described_class::VOICE_REFERENCE_TEXT)
@@ -35,5 +35,52 @@ RSpec.describe Audiobook::Runner do
     expect(runner).not_to receive(:create_silent_wav)
 
     expect { runner.process_to_audio('/tmp/audiobook.opus') }.to raise_error('page TTS failed')
+  end
+
+  it 'sets the speech language before pipelining translation into synthesis' do
+    book = instance_double(Audiobook::Book, metadata: {}, pages: [], translation_needed?: true, speech_language: 'pt')
+    runner = described_class.new(book)
+
+    runner.send(:apply_translation!)
+
+    expect(runner.instance_variable_get(:@lang)).to eq('pt')
+  end
+
+  it 'pipelines sentence translation into batch synthesis' do
+    data = SymMash.new(
+      metadata: {page_count: 1, language: 'en'},
+      opts:     {includeall: true},
+      content:  {
+        lines: [
+          {text: 'Hello world.', font_size: 12, page: 1},
+          {text: 'Another sentence.', font_size: 12, page: 1},
+        ],
+        images: [],
+      },
+    )
+    allow(Translator).to receive(:translate) do |text, from:, to:|
+      mapped = Array(text).map { |line| "PT(#{from}->#{to}):#{line}" }
+      text.is_a?(Array) ? mapped : mapped.first
+    end
+    book = Audiobook::Book.new(data: data, opts: SymMash.new(lang: 'pt', includeall: true), translate: false)
+    runner = described_class.new(book, nil, book.instance_variable_get(:@opts))
+    synthesized = []
+    allow(TTS).to receive(:synthesize_batch) do |items:, **|
+      synthesized.concat(items.map { |job| job[:text] })
+      items.each { |job| File.write(job[:out_path], 'wav') }
+      items.map { |job| job[:out_path] }
+    end
+    allow(Audiobook::AudioFiles).to receive(:speed_all)
+
+    Dir.mktmpdir do |dir|
+      runner.send(:apply_translation!)
+      pages = book.pages
+      runner.send(:prepare_pages, pages, dir, [0], 1, 1, {})
+      runner.send(:process_speech_jobs, pages, dir, {})
+    end
+
+    expect(synthesized).to contain_exactly('PT(en->pt):Hello world.', 'PT(en->pt):Another sentence.')
+    expect(book.translated).to be(true)
+    expect(book.metadata.language).to eq('pt')
   end
 end

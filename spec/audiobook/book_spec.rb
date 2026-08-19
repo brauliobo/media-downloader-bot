@@ -33,7 +33,12 @@ RSpec.describe Audiobook::Book do
       )
     end
 
-    before { allow(Translator).to receive(:translate) { |text, from:, to:| "PT(#{from}->#{to}):#{text}" } }
+    before do
+      allow(Translator).to receive(:translate) do |text, from:, to:|
+        mapped = Array(text).map { |line| "PT(#{from}->#{to}):#{line}" }
+        text.is_a?(Array) ? mapped : mapped.first
+      end
+    end
 
     it 'translates every sentence to lang=' do
       book = described_class.new(data: english_book_data, opts: SymMash.new(lang: 'pt', includeall: true))
@@ -43,6 +48,10 @@ RSpec.describe Audiobook::Book do
       )
       expect(book.metadata.language).to eq('pt')
       expect(book.translated).to be(true)
+      expect(Translator).to have_received(:translate).with(
+        contain_exactly('Chapter One', 'Hello world.', 'Another sentence.'),
+        from: 'en', to: 'pt'
+      )
     end
 
     it 'translates every YAML sentence to slang=' do

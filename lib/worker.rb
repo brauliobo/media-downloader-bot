@@ -202,7 +202,7 @@ class Worker
   private
 
   def peach_threads
-    Bot::MsgHelpers.from_admin?(msg) ? (opts.threads || ENV['THREADS'] || 10) : 1
+    Enumerable.admin_threads(Bot::MsgHelpers.from_admin?(msg), opts.threads)
   end
 
   def process_lines(lines, ctx)

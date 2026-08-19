@@ -25,19 +25,18 @@ module Audiobook
     end
 
     opts ||= SymMash.new
-    book = Audiobook::Book.from_input(input_path, opts: opts, stl: stl)
-
+    book = Audiobook::Book.from_input(input_path, opts: opts, stl: stl, translate: opts.onlyyml)
     yaml_path = SourceFormats.yaml_path(input_path, out_audio)
-
-    book.write(yaml_path)
-    translation_pdf = write_translation_pdf(book, input_path, yaml_path, stl)
-
-    # If Book came from Kindle capture, it may carry the compiled PDF path in metadata
     pdf_path = book.metadata['kindle_pdf'] || book.metadata[:kindle_pdf]
-    return SymMash.new(yaml: yaml_path, pdf: pdf_path, translation_pdf: translation_pdf, book: book) if opts.onlyyml
+
+    if opts.onlyyml
+      book.write(yaml_path)
+      return SymMash.new(yaml: yaml_path, pdf: pdf_path, translation_pdf: write_translation_pdf(book, input_path, yaml_path, stl), book: book)
+    end
 
     final_audio = Runner.new(book, stl, opts).process_to_audio(out_audio)
-    SymMash.new(yaml: yaml_path, audio: final_audio, pdf: pdf_path, translation_pdf: translation_pdf, book: book)
+    book.write(yaml_path)
+    SymMash.new(yaml: yaml_path, audio: final_audio, pdf: pdf_path, translation_pdf: write_translation_pdf(book, input_path, yaml_path, stl), book: book)
   end
 
   # Unified helper to generate audiobook and return ready-to-upload entries

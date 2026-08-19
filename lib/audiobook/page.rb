@@ -143,7 +143,7 @@ module Audiobook
       return if File.exist?(out_path)
 
       text = sentence.spoken_text
-      { text: text, lang: sentence.language || lang, out_path: out_path, status: status } unless text.empty?
+      { text: text, lang: sentence.language || lang, out_path: out_path, status: status, sentence: sentence } unless text.empty?
     end
 
     # Extract all sentences from all items for translation

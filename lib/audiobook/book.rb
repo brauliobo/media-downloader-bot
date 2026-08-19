@@ -43,13 +43,13 @@ module Audiobook
       items
     end
 
-    def self.from_input(input_path, opts: nil, stl: nil)
-      return parse_url_kindle(input_path, opts: opts, stl: stl) if url_kindle?(input_path)
+    def self.from_input(input_path, opts: nil, stl: nil, translate: true)
+      return parse_url_kindle(input_path, opts: opts, stl: stl, translate: translate) if url_kindle?(input_path)
 
       format = SourceFormats.format_for_path(input_path)
-      return from_yaml(input_path, opts: opts, stl: stl) if format&.dig(:loader) == :yaml
+      return from_yaml(input_path, opts: opts, stl: stl, translate: translate) if format&.dig(:loader) == :yaml
 
-      new(data: parse_input(input_path, format, opts: opts, stl: stl), opts: opts, stl: stl)
+      new(data: parse_input(input_path, format, opts: opts, stl: stl), opts: opts, stl: stl, translate: translate)
     end
 
     def self.detect_language(input_path, opts: nil, stl: nil)
@@ -88,6 +88,16 @@ module Audiobook
 
     def self.speech_language(opts) = lang_code(opts&.slang) || lang_code(opts&.lang)
 
+    def self.translate_sentences(sentences, from:, to:)
+      sentences.group_by { |sent| sent.language.presence || from }.each do |source, group|
+        texts = Array(Translator.translate(group.map(&:text), from: source, to: to))
+        group.zip(texts).each do |sent, text|
+          sent.text     = text
+          sent.language = to
+        end
+      end
+    end
+
     def self.url_kindle?(input_path)
       s = input_path.to_s
       return false unless s.start_with?('http')
@@ -95,7 +105,7 @@ module Audiobook
       Audiobook::Parsers::Kindle::READ_HOSTS.include?(host)
     end
 
-    def self.parse_url_kindle(input_path, opts: nil, stl: nil)
+    def self.parse_url_kindle(input_path, opts: nil, stl: nil, translate: true)
       stl&.update 'Capturing Kindle reader via browser...'
       data = Parsers::Kindle.parse(input_path, stl: stl, opts: opts)
       pdf_path = data.content&.pdf || data.pdf
@@ -111,9 +121,9 @@ module Audiobook
         rescue => e
           STDERR.puts "[KINDLE] metadata assign failed: #{e.class}: #{e.message}"
         end
-        return new(data: parsed, opts: opts, stl: stl)
+        return new(data: parsed, opts: opts, stl: stl, translate: translate)
       end
-      new(data: data, opts: opts, stl: stl)
+      new(data: data, opts: opts, stl: stl, translate: translate)
     end
 
     def self.parse_json(json_path, stl: nil, opts: nil)
@@ -148,7 +158,7 @@ module Audiobook
       Ocr.transcribe(path, opts: opts, stl: stl)
     end
 
-    def self.from_yaml(yaml_path, opts: nil, stl: nil)
+    def self.from_yaml(yaml_path, opts: nil, stl: nil, translate: true)
       data = SymMash.new(load_yaml(yaml_path))
       # Support both new format (no metadata) and legacy format (with metadata)
       metadata = data.metadata || SymMash.new
@@ -176,7 +186,7 @@ module Audiobook
       obj.instance_variable_set(:@stl, stl)
       obj.instance_variable_set(:@lang, metadata.language || 'en')
       obj.instance_variable_set(:@pages, pages)
-      obj.send(:finish_pages!)
+      obj.send(:finish_pages!, translate: translate)
       obj
     end
 
@@ -242,7 +252,7 @@ module Audiobook
       end
     end
 
-    def initialize(data:, opts: nil, stl: nil)
+    def initialize(data:, opts: nil, stl: nil, translate: true)
       @data = data
       @metadata = @data.metadata || SymMash.new
       @opts = opts || SymMash.new
@@ -260,7 +270,7 @@ module Audiobook
         @pages = pages_from_paragraphs
       end
 
-      finish_pages!
+      finish_pages!(translate: translate)
     end
 
     # Write YAML file following class hierarchy representation
@@ -689,10 +699,10 @@ module Audiobook
       !!(@opts&.includeall || @data&.opts&.includeall)
     end
 
-    def finish_pages!
+    def finish_pages!(translate: true)
       select_pages!
       filter_repeated_page_boundaries! unless include_all?
-      translate! if translation_needed?
+      translate! if translate && translation_needed?
     end
 
     def select_pages!
@@ -895,24 +905,27 @@ module Audiobook
     end
 
 
+    public
+
     def speech_language = self.class.speech_language(@opts)
 
     def translation_needed?
       (target = speech_language) && target != @lang.to_s
     end
 
-    def translate!
-      target = speech_language
-      @stl&.update 'Translating pages'
-      @pages.each_with_index do |page, pidx|
-        page.all_sentences.each_with_index do |sent, sidx|
-          @stl&.update "Translating page #{pidx+1}/#{@pages.size} sentence #{sidx+1}"
-          sent.text     = Translator.translate(sent.text, from: sent.language.presence || @lang, to: target)
-          sent.language = target
-        end
-      end
+    def mark_translated!(target)
       @lang = @metadata.language = target
       @translated = true
+    end
+
+    def translate!
+      target = speech_language
+      pending = @pages.flat_map(&:all_sentences).reject { |sent| sent.language.to_s == target.to_s }
+      if pending.any?
+        @stl&.update 'Translating pages'
+        self.class.translate_sentences(pending, from: @lang, to: target)
+      end
+      mark_translated!(target)
     end
   end
 end

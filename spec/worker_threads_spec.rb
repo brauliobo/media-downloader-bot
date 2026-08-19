@@ -32,13 +32,13 @@ RSpec.describe Worker, 'input concurrency' do
         ENV['THREADS'] = previous
       end
 
-      it { is_expected.to eq('6') }
+      it { is_expected.to eq(6) }
     end
 
     context 'with a thread option' do
       let(:opts) { SymMash.new(threads: '4') }
 
-      it { is_expected.to eq('4') }
+      it { is_expected.to eq(4) }
     end
   end
 end
