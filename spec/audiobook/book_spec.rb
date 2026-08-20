@@ -4,7 +4,7 @@ require_relative '../../lib/audiobook/book'
 RSpec.describe Audiobook::Book do
   describe 'language options' do
     it 'uses alang as the source-language override' do
-      expect(Language).not_to receive(:detect)
+      expect(Language).not_to receive(:book_metadata)
       expect(described_class.detect_language('/does/not/exist.pdf', opts: SymMash.new(alang: 'pt'))).to eq('pt')
     end
 
@@ -34,10 +34,31 @@ RSpec.describe Audiobook::Book do
     end
 
     before do
+      allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'male')
       allow(Translator).to receive(:translate) do |text, from:, to:|
         mapped = Array(text).map { |line| "PT(#{from}->#{to}):#{line}" }
         text.is_a?(Array) ? mapped : mapped.first
       end
+    end
+
+    it 'detects title and author then translates them' do
+      allow(Language).to receive(:book_metadata).and_return(
+        'title' => 'Hello Book', 'author' => 'Jane Doe', 'gender' => 'female'
+      )
+      book = described_class.new(data: english_book_data, opts: SymMash.new(lang: 'pt', includeall: true))
+
+      expect(book.metadata.title).to eq('PT(en->pt):Hello Book')
+      expect(book.metadata.author).to eq('PT(en->pt):Jane Doe')
+      expect(book.author_gender).to eq('female')
+    end
+
+    it 'translates the book title and source filename' do
+      data = english_book_data
+      data.metadata.title = 'Hello Book'
+      book = described_class.new(data: data, opts: SymMash.new(lang: 'pt', includeall: true, source_base: 'Hello Book'))
+
+      expect(book.metadata.title).to eq('PT(en->pt):Hello Book')
+      expect(book.translated_base).to eq('PT(en->pt):Hello Book')
     end
 
     it 'translates every sentence to lang=' do

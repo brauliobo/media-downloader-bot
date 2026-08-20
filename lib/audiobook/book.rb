@@ -32,7 +32,11 @@ module Audiobook
     MAX_STRUCTURED_BYTES = ENV.fetch('MAX_STRUCTURED_DOCUMENT_BYTES', 20 * 1024 * 1024).to_i
     CHINESE_MAX_SENTENCE_CHARS = 30
 
-    attr_reader :metadata, :pages, :translated
+    attr_reader :metadata, :pages, :translated, :translated_base, :author_gender
+
+    def title    = field(:title)
+    def author   = field(:author)
+    def language = (@lang.presence || field(:language) || 'en').to_s
 
     # Alias for backward compatibility
     def items
@@ -68,7 +72,7 @@ module Audiobook
       obj.instance_variable_set(:@metadata, data.metadata || SymMash.new)
       obj.instance_variable_set(:@opts, opts || SymMash.new)
       obj.instance_variable_set(:@stl, stl)
-      obj.send(:detect_language_from_first_pages)
+      obj.send(:detect_publication!)
       obj.metadata.language || 'en'
     end
 
@@ -130,16 +134,12 @@ module Audiobook
       SymMash.new(JSON.parse(read_structured(json_path)))
     end
 
-    def self.parse_pdf(pdf_path, stl: nil, opts: nil)
-      stl&.update 'Analyzing document and extracting text...'
-      data = Parsers::Pdf.parse(pdf_path, stl: stl, opts: opts)
-      stl&.update 'Structuring content and processing images...'
-      data
-    end
+    def self.parse_pdf(pdf_path, stl: nil, opts: nil)   = parse_document(Parsers::Pdf, pdf_path, stl: stl, opts: opts)
+    def self.parse_epub(epub_path, stl: nil, opts: nil) = parse_document(Parsers::Epub, epub_path, stl: stl, opts: opts)
 
-    def self.parse_epub(epub_path, stl: nil, opts: nil)
+    def self.parse_document(parser, path, stl:, opts:)
       stl&.update 'Analyzing document and extracting text...'
-      data = Parsers::Epub.parse(epub_path, stl: stl, opts: opts)
+      data = parser.parse(path, stl: stl, opts: opts)
       stl&.update 'Structuring content and processing images...'
       data
     end
@@ -259,8 +259,7 @@ module Audiobook
       @stl = stl
       @metadata.language ||= self.class.source_language(@opts)
       
-      # Detect language from the first content pages before TTS options are chosen.
-      detect_language_from_first_pages
+      detect_publication!
       @lang = @metadata.language || 'en'
 
       # Handle new line-based format or legacy paragraph format
@@ -275,8 +274,7 @@ module Audiobook
 
     # Write YAML file following class hierarchy representation
     def write(yaml_path)
-      lang_code = @metadata.language || @lang || 'en'
-      book_hash = { 'language' => lang_code, 'pages' => pages.map(&:to_h) }
+      book_hash = { 'language' => language, 'pages' => pages.map(&:to_h) }
       book_hash = deep_to_h(book_hash)
       begin
         File.write(yaml_path, YAML.dump(book_hash, line_width: -1))
@@ -326,22 +324,22 @@ module Audiobook
 
     private
 
-    def detect_language_from_first_pages
-      return if @metadata.language
+    def detect_publication!
+      return if @publication_detected
 
-      @stl&.update 'Detecting language from content'
-      sample_paras = extract_first_5_pages_text
-      return if sample_paras.empty?
+      @publication_detected = true
+      sample = publication_sample
+      return if sample.blank?
 
-      lang = Language.detect(sample_paras)
-      @metadata.language = lang
-      @stl&.update "Detected language: #{lang}"
-    rescue => e
-      @stl&.error 'Language detection failed', exception: e
-      raise
+      @stl&.update 'Detecting book metadata'
+      info = Language.book_metadata(Language.book_input(metadata, sample))
+      @metadata.title    = info['title']  if info['title'].present?
+      @metadata.author   = info['author'] if info['author'].present?
+      @metadata.language = info['lang']   if field(:language).blank? && info['lang'].to_s.match?(/\A[a-z]{2}\z/)
+      @author_gender     = info['gender'].presence || 'male'
     end
 
-    def extract_first_5_pages_text
+    def extract_sample_text
       ordered_sample = extract_ordered_content_sample
       return ordered_sample if ordered_sample.any?
 
@@ -700,6 +698,7 @@ module Audiobook
     def finish_pages!(translate: true)
       select_pages!
       filter_repeated_page_boundaries! unless include_all?
+      detect_publication!
       translate! if translate && translation_needed?
     end
 
@@ -922,7 +921,38 @@ module Audiobook
         @stl&.update 'Translating pages'
         self.class.translate_sentences(pending, from: @lang, to: target)
       end
+      translate_names!(from: @lang, to: target)
       mark_translated!(target)
     end
+
+    def translate_names!(from:, to:)
+      names = [title, author, @opts&.source_base.presence].compact.uniq
+      return if names.empty?
+
+      @stl&.update 'Translating title'
+      names.zip(Array(Translator.translate(names, from: from, to: to))).each do |orig, text|
+        apply_translated_name(orig, text)
+      end
+    end
+
+    def apply_translated_name(orig, text)
+      text = text.to_s.gsub(/[\/\\\0]/, ' ').gsub(/\s+/, ' ').strip.presence || orig
+      @metadata.title    = text if orig == title
+      @metadata.author   = text if orig == author
+      @translated_base   = text if @opts&.source_base.to_s == orig
+    end
+
+    def publication_sample
+      if instance_variable_defined?(:@pages) && @pages
+        pages.first(LANGUAGE_SAMPLE_PAGES).flat_map(&:all_sentences).map(&:text).join("\n")
+      else
+        extract_sample_text.map { |para| para[:text] || para.text }.join("\n")
+      end
+    end
+
+    def field(key)
+      metadata[key].presence || metadata[key.to_s].presence
+    end
+    private :field
   end
 end

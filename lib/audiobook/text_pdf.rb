@@ -51,8 +51,8 @@ module Audiobook
     end
 
     def build_html
-      title = @book.metadata['title'].presence || @book.metadata[:title].presence
-      lang  = @book.metadata['language'] || @book.metadata[:language] || 'en'
+      title = @book.title
+      lang  = @book.language
       html_header(title, lang) + html_body + html_footer
     end
 

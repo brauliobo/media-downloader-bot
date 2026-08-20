@@ -15,9 +15,9 @@ RSpec.describe 'Audiobook OCR language detection' do
   it 'detects language from sampled image OCR text' do
     allow(Audiobook::OcrText).to receive(:transcribe).and_return('Texto em portugues da pagina escaneada.')
 
-    allow(Language).to receive(:detect) do |paragraphs|
-      expect(paragraphs.map(&:text).join("\n")).to include('portugues')
-      'pt'
+    allow(Language).to receive(:book_metadata) do |input|
+      expect(input).to include('portugues')
+      { 'lang' => 'pt', 'title' => '', 'author' => '', 'gender' => 'male' }
     end
 
     book = Audiobook::Book.new(data: image_book_data(1))
@@ -34,12 +34,11 @@ RSpec.describe 'Audiobook OCR language detection' do
       "Texto portugues #{path}"
     end
 
-    allow(Language).to receive(:detect) do |paragraphs|
-      sample = paragraphs.map(&:text).join("\n")
-      expect(sample).to include('book.pdf#page=1')
-      expect(sample).to include('book.pdf#page=2')
-      expect(sample).not_to include('book.pdf#page=3')
-      'pt'
+    allow(Language).to receive(:book_metadata) do |input|
+      expect(input).to include('book.pdf#page=1')
+      expect(input).to include('book.pdf#page=2')
+      expect(input).not_to include('book.pdf#page=3')
+      { 'lang' => 'pt', 'title' => '', 'author' => '', 'gender' => 'male' }
     end
 
     Audiobook::Book.new(data: image_book_data(1, 2, 3))
@@ -59,7 +58,7 @@ RSpec.describe 'Audiobook OCR language detection' do
       seen_opts << opts
       'Texto portugues'
     end
-    allow(Language).to receive(:detect).and_return('pt')
+    allow(Language).to receive(:book_metadata).and_return('lang' => 'pt', 'title' => '', 'author' => '', 'gender' => 'male')
 
     Audiobook::Book.new(data: image_book_data(1, 2), opts: opts)
 
@@ -82,7 +81,7 @@ RSpec.describe 'Audiobook OCR language detection' do
   it 'uses the book cover as the audio thumbnail' do
     book = instance_double(Audiobook::Book)
     allow(book).to receive(:thumb).with(dir: 'tmp', base: 'book').and_return('/tmp/book-cover.jpg')
-    allow(book).to receive(:metadata).and_return(SymMash.new(title: 'Book Title'))
+    allow(book).to receive(:metadata).and_return(SymMash.new(title: 'Book Title', author: 'Jane Austen'))
     allow(Audiobook).to receive(:base_from_source).and_return('book')
     allow(Audiobook).to receive(:generate).and_return(
       SymMash.new(yaml: 'book.yml', audio: 'book.m4a', book: book)
@@ -95,6 +94,8 @@ RSpec.describe 'Audiobook OCR language detection' do
     expect(uploads.last.mime).to eq('audio/aac')
     expect(uploads.last.fn_out).to eq('book.m4a')
     expect(uploads.map { |upload| upload.info.title }.uniq).to eq(['Book Title'])
+    expect(uploads.last.info.uploader).to eq('Jane Austen')
+    expect(uploads.first.info.uploader).to eq('')
   end
 
   it 'uploads a translation PDF with the yaml and audiobook' do
@@ -114,6 +115,35 @@ RSpec.describe 'Audiobook OCR language detection' do
       ['book.pt.pdf', 'application/pdf'],
       ['book.m4a', 'audio/aac'],
     ])
+  end
+
+  it 'renames uploads to the translated filename' do
+    Dir.mktmpdir do |dir|
+      yaml  = File.join(dir, 'Adios.yml')
+      pdf   = File.join(dir, 'Adios.pt.pdf')
+      audio = File.join(dir, 'Adios.m4a')
+      File.write(yaml, 'x')
+      File.write(pdf, 'x')
+      File.write(audio, 'x')
+      book = Audiobook::Book.allocate
+      book.instance_variable_set(:@translated, true)
+      book.instance_variable_set(:@translated_base, 'Adeus a inflamacao')
+      book.instance_variable_set(:@metadata, SymMash.new(title: 'Adeus a inflamacao', language: 'pt'))
+      allow(book).to receive(:thumb).with(dir: dir, base: 'Adios').and_return(nil)
+      allow(Audiobook).to receive(:base_from_source).and_return('Adios')
+      allow(Audiobook).to receive(:generate).and_return(
+        SymMash.new(yaml: yaml, audio: audio, translation_pdf: pdf, book: book)
+      )
+      allow(Prober).to receive(:for)
+
+      uploads = Audiobook.generate_uploads('Adios.pdf', dir: dir, stl: nil)
+
+      expect(uploads.map { |upload| [File.basename(upload.fn_out), upload.info.title] }).to eq([
+        ['Adeus a inflamacao.yml', 'Adeus a inflamacao'],
+        ['Adeus a inflamacao.pt.pdf', 'Adeus a inflamacao'],
+        ['Adeus a inflamacao.m4a', 'Adeus a inflamacao'],
+      ])
+    end
   end
 
   it 'writes a translation PDF next to the yaml for a translated PDF' do

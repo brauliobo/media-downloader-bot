@@ -25,18 +25,16 @@ module Audiobook
     end
 
     opts ||= SymMash.new
+    opts.source_base ||= base_from_source(input_path)
     book = Audiobook::Book.from_input(input_path, opts: opts, stl: stl, translate: opts.onlyyml)
     yaml_path = SourceFormats.yaml_path(input_path, out_audio)
-    pdf_path = book.metadata['kindle_pdf'] || book.metadata[:kindle_pdf]
-
-    if opts.onlyyml
-      book.write(yaml_path)
-      return SymMash.new(yaml: yaml_path, pdf: pdf_path, translation_pdf: write_translation_pdf(book, input_path, yaml_path, stl), book: book)
-    end
-
-    final_audio = Runner.new(book, stl, opts).process_to_audio(out_audio)
+    audio = Runner.new(book, stl, opts).process_to_audio(out_audio) unless opts.onlyyml
     book.write(yaml_path)
-    SymMash.new(yaml: yaml_path, audio: final_audio, pdf: pdf_path, translation_pdf: write_translation_pdf(book, input_path, yaml_path, stl), book: book)
+    SymMash.new(
+      yaml: yaml_path, audio: audio, book: book,
+      pdf: book.metadata['kindle_pdf'] || book.metadata[:kindle_pdf],
+      translation_pdf: write_translation_pdf(book, input_path, yaml_path, stl)
+    )
   end
 
   # Unified helper to generate audiobook and return ready-to-upload entries
@@ -45,7 +43,8 @@ module Audiobook
     audio_format = Zipper::Types.audio.aac
     audio_out = File.join(dir, "#{base}.#{audio_format.ext}")
     result = generate(source, audio_out, stl: stl, opts: opts)
-    title   = upload_title(result.book, base)
+    title  = upload_title(result.book, base)
+    result = relocate_translated_outputs(result, title) if result.book.is_a?(Book) && result.book.translated
     uploads = [document_upload(result.yaml, title, 'application/x-yaml')]
     return uploads if opts.onlyyml
 
@@ -57,23 +56,14 @@ module Audiobook
   end
 
   def self.document_upload(path, title, mime)
-    SymMash.new(
-      fn_out: path,
-      type:   SymMash.new(name: :document),
-      info:   SymMash.new(title: title, uploader: ''),
-      mime:   mime,
-      opts:   SymMash.new(format: SymMash.new(mime: mime))
-    )
+    upload(path, type: :document, title: title, mime: mime)
   end
 
   def self.audio_upload(result, dir, base, audio_format, title: base)
-    upload = SymMash.new(
-      fn_out: result.audio,
-      type:   SymMash.new(name: :audio),
-      info:   SymMash.new(title: title, uploader: ''),
-      thumb:  result.book.thumb(dir: dir, base: base),
-      mime:   audio_format.mime,
-      opts:   SymMash.new(format: audio_format)
+    upload = upload(
+      result.audio, type: :audio, title: title, mime: audio_format.mime,
+      uploader: upload_author(result.book).to_s, format: audio_format,
+      thumb: result.book.thumb(dir: dir, base: base)
     )
     upload.oprobe = Prober.for(result.audio)
     upload
@@ -82,16 +72,73 @@ module Audiobook
     upload
   end
 
+  def self.upload(path, type:, title:, mime:, uploader: '', format: nil, **extra)
+    SymMash.new(
+      fn_out: path,
+      type:   SymMash.new(name: type),
+      info:   SymMash.new(title: title, uploader: uploader),
+      mime:   mime,
+      opts:   SymMash.new(format: format || SymMash.new(mime: mime)),
+      **extra
+    )
+  end
+
   def self.write_translation_pdf(book, input_path, yaml_path, stl)
     return unless book.translated
     return unless SourceFormats.format_for_path(input_path)&.[](:parser) == :parse_pdf
 
-    lang = book.metadata['language'] || book.metadata[:language]
-    TextPdf.generate(book, yaml_path.sub(/\.yml\z/i, ".#{lang}.pdf"), stl: stl, source_pdf: input_path)
+    TextPdf.generate(book, yaml_path.sub(/\.yml\z/i, ".#{book_language(book)}.pdf"), stl: stl, source_pdf: input_path)
+  end
+
+  def self.processing_status(*parts, ocr: false)
+    line = "Processing #{parts.compact.join(', ')}"
+    line += " (OCR)" if ocr
+    line
   end
 
   def self.upload_title(book, fallback)
-    book&.metadata&.[](:title).presence || book&.metadata&.[]('title').presence || fallback
+    return fallback unless book
+    return book.title.presence || book.translated_base.presence || fallback if book.is_a?(Book)
+
+    meta(book, :title) || fallback
+  end
+
+  def self.upload_author(book)
+    (book.author if book.is_a?(Book)).presence || meta(book, :author)
+  end
+
+  def self.meta(book, key)
+    md = book.metadata if book.respond_to?(:metadata)
+    md[key].presence || md[key.to_s].presence if md
+  end
+
+  def self.book_language(book)
+    return book.language if book.is_a?(Book)
+
+    meta(book, :language) || 'en'
+  end
+
+  def self.relocate_translated_outputs(result, title)
+    base = safe_filename(title)
+    return result unless base.present?
+
+    lang = book_language(result.book)
+    result.yaml            = relocate_file(result.yaml, "#{base}.yml")
+    result.translation_pdf = relocate_file(result.translation_pdf, "#{base}.#{lang}.pdf") if result.translation_pdf
+    result.audio           = relocate_file(result.audio, "#{base}#{File.extname(result.audio.to_s)}") if result.audio
+    result
+  end
+
+  def self.relocate_file(path, name)
+    return path unless path && File.file?(path)
+
+    dest = File.join(File.dirname(path), name)
+    File.rename(path, dest) unless dest == path
+    dest
+  end
+
+  def self.safe_filename(name)
+    name.to_s.gsub(/[\/\\\0]/, ' ').gsub(/\s+/, ' ').strip.sub(/\.\z/, '').presence
   end
 
   def self.cleanup_kindle_capture(pdf_path)

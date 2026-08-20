@@ -1,6 +1,10 @@
 require 'spec_helper'
 
 RSpec.describe Audiobook::TextPdf do
+  before do
+    allow(Language).to receive(:book_metadata).and_return('lang' => 'pt', 'title' => '', 'author' => '', 'gender' => 'male')
+  end
+
   def fixture_path(name)
     File.expand_path("../fixtures/#{name}", __dir__)
   end

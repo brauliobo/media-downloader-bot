@@ -97,14 +97,20 @@ module Audiobook
       Array(texts).filter_map { |text| build(text) }
     end
 
+    def self.from_text(text)
+      build_all(TextHelpers.normalize_text(text).gsub(/([.!?…]\"?)\s+(?=\p{Lu})/u, "\\1\n").split(/\n+/))
+    end
+
+    def self.wrap(value)
+      value.is_a?(Hash) ? SymMash.new(value) : value
+    end
+
     def self.text_value(value)
-      value = SymMash.new(value) if value.is_a?(Hash)
-      value.respond_to?(:text) ? value.text : value
+      wrap(value).then { |item| item.respond_to?(:text) ? item.text : item }
     end
 
     def self.language_value(value)
-      value = SymMash.new(value) if value.is_a?(Hash)
-      value.language if value.respond_to?(:language)
+      wrap(value).then { |item| item.language if item.respond_to?(:language) }
     end
   end
 end

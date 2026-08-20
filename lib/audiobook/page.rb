@@ -20,38 +20,20 @@ module Audiobook
       { 'page' => { 'number' => number, 'items' => items.map(&:to_h) } }
     end
 
-    # Generate combined wav for all items on this page
-    def to_wav(dir, idx, lang: 'en', stl: nil, para_context: nil, page_context: nil, book_metadata: {}, tts_options: {})
+    def to_wav(dir, idx, **kwargs)
       return nil if items.empty?
 
-      context = prepare_speech_items(
-        dir, idx,
-        lang: lang,
-        stl: stl,
-        para_context: para_context,
-        page_context: page_context,
-        book_metadata: book_metadata,
-        tts_options: tts_options
-      )
-      page_idx = context[:page_idx]
-      page_total = context[:page_total]
-      is_ocr_book = context[:is_ocr_book]
-
+      context = prepare_speech_items(dir, idx, **kwargs)
       wavs = items.each_with_index.flat_map do |item, iidx|
         if item.is_a?(Audiobook::Paragraph)
           [item.to_wav]
         else
-          operation = item.class.name.split('::').last
-          status_parts = ["page #{page_idx}/#{page_total}", "item #{iidx+1}/#{items.size}", operation]
-          status_line = "Processing #{status_parts.join(', ')}"
-          status_line << " (OCR)" if is_ocr_book
-          stl&.update status_line
+          kwargs[:stl]&.update item_status(item, iidx, context[:page_idx], context[:page_total], ocr: context[:is_ocr_book])
           wav = item.to_wav(
-            dir,
-            "#{idx}_#{iidx}",
-            lang: item.language || lang,
-            stl: stl,
-            tts_options: tts_options
+            dir, "#{idx}_#{iidx}",
+            lang: item.language || kwargs[:lang] || 'en',
+            stl: kwargs[:stl],
+            tts_options: kwargs[:tts_options] || {}
           )
           heading_pause = item.pause_file(dir) if item.respond_to?(:pause_file)
           [heading_pause, wav].compact
@@ -108,35 +90,34 @@ module Audiobook
         if item.is_a?(Audiobook::Paragraph)
           paragraph_jobs(item, lang)
         elsif item.respond_to?(:spoken_text)
-          parts  = ["page #{page_idx}/#{page_total}", "item #{iidx + 1}/#{items.size}", item.class.name.demodulize]
-          status = "Processing #{parts.join(', ')}"
-          sentence_job(item, File.join(dir, "#{idx}_#{iidx}.wav"), lang, status)
+          sentence_job(item, File.join(dir, "#{idx}_#{iidx}.wav"), lang, item_status(item, iidx, page_idx, page_total))
         end
       end.compact
     end
 
     def paragraph_jobs(paragraph, lang)
       paragraph.sentences.each_with_index.flat_map do |sentence, sidx|
-        context = [
-          "page #{paragraph.page_idx}/#{paragraph.page_total}",
-          "item #{paragraph.item_idx}/#{paragraph.item_total}",
-          "paragraph #{paragraph.para_idx}/#{paragraph.para_total}",
-        ]
-        status = "Processing #{[*context, "sentence #{sidx + 1}/#{paragraph.sentences.size}"].join(', ')}"
-        jobs = [sentence_job(sentence, File.join(paragraph.dir, "#{paragraph.idx}_#{sidx}.wav"), lang, status)]
+        jobs = [sentence_job(sentence, File.join(paragraph.dir, "#{paragraph.idx}_#{sidx}.wav"), lang,
+                             paragraph.progress_status("sentence #{sidx + 1}/#{paragraph.sentences.size}", ocr: false))]
         sentence.references.each_with_index do |reference, ridx|
           reference.sentences.each_with_index do |referenced, idx|
-            status = "Processing #{[*context, "reference #{reference.id}", "sentence #{idx + 1}/#{reference.sentences.size}"].join(', ')}"
             jobs << sentence_job(
               referenced,
               File.join(paragraph.dir, "#{paragraph.idx}_#{sidx}_r#{ridx}_#{idx}.wav"),
               lang,
-              status
+              paragraph.progress_status("reference #{reference.id}", "sentence #{idx + 1}/#{reference.sentences.size}", ocr: false)
             )
           end
         end
         jobs.compact
       end
+    end
+
+    def item_status(item, iidx, page_idx, page_total, ocr: false)
+      Audiobook.processing_status(
+        "page #{page_idx}/#{page_total}", "item #{iidx + 1}/#{items.size}", item.class.name.demodulize,
+        ocr: ocr
+      )
     end
 
     def sentence_job(sentence, out_path, lang, status)

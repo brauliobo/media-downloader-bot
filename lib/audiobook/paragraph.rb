@@ -34,24 +34,7 @@ module Audiobook
       wavs = sentences.each_with_index.flat_map do |sent, sidx|
         next [] unless sent.speakable?
 
-        status_parts = []
-        
-        page_str = "page "
-        if page_idx && page_total
-          page_str << "#{page_idx}/#{page_total}"
-        elsif page_num
-          page_str << page_num.to_s
-        end
-        status_parts << page_str
-
-        status_parts << "item #{item_idx}/#{item_total}" if item_idx && item_total
-        status_parts << "paragraph #{para_idx}/#{para_total}" if para_idx && para_total
-        status_parts << "sentence #{sidx+1}/#{sentences.size}"
-        
-        status_line = "Processing #{status_parts.join(', ')}"
-        status_line << " (OCR)" if defined?(@is_ocr) && @is_ocr
-        
-        stl&.update status_line
+        stl&.update progress_status("sentence #{sidx + 1}/#{sentences.size}")
         main_wav = sent.to_wav(
           dir,
           "#{idx}_#{sidx}",
@@ -89,17 +72,25 @@ module Audiobook
       Detector.discover_from_lines(lines, max_sentence_chars: max_sentence_chars)
     end
 
-    # Legacy discover for text strings (EPUB, etc)
+    def progress_parts(*extra)
+      parts = []
+      parts << (page_idx && page_total ? "page #{page_idx}/#{page_total}" : page_num ? "page #{page_num}" : "page ")
+      parts << "item #{item_idx}/#{item_total}" if item_idx && item_total
+      parts << "paragraph #{para_idx}/#{para_total}" if para_idx && para_total
+      parts.concat(extra)
+    end
+
+    def progress_status(*extra, ocr: is_ocr)
+      Audiobook.processing_status(*progress_parts(*extra), ocr: ocr)
+    end
+
     def self.discover(raw_paragraphs)
-      raw_paragraphs.map do |para_text|
-        normalized = TextHelpers.normalize_text(para_text)
-        next if normalized.empty?
-        
-        sentences = normalized.gsub(/([.!?…]\"?)\s+(?=\p{Lu})/u, "\\1\n").split(/\n+/)
-          .then { |parts| Sentence.build_all(parts) }
-        
-        Factory.heading_like?(sentences.first&.text) && sentences.size == 1 ? Heading.new(sentences.first.text) : new(sentences)
-      end.compact.reject { |item| item.is_a?(Paragraph) && item.empty? }
+      raw_paragraphs.filter_map do |para_text|
+        sentences = Sentence.from_text(para_text)
+        next if sentences.empty?
+
+        Factory.heading_like?(sentences.first.text) && sentences.size == 1 ? Heading.new(sentences.first.text) : new(sentences)
+      end.reject { |item| item.is_a?(Paragraph) && item.empty? }
     end
 
   end

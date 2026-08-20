@@ -13,7 +13,6 @@ module Audiobook
     VOICE_REFERENCE_TEXT  = Language::REF_FALLBACK
     VOICE_REFERENCE_WORDS = 12..24
     VOICE_REFERENCE_MAX_CHARS = 240
-    AUTHOR_SAMPLE_PAGES   = 3
 
     def initialize(book, stl = nil, opts = nil)
       @book = book
@@ -29,13 +28,8 @@ module Audiobook
       @stl&.update "Generating audio"
       final_audio = nil
       Dir.mktmpdir do |dir|
-        # Precompute per-page paragraph offsets to keep numbering while parallelizing pages
-        para_counts  = pages.map { |p| p.items.count { |i| i.is_a?(Audiobook::Paragraph) } }
-        total_paras  = para_counts.sum
-        para_offsets = []
-        run = 0
-        para_counts.each { |c| para_offsets << run; run += c }
-
+        para_offsets = paragraph_offsets(pages)
+        total_paras  = para_offsets.last.to_i + pages.last.items.count { |item| item.is_a?(Audiobook::Paragraph) }
         wavs = Array.new(pages.size)
         total_pages = pages.size
         apply_translation!
@@ -50,14 +44,7 @@ module Audiobook
         errors = Queue.new
         pages.each.with_index.peach do |page, idx|
           begin
-            wavs[idx] = page.to_wav(
-              dir, format('%04d', idx + 1),
-              lang: @lang, stl: @stl,
-              para_context: { current: para_offsets[idx], total: total_paras },
-              page_context: { current: idx + 1, total: total_pages },
-              book_metadata: @book.metadata,
-              tts_options: speech_options
-            )
+            wavs[idx] = page.to_wav(dir, page_id(idx), **speech_kwargs(idx, para_offsets, total_paras, total_pages, speech_options))
           rescue => error
             errors << error
           end
@@ -151,11 +138,11 @@ module Audiobook
         }
         reference_options[:on_status] = @stl.method(:update) if @stl
         reference = ::VoiceReference.from_url(**reference_options)
-        return options.merge(speaker_wav: ref_path, ref_text: reference.text)
+        return with_speaker(options, ref_path, reference.text)
       end
 
       if @opts&.speaker_wav.present?
-        return options.merge(speaker_wav: File.expand_path(@opts.speaker_wav), ref_text: @opts.ref_text.to_s.strip)
+        return with_speaker(options, File.expand_path(@opts.speaker_wav), @opts.ref_text.to_s.strip)
       end
 
       options[:instruct] ||= detected_voice_instruct
@@ -170,21 +157,36 @@ module Audiobook
         )
       end
 
-      options.merge(speaker_wav: ref_path, ref_text: voice_reference_text)
+      with_speaker(options, ref_path, voice_reference_text)
+    end
+
+    def with_speaker(options, wav, text)
+      options.merge(speaker_wav: wav, ref_text: text)
+    end
+
+    def page_id(idx) = format('%04d', idx + 1)
+
+    def paragraph_offsets(pages)
+      offset = 0
+      pages.map do |page|
+        offset.tap { offset += page.items.count { |item| item.is_a?(Audiobook::Paragraph) } }
+      end
     end
 
     def prepare_pages(pages, dir, para_offsets, total_paras, total_pages, speech_options)
       pages.each.with_index do |page, idx|
-        page.prepare_speech_items(
-          dir, format('%04d', idx + 1),
-          lang: @lang,
-          stl: @stl,
-          para_context: { current: para_offsets[idx], total: total_paras },
-          page_context: { current: idx + 1, total: total_pages },
-          book_metadata: @book.metadata,
-          tts_options: speech_options
-        )
+        page.prepare_speech_items(dir, page_id(idx), **speech_kwargs(idx, para_offsets, total_paras, total_pages, speech_options))
       end
+    end
+
+    def speech_kwargs(idx, para_offsets, total_paras, total_pages, speech_options)
+      {
+        lang: @lang, stl: @stl,
+        para_context: { current: para_offsets[idx], total: total_paras },
+        page_context: { current: idx + 1, total: total_pages },
+        book_metadata: @book.metadata,
+        tts_options: speech_options,
+      }
     end
 
     def apply_translation!
@@ -193,7 +195,7 @@ module Audiobook
 
     def process_speech_jobs(pages, dir, speech_options, lang = @lang)
       jobs = pages.each_with_index.flat_map do |page, idx|
-        page.speech_jobs(dir, format('%04d', idx + 1), lang)
+        page.speech_jobs(dir, page_id(idx), lang)
       end
       return if jobs.empty?
 
@@ -232,10 +234,6 @@ module Audiobook
       job
     end
 
-    def batch_synthesize_pages(pages, dir, speech_options)
-      process_speech_jobs(pages, dir, speech_options)
-    end
-
     def audio_speed
       speed = @opts&.speed
       return unless speed
@@ -245,10 +243,7 @@ module Audiobook
     end
 
     def book_language
-      metadata = @book.metadata || {}
-      language = metadata['language'] || metadata[:language]
-      language ||= metadata.language if metadata.respond_to?(:language)
-      (language || 'en').to_s
+      Audiobook.book_language(@book)
     end
 
     def voice_reference_text
@@ -275,14 +270,7 @@ module Audiobook
     end
 
     def author_gender
-      @author_gender ||= Language.author_gender(author_gender_input)
-    end
-
-    def author_gender_input
-      metadata = @book.metadata || {}
-      sample = @book.pages.first(AUTHOR_SAMPLE_PAGES).flat_map(&:all_sentences)
-        .map(&:text).join("\n")
-      ["Metadata:\n#{metadata.to_h}", "First pages:\n#{sample}"].join("\n\n")
+      @author_gender ||= @book.try(:author_gender).presence || 'male'
     end
 
     def stable_voice_reference?

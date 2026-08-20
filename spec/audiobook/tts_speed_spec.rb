@@ -4,13 +4,13 @@ RSpec.describe 'Audiobook TTS speed' do
   [TTS::OmniVoice, TTS::MossTTS].each do |backend|
     it "builds and reuses stable speech options for #{backend.name}" do
       stub_const('TTS::BACKEND', backend)
-      book = instance_double(Audiobook::Book, metadata: {}, pages: [])
+      book = instance_double(Audiobook::Book, metadata: {}, pages: [], author_gender: 'female')
       runner = Audiobook::Runner.new(book, nil, SymMash.new(speed: '1.25'))
 
       Dir.mktmpdir do |dir|
         syntheses = []
         allow(Language).to receive(:voice_reference_text).with('en').and_return(Audiobook::Runner::VOICE_REFERENCE_TEXT)
-        allow(Language).to receive(:author_gender).and_return('female')
+        allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'female')
         allow(TTS).to receive(:synthesize) do |out_path:, **kwargs|
           syntheses << kwargs
           File.write(out_path, 'wav')
@@ -44,10 +44,10 @@ RSpec.describe 'Audiobook TTS speed' do
       Audiobook::Heading.new(short_text),
       Audiobook::Heading.new(source_text),
     ])
-    book = instance_double(Audiobook::Book, metadata: { 'language' => 'pt' }, pages: [page])
+    book = instance_double(Audiobook::Book, metadata: { 'language' => 'pt' }, pages: [page], author_gender: 'female')
     runner = Audiobook::Runner.new(book, nil, SymMash.new)
 
-    allow(Language).to receive(:author_gender).and_return('female')
+    allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'female')
     expect(Language).not_to receive(:voice_reference_text)
     expect(TTS).to receive(:synthesize).with(hash_including(text: source_text)) do |out_path:, **_kwargs|
       File.write(out_path, 'wav')
@@ -75,13 +75,13 @@ RSpec.describe 'Audiobook TTS speed' do
 
   it 'uses language-specific reference text for non-English audiobooks' do
     stub_const('TTS::BACKEND', TTS::OmniVoice)
-    book = instance_double(Audiobook::Book, metadata: { 'language' => 'pt' }, pages: [])
+    book = instance_double(Audiobook::Book, metadata: { 'language' => 'pt' }, pages: [], author_gender: 'male')
     runner = Audiobook::Runner.new(book, nil, SymMash.new)
 
     Dir.mktmpdir do |dir|
       captured = nil
       allow(Language).to receive(:voice_reference_text).with('pt').and_return('Esta frase fixa a voz narradora do audiolivro.')
-      allow(Language).to receive(:author_gender).and_return('male')
+      allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'male')
       allow(TTS).to receive(:synthesize) do |**kwargs|
         captured = kwargs
         File.write(kwargs[:out_path], 'wav')
@@ -105,12 +105,12 @@ RSpec.describe 'Audiobook TTS speed' do
 
   it 'uses language-specific voice reference text for English audiobooks too' do
     stub_const('TTS::BACKEND', TTS::OmniVoice)
-    book = instance_double(Audiobook::Book, metadata: { language: 'en' }, pages: [])
+    book = instance_double(Audiobook::Book, metadata: { language: 'en' }, pages: [], author_gender: 'male')
     runner = Audiobook::Runner.new(book, nil, SymMash.new)
 
     Dir.mktmpdir do |dir|
       allow(Language).to receive(:voice_reference_text).with('en').and_return('This sentence anchors the narrator voice.')
-      allow(Language).to receive(:author_gender).and_return('male')
+      allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'male')
       allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
         File.write(out_path, 'wav')
       end
@@ -121,7 +121,7 @@ RSpec.describe 'Audiobook TTS speed' do
 
   it 'uses an explicit recorded voice reference without synthesizing one' do
     stub_const('TTS::BACKEND', TTS::OmniVoice)
-    book = instance_double(Audiobook::Book, metadata: { language: 'en' }, pages: [])
+    book = instance_double(Audiobook::Book, metadata: { language: 'en' }, pages: [], author_gender: 'male')
 
     Dir.mktmpdir do |dir|
       reference = File.join(dir, 'speaker.wav')
@@ -158,7 +158,7 @@ RSpec.describe 'Audiobook TTS speed' do
         language: 'pt',
         reference_filter: :clone
       ).and_return(reference)
-      allow(Language).to receive(:author_gender).and_return('female')
+      allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'female')
       expect(TTS).not_to receive(:synthesize)
 
       options = runner.send(:tts_options, dir)
@@ -218,7 +218,7 @@ RSpec.describe 'Audiobook TTS speed' do
   end
 
   it 'ignores temperature when the backend does not support it' do
-    book = instance_double(Audiobook::Book, metadata: {}, pages: [])
+    book = instance_double(Audiobook::Book, metadata: {}, pages: [], author_gender: 'male')
     runner = Audiobook::Runner.new(book, nil, SymMash.new(temp: '0.35'))
 
     allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
@@ -227,27 +227,18 @@ RSpec.describe 'Audiobook TTS speed' do
 
     Dir.mktmpdir do |dir|
       allow(Language).to receive(:voice_reference_text).with('en').and_return(Audiobook::Runner::VOICE_REFERENCE_TEXT)
-      allow(Language).to receive(:author_gender).and_return('male')
+      allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'male')
 
       expect(runner.send(:tts_options, dir)).not_to have_key(:temperature)
     end
   end
 
-  it 'detects author gender from the first pages and omits accent' do
+  it 'uses the book author gender for narrator instructions' do
     stub_const('TTS::BACKEND', TTS::OmniVoice)
-    page = Audiobook::Page.new(1, [
-      Audiobook::Heading.new('Frankenstein'),
-      Audiobook::Paragraph.new([Audiobook::Sentence.new('By Mary Shelley.')])
-    ])
-    book = instance_double(Audiobook::Book, metadata: { 'title' => 'Frankenstein' }, pages: [page])
+    book = instance_double(Audiobook::Book, metadata: { 'title' => 'Frankenstein' }, pages: [], author_gender: 'female')
     runner = Audiobook::Runner.new(book, nil, SymMash.new)
 
     allow(Language).to receive(:voice_reference_text).with('en').and_return(Audiobook::Runner::VOICE_REFERENCE_TEXT)
-    allow(Language).to receive(:author_gender) do |input|
-      expect(input).to include('Frankenstein')
-      expect(input).to include('Mary Shelley')
-      'female'
-    end
     allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
       File.write(out_path, 'wav')
     end
@@ -262,7 +253,7 @@ RSpec.describe 'Audiobook TTS speed' do
     runner = Audiobook::Runner.new(book, nil, SymMash.new(voice: 'male,high_pitch'))
 
     allow(Language).to receive(:voice_reference_text).with('en').and_return(Audiobook::Runner::VOICE_REFERENCE_TEXT)
-    allow(Language).to receive(:author_gender).and_raise('should not detect')
+    allow(Language).to receive(:book_metadata).and_raise('should not detect')
     allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
       File.write(out_path, 'wav')
     end
@@ -385,7 +376,7 @@ RSpec.describe 'Audiobook TTS speed' do
         Audiobook::Sentence.new('Second sentence!', language: 'sa')
       ])
     ])
-    book = instance_double(Audiobook::Book, metadata: {}, pages: [page])
+    book = instance_double(Audiobook::Book, metadata: {}, pages: [page], author_gender: 'female')
     status = double
     allow(status).to receive(:update)
     runner = Audiobook::Runner.new(book, status)
@@ -410,7 +401,7 @@ RSpec.describe 'Audiobook TTS speed' do
       )
 
       runner.send(
-        :batch_synthesize_pages,
+        :process_speech_jobs,
         [page],
         dir,
         { audio_speed: 1.25, instruct: 'female narrator' }

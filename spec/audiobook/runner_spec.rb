@@ -21,11 +21,11 @@ RSpec.describe Audiobook::Runner do
 
   it 'propagates page synthesis failures instead of encoding a silent audiobook' do
     page = instance_double(Audiobook::Page, items: [], all_sentences: [])
-    book = instance_double(Audiobook::Book, metadata: {}, pages: [page], translation_needed?: false)
+    book = instance_double(Audiobook::Book, metadata: {}, pages: [page], translation_needed?: false, author_gender: 'female')
     runner = described_class.new(book)
 
     allow(Language).to receive(:voice_reference_text).with('en').and_return(described_class::VOICE_REFERENCE_TEXT)
-    allow(Language).to receive(:author_gender).and_return('female')
+    allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'female')
     allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
       File.write(out_path, 'reference')
     end
@@ -58,6 +58,7 @@ RSpec.describe Audiobook::Runner do
         images: [],
       },
     )
+    allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'male')
     allow(Translator).to receive(:translate) do |text, from:, to:|
       mapped = Array(text).map { |line| "PT(#{from}->#{to}):#{line}" }
       text.is_a?(Array) ? mapped : mapped.first

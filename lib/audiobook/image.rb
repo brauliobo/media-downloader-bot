@@ -24,25 +24,29 @@ module Audiobook
 
     private
 
-    def ocr_text
-      page_str = ""
-      if @page_context
-        page_str = "page #{@page_context[:current]}/#{@page_context[:total]}, "
-      elsif path.to_s =~ /^(.+\.pdf)#page=(\d+)$/i
-        page_str = "page #{$2}, "
-      end
+    PDF_PAGE = /\.pdf#page=(\d+)$/i
 
-      ocr_msg = path.to_s =~ /^(.+\.pdf)#page=(\d+)$/i ? "rasterizing and running OCR" : "running OCR"
-      @stl&.update "Processing #{page_str}#{ocr_msg}"
+    def ocr_text
+      @stl&.update "Processing #{ocr_page_prefix}#{ocr_action}"
       OcrText.transcribe(path, stl: @stl, opts: @opts)
     end
 
-    def build_sentences(text)
-      return if text.strip.empty?
+    def ocr_page_prefix
+      if @page_context
+        "page #{@page_context[:current]}/#{@page_context[:total]}, "
+      elsif (page = path.to_s[PDF_PAGE, 1])
+        "page #{page}, "
+      else
+        ''
+      end
+    end
 
-      normalized = TextHelpers.normalize_text(text)
-      parts = normalized.gsub(/([.!?…]\"?)\s+(?=\p{Lu})/u, "\\1\n").split(/\n+/)
-      @sentences = Sentence.build_all(parts)
+    def ocr_action
+      path.to_s.match?(PDF_PAGE) ? 'rasterizing and running OCR' : 'running OCR'
+    end
+
+    def build_sentences(text)
+      @sentences = Sentence.from_text(text)
     end
   end
 end
