@@ -35,13 +35,7 @@ module Audiobook
             if prev_line.ends_with_hyphen? && line.starts_with_lowercase?
               buf[-1] = Line.new(
                 buf.last.text.chomp('-') + line.text,
-                font_size: prev_line.font_size,
-                page_number: prev_line.page_number,
-                x_position: prev_line.x_position,
-                top_spacing: prev_line.top_spacing,
-                bottom_spacing: prev_line.bottom_spacing,
-                section_level: prev_line.section_level,
-                language: prev_line.language
+                **prev_line.style_attrs
               )
               prev_line = buf.last
               next
@@ -102,7 +96,7 @@ module Audiobook
       def self.should_break?(prev_line, line, buf, spacing_threshold:, indent_threshold:)
         # Dehyphenate check is handled before calling this
         
-        font_changed = line.font_changed?(prev_line)
+        font_changed = line.font_changed?(prev_line) || line.style_changed?(prev_line)
         page_changed = line.page_number != prev_line.page_number
         is_only_numbers = line.text.match?(/^\d+$/)
         language_changed = line.language != prev_line.language

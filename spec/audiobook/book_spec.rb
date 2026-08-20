@@ -69,10 +69,80 @@ RSpec.describe Audiobook::Book do
       )
       expect(book.metadata.language).to eq('pt')
       expect(book.translated).to be(true)
+      chapter = book.items.grep(Audiobook::Section).first || book.items.grep(Audiobook::Heading).first
+      expect(chapter.font_size).to eq(18)
       expect(Translator).to have_received(:translate).with(
         contain_exactly('Chapter One', 'Hello world.', 'Another sentence.'),
         from: 'en', to: 'pt'
       )
+    end
+
+    it 'maps font size, bold, and alignment to chapters versus headings' do
+      data = SymMash.new(
+        metadata: {page_count: 1, language: 'en'},
+        opts:     {includeall: true},
+        content:  {
+          lines: [
+            {text: 'Book Title', font_size: 24, page: 1, bold: true, alignment: :center, x: 200, x_max: 400, page_width: 600},
+            {text: 'Chapter One', font_size: 18, page: 1, bold: true, alignment: :center, x: 200, x_max: 400, page_width: 600},
+            {text: 'A body paragraph that stays body because it has enough words in it.', font_size: 12, page: 1},
+            {text: 'Another body paragraph continues the story with more words here.', font_size: 12, page: 1},
+            {text: 'Chapter Two', font_size: 18, page: 1, bold: true, alignment: :center, x: 200, x_max: 400, page_width: 600},
+            {text: 'More body text so twelve point remains the dominant size overall.', font_size: 12, page: 1},
+            {text: 'A Short Heading', font_size: 12, page: 1, bold: true, alignment: :center, x: 180, x_max: 420, page_width: 600},
+            {text: 'Final body paragraph after the inline heading with enough words.', font_size: 12, page: 1},
+          ],
+          images: [],
+        },
+      )
+      book = described_class.new(data: data, opts: SymMash.new(includeall: true), translate: false)
+      sections = book.items.grep(Audiobook::Section)
+
+      expect(book.items.grep(Audiobook::Heading).map(&:text)).to include('Book Title')
+      expect(sections.map { |section| [section.text, section.level] }).to include(
+        ['Chapter One', 1], ['Chapter Two', 1], ['A Short Heading', 2]
+      )
+      expect(sections.find { |section| section.text == 'Chapter One' }.bold).to be(true)
+      expect(sections.find { |section| section.text == 'Chapter One' }.alignment).to eq(:center)
+    end
+
+    it 'writes chapter and heading details into yaml and restores them' do
+      data = SymMash.new(
+        metadata: {page_count: 1, language: 'en'},
+        opts:     {includeall: true},
+        content:  {
+          lines: [
+            {text: 'Book Title', font_size: 24, page: 1, bold: true, alignment: :center, x: 200, x_max: 400, page_width: 600},
+            {text: 'Chapter One', font_size: 18, page: 1, bold: true, alignment: :center, x: 200, x_max: 400, page_width: 600},
+            {text: 'A body paragraph that stays body because it has enough words in it.', font_size: 12, page: 1},
+            {text: 'Another body paragraph continues the story with more words here.', font_size: 12, page: 1},
+            {text: 'Chapter Two', font_size: 18, page: 1, bold: true, alignment: :center, x: 200, x_max: 400, page_width: 600},
+            {text: 'More body text so twelve point remains the dominant size overall.', font_size: 12, page: 1},
+            {text: 'A Short Heading', font_size: 12, page: 1, bold: true, alignment: :center, x: 180, x_max: 420, page_width: 600},
+            {text: 'Final body paragraph after the inline heading with enough words.', font_size: 12, page: 1},
+          ],
+          images: [],
+        },
+      )
+      book = described_class.new(data: data, opts: SymMash.new(includeall: true), translate: false)
+
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, 'book.yml')
+        book.write(path)
+        yaml = YAML.safe_load(File.read(path))
+
+        expect(yaml['font_roles']['body_size']).to eq(12.0)
+        expect(yaml['outline'].map { |entry| [entry['text'], entry['role']] }).to include(
+          ['Book Title', 'title'], ['Chapter One', 'chapter'], ['Chapter Two', 'chapter']
+        )
+        chapter = yaml['outline'].find { |entry| entry['text'] == 'Chapter Two' }
+        expect(chapter['headings'].map { |entry| entry['text'] }).to include('A Short Heading')
+
+        restored = described_class.from_yaml(path, opts: SymMash.new(includeall: true), translate: false)
+        expect(restored.font_roles.body_size).to eq(12.0)
+        expect(restored.items.grep(Audiobook::Section).map(&:role)).to include(:chapter)
+        expect(restored.outline.map { |entry| entry['text'] }).to include('Chapter One')
+      end
     end
 
     it 'translates every YAML sentence to slang=' do

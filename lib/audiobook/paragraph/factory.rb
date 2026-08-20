@@ -3,6 +3,7 @@ require_relative '../paragraph'
 require_relative '../heading'
 require_relative '../section'
 require_relative '../../text_helpers'
+require_relative '../font_roles'
 
 module Audiobook
   class Paragraph
@@ -61,6 +62,7 @@ module Audiobook
 
       def split_group?(group, line, prev_font)
         return true if prev_font && line.font_size && line.font_size != prev_font
+        return true if line.style_changed?(group.first)
         return true if line.text.match?(/^\d+$/)
 
         self.class.heading_like?(line.text) || self.class.heading_like?(group.first.text)
@@ -79,8 +81,11 @@ module Audiobook
 
       def create_item(first_line, sentences)
         numeric_only = sentences.size == 1 && sentences.first.text.strip.match?(/\A[^\p{L}]*\z/u)
+        level = FontRoles.current&.level_for(first_line)
 
-        item = if !numeric_only && sentences.size == 1 && heading_like?(first_line, sentences.first.text)
+        item = if !numeric_only && heading_from_font?(first_line, level, sentences)
+          create_section(first_line, sentences.map(&:text).join(' '), level: level)
+        elsif !numeric_only && sentences.size == 1 && heading_like?(first_line, sentences.first.text)
           create_heading(first_line, sentences.first)
         else
           create_paragraph(first_line, sentences)
@@ -89,25 +94,57 @@ module Audiobook
         item_data(first_line, item)
       end
 
-      def create_heading(first_line, sentence)
-        with_font_size(Heading.new(sentence), first_line)
+      def heading_from_font?(first_line, level, sentences)
+        return false unless level.to_i.positive?
+
+        words = sentences.sum { |sentence| sentence.text.split.size }
+        return false unless sentences.size == 1 && words <= 20
+
+        heading_like?(first_line, sentences.first.text) || words <= 12
       end
 
-      def create_section(first_line, text)
-        with_font_size(Section.new(text, level: first_line.section_level, language: first_line.language), first_line)
+      def create_heading(first_line, sentence)
+        with_style(Heading.new(sentence), first_line)
+      end
+
+      def create_section(first_line, text, level: first_line.section_level)
+        with_style(Section.new(text, level: level || 1, language: first_line.language), first_line)
       end
 
       def create_paragraph(first_line, sentences)
         para = Paragraph.new(sentences)
-        if first_line.font_size
-          para.sentences.each { |s| s.font_size = first_line.font_size if s.respond_to?(:font_size=) }
-        end
+        sentences.each { |sentence| copy_style(sentence, first_line) }
         para
       end
 
-      def with_font_size(item, first_line)
-        item.font_size = first_line.font_size if item.respond_to?(:font_size=)
+      def with_style(item, first_line)
+        copy_style(item, first_line)
+        assign_role(item, first_line)
         item
+      end
+
+      def assign_role(item, line)
+        return unless item.respond_to?(:role=)
+
+        roles = FontRoles.current
+        item.role = if roles
+          role = roles.role_for(line)
+          if roles.heading?(line) || role == :title
+            role
+          elsif item.is_a?(Section)
+            FontRoles::HEADING_ROLES[item.level - 1] || :subheading
+          else
+            :heading
+          end
+        elsif item.is_a?(Section)
+          FontRoles::HEADING_ROLES[item.level - 1] || :subheading
+        else
+          :heading
+        end
+      end
+
+      def copy_style(item, line)
+        FontRoles.copy_style(item, line)
       end
 
       def item_data(first_line, item)

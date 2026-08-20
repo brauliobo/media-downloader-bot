@@ -36,11 +36,13 @@ module Audiobook
         lines.last&.page || 1
       end
 
-      def self.line(text, font_size = BODY_FONT_SIZE, section_level: nil, language: nil, page: 1)
+      def self.line(text, font_size = BODY_FONT_SIZE, section_level: nil, language: nil, page: 1,
+                    bold: nil, italic: nil, alignment: nil, color: nil, font_name: nil)
         text = normalize_plain_text(text)
         SymMash.new(
           text: text, font_size: font_size, section_level: section_level,
-          language: language.to_s.strip.presence, y: nil, page: page
+          language: language.to_s.strip.presence, y: nil, page: page,
+          bold: bold, italic: italic, alignment: alignment, color: color, font_name: font_name
         ).compact unless text.empty?
       end
 

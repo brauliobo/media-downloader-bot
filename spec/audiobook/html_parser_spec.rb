@@ -135,4 +135,26 @@ RSpec.describe Audiobook::Parsers::Html do
       expect(sentences).to include('A complete sentence.')
     end
   end
+
+  it 'maps stylesheet classes onto the generic line style' do
+    html = <<~HTML
+      <style>
+        .chapter { font-size: 22pt; font-weight: bold; text-align: center; color: #112233; font-family: Georgia; }
+      </style>
+      <p class="chapter">Chapter One</p>
+      <p>A complete sentence that remains body copy.</p>
+    HTML
+
+    with_html(html) do |path|
+      data = described_class.extract_data(path)
+      chapter = data.content.lines.first
+
+      expect(chapter.text).to eq('Chapter One')
+      expect(chapter.font_size).to eq(22)
+      expect(chapter.bold).to be(true)
+      expect(chapter.alignment).to eq(:center)
+      expect(chapter.color).to eq('#112233')
+      expect(chapter.font_name).to eq('Georgia')
+    end
+  end
 end

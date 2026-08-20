@@ -14,6 +14,7 @@ require_relative '../text_helpers'
 require_relative '../ocr'
 require_relative '../language'
 require_relative 'line'
+require_relative 'font_roles'
 require_relative 'sentence'
 require_relative 'paragraph'
 require_relative 'reference'
@@ -32,7 +33,7 @@ module Audiobook
     MAX_STRUCTURED_BYTES = ENV.fetch('MAX_STRUCTURED_DOCUMENT_BYTES', 20 * 1024 * 1024).to_i
     CHINESE_MAX_SENTENCE_CHARS = 30
 
-    attr_reader :metadata, :pages, :translated, :translated_base, :author_gender
+    attr_reader :metadata, :pages, :translated, :translated_base, :author_gender, :font_roles
 
     def title    = field(:title)
     def author   = field(:author)
@@ -186,6 +187,7 @@ module Audiobook
       obj.instance_variable_set(:@stl, stl)
       obj.instance_variable_set(:@lang, metadata.language || 'en')
       obj.instance_variable_set(:@pages, pages)
+      obj.instance_variable_set(:@font_roles, FontRoles.from_h(data.font_roles)) if data.font_roles
       obj.send(:finish_pages!, translate: translate)
       obj
     end
@@ -203,10 +205,12 @@ module Audiobook
       item = SymMash.new(item) unless item.is_a?(SymMash)
       # Item is a hash with single key indicating type
       if item.heading
-        Heading.new(item.heading.text, language: item.heading.language) if Sentence.speakable_text?(item.heading.text)
+        heading = Heading.new(item.heading.text, language: item.heading.language) if Sentence.speakable_text?(item.heading.text)
+        apply_item_style(heading, item.heading)
       elsif item.section
         section = item.section
-        Section.new(section.text, level: section.level || 1, language: section.language) if Sentence.speakable_text?(section.text)
+        parsed = Section.new(section.text, level: section.level || 1, language: section.language) if Sentence.speakable_text?(section.text)
+        apply_item_style(parsed, section)
       elsif item.reference
         ref_info = item.reference
         sentences = Sentence.build_all(ref_info.sentences)
@@ -252,6 +256,12 @@ module Audiobook
       end
     end
 
+    def self.apply_item_style(item, data)
+      FontRoles.copy_style(item, data) if item && data
+      item.role = data.role.to_s.to_sym if item.respond_to?(:role=) && data.respond_to?(:role) && data.role
+      item
+    end
+
     def initialize(data:, opts: nil, stl: nil, translate: true)
       @data = data
       @metadata = @data.metadata || SymMash.new
@@ -275,12 +285,52 @@ module Audiobook
     # Write YAML file following class hierarchy representation
     def write(yaml_path)
       book_hash = { 'language' => language, 'pages' => pages.map(&:to_h) }
+      book_hash['font_roles'] = font_roles.to_h if font_roles
+      outline_data = outline
+      book_hash['outline'] = outline_data if outline_data.any?
       book_hash = deep_to_h(book_hash)
       begin
         File.write(yaml_path, YAML.dump(book_hash, line_width: -1))
       rescue ArgumentError
         File.write(yaml_path, YAML.dump(book_hash))
       end
+    end
+
+    def outline
+      tree = []
+      current = nil
+      pages.each do |page|
+        page.items.grep(Heading).each do |item|
+          entry = outline_entry(item, page)
+          if chapter_entry?(item)
+            current = entry.merge('headings' => [])
+            tree << current
+          elsif current
+            current['headings'] << entry
+          else
+            tree << entry
+          end
+        end
+      end
+      tree.each { |entry| entry.delete('headings') if entry['headings']&.empty? }
+      tree
+    end
+
+    def outline_entry(item, page)
+      entry = { 'text' => item.text, 'page' => page.number }
+      entry['role'] = item.role.to_s if item.respond_to?(:role) && item.role
+      entry['level'] = item.level if item.is_a?(Section)
+      entry['font_size'] = item.font_size if item.font_size
+      entry['alignment'] = item.alignment.to_s if item.alignment
+      entry['bold'] = item.bold unless item.bold.nil?
+      entry['italic'] = item.italic unless item.italic.nil?
+      entry['color'] = item.color if item.color
+      entry['font_name'] = item.font_name if item.font_name
+      entry
+    end
+
+    def chapter_entry?(item)
+      item.role.to_s == 'chapter' || (item.is_a?(Section) && item.level == 1 && item.role.to_s != 'title')
     end
 
     def deep_to_h(obj)
@@ -405,23 +455,32 @@ module Audiobook
       lines = filtered_lines.map do |l|
         l = SymMash.new(l) unless l.is_a?(SymMash)
         Line.new(
-          l.text, 
-          font_size: l.font_size, 
-          y_position: l.y, 
+          l.text,
+          font_size: l.font_size,
+          y_position: l.y,
           page_number: l.page,
           x_position: l.x,
+          x_max: l.x_max,
+          page_width: l.page_width,
           top_spacing: l.top_spacing,
           bottom_spacing: l.bottom_spacing,
-          section_level: l.section_level,
-          language: l.language
+          section_level: l.section_level || l.section_level,
+          language: l.language,
+          alignment: l.alignment,
+          bold: l.bold,
+          italic: l.italic,
+          color: l.color,
+          font_name: l.font_name
         )
       end.reject(&:empty?)
-      
-      # Discover paragraphs across all pages (handles cross-page paragraphs)
-      items_with_pages = Paragraph.discover_from_lines(
-        lines,
-        max_sentence_chars: @lang == 'zh' ? CHINESE_MAX_SENTENCE_CHARS : Paragraph::Factory::MAX_SENTENCE_CHARS
-      ).map { |e| SymMash.new(e) }
+
+      @font_roles = FontRoles.from_lines(lines)
+      items_with_pages = FontRoles.use(@font_roles) do
+        Paragraph.discover_from_lines(
+          lines,
+          max_sentence_chars: @lang == 'zh' ? CHINESE_MAX_SENTENCE_CHARS : Paragraph::Factory::MAX_SENTENCE_CHARS
+        )
+      end.map { |e| SymMash.new(e) }
 
       # Pre-compute body font per page as the most frequent paragraph font size
       body_font_by_page = compute_body_font_by_page(items_with_pages)

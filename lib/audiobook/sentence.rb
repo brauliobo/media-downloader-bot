@@ -2,6 +2,7 @@ require 'retriable'
 require_relative 'speech'
 require_relative '../tts'
 require_relative '../text_helpers'
+require_relative 'font_roles'
 
 module Audiobook
   # Represents a sentence of text to speak.
@@ -10,7 +11,7 @@ module Audiobook
     PAUSE = Pauses::SENTENCE
     PUNCTUATION_ONLY = /\A[\p{P}\p{S}\s]+\z/u
 
-    attr_accessor :text, :source_sentence, :font_size, :language
+    attr_accessor :text, :source_sentence, :font_size, :alignment, :language, :bold, :italic, :color, :font_name
     attr_writer :references
 
     def initialize(text, language: nil)
@@ -24,6 +25,11 @@ module Audiobook
       @font_size = nil
       @source_sentence = nil
       @language = language.to_s.strip.presence
+      @alignment = nil
+      @bold = nil
+      @italic = nil
+      @color = nil
+      @font_name = nil
     end
 
     def references
@@ -76,7 +82,19 @@ module Audiobook
     def extra_hash
       h = { 'text' => text }
       h['language'] = language if language
+      h.merge!(style_hash)
       h['references'] = references.map(&:to_h) if references.any?
+      h
+    end
+
+    def style_hash
+      h = {}
+      h['font_size'] = font_size if font_size
+      h['alignment'] = alignment.to_s if alignment
+      h['bold'] = bold unless bold.nil?
+      h['italic'] = italic unless italic.nil?
+      h['color'] = color if color
+      h['font_name'] = font_name if font_name
       h
     end
 
@@ -90,7 +108,12 @@ module Audiobook
     end
 
     def self.build(text)
-      new(text_value(text), language: language_value(text)).then { |sentence| sentence if sentence.speakable? }
+      new(text_value(text), language: language_value(text)).then do |sentence|
+        next unless sentence.speakable?
+
+        copy_style(sentence, wrap(text))
+        sentence
+      end
     end
 
     def self.build_all(texts)
@@ -111,6 +134,16 @@ module Audiobook
 
     def self.language_value(value)
       wrap(value).then { |item| item.language if item.respond_to?(:language) }
+    end
+
+    def self.copy_style(sentence, item)
+      FontRoles.copy_style(sentence, item)
+    end
+    private_class_method :copy_style
+
+    class << self
+      alias_method :speakable_text?, :speakable_text? unless method_defined?(:speakable_text?)
+      alias_method :build_all, :build_all unless method_defined?(:build_all)
     end
   end
 end

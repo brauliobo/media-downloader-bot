@@ -71,6 +71,9 @@ module Audiobook
     def self.discover_from_lines(lines, max_sentence_chars: Factory::MAX_SENTENCE_CHARS)
       Detector.discover_from_lines(lines, max_sentence_chars: max_sentence_chars)
     end
+    class << self
+      alias_method :discover_from_lines, :discover_from_lines unless method_defined?(:discover_from_lines)
+    end
 
     def progress_parts(*extra)
       parts = []

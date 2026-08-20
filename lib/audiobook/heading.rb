@@ -6,11 +6,12 @@ module Audiobook
   class Heading < Sentence
 
     PAUSE = Pauses::HEADING
+    attr_accessor :role
 
     def initialize(text, language: nil)
       if text.is_a?(Sentence)
         super(text.text, language: language || text.language)
-        @font_size = text.font_size if text.respond_to?(:font_size)
+        FontRoles.copy_style(self, text)
         @source_sentence = text.source_sentence if text.respond_to?(:source_sentence)
       else
         super(text, language: language)
@@ -20,6 +21,8 @@ module Audiobook
     def to_h
       data = { 'text' => text }
       data['language'] = language if language
+      data['role'] = role.to_s if role
+      data.merge!(style_hash)
       { 'heading' => data }
     end
   end

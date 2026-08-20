@@ -26,6 +26,14 @@ RSpec.describe Audiobook::TextPdf do
     paragraph = Audiobook::Paragraph.new([sentence, Audiobook::Sentence.new('Second sentence.')])
     heading   = Audiobook::Heading.new('Chapter')
     section   = Audiobook::Section.new('Part One', level: 1)
+    heading.font_size = 16
+    heading.alignment = :center
+    heading.bold = true
+    section.font_size = 18
+    section.alignment = :center
+    section.bold = true
+    sentence.font_size = 12
+    sentence.alignment = :left
     footer    = Audiobook::Paragraph.new([Audiobook::Sentence.new('Repeated footer.')])
     image     = Audiobook::Image.allocate
     image.instance_variable_set(:@path, 'book.pdf#page=1')
@@ -43,10 +51,9 @@ RSpec.describe Audiobook::TextPdf do
     html = described_class.new(structured_book).build_html
 
     expect(html).to include('<title>Book Title</title>')
-    expect(html).not_to include('<h1>')
-    expect(html).to include('<h2>Part One</h2>')
-    expect(html).to include('<h2>Chapter</h2>')
-    expect(html).to include('<p>First sentence. [1] Second sentence.</p>')
+    expect(html).to include('<h1 style="font-size: 18pt; text-align: center; font-weight: bold">Part One</h1>')
+    expect(html).to include('<h2 style="font-size: 16pt; text-align: center; font-weight: bold">Chapter</h2>')
+    expect(html).to include('<p style="font-size: 12pt; text-align: left">First sentence. [1] Second sentence.</p>')
     expect(html).to include('<p>Repeated footer.</p>')
     expect(html).to include('<aside class="reference"><sup>1</sup> A footnote.</aside>')
     expect(html).to include('<p>OCR cover text.</p>')

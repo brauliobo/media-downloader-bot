@@ -1,5 +1,6 @@
 require 'nokogiri'
 require_relative 'base'
+require_relative 'css_style'
 
 module Audiobook
   module Parsers
@@ -16,6 +17,7 @@ module Audiobook
         document = Nokogiri::HTML5.parse(html)
         parser_opts = SymMash.new(opts || {})
         parser_opts.includeall = true
+        sheets   = CssStyle.sheets_from(document)
         root     = document.at('main,article,body') || document
         root.css(EXCLUDED_SELECTOR).remove
         selector = opts&.html_content_selector.to_s.presence || BLOCK_SELECTOR
@@ -24,7 +26,7 @@ module Audiobook
         lines = if opts&.html_block_comments
           structured_lines(html, root, title)
         else
-          selected_lines(root, selector)
+          selected_lines(root, selector, sheets)
         end
         page_count = paginate(lines, words_per_page(opts))
 
@@ -39,15 +41,21 @@ module Audiobook
         )
       end
 
-      def self.selected_lines(root, selector)
+      def self.selected_lines(root, selector, sheets = [])
         root.css(selector).filter_map do |node|
           next if node.ancestors.any? { |ancestor| ancestor.element? && ancestor.matches?(selector) }
 
+          style = CssStyle.for_node(node, sheets)
           line(
             node_text(node),
-            font_size(node),
+            style[:font_size] || font_size(node),
             section_level: section_level(node),
-            language: node_language(node)
+            language: node_language(node),
+            bold: style[:bold] || bold?(node),
+            italic: style[:italic] || italic?(node),
+            alignment: style[:alignment] || alignment_for(node),
+            color: style[:color],
+            font_name: style[:font_name]
           )
         end
       end
@@ -64,7 +72,9 @@ module Audiobook
             node_text(fragment),
             font_size_for_classes(classes),
             section_level: section_level_for_classes(classes),
-            language: paragraph&.[]('lang')
+            language: paragraph&.[]('lang'),
+            bold: heading_class?(classes),
+            alignment: alignment_for(paragraph)
           )
         end
         root.css('.Para_Footnote').each { |node| lines << line(node_text(node), 10) }
@@ -113,6 +123,8 @@ module Audiobook
       end
 
       def self.section_level(node)
+        return node.name[1].to_i if node.name.match?(/\Ah[1-6]\z/)
+
         section_level_for_classes(node['class'])
       end
 
@@ -125,6 +137,28 @@ module Audiobook
         [node, *node.ancestors].filter_map { |element| element['lang'].to_s.strip.presence }.first
       end
 
+      def self.bold?(node)
+        return true if %w[h1 h2 h3 h4 h5 h6 b strong].include?(node.name)
+        return true if node['style'].to_s.match?(/font-weight:\s*(bold|[6-9]00)/i)
+
+        heading_class?(node['class'])
+      end
+
+      def self.italic?(node)
+        %w[i em].include?(node.name) || node['style'].to_s.match?(/font-style:\s*italic/i)
+      end
+
+      def self.alignment_for(node)
+        return unless node
+
+        align = node['align'].to_s.downcase.presence || node['style'].to_s[/text-align:\s*(left|right|center|justify)/i, 1]
+        return align.downcase.to_sym if align
+        return :center if node.name == 'center' || node.at_css('center')
+      end
+
+      def self.heading_class?(classes)
+        classes.to_s.match?(/Heading|chapter_title/i)
+      end
     end
   end
 end

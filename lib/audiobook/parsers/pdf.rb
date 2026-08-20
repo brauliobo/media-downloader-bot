@@ -1,4 +1,5 @@
 require 'nokogiri'
+require 'tmpdir'
 require_relative 'base'
 require_relative '../cover'
 require_relative '../page_selection'
@@ -101,12 +102,14 @@ module Audiobook
             y_min = line['yMin'].to_f
             y_max = line['yMax'].to_f
             SymMash.new(
-              text:      text,
-              font_size: y_max - y_min,
-              y:         page_height - y_min,
-              x:         line['xMin'].to_f,
-              y_min:     y_min,
-              y_max:     y_max
+              text:       text,
+              font_size:  y_max - y_min,
+              y:          page_height - y_min,
+              x:          line['xMin'].to_f,
+              x_max:      line['xMax'].to_f,
+              page_width: page['width'].to_f,
+              y_min:      y_min,
+              y_max:      y_max
             )
           end
           SymMash.new(
@@ -116,6 +119,7 @@ module Audiobook
             lines:  lines
           )
         end
+        apply_xml_styles(pages, pdf_path, first_page: first_page, last_page: last_page)
         pages
       end
 
@@ -148,6 +152,99 @@ module Audiobook
 
       def self.superscript_marker?(word, baseline)
         word.text.match?(/\A\d{1,3}\z/) && word['yMax'].to_f < baseline - 1.0
+      end
+
+      BOLD_FONT   = /bold|black|heavy|semibold|demi|extrabold/i
+      ITALIC_FONT = /italic|oblique/i
+
+      def self.apply_xml_styles(pages, pdf_path, first_page:, last_page:)
+        xml_pages = xml_style_pages(pdf_path, first_page: first_page, last_page: last_page)
+        return if xml_pages.empty?
+
+        pages.each do |page|
+          fragments = xml_pages[page.number]
+          next if fragments.blank?
+
+          scale = fragments.first[:page_height].to_f.positive? ? page.height / fragments.first[:page_height].to_f : 1.0
+          page.lines.each do |line|
+            matches = fragments.select { |fragment| xml_match?(line, fragment, scale) }
+            next if matches.empty?
+
+            chars = matches.sum { |fragment| fragment[:text].length }
+            next unless chars.positive?
+
+            line.bold = matches.sum { |fragment| fragment[:bold] ? fragment[:text].length : 0 } >= chars / 2.0
+            line.italic = matches.sum { |fragment| fragment[:italic] ? fragment[:text].length : 0 } >= chars / 2.0
+            dominant = matches.max_by { |fragment| fragment[:text].length }
+            line.font_name = dominant[:font_name].presence
+            line.color = dominant[:color] if dominant[:color].present? && dominant[:color] !~ /\A#0+\z/i
+          end
+        end
+      end
+
+      def self.xml_style_pages(pdf_path, first_page:, last_page:)
+        return {} unless pdftohtml_bin
+
+        xml = pdftohtml_xml(pdf_path, first_page: first_page, last_page: last_page)
+        return {} if xml.blank?
+
+        fonts = {}
+        document = Nokogiri::XML(xml) { |config| config.nonet }
+        document.remove_namespaces!
+        document.xpath('//page').each_with_object({}) do |page, pages|
+          page.xpath('./fontspec').each do |font|
+            fonts[font['id']] = {
+              family: font['family'].to_s,
+              color:  font['color'].to_s.presence
+            }
+          end
+          pages[page['number'].to_i] = page.xpath('./text').filter_map do |node|
+            text = node.text.to_s.gsub(/\s+/, ' ').strip
+            next if text.empty?
+
+            font = fonts[node['font']] || {}
+            markup = node.inner_html
+            {
+              top:         node['top'].to_f,
+              height:      node['height'].to_f,
+              text:        text,
+              bold:        markup.match?(/<b[\s>]/i) || font[:family].match?(BOLD_FONT),
+              italic:      markup.match?(/<i[\s>]/i) || font[:family].match?(ITALIC_FONT),
+              font_name:   font[:family].presence,
+              color:       font[:color],
+              page_height: page['height'].to_f
+            }
+          end
+        end
+      end
+
+      def self.pdftohtml_xml(pdf_path, first_page:, last_page:)
+        Dir.mktmpdir('pdf-xml-') do |dir|
+          output = File.join(dir, 'doc')
+          _out, stderr, status = Sh.run [
+            pdftohtml_bin, '-xml', '-i', '-q',
+            '-f', first_page.to_s, '-l', last_page.to_s,
+            pdf_path, output
+          ]
+          Sh.assert_success!('PDF style extraction failed', stderr, status: status)
+          xml_path = File.exist?("#{output}.xml") ? "#{output}.xml" : Dir["#{dir}/*.xml"].first
+          File.read(xml_path) if xml_path && File.exist?(xml_path)
+        end
+      end
+
+      def self.pdftohtml_bin
+        @pdftohtml_bin ||= %w[pdftohtml].find { system('which', _1, out: File::NULL, err: File::NULL) }
+      end
+
+      def self.xml_match?(line, fragment, scale)
+        top = fragment[:top] * scale
+        bottom = top + fragment[:height] * scale
+        overlap = [line.y_max, bottom].min - [line.y_min, top].max
+        return false if overlap < fragment[:height] * scale * 0.3
+
+        xml_text = fragment[:text].downcase
+        line_text = line.text.to_s.downcase
+        line_text.include?(xml_text) || xml_text.include?(line_text[0, 24])
       end
     end
   end

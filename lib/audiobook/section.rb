@@ -17,6 +17,8 @@ module Audiobook
     def to_h
       data = { 'text' => text, 'level' => level }
       data['language'] = language if language
+      data['role'] = role.to_s if role
+      data.merge!(style_hash)
       { 'section' => data }
     end
   end

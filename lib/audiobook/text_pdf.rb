@@ -72,10 +72,12 @@ module Audiobook
     end
 
     def html_styles
+      body_size = @book.respond_to?(:font_roles) ? @book.font_roles&.body_size : nil
+      body_rule = body_size ? "font-size: #{format_pt(body_size)}; " : ''
       <<~CSS
         <style>
           @page { size: A4; margin: 14mm; }
-          body { font-family: serif; line-height: 1.55; margin: 0; }
+          body { font-family: serif; #{body_rule}line-height: 1.55; margin: 0; }
           h1, h2, h3, h4, h5, h6 { page-break-after: avoid; margin: 0 0 0.8em; }
           p { margin: 0 0 1em; text-align: justify; }
           aside.reference { font-size: 0.9em; margin: 0.4em 0 0; }
@@ -125,8 +127,8 @@ module Audiobook
 
     def render_item(item)
       case item
-      when Section   then heading_html(item.level + 1, item.text)
-      when Heading   then heading_html(2, item.text)
+      when Section   then heading_html(item)
+      when Heading   then heading_html(item)
       when Image     then ''
       when Reference then render_reference(item)
       when Paragraph then render_paragraph(item)
@@ -134,9 +136,10 @@ module Audiobook
       end
     end
 
-    def heading_html(level, text)
-      tag = "h#{level.clamp(1, 6)}"
-      "<#{tag}>#{escape_text(text)}</#{tag}>\n"
+    def heading_html(item)
+      level = item.is_a?(Section) ? item.level : (@book.font_roles&.level_for(item) || 2)
+      tag = "h#{level.to_i.clamp(1, 6)}"
+      "<#{tag}#{style_attr(item)}>#{escape_text(item.text)}</#{tag}>\n"
     end
 
     def render_reference(item)
@@ -164,7 +167,7 @@ module Audiobook
 
     def render_paragraph(item)
       parts = item.sentences.filter_map { |sentence| sentence_html(sentence) }
-      parts.empty? ? '' : "<p>#{parts.join(' ')}</p>\n"
+      parts.empty? ? '' : "<p#{style_attr(item.sentences.first)}>#{parts.join(' ')}</p>\n"
     end
 
     def sentence_html(sentence)
@@ -245,6 +248,23 @@ module Audiobook
 
     def escape_text(text)
       CGI.escapeHTML(text.to_s)
+    end
+
+    def style_attr(*sources)
+      item = sources.compact.first
+      return '' unless item
+
+      rules = []
+      rules << "font-size: #{format_pt(item.font_size)}" if item.respond_to?(:font_size) && item.font_size
+      rules << "text-align: #{item.alignment}" if item.respond_to?(:alignment) && item.alignment
+      rules << 'font-weight: bold' if item.respond_to?(:bold) && item.bold
+      rules << 'font-style: italic' if item.respond_to?(:italic) && item.italic
+      rules << "color: #{item.color}" if item.respond_to?(:color) && item.color
+      rules.empty? ? '' : %( style="#{rules.join('; ')}")
+    end
+
+    def format_pt(size)
+      "#{size.to_f.round(1)}pt".sub('.0pt', 'pt')
     end
 
     def convert_html_to_pdf(html_path, pdf_path)
