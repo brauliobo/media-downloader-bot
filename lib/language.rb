@@ -4,7 +4,7 @@ require_relative 'ai/ollama'
 require_relative 'ai/json_schema'
 
 module Language
-  BOOK_PROMPT     = "From the supplied first pages or metadata, detect the predominant language as an ISO 639-1 two-letter code (do not return `en` unless the text is actually English), identify the book title and author, and infer the author's likely gender for choosing an audiobook narrator voice. Return gender as exactly `male` or `female`. If the title or author is unknown, return an empty string for that field. If the author is unknown, ambiguous, a group, an organization, or gender cannot be inferred confidently, return `male`. Return only valid JSON.".freeze
+  BOOK_PROMPT     = "From the supplied filename, metadata, and sample pages, detect the predominant language as an ISO 639-1 two-letter code (do not return `en` unless the text is actually English), identify the book title and author, and infer the author's likely gender for choosing an audiobook narrator voice. Treat the filename as a hint for title and author when the opening pages omit them. Prefer a named person on a title, copyright, or author line over a publisher, church, or organization in metadata. Distinguish Portuguese (`pt`) from Spanish (`es`) using function words and diacritics such as ã, õ, and ç versus ñ. Return gender as exactly `male` or `female`. If the title or author is unknown, return an empty string for that field. If the author is unknown, ambiguous, a group, an organization, or gender cannot be inferred confidently, return `male`. Return only valid JSON.".freeze
   REF_PROMPT      = "Write one neutral audiobook narrator reference sentence in the requested language, between 12 and 20 words. Return only valid JSON.".freeze
   REF_FALLBACK    = 'This narrator voice reads the audiobook with calm, clear, natural pacing and keeps a steady tone across sentences.'.freeze
   REF_FALLBACKS   = {
@@ -56,8 +56,20 @@ module Language
     book_metadata(input)['gender']
   end
 
-  def self.book_input(metadata, sample)
-    ["Metadata:\n#{metadata.to_h}", "First pages:\n#{sample}"].join("\n\n")
+  def self.book_input(metadata, sample, filename: nil)
+    fields = publication_fields(metadata)
+    name   = filename.to_s.strip.presence || fields['source_name']
+    parts  = []
+    parts << "Filename: #{name}" if name.present?
+    parts << "Metadata:\n#{fields.except('source_name')}"
+    parts << "Sample pages:\n#{sample}"
+    parts.join("\n\n")
+  end
+
+  def self.publication_fields(metadata)
+    hash = (metadata.respond_to?(:to_h) ? metadata.to_h : metadata).to_h
+    hash.stringify_keys.slice('title', 'author', 'pdf_author', 'language', 'page_count', 'source_name')
+      .reject { |_key, value| value.blank? }
   end
 
   def self.ask(task, schema, input)

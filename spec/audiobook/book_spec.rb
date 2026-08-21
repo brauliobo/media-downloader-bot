@@ -2,6 +2,65 @@ require 'spec_helper'
 require_relative '../../lib/audiobook/book'
 
 RSpec.describe Audiobook::Book do
+  describe 'publication sampling' do
+    it 'skips dotted table-of-contents pages when choosing metadata pages' do
+      toc   = (1..8).map { |i| "Chapter #{i} #{'.' * 20} #{i}" }
+      pages = [1, 2, 3, 4]
+      texts = {
+        1 => ['Este Livro é Dedicado a Todos os que Sofrem'],
+        2 => toc,
+        3 => ['Se nunca tinha ouvido falar no MMS antes, espero que não pense que este livro é sobre mais um suplemento.'],
+        4 => ['Autor: James V. Humble (Jim Humble)', 'Tradução para Português'],
+      }
+
+      expect(described_class.select_publication_pages(pages, texts)).to eq([1, 3, 4])
+      expect(described_class.toc_like_page?(toc)).to eq(true)
+      expect(described_class.toc_like_page?(texts[1])).to eq(false)
+      expect(described_class.toc_like_page?(
+        ['1. ACERCA DESTE LIVRO ...................................................................................... 1'] * 6
+      )).to eq(true)
+    end
+
+    it 'falls back to the opening pages when every scanned page looks like a TOC' do
+      toc   = (1..8).map { |i| "Chapter #{i} #{'.' * 20} #{i}" }
+      pages = [1, 2, 3, 4, 5, 6]
+      texts = pages.index_with { toc }
+
+      expect(described_class.select_publication_pages(pages, texts)).to eq([1, 2, 3, 4, 5])
+    end
+
+    it 'samples past TOC pages and passes the filename into metadata detection' do
+      toc  = (1..8).map { |i| "Chapter #{i} #{'.' * 20} #{i}" }
+      data = SymMash.new(
+        metadata: { title: 'A Solução Mineral', pdf_author: 'GENESIS 2 CHURCH', source_name: 'MMS Jim Humble', page_count: 4 },
+        content:  {
+          lines: [
+            { text: 'Este Livro é Dedicado', font_size: 14, page: 1 },
+            *toc.map { |text| { text: text, font_size: 10, page: 2 } },
+            { text: 'Se nunca tinha ouvido falar no MMS antes, espero que não pense que este livro é sobre mais um suplemento.', font_size: 12, page: 3 },
+            { text: 'Autor: James V. Humble (Jim Humble)', font_size: 12, page: 4 },
+            { text: 'Tradução para Português', font_size: 12, page: 4 },
+          ],
+          images: [],
+        },
+      )
+      seen = nil
+      allow(Language).to receive(:book_metadata) do |input|
+        seen = input
+        { 'lang' => 'pt', 'title' => 'A Solução Mineral Mestre', 'author' => 'Jim Humble', 'gender' => 'male' }
+      end
+
+      book = described_class.new(data: data, opts: SymMash.new(source_base: 'MMS Jim Humble', includeall: true), translate: false)
+
+      expect(seen).to include('Filename: MMS Jim Humble')
+      expect(seen).to include('Autor: James V. Humble (Jim Humble)')
+      expect(seen).to include('Tradução para Português')
+      expect(seen).not_to include('Chapter 1')
+      expect(book.author).to eq('Jim Humble')
+      expect(book.language).to eq('pt')
+    end
+  end
+
   describe 'language options' do
     it 'uses alang as the source-language override' do
       expect(Language).not_to receive(:book_metadata)

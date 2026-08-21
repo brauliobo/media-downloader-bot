@@ -46,6 +46,21 @@ RSpec.describe Audiobook::Parsers::Pdf do
     expect(line.x).to be_positive
   end
 
+  it 'reads pdfinfo author as a hint without treating it as the spoken author' do
+    status = instance_double(Process::Status, success?: true)
+    allow(Sh).to receive(:run).with(['pdfinfo', 'book.pdf']).and_return([
+      "Title:           A Solução Mineral Mestre\nAuthor:          GENESIS 2 CHURCH\nPages:           10\n",
+      '',
+      status,
+    ])
+
+    info = described_class.extract_pdfinfo('book.pdf')
+
+    expect(info.title).to eq('A Solução Mineral Mestre')
+    expect(info.author).to eq('GENESIS 2 CHURCH')
+    expect(info.pages).to eq(10)
+  end
+
   it 'limits the real Poppler extraction to the requested page range' do
     document = described_class.extract_document(
       fixture_path('image-text-handler.pdf'),

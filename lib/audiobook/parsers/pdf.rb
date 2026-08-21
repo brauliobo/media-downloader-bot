@@ -47,6 +47,8 @@ module Audiobook
         SymMash.new(
           metadata: SymMash.new(
             title:          info.title.presence || File.basename(pdf_path, '.*'),
+            pdf_author:     info.author,
+            source_name:    File.basename(pdf_path, '.*'),
             cover:          cover,
             has_ocr_pages:  image_pages.any?,
             page_count:     page_count,
@@ -129,9 +131,12 @@ module Audiobook
         count = output[/^Pages:\s+(\d+)$/i, 1]&.to_i
         raise 'PDF page count missing' unless count&.positive?
 
-        title = output[/^Title:\s+(.+)$/i, 1]&.strip
-        title = nil if title.blank? || title == '-'
-        SymMash.new(pages: count, title: title)
+        SymMash.new(pages: count, title: pdfinfo_field(output, 'Title'), author: pdfinfo_field(output, 'Author'))
+      end
+
+      def self.pdfinfo_field(output, label)
+        value = output[/^#{Regexp.escape(label)}:\s+(.+)$/i, 1]&.strip
+        value if value.present? && value != '-'
       end
 
       def self.extract_page_count(pdf_path)

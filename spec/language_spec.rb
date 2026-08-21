@@ -80,4 +80,19 @@ RSpec.describe Language do
     )
     expect(described_class.author_gender('Unknown author')).to eq('male')
   end
+
+  it 'puts the filename and pdf author in the prompt and omits cover objects' do
+    input = described_class.book_input(
+      { 'title' => 'A Solução Mineral', 'pdf_author' => 'GENESIS 2 CHURCH', 'cover' => Object.new, 'source_name' => 'MMS Jim Humble' },
+      'Autor: James V. Humble',
+      filename: 'MMS Jim Humble'
+    )
+
+    expect(input).to include('Filename: MMS Jim Humble')
+    expect(input).to include('pdf_author')
+    expect(input).to include('GENESIS 2 CHURCH')
+    expect(input).to include('Sample pages:')
+    expect(input).to include('James V. Humble')
+    expect(input).not_to include('cover')
+  end
 end

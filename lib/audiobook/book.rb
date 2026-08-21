@@ -30,6 +30,8 @@ module Audiobook
   # Represents an intermediate structured manuscript that can be saved as YAML.
   class Book
     LANGUAGE_SAMPLE_PAGES = 5
+    SAMPLE_SCAN_PAGES     = 40
+    TOC_LEADER            = /(?:\.{4,}|\s{3,})\s*\d{1,4}\s*\z/
     MAX_STRUCTURED_BYTES = ENV.fetch('MAX_STRUCTURED_DOCUMENT_BYTES', 20 * 1024 * 1024).to_i
     CHINESE_MAX_SENTENCE_CHARS = 30
 
@@ -382,7 +384,7 @@ module Audiobook
       return if sample.blank?
 
       @stl&.update 'Detecting book metadata'
-      info = Language.book_metadata(Language.book_input(metadata, sample))
+      info = Language.book_metadata(Language.book_input(metadata, sample, filename: publication_filename))
       @metadata.title    = info['title']  if info['title'].present?
       @metadata.author   = info['author'] if info['author'].present?
       @metadata.language = info['lang']   if field(:language).blank? && info['lang'].to_s.match?(/\A[a-z]{2}\z/)
@@ -418,8 +420,28 @@ module Audiobook
     end
 
     def sample_pages(text_items, image_items)
-      (text_items.map { |item| page_for(item) } + image_items.map { |item| page_for(item) })
-        .compact.uniq.sort_by(&:to_i).first(LANGUAGE_SAMPLE_PAGES)
+      pages = (text_items.map { |item| page_for(item) } + image_items.map { |item| page_for(item) })
+        .compact.uniq.sort_by(&:to_i)
+      texts_by_page = pages.first(SAMPLE_SCAN_PAGES).index_with { |page| texts_for_page(text_items, page) }
+      self.class.select_publication_pages(pages, texts_by_page)
+    end
+
+    def self.select_publication_pages(pages, texts_by_page)
+      ranked = pages.first(SAMPLE_SCAN_PAGES)
+      chosen = ranked.reject { |page| toc_like_page?(texts_by_page[page]) }
+      (chosen.presence || ranked).first(LANGUAGE_SAMPLE_PAGES)
+    end
+
+    def self.toc_like_page?(texts)
+      lines   = Array(texts).map { |text| text.to_s.strip }.reject(&:empty?)
+      return false if lines.size < 5
+
+      leaders = lines.count { |line| line.match?(TOC_LEADER) }
+      leaders >= 5 && leaders >= (lines.size * 0.3)
+    end
+
+    def publication_filename
+      @opts&.source_base.presence || field(:source_name)
     end
 
     def texts_for_page(items, page)
