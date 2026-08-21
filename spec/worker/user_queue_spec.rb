@@ -81,25 +81,24 @@ RSpec.describe Bot::UserQueue do
       expect(peak).to eq(3)
     end
 
-    it 'posts a Queued notice while waiting and deletes it on acquire' do
+    it 'posts a Queued status while waiting and keeps it on acquire' do
       queue = described_class.instance
       queue.acquire(non_admin_id)
 
       sent = []
-      deleted = []
       allow(bot).to receive(:send_message) { |_, t| sent << t; SymMash.new(message_id: 99) }
-      allow(bot).to receive(:delete_message) { |_, id| deleted << id }
+      expect(bot).not_to receive(:delete_message)
+      msg = msg_for(non_admin_id)
 
-      t = Thread.new { queue.with_user_slot(bot, msg_for(non_admin_id)) { sleep 0.05 } }
+      t = Thread.new { queue.with_user_slot(bot, msg) { sleep 0.05 } }
       sleep 0.1
 
       expect(sent.last).to include(described_class::QUEUED_MSG)
-      expect(deleted).to be_empty
+      expect(msg.resp.message_id).to eq(99)
 
       queue.release(non_admin_id)
       t.join
 
-      expect(deleted).to eq([99])
     end
 
     it 'releases the slot when the block raises' do
@@ -108,22 +107,5 @@ RSpec.describe Bot::UserQueue do
       expect(queue.queued?(non_admin_id)).to be false
     end
 
-    it 'still runs a queued job when deleting the queued notice fails' do
-      queue = described_class.instance
-      queue.acquire(non_admin_id)
-
-      allow(bot).to receive(:send_message).and_return(SymMash.new(message_id: 99))
-      allow(bot).to receive(:delete_message).and_raise('delete failed')
-
-      ran = false
-      t = Thread.new { queue.with_user_slot(bot, msg_for(non_admin_id)) { ran = true } }
-      sleep 0.1
-
-      queue.release(non_admin_id)
-      t.join
-
-      expect(ran).to be true
-      expect(queue.queued?(non_admin_id)).to be false
-    end
   end
 end

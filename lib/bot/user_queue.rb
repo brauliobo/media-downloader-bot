@@ -44,27 +44,19 @@ module Bot
       end
     end
 
-    # Parent-side dispatch wrapper: posts a "Queued" notice via bot when the user
-    # is at the limit, blocks until a slot frees, deletes the notice, then yields.
+    # Parent-side dispatch wrapper: posts a "Queued" status via bot when the user
+    # is at the limit, blocks until a slot frees, then yields. The worker replaces
+    # that status with its active progress message.
     # Must run in the bot's main process so all messages share queue state.
     def with_user_slot(bot, msg)
       return yield if Jobs.stop_command?(msg.text)
 
       user_id = msg.from.id
       admin   = Bot::MsgHelpers.from_admin?(msg)
-      queued_msg = (bot.send_message(msg, Bot::MsgHelpers.me(QUEUED_MSG)) if !admin && queued?(user_id))
+      msg.resp = bot.send_message(msg, Bot::MsgHelpers.me(QUEUED_MSG)) if !admin && queued?(user_id)
       with_slot(user_id, admin: admin) do
-        delete_queued_notice(bot, msg, queued_msg)
         yield
       end
-    end
-
-    private
-
-    def delete_queued_notice(bot, msg, queued_msg)
-      bot.delete_message(msg, queued_msg.message_id) if queued_msg
-    rescue StandardError
-      nil
     end
   end
 end

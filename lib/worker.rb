@@ -233,7 +233,11 @@ class Worker
     initial_params = job_id ? {cancel_job: job_id} : {}
     initial_text   = 'Downloading metadata...'
     @status_update = [initial_text, [], initial_params]
-    msg.resp ||= send_message msg, Bot::MsgHelpers.me(initial_text), **initial_params
+    if msg.resp&.message_id
+      edit_message msg, msg.resp.message_id, text: Bot::MsgHelpers.me(initial_text), **initial_params
+    else
+      msg.resp = send_message msg, Bot::MsgHelpers.me(initial_text), **initial_params
+    end
   end
 
   def delete_status_message

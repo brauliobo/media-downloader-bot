@@ -40,6 +40,16 @@ RSpec.describe Worker, 'job status controls' do
     expect(service.edited.last.last).to include(force: true)
   end
 
+  it 'replaces a queued status with the initial active status' do
+    msg.resp = SymMash.new(message_id: 789)
+    worker = described_class.new(msg, service: service, job_id: 'job-id', skip_cleanup: true)
+
+    worker.send(:init_status)
+
+    expect(service.sent).to be_nil
+    expect(service.edited.last).to eq([789, {text: 'Downloading metadata\\.\\.\\.', cancel_job: 'job-id'}])
+  end
+
   it 'replaces the status with Cancelled when execution is interrupted' do
     worker = described_class.new(msg, service: service, job_id: 'job-id', skip_cleanup: true)
     worker.send(:init_status)
