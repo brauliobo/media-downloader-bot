@@ -22,9 +22,10 @@ class Sh
     Shellwords.escape f
   end
 
-  def self.run cmd, *args, **params
+  def self.run cmd, *args, env: nil, **params
     STDERR.puts(printable(cmd)) if ENV['PRINT_CMD']
-    cmd.is_a?(Array) ? Open3.capture3(*cmd, *args, **params) : Open3.capture3(cmd, *args, **params)
+    command = cmd.is_a?(Array) ? cmd : [cmd]
+    env ? Open3.capture3(env, *command, *args, **params) : Open3.capture3(*command, *args, **params)
   end
 
   def self.error_message(stderr, status: nil, fallback: 'command failed')

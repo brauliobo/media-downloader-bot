@@ -103,4 +103,23 @@ RSpec.describe Audiobook::TextPdf do
     expect(pdf).to have_received(:chromium_convert)
     expect(pdf).not_to have_received(:pandoc_convert)
   end
+
+  it 'generates a PDF with unusable parent XDG directories' do
+    skip 'chromium not available' unless system('which', 'chromium', out: File::NULL, err: File::NULL)
+
+    book = Audiobook::Book.new(data: book_data, opts: SymMash.new(includeall: true), translate: false)
+    Dir.mktmpdir do |dir|
+      blocked_path = File.join(dir, 'not-a-directory')
+      File.write(blocked_path, '')
+      previous = %w[XDG_CONFIG_HOME XDG_CACHE_HOME].to_h { |key| [key, ENV[key]] }
+      ENV['XDG_CONFIG_HOME'] = blocked_path
+      ENV['XDG_CACHE_HOME']  = blocked_path
+
+      path = File.join(dir, 'book.pt.pdf')
+      expect(described_class.generate(book, path)).to eq(path)
+      expect(File.binread(path, 5)).to eq('%PDF-')
+    ensure
+      previous.each { |key, value| value ? ENV[key] = value : ENV.delete(key) }
+    end
+  end
 end

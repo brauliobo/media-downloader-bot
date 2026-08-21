@@ -300,7 +300,11 @@ module Audiobook
             "file://#{File.expand_path(html_path)}"
           ],
           'chromium pdf',
-          pdf_path
+          pdf_path,
+          env: {
+            'XDG_CONFIG_HOME' => dir,
+            'XDG_CACHE_HOME'  => dir,
+          }
         )
       end
     end
@@ -322,8 +326,8 @@ module Audiobook
       run_pdf!(['pandoc', '-f', 'html', '-t', 'pdf', '-o', pdf_path, html_path], 'pandoc pdf', pdf_path)
     end
 
-    def run_pdf!(cmd, label, pdf_path)
-      _out, err, status = Sh.run(cmd)
+    def run_pdf!(cmd, label, pdf_path, **options)
+      _out, err, status = Sh.run(cmd, **options)
       Sh.assert_success!(label, err, status: status, output: pdf_path)
     end
   end
