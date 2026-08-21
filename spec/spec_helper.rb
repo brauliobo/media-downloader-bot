@@ -1,5 +1,3 @@
-ENV['TELEGRAM_MESSAGE_INTERVAL'] = '0'
-
 require_relative '../lib/manager'
 require_relative '../lib/worker'
 require_relative '../lib/audiobook'

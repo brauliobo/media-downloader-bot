@@ -11,7 +11,7 @@ module TDBot
       return edit_generated_text(chat_id, message_id, text, parse_mode) if media_type.in?(%w[message text])
 
       content = generated_message_content(media_type, text, parse_mode, params)
-      bot.send(:td_with_rate_limit, 'edit_generated_message') do
+      bot.with_rate_limit('edit_generated_message') do
         bot.send(:throttle!)
         result = td.edit_message_media(
           chat_id:               chat_id,

@@ -2,7 +2,7 @@ module Bot
   module RateLimiter
     extend ActiveSupport::Concern
 
-    DEFAULT_SEND_INTERVAL = 1.0
+    DEFAULT_SEND_INTERVAL = 2.0
 
     class Scheduler
       def initialize(interval)
@@ -92,8 +92,7 @@ module Bot
 
     included do
       class_attribute :telegram_scheduler
-      interval = ENV.fetch('TELEGRAM_MESSAGE_INTERVAL', DEFAULT_SEND_INTERVAL).to_f
-      self.telegram_scheduler = Scheduler.new(interval)
+      self.telegram_scheduler = Scheduler.new(DEFAULT_SEND_INTERVAL)
     end
 
     def throttle!
@@ -104,12 +103,34 @@ module Bot
       telegram_scheduler.edit([chat_id, message_id], force: force, &operation)
     end
 
+    def with_rate_limit(tag)
+      yield
+    rescue => e
+      raise unless rate_limited?(e)
+      ra = retry_after_seconds(e)
+      log_rate_limit(tag, ra)
+      sleep ra
+      raise
+    end
+
+    def rate_limited?(error)
+      msg = error.message.to_s
+      msg.include?('429') || msg.include?('Too Many Requests')
+    end
+
     def retry_after_seconds(e)
-      retry_after = e.message[/retry after (\d+(?:\.\d+)?)/, 1]
+      retry_after = e.message.to_s[/retry after (\d+(?:\.\d+)?)/i, 1]
       return retry_after.to_f.ceil if retry_after
 
-      body = JSON.parse(e.response.body)
-      (body.dig('parameters', 'retry_after') || body.dig('error', 'retry_after')).to_i
+      body   = e.respond_to?(:response) && e.response.respond_to?(:body) ? e.response.body : nil
+      parsed = JSON.parse(body.to_s) rescue {}
+      ra     = (parsed.dig('parameters', 'retry_after') || parsed.dig('error', 'retry_after')).to_i
+      ra.positive? ? ra : 60
+    end
+
+    def log_rate_limit(tag, seconds)
+      msg = "[RATE_LIMIT] sleeping #{seconds}s (#{tag})"
+      respond_to?(:dlog, true) ? dlog(msg) : warn(msg)
     end
   end
 end

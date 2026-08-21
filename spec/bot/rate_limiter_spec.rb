@@ -65,3 +65,24 @@ RSpec.describe Bot::RateLimiter::Scheduler do
     expect(edits).to be_empty
   end
 end
+
+RSpec.describe Bot::RateLimiter do
+  let(:host) { Class.new { include Bot::RateLimiter }.new }
+
+  it 'sleeps on a Telegram 429 then re-raises' do
+    allow(host).to receive(:sleep)
+
+    expect { host.with_rate_limit('send') { raise 'Too Many Requests: retry after 5' } }.to raise_error('Too Many Requests: retry after 5')
+    expect(host).to have_received(:sleep).with(5)
+  end
+
+  it 'reads retry_after from a JSON response body' do
+    error = double(message: '429', response: double(body: {parameters: {retry_after: 7}}.to_json))
+
+    expect(host.retry_after_seconds(error)).to eq(7)
+  end
+
+  it 're-raises other errors' do
+    expect { host.with_rate_limit('send') { raise 'Bad Request' } }.to raise_error('Bad Request')
+  end
+end

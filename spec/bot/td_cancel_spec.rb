@@ -47,17 +47,16 @@ else
       expect(bot).to have_received(:throttle_edit).with(123, 789, force: true)
     end
 
-    it 'retries media after an asynchronous TDLib rate limit failure' do
+    it 'sleeps on an asynchronous TDLib rate limit failure then re-raises' do
       error = double(code: 429, message: 'Too Many Requests: retry after 2409')
       described_class.message_send_outcomes[789] = described_class::SendOutcome.new(error: TD::Error.new(error))
-      described_class.message_send_outcomes[790] = described_class::SendOutcome.new(message_id: 900)
-      allow(sender).to receive(:send_audio).and_return({message_id: 789}, {message_id: 790})
-      allow(bot).to receive(:td_retry_after_seconds).and_return(0)
+      allow(sender).to receive(:send_audio).and_return(message_id: 789)
+      allow(bot).to receive(:retry_after_seconds).and_return(0)
 
-      result = bot.send_message(msg, '', type: :audio, file_path: __FILE__)
-
-      expect(result.message_id).to eq(900)
-      expect(sender).to have_received(:send_audio).twice
+      expect do
+        bot.send_message(msg, '', type: :audio, file_path: __FILE__)
+      end.to raise_error(TD::Error, 'Too Many Requests: retry after 2409')
+      expect(sender).to have_received(:send_audio).once
     end
 
     it 'propagates asynchronous media send failures' do

@@ -2,7 +2,6 @@ require 'tdlib-ruby'
 require 'concurrent/map'
 require 'set'
 require 'fileutils'
-require 'retriable'
 require_relative 'base'
 require_relative 'caption'
 require_relative 'jobs'
@@ -56,10 +55,6 @@ module Bot
         end
       end
       bot
-    end
-
-    def td_retry_after_seconds(e)
-      e.message[/retry after (\d+)/, 1]&.to_i || 60
     end
 
     def listen(on_callback: nil, &handler)
@@ -117,22 +112,18 @@ module Bot
       t = type.to_s
       media_type, params = normalize_params(params, type: type) unless t.in?(%w[message text])
       text = Caption.normalize(text, parse_mode: parse_mode) if media_type
-      ret = td_with_rate_limit('send_message') do
+      ret = with_rate_limit('send_message') do
         throttle!
         reply_to = incoming_message_id(msg, :id, :message_id)
         dlog "[TD_SEND_MESSAGE] reply_to=#{reply_to} msg.class=#{msg.class}"
-        result = nil
         if t.in? %w[message text]
-          Manager.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0) do |attempt|
-            reply_to = nil if attempt == 1
-            result = message_sender.send_text(
-              msg.chat.id,
-              text,
-              parse_mode:   parse_mode,
-              reply_to:     reply_to,
-              reply_markup: job_reply_markup(cancel_job),
-            )
-          end
+          result = message_sender.send_text(
+            msg.chat.id,
+            text,
+            parse_mode:   parse_mode,
+            reply_to:     reply_to,
+            reply_markup: job_reply_markup(cancel_job),
+          )
         else
           result = message_sender.public_send("send_#{media_type}", msg.chat.id, text, reply_to: reply_to, **params)
           result = wait_for_media_send(result, timeout: params[:timeout].to_i.nonzero? || MEDIA_SEND_TIMEOUT)
@@ -147,7 +138,7 @@ module Bot
       album = Album.new(uploads, album_caption_text(msg, text, parse_mode))
 
       album.batches.each do |batch|
-        result = td_with_rate_limit('send_album') do
+        result = with_rate_limit('send_album') do
           throttle!
           message_sender.send_media_album(msg.chat.id, batch.uploads, caption: batch.caption, parse_mode: parse_mode, timeout: 1_800)
         end
@@ -192,7 +183,7 @@ module Bot
 
     def send_album_items(msg, batch, parse_mode)
       batch.items.map do |up, caption|
-        td_with_rate_limit('send_album_item') do
+        with_rate_limit('send_album_item') do
           throttle!
           case Utils::MimeTypes.telegram_type(up)
           when :video
@@ -209,11 +200,9 @@ module Bot
     def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', force: false, cancel_job: nil, **params)
       reply_markup = job_reply_markup(cancel_job)
       throttle_edit(msg.chat.id, id, force: force) do
-        td_with_rate_limit('edit_message') do
-          Manager.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0) do |_attempt|
-            message_sender.edit_message(msg.chat.id, id, text, parse_mode: parse_mode, reply_markup: reply_markup)
-            true
-          end || false
+        with_rate_limit('edit_message') do
+          message_sender.edit_message(msg.chat.id, id, text, parse_mode: parse_mode, reply_markup: reply_markup)
+          true
         end || false
       end
     end
@@ -286,6 +275,18 @@ module Bot
       edit_message(msg, msg.id, text: text)
     end
 
+    def with_rate_limit(tag, &block)
+      super
+    rescue TD::Error => e
+      STDERR.puts "[TD_ERROR] #{e.class}: #{e.message}"
+      dlog "[TD_ERROR] #{e.class}: #{e.message}"
+      raise
+    rescue => e
+      STDERR.puts "[TD_ERROR] #{e.class}: #{e.message}\n#{e.backtrace&.first(5)&.join("\n")}"
+      dlog "[TD_ERROR] #{e.class}: #{e.message}"
+      raise
+    end
+
     private
 
     def setup_callback_handler(handler)
@@ -335,21 +336,6 @@ module Bot
         raise "timed out waiting for media message #{message_id}" if Time.now >= deadline
         sleep 0.1
       end
-    end
-
-    def td_with_rate_limit(tag)
-      return yield
-    rescue TD::Error => e
-      if e.message.include?('429') || e.message.include?('Too Many Requests')
-        ra = td_retry_after_seconds(e); dlog "[RATE_LIMIT] TDLib sleeping #{ra}s (#{tag})"; sleep ra; retry
-      end
-      STDERR.puts "[TD_ERROR] #{e.class}: #{e.message}"
-      dlog "[TD_ERROR] #{e.class}: #{e.message}"
-      raise
-    rescue => e
-      STDERR.puts "[TD_ERROR] #{e.class}: #{e.message}\n#{e.backtrace&.first(5)&.join("\n")}"
-      dlog "[TD_ERROR] #{e.class}: #{e.message}"
-      raise
     end
   end
 end

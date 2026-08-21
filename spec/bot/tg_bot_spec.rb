@@ -87,6 +87,22 @@ RSpec.describe Bot::TgBot do
     end
   end
 
+  describe '#send_message rate limit' do
+    it 'sleeps on a Telegram 429 then re-raises' do
+      bot = described_class.new
+      msg = SymMash.new(chat: {id: 123}, message_id: 456)
+      tg  = double
+      error = RuntimeError.new('Too Many Requests: retry after 1')
+      allow(bot).to receive(:throttle!)
+      allow(bot).to receive(:sleep)
+      allow(tg).to receive(:send).and_raise(error)
+      bot.tg = tg
+
+      expect { bot.send_message(msg, 'hi') }.to raise_error(error)
+      expect(bot).to have_received(:sleep).with(1)
+    end
+  end
+
   describe '.callback_from' do
     it 'normalizes Telegram callback queries' do
       query = double(

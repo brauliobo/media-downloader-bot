@@ -82,7 +82,7 @@ else
       uploaded = double(id: 456)
       File.write(path, '')
       allow(bot).to receive(:td).and_return(td)
-      allow(bot).to receive(:td_with_rate_limit).and_yield
+      allow(bot).to receive(:with_rate_limit).and_yield
       allow(td).to receive(:edit_message_media).and_return(future)
       allow(future).to receive(:value!).with(no_args).and_return(edited)
       allow(bot.message_sender).to receive(:parse_markdown_text).and_return(

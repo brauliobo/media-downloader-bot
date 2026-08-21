@@ -74,12 +74,14 @@ module Bot
 
     def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', force: false, cancel_job: nil, **params)
       throttle_edit(msg.chat.id, id, force: force) do
-        params[:reply_markup] = job_reply_markup(cancel_job) unless cancel_job.nil?
-        tg.send "edit_message_#{type}", **tg_text_payload(msg, text, parse_mode), message_id: id, **params
-      rescue ::Telegram::Bot::Exceptions::ResponseError => e
-        resp = SymMash.new(JSON.parse(e.response.body))
-        next if resp&.description&.match(/exactly the same as a current content/)
-        raise
+        with_rate_limit('edit_message') do
+          params[:reply_markup] = job_reply_markup(cancel_job) unless cancel_job.nil?
+          tg.send "edit_message_#{type}", **tg_text_payload(msg, text, parse_mode), message_id: id, **params
+        rescue ::Telegram::Bot::Exceptions::ResponseError => e
+          resp = SymMash.new(JSON.parse(e.response.body))
+          next if resp&.description&.match(/exactly the same as a current content/)
+          raise
+        end
       end
     end
 
@@ -88,17 +90,19 @@ module Bot
     end
 
     def send_message(msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, cancel_job: nil, **params)
-      _text = text
-      throttle!
-      ep = "send_#{type}"
-      payload = tg_text_payload(msg, text, parse_mode)
-      payload.delete(:text) if type.to_s != 'message'
-      payload[:reply_to_message_id] = incoming_message_id(msg)
-      params[:reply_markup] = job_reply_markup(cancel_job) unless cancel_job.nil?
-      resp  = SymMash.new tg.send(ep, **payload, **wrap_upload_params(params.merge(type: type))).to_h
-      resp.text = _text
+      with_rate_limit('send_message') do
+        _text = text
+        throttle!
+        ep = "send_#{type}"
+        payload = tg_text_payload(msg, text, parse_mode)
+        payload.delete(:text) if type.to_s != 'message'
+        payload[:reply_to_message_id] = incoming_message_id(msg)
+        params[:reply_markup] = job_reply_markup(cancel_job) unless cancel_job.nil?
+        resp  = SymMash.new tg.send(ep, **payload, **wrap_upload_params(params.merge(type: type))).to_h
+        resp.text = _text
 
-      finalize_sent_message(msg, resp, delete: delete, delete_both: delete_both)
+        finalize_sent_message(msg, resp, delete: delete, delete_both: delete_both)
+      end
     end
 
     def send_album(msg, text, uploads:, parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **_params)
@@ -106,14 +110,16 @@ module Bot
       album = Album.new(uploads, text)
 
       album.batches.each do |batch|
-        throttle!
-        payload = {
-          chat_id:             msg.chat.id,
-          reply_to_message_id: incoming_message_id(msg),
-          media:               album_media(batch.uploads, batch.caption, parse_mode)
-        }
-        batch.uploads.each_with_index { |up, i| payload["file#{i}".to_sym] = build_upload_io(up.fn_out, up.mime) }
-        sent.concat Array(tg.send(:send_media_group, **payload).map { |m| SymMash.new(m.to_h) })
+        with_rate_limit('send_album') do
+          throttle!
+          payload = {
+            chat_id:             msg.chat.id,
+            reply_to_message_id: incoming_message_id(msg),
+            media:               album_media(batch.uploads, batch.caption, parse_mode)
+          }
+          batch.uploads.each_with_index { |up, i| payload["file#{i}".to_sym] = build_upload_io(up.fn_out, up.mime) }
+          sent.concat Array(tg.send(:send_media_group, **payload).map { |m| SymMash.new(m.to_h) })
+        end
       end
 
       finalize_sent_message(msg, sent.first || SymMash.new(message_id: 0), delete: delete, delete_both: delete_both)
