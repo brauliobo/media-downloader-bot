@@ -42,13 +42,17 @@ module Audiobook
           end
         end
 
-        cover = Cover.detect(pdf_path, page: document.pages.first) if document.pages.any?
+        first = document.pages.first
+        cover = Cover.detect(pdf_path, page: first) if first
 
         SymMash.new(
           metadata: SymMash.new(
             title:          info.title.presence || File.basename(pdf_path, '.*'),
             pdf_author:     info.author,
             source_name:    File.basename(pdf_path, '.*'),
+            source_path:    pdf_path,
+            page_width:     first&.width,
+            page_height:    first&.height,
             cover:          cover,
             has_ocr_pages:  image_pages.any?,
             page_count:     page_count,

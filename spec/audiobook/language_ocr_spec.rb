@@ -78,6 +78,19 @@ RSpec.describe 'Audiobook OCR language detection' do
     expect(uploads.first.mime).to eq('application/x-yaml')
   end
 
+  it 'attaches the cover thumb to onlyyml uploads' do
+    book = instance_double(Audiobook::Book)
+    allow(book).to receive(:thumb).with(dir: 'tmp', base: 'book').and_return('/tmp/book-cover.jpg')
+    allow(book).to receive(:metadata).and_return(SymMash.new(title: 'Book'))
+    allow(Audiobook).to receive(:base_from_source).and_return('book')
+    allow(Audiobook).to receive(:generate).and_return(SymMash.new(yaml: 'book.yml', book: book))
+
+    uploads = Audiobook.generate_uploads('book.pdf', dir: 'tmp', stl: nil, opts: SymMash.new(onlyyml: 1))
+
+    expect(uploads.size).to eq(1)
+    expect(uploads.first.thumb).to eq('/tmp/book-cover.jpg')
+  end
+
   it 'uses the book cover as the audio thumbnail' do
     book = instance_double(Audiobook::Book)
     allow(book).to receive(:thumb).with(dir: 'tmp', base: 'book').and_return('/tmp/book-cover.jpg')
@@ -90,7 +103,7 @@ RSpec.describe 'Audiobook OCR language detection' do
 
     uploads = Audiobook.generate_uploads('book.pdf', dir: 'tmp', stl: nil)
 
-    expect(uploads.last.thumb).to eq('/tmp/book-cover.jpg')
+    expect(uploads.map(&:thumb).uniq).to eq(['/tmp/book-cover.jpg'])
     expect(uploads.last.mime).to eq('audio/aac')
     expect(uploads.last.fn_out).to eq('book.m4a')
     expect(uploads.map { |upload| upload.info.title }.uniq).to eq(['Book Title'])
@@ -100,7 +113,7 @@ RSpec.describe 'Audiobook OCR language detection' do
 
   it 'uploads a translation PDF with the yaml and audiobook' do
     book = instance_double(Audiobook::Book)
-    allow(book).to receive(:thumb).with(dir: 'tmp', base: 'book').and_return(nil)
+    allow(book).to receive(:thumb).with(dir: 'tmp', base: 'book').and_return('/tmp/book-cover.jpg')
     allow(book).to receive(:metadata).and_return(SymMash.new)
     allow(Audiobook).to receive(:base_from_source).and_return('book')
     allow(Audiobook).to receive(:generate).and_return(
@@ -110,10 +123,10 @@ RSpec.describe 'Audiobook OCR language detection' do
 
     uploads = Audiobook.generate_uploads('book.pdf', dir: 'tmp', stl: nil)
 
-    expect(uploads.map { |upload| [upload.fn_out, upload.mime] }).to eq([
-      ['book.yml', 'application/x-yaml'],
-      ['book.pt.pdf', 'application/pdf'],
-      ['book.m4a', 'audio/aac'],
+    expect(uploads.map { |upload| [upload.fn_out, upload.mime, upload.thumb] }).to eq([
+      ['book.yml', 'application/x-yaml', '/tmp/book-cover.jpg'],
+      ['book.pt.pdf', 'application/pdf', '/tmp/book-cover.jpg'],
+      ['book.m4a', 'audio/aac', '/tmp/book-cover.jpg'],
     ])
   end
 

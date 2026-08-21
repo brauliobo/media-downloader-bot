@@ -45,25 +45,26 @@ module Audiobook
     result = generate(source, audio_out, stl: stl, opts: opts)
     title  = upload_title(result.book, base)
     result = relocate_translated_outputs(result, title) if result.book.is_a?(Book) && result.book.translated
-    uploads = [document_upload(result.yaml, title, 'application/x-yaml')]
+    thumb  = result.book.thumb(dir: dir, base: base) if result.book.respond_to?(:thumb)
+    uploads = [document_upload(result.yaml, title, 'application/x-yaml', thumb: thumb)]
     return uploads if opts.onlyyml
 
-    uploads << document_upload(result.translation_pdf, title, 'application/pdf') if result.translation_pdf
-    uploads << audio_upload(result, dir, base, audio_format, title: title)
+    uploads << document_upload(result.translation_pdf, title, 'application/pdf', thumb: thumb) if result.translation_pdf
+    uploads << audio_upload(result, audio_format, title: title, thumb: thumb)
     uploads
   ensure
     cleanup_kindle_capture(result&.pdf)
   end
 
-  def self.document_upload(path, title, mime)
-    upload(path, type: :document, title: title, mime: mime)
+  def self.document_upload(path, title, mime, thumb: nil)
+    upload(path, type: :document, title: title, mime: mime, thumb: thumb)
   end
 
-  def self.audio_upload(result, dir, base, audio_format, title: base)
+  def self.audio_upload(result, audio_format, title:, thumb:)
     upload = upload(
       result.audio, type: :audio, title: title, mime: audio_format.mime,
       uploader: upload_author(result.book).to_s, format: audio_format,
-      thumb: result.book.thumb(dir: dir, base: base)
+      thumb: thumb
     )
     upload.oprobe = Prober.for(result.audio)
     upload

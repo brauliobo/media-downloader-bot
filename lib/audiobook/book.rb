@@ -349,29 +349,7 @@ module Audiobook
     end
 
     def thumb(dir:, base:)
-      return metadata.cover&.thumbnail(dir: dir, base: base) if metadata.key?(:cover)
-      return nil unless (first_page = pages.first)
-      return nil unless (first_image = first_page.items.find { |item| item.is_a?(Audiobook::Image) })
-      return nil unless first_image.path
-
-      img_path = first_image.path.to_s
-      return img_path if File.exist?(img_path)
-
-      return nil unless img_path =~ /^(.+\.pdf)#page=(\d+)$/i
-      pdf_path = $1
-      page_num = $2.to_i
-      return nil unless File.exist?(pdf_path)
-      return nil unless page_num > 0
-
-      tmp_base = File.join(dir, "#{base}-thumb")
-      tmp_thumb = "#{tmp_base}.png"
-      return nil unless system('pdftoppm', '-f', page_num.to_s, '-l', page_num.to_s, '-png', '-singlefile', pdf_path, tmp_base)
-
-      candidate = Dir["#{tmp_base}*.png"].min
-      return nil unless candidate
-
-      FileUtils.mv(candidate, tmp_thumb) unless candidate == tmp_thumb
-      File.exist?(tmp_thumb) ? tmp_thumb : nil
+      cover_for_thumb&.thumbnail(dir: dir, base: base)
     end
 
     private
@@ -389,6 +367,17 @@ module Audiobook
       @metadata.author   = info['author'] if info['author'].present?
       @metadata.language = info['lang']   if field(:language).blank? && info['lang'].to_s.match?(/\A[a-z]{2}\z/)
       @author_gender     = info['gender'].presence || 'male'
+    end
+
+    def cover_for_thumb
+      metadata.cover.presence || cover_from_source
+    end
+
+    def cover_from_source
+      path = field(:source_path)
+      return unless path && File.file?(path.to_s)
+
+      Cover.from_page(path, SymMash.new(number: 1, width: field(:page_width).to_f, height: field(:page_height).to_f))
     end
 
     def extract_sample_text
