@@ -441,6 +441,13 @@ class Zipper
     File.unlink wav if wav && File.exist?(wav)
   end
 
+  def self.with_copy_audio path, ffmpeg: nil, ffmpeg_factory: nil
+    audio = copy_audio path, ffmpeg: ffmpeg, ffmpeg_factory: ffmpeg_factory
+    File.open(audio) { |file| yield file }
+  ensure
+    File.unlink audio if audio && File.exist?(audio)
+  end
+
   def self.audio_to_wav path, sample_rate: nil, channels: nil, ffmpeg: nil, ffmpeg_factory: nil
     wav = File.join Dir.pwd, "audio-#{SecureRandom.hex 6}.wav"
     builder = ffmpeg || ffmpeg_factory&.call || FFmpeg.new
@@ -453,6 +460,17 @@ class Zipper
       raise 'ffmpeg failed'
     end
     wav
+  end
+
+  def self.copy_audio path, ffmpeg: nil, ffmpeg_factory: nil
+    audio   = File.join Dir.pwd, "audio-#{SecureRandom.hex 6}.mka"
+    builder = ffmpeg || ffmpeg_factory&.call || FFmpeg.new
+    begin
+      builder.extract_copy_audio input: path, output: audio, label: 'ffmpeg failed'
+    rescue Sh::Error
+      raise 'ffmpeg failed'
+    end
+    audio
   end
 
   def self.prepare_subtitle(*args, **kwargs)

@@ -18,7 +18,7 @@ RSpec.describe Zipper do
       add_filter add_map map_stream scale preserve_resolution_scale metadata codec encode_video maxrate buffer_size
       rate_control bitrate no_audio copy_audio encode_audio metadata_policy movflags
       end_at duration output capture create_silence concat_audio add_audio_floor speed_audio
-      audio_to_wav convert_subtitle subtitle_codec
+      audio_to_wav extract_copy_audio convert_subtitle subtitle_codec
     ]
     methods.each { |method| allow(ffmpeg).to receive(method) }
     allow(ffmpeg).to receive(:capture).and_return result
@@ -57,6 +57,26 @@ RSpec.describe Zipper do
     expect(ffmpeg).to have_received(:audio_to_wav).with(
       input: '/tmp/input.mp4', output: match(/audio-.*\.wav\z/),
       sample_rate: 16_000, channels: 1, label: 'ffmpeg failed'
+    )
+  end
+
+  it 'cleans a stream-copied audio file after yielding it through an injected builder' do
+    ffmpeg = ffmpeg_double
+    output = nil
+    allow(ffmpeg).to receive(:extract_copy_audio) do |arguments|
+      output = arguments.fetch(:output)
+      File.write output, 'audio'
+      output
+    end
+
+    result = described_class.with_copy_audio '/tmp/input.mp4', ffmpeg: ffmpeg do |file|
+      file.read
+    end
+
+    expect(result).to eq 'audio'
+    expect(File).not_to exist(output)
+    expect(ffmpeg).to have_received(:extract_copy_audio).with(
+      input: '/tmp/input.mp4', output: match(/audio-.*\.mka\z/), label: 'ffmpeg failed'
     )
   end
 

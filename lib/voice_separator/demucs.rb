@@ -1,8 +1,9 @@
 require 'archive/zip'
-require 'faraday'
-require 'faraday/multipart'
 require 'tempfile'
 require 'uri'
+
+require_relative '../utils/http'
+require_relative '../zipper'
 
 class VoiceSeparator
   module Demucs
@@ -22,22 +23,18 @@ class VoiceSeparator
     end
 
     def download(path)
-      archive = Tempfile.new(['demucs-stems-', '.zip'])
-      connection = Faraday.new(url: api.to_s) do |faraday|
-        faraday.request :multipart
-        faraday.adapter Faraday.default_adapter
-      end
-      connection.options.timeout = ENV.fetch('HTTP_TIMEOUT', 30 * 60).to_i
-      response = connection.post('/v1/separate') do |request|
-        request.body = {
-          file: Faraday::Multipart::FilePart.new(path, 'application/octet-stream')
-        }
-        request.options.on_data = ->(chunk, _bytes, _env) { archive.write(chunk) }
-      end
-      raise "voice separation failed: #{response.status}" unless response.success?
+      archive = nil
+      Utils::HTTP.client(timeout: ENV.fetch('HTTP_TIMEOUT', 30 * 60).to_i)
+      Zipper.with_copy_audio(path) do |file|
+        response = Utils::HTTP.post("#{api.to_s.delete_suffix('/')}/v1/separate", file: file)
+        raise "voice separation failed: #{response.code}" unless response.code == '200'
 
-      archive.flush
-      archive.rewind
+        archive = Tempfile.new(['demucs-stems-', '.zip'])
+        archive.binmode
+        archive.write(response.body)
+        archive.flush
+        archive.rewind
+      end
       archive
     rescue
       archive&.close!

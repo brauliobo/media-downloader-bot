@@ -900,6 +900,20 @@ RSpec.describe FFmpeg do
       end
     end
 
+    it 'copies the audio stream without decoding' do
+      Dir.mktmpdir do |dir|
+        output = File.join dir, 'audio.mka'
+
+        expect(ffmpeg.extract_copy_audio(
+          input: '/media/source.mp4', output: output, label: 'ffmpeg failed'
+        )).to eq output
+        expect(commands).to eq [[
+          'ffmpeg', '-loglevel', 'error', '-y', '-i', '/media/source.mp4',
+          '-vn', '-c:a', 'copy', output
+        ]]
+      end
+    end
+
     it 'normalizes mono speech at 48 kHz' do
       Dir.mktmpdir do |dir|
         output = File.join dir, 'speech.wav'

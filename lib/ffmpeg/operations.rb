@@ -48,6 +48,15 @@ class FFmpeg
     end
   end
 
+  def extract_copy_audio input:, output:, label:
+    run_one_shot profile: :extract, label: label do |builder|
+      builder.input input
+      builder.disable :video
+      builder.copy stream: :audio
+      builder.output output
+    end
+  end
+
   def normalize_dub_audio input:, output:, label:
     run_one_shot label: label do |builder|
       builder.input input
@@ -189,7 +198,7 @@ class FFmpeg
   end
 
   public :extract_audio, :transcribe_wav, :convert_subtitle, :remux_audio,
-         :normalize_dub_audio, :render_dub_timeline, :create_dub_silence,
+         :extract_copy_audio, :normalize_dub_audio, :render_dub_timeline, :create_dub_silence,
          :mux_dubbed_audio, :concat_audio, :create_silence, :add_audio_floor,
          :speed_audio, :audio_to_wav
 end
