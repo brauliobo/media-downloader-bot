@@ -18,6 +18,8 @@ class Zipper
       return unless subtitles_requested?(zipper.opts)
 
       subtitle = prepare(zipper, translate_to: subtitle_translation_target(zipper.opts))
+      return unless subtitle
+
       zipper.stl&.update 'transcoding'
 
       stream = zipper.probe.streams.find { |s| s.codec_type == 'video' }
@@ -44,6 +46,9 @@ class Zipper
       subtitle ||= fetch(zipper) unless zipper.opts.gensubs
 
       unless subtitle
+        return unless transcription_requested?(zipper.opts)
+
+        # Demucs vocals are only for Whisper. The zipper still encodes zipper.infile.
         subtitle = Subtitler.transcribe(zipper.infile, stl: zipper.stl)
         normalize_language!(subtitle)
         subtitle.normalize_entries!
@@ -87,8 +92,16 @@ class Zipper
     def subtitles_requested?(opts)
       return false if subtitle_mode(opts) == 'none'
 
-      opts.slang || opts.sub_mode.present? || opts.sub.present? || opts.subs || opts.gensubs || opts.onlysrt ||
-        opts.subtitle || opts.sub_vtt
+      transcription_requested?(opts) || opts.slang.present? || opts.subtitle || opts.sub_vtt
+    end
+
+    # Whisper on the Demucs vocal stem. lang=/slang= request generation; the
+    # original soundtrack is kept unless dubbing remuxes separated audio.
+    def transcription_requested?(opts)
+      return false if subtitle_mode(opts) == 'none'
+
+      opts.slang.present? || opts.sub_mode.present? || opts.sub.present? || opts.subs ||
+        opts.gensubs || opts.onlysrt || opts.genshorts
     end
 
     def sanitize_vtt vtt
@@ -187,7 +200,7 @@ class Zipper
       subtitle.translated(from: from, to: to, merge_adjacent: false)
     end
 
-    private :subtitles_requested?, :provided_subtitle, :fetch, :fetch_scraped,
+    private :subtitles_requested?, :transcription_requested?, :provided_subtitle, :fetch, :fetch_scraped,
             :fetch_embedded, :preferred_lang, :subtitle_match?, :normalize_language!, :translate_if_needed
     private :safe_ass_prefix
   end

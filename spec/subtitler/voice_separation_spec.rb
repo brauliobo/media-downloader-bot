@@ -10,6 +10,7 @@ RSpec.describe Subtitler do
       .and_return(transcript)
 
     expect(described_class.transcribe('/tmp/input.mp4')).to equal(transcript)
+    expect(VoiceSeparator).to have_received(:with_stems).with('/tmp/input.mp4')
   end
 
   it 'reports voice separation before transcription' do

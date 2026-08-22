@@ -66,6 +66,44 @@ RSpec.describe Zipper::Subtitle do
     expect(structured).to have_attributes(language: 'en', text: 'Hello.')
   end
 
+  it 'does not transcribe a simple video convert without a generation rule' do
+    zipper = instance_double(
+      Zipper,
+      infile: 'video.mp4',
+      opts: SymMash.new,
+      stl: nil,
+      info: SymMash.new
+    )
+    allow(described_class).to receive(:fetch).and_return(nil)
+    expect(Subtitler).not_to receive(:transcribe)
+    expect(VoiceSeparator).not_to receive(:with_stems)
+
+    expect(described_class.prepare(zipper)).to be_nil
+  end
+
+  it 'transcribes lang=/slang= from Demucs vocals without changing the source file' do
+    opts = SymMash.new(lang: 'pt')
+    Processors::Base.normalize_options(opts)
+    subtitle = Subtitler::Subtitle.new(
+      language: 'en', text: 'Hello.',
+      entries: [Subtitler::Subtitle::Entry.new(text: 'Hello.', start: 0.0, finish: 1.0)]
+    )
+    zipper = instance_double(
+      Zipper,
+      infile: 'video.mp4',
+      opts: opts,
+      stl: nil,
+      info: SymMash.new
+    )
+    allow(described_class).to receive(:fetch).and_return(nil)
+    allow(Subtitler).to receive(:transcribe).with('video.mp4', stl: nil).and_return(subtitle)
+
+    structured = described_class.prepare(zipper)
+
+    expect(structured).to have_attributes(language: 'en', text: 'Hello.')
+    expect(Subtitler).to have_received(:transcribe).with('video.mp4', stl: nil)
+  end
+
   it 'prefers exact and base-matching authored locales without translating them' do
     vtt    = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nOlá.\n"
     ffmpeg = instance_double(FFmpeg)

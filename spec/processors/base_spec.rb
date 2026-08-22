@@ -96,5 +96,14 @@ RSpec.describe Processors::Base do
       expect(opts.sub_mode).to be_nil
       expect(opts.sub_lang).to be_nil
     end
+
+    it 'canonicalizes gensub as gensubs' do
+      opts = SymMash.new(gensub: 1)
+
+      described_class.normalize_options(opts)
+
+      expect(opts.gensubs).to eq(1)
+      expect(opts.gensub).to be_nil
+    end
   end
 end

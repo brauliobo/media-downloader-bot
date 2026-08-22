@@ -138,9 +138,7 @@ module Processors
 
       fn_out = ::File.expand_path(Output.filename(i.info, dir: dir, ext: i.format.ext, pos: pos))
       fn_in = ::File.expand_path(i.fn_in)
-      if dub_video?(i)
-        fn_in = dub_video(i, fn_in)
-      end
+      fn_in = dub_video(i, fn_in) if dub_video?(i)
 
       o, e, st = Zipper.send "zip_#{i.type.name}", fn_in, fn_out,
         opts: i.opts, probe: i.probe, stl: i.stl, info: i.info

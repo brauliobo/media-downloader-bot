@@ -181,6 +181,21 @@ RSpec.describe Processors::Media do
       expect(i.opts.acodec).to eq('aac')
     end
 
+    it 'zips the original file when transcribing subtitles' do
+      i.opts = SymMash.new(gensubs: 1, slang: 'pt')
+      allow(Zipper).to receive(:choose_format).and_return(SymMash.new(ext: :mp4, mime: 'video/mp4'))
+      allow(Dubbing::Pipeline).to receive(:apply)
+      allow(Zipper).to receive(:zip_video).and_return(['', '', instance_double(Process::Status, success?: true)])
+      allow(Output).to receive(:filename).and_return(File.join(dir, 'out.mp4'))
+
+      processor.convert(i)
+
+      expect(Dubbing::Pipeline).not_to have_received(:apply)
+      expect(Zipper).to have_received(:zip_video).with(
+        '/tmp/in.mp4', File.join(dir, 'out.mp4'), opts: i.opts, probe: nil, stl: stl, info: i.info
+      )
+    end
+
     it 'dubs video inputs before the normal zipper conversion' do
       i.opts = SymMash.new(dub: 1, dub_lang: 'pt', sub_mode: 'language', sub_lang: 'pt')
       dubbed = File.join(dir, 'dubbed.mp4')

@@ -113,6 +113,7 @@ module Processors
 
     def self.normalize_options(opts)
       normalize_hashtags_opt opts
+      normalize_gensubs_opt opts
       normalize_dub_opt opts
       normalize_sub_opt opts
       expand_lang_opt opts
@@ -126,6 +127,15 @@ module Processors
       opts.delete(:hts)
       opts.delete('#')
       opts.delete(:'#')
+      opts
+    end
+
+    def self.normalize_gensubs_opt(opts)
+      value = opts[:gensubs] || opts[:gensub]
+      return opts unless value
+
+      opts[:gensubs] = value
+      opts.delete(:gensub)
       opts
     end
 
