@@ -39,7 +39,7 @@ module Audiobook
     end
 
     def generate(pdf_path)
-      @stl&.update 'Generating PDF from text'
+      @stl&.update 'Generating translated PDF'
       Dir.mktmpdir('text-pdf-') do |dir|
         @assets   = dir
         html_path = File.join(dir, 'book.html')
@@ -73,7 +73,7 @@ module Audiobook
 
     def html_styles
       body_size = @book.respond_to?(:font_roles) ? @book.font_roles&.body_size : nil
-      body_rule = body_size ? "font-size: #{format_pt(body_size)}; " : ''
+      body_rule = body_size ? "font-size: #{FontRoles.format_pt(body_size)}; " : ''
       <<~CSS
         <style>
           @page { size: A4; margin: 14mm; }
@@ -167,7 +167,11 @@ module Audiobook
 
     def render_paragraph(item)
       parts = item.sentences.filter_map { |sentence| sentence_html(sentence) }
-      parts.empty? ? '' : "<p#{style_attr(item.sentences.first)}>#{parts.join(' ')}</p>\n"
+      return '' if parts.empty?
+
+      text  = parts.join(' ')
+      first = item.sentences.first
+      "<p#{style_attr(first, alignment: FontRoles.flow_alignment(first, text: text, paragraph: true))}>#{text}</p>\n"
     end
 
     def sentence_html(sentence)
@@ -250,21 +254,9 @@ module Audiobook
       CGI.escapeHTML(text.to_s)
     end
 
-    def style_attr(*sources)
-      item = sources.compact.first
-      return '' unless item
-
-      rules = []
-      rules << "font-size: #{format_pt(item.font_size)}" if item.respond_to?(:font_size) && item.font_size
-      rules << "text-align: #{item.alignment}" if item.respond_to?(:alignment) && item.alignment
-      rules << 'font-weight: bold' if item.respond_to?(:bold) && item.bold
-      rules << 'font-style: italic' if item.respond_to?(:italic) && item.italic
-      rules << "color: #{item.color}" if item.respond_to?(:color) && item.color
+    def style_attr(item, alignment: :keep)
+      rules = FontRoles.css_rules(item, alignment: alignment)
       rules.empty? ? '' : %( style="#{rules.join('; ')}")
-    end
-
-    def format_pt(size)
-      "#{size.to_f.round(1)}pt".sub('.0pt', 'pt')
     end
 
     def convert_html_to_pdf(html_path, pdf_path)

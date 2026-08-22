@@ -53,7 +53,7 @@ RSpec.describe Audiobook::TextPdf do
     expect(html).to include('<title>Book Title</title>')
     expect(html).to include('<h1 style="font-size: 18pt; text-align: center; font-weight: bold">Part One</h1>')
     expect(html).to include('<h2 style="font-size: 16pt; text-align: center; font-weight: bold">Chapter</h2>')
-    expect(html).to include('<p style="font-size: 12pt; text-align: left">First sentence. [1] Second sentence.</p>')
+    expect(html).to include('<p style="font-size: 12pt">First sentence. [1] Second sentence.</p>')
     expect(html).to include('<p>Repeated footer.</p>')
     expect(html).to include('<aside class="reference"><sup>1</sup> A footnote.</aside>')
     expect(html).to include('<p>OCR cover text.</p>')
@@ -89,6 +89,35 @@ RSpec.describe Audiobook::TextPdf do
       list, = Sh.run ['pdfimages', '-list', path]
       expect(list.lines.count { |line| line.split[2] == 'image' }).to be >= 1
     end
+  end
+
+  it 'keeps long body paragraphs justified instead of inheriting center' do
+    sentence = Audiobook::Sentence.new('A long translated paragraph that should not be centered on the page.')
+    sentence.font_size = 12
+    sentence.alignment = :center
+    book = Audiobook::Book.allocate
+    book.instance_variable_set(:@pages, [Audiobook::Page.new(1, [Audiobook::Paragraph.new([sentence])])])
+    book.instance_variable_set(:@metadata, SymMash.new(language: 'pt', title: 'Book'))
+
+    html = described_class.new(book).build_html
+
+    expect(html).to include('<p style="font-size: 12pt">A long translated paragraph that should not be centered on the page.</p>')
+    expect(html).not_to include('text-align: center')
+  end
+
+  it 'announces translated PDF generation on the status line' do
+    book = Audiobook::Book.new(data: book_data, opts: SymMash.new(includeall: true), translate: false)
+    stl  = instance_double('StatusLine', update: nil)
+    pdf  = described_class.new(book, stl: stl)
+    allow(pdf).to receive(:convert_html_to_pdf)
+
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, 'book.pt.pdf')
+      File.write(path, '%PDF-')
+      pdf.generate(path)
+    end
+
+    expect(stl).to have_received(:update).with('Generating translated PDF')
   end
 
   it 'prefers chromium over pandoc' do
