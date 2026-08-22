@@ -43,10 +43,10 @@ module Audiobook
       }
     end
 
-    def font_changed?(other_line, threshold: 0.10)
+    def font_changed?(other_line)
       return false unless @font_size && other_line.font_size && other_line.font_size > 0
-      diff = (@font_size - other_line.font_size).abs
-      diff > 1.0 || diff / other_line.font_size > threshold
+
+      !FontRoles.same_size?(self, other_line)
     end
 
     def style_changed?(other_line)

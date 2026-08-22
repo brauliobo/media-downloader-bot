@@ -6,7 +6,12 @@ module Audiobook
     HEADING_MIN_SCORE = 3.5
     TITLE_MAX_COUNT = 2
     HEADING_ROLES = %i[chapter heading subheading].freeze
+    HEADING_LIKE_ROLES = %i[title chapter heading subheading].freeze
     STYLE_ATTRS = %i[font_size alignment bold italic color font_name].freeze
+    CENTER_SPAN_MAX = 0.55
+    CENTER_SIDE_MIN = 0.18
+    SHORT_CENTER_WORDS = 12
+    MAX_HEADING_WORDS  = 24
 
     attr_reader :body_size, :map
 
@@ -45,15 +50,84 @@ module Audiobook
       right_edge = x_max.to_f
       right_edge = left if right_edge <= left
       right      = width - right_edge
+      span       = right_edge - left
       mid_err    = ((left + right_edge) / 2.0 - width / 2.0).abs
 
-      if mid_err <= width * 0.08 && left > width * 0.12 && right > width * 0.12
+      if mid_err <= width * 0.08 && left > width * CENTER_SIDE_MIN && right > width * CENTER_SIDE_MIN &&
+          span <= width * CENTER_SPAN_MAX
         :center
       elsif right + 2 < left * 0.5 && left > width * 0.25
         :right
       else
         :left
       end
+    end
+
+    def self.same_size?(a, b)
+      sa, sb = size_of(a), size_of(b)
+      sa && sb && sa == sb
+    end
+
+    def self.heading_item?(line)
+      if (roles = current)
+        role = roles.role_for(line)
+        return true if HEADING_LIKE_ROLES.include?(role)
+        return false if %i[body footnote].include?(role)
+      end
+      line.respond_to?(:heading_like?) && line.heading_like?
+    end
+
+    def self.heading_continuation?(prev, line)
+      return false unless prev && line && heading_item?(prev)
+      return false unless same_size?(prev, line)
+      return false if long_body_line?(line) || labeled_line?(line)
+      heading_item?(line) || same_emphasis?(prev, line)
+    end
+
+    def self.labeled_line?(line)
+      line.text.to_s.match?(/\A[\p{L}.]+\s*:/u)
+    end
+
+    def self.long_body_line?(line)
+      words = line.respond_to?(:word_count) ? line.word_count : line.text.to_s.split.size
+      words > SHORT_CENTER_WORDS && !heading_item?(line)
+    end
+
+    def self.same_emphasis?(a, b)
+      !!a&.bold == !!b&.bold
+    end
+
+    def self.alignment_of(line)
+      value = line.respond_to?(:alignment) ? line.alignment : line[:alignment] || line['alignment']
+      value&.to_s&.to_sym
+    end
+
+    def self.flow_alignment(item, text: nil, paragraph: false)
+      align = alignment_of(item)
+      return unless align
+
+      body = text || (item.respond_to?(:text) ? item.text : '')
+      return if paragraph && align == :center && body.to_s.split.size >= SHORT_CENTER_WORDS
+      return if paragraph && align == :left
+
+      align
+    end
+
+    def self.format_pt(size)
+      "#{size.to_f.round(1)}pt".sub('.0pt', 'pt')
+    end
+
+    def self.css_rules(item, alignment: :keep)
+      return [] unless item
+
+      align = alignment == :keep ? alignment_of(item) : alignment
+      rules = []
+      rules << "font-size: #{format_pt(item.font_size)}" if item.respond_to?(:font_size) && item.font_size
+      rules << "text-align: #{align}" if align
+      rules << 'font-weight: bold' if item.respond_to?(:bold) && item.bold
+      rules << 'font-style: italic' if item.respond_to?(:italic) && item.italic
+      rules << "color: #{item.color}" if item.respond_to?(:color) && item.color
+      rules
     end
 
     def self.copy_style(target, source)
@@ -253,8 +327,7 @@ module Audiobook
     end
 
     def alignment_of(line)
-      value = line.respond_to?(:alignment) ? line.alignment : line[:alignment] || line['alignment']
-      value&.to_s&.to_sym
+      self.class.alignment_of(line)
     end
 
     def uppercase?(line)
