@@ -96,10 +96,14 @@ module Audiobook
       def self.should_break?(prev_line, line, buf, spacing_threshold:, indent_threshold:)
         # Dehyphenate check is handled before calling this
         
-        font_changed = line.font_changed?(prev_line) || line.style_changed?(prev_line)
+        continuation = FontRoles.heading_continuation?(prev_line, line)
+        font_changed = line.font_changed?(prev_line) || (
+          !continuation && !FontRoles.heading_item?(prev_line) && line.style_changed?(prev_line)
+        )
         page_changed = line.page_number != prev_line.page_number
         is_only_numbers = line.text.match?(/^\d+$/)
         language_changed = line.language != prev_line.language
+        role_changed = !continuation && FontRoles.heading_item?(prev_line) != FontRoles.heading_item?(line)
 
         spacing_break = detect_spacing_break(prev_line, line, spacing_threshold)
         indent_break = detect_indent_break(prev_line, line, indent_threshold)
@@ -107,14 +111,16 @@ module Audiobook
         buffer_text = buf.map(&:text).join(' ').strip
         sentence_finished = Sentence.ends_with_punctuation?(buffer_text)
 
-        should_break = language_changed || is_only_numbers || font_changed || (sentence_finished && line.starts_with_capital?)
-        should_break = true if (spacing_break || indent_break) && sentence_finished
+        should_break = language_changed || is_only_numbers || font_changed || role_changed ||
+          FontRoles.labeled_line?(line) ||
+          (sentence_finished && line.starts_with_capital? && !continuation)
+        should_break = true if (spacing_break || indent_break) && sentence_finished && !continuation
 
         if should_break
           should_break = false if TextHelpers.starts_with_ref_markers?(line.text)
         end
 
-        if page_changed && !sentence_finished && !font_changed && !is_only_numbers && !spacing_break && !indent_break
+        if page_changed && !sentence_finished && !font_changed && !role_changed && !is_only_numbers && !spacing_break && !indent_break
           should_break = false
         end
 

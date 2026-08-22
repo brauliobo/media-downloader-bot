@@ -61,11 +61,13 @@ module Audiobook
       end
 
       def split_group?(group, line, prev_font)
-        return true if prev_font && line.font_size && line.font_size != prev_font
-        return true if line.style_changed?(group.first)
-        return true if line.text.match?(/^\d+$/)
+        return true if line.text.match?(/^\d+$/) || FontRoles.labeled_line?(line)
+        return true if prev_font && line.font_size && !FontRoles.same_size?(line, group.last)
+        return false if FontRoles.heading_continuation?(group.last, line)
+        return true if FontRoles.heading_item?(group.first) != FontRoles.heading_item?(line)
+        return true if !FontRoles.heading_item?(group.first) && line.style_changed?(group.first)
 
-        self.class.heading_like?(line.text) || self.class.heading_like?(group.first.text)
+        false
       end
 
       def normalize_group_text(group)
@@ -82,11 +84,14 @@ module Audiobook
       def create_item(first_line, sentences)
         numeric_only = sentences.size == 1 && sentences.first.text.strip.match?(/\A[^\p{L}]*\z/u)
         level = FontRoles.current&.level_for(first_line)
+        joined = sentences.map(&:text).join(' ')
 
-        item = if !numeric_only && heading_from_font?(first_line, level, sentences)
-          create_section(first_line, sentences.map(&:text).join(' '), level: level)
-        elsif !numeric_only && sentences.size == 1 && heading_like?(first_line, sentences.first.text)
-          create_heading(first_line, sentences.first)
+        item = if !numeric_only && heading_group?(first_line, level, joined, sentences.size)
+          if level.to_i.positive?
+            create_section(first_line, joined, level: level)
+          else
+            create_heading(first_line, joined, language: first_line.language)
+          end
         else
           create_paragraph(first_line, sentences)
         end
@@ -94,17 +99,20 @@ module Audiobook
         item_data(first_line, item)
       end
 
-      def heading_from_font?(first_line, level, sentences)
-        return false unless level.to_i.positive?
+      def heading_group?(first_line, level, joined, sentence_count)
+        words = joined.split.size
+        return false if words > FontRoles::MAX_HEADING_WORDS
 
-        words = sentences.sum { |sentence| sentence.text.split.size }
-        return false unless sentences.size == 1 && words <= 20
-
-        heading_like?(first_line, sentences.first.text) || words <= 12
+        font_heading = level.to_i.positive? || (FontRoles.current && FontRoles.heading_item?(first_line))
+        if font_heading
+          heading_like?(first_line, joined) || words <= 20
+        else
+          sentence_count == 1 && heading_like?(first_line, joined)
+        end
       end
 
-      def create_heading(first_line, sentence)
-        with_style(Heading.new(sentence), first_line)
+      def create_heading(first_line, text, language: first_line.language)
+        with_style(Heading.new(text, language: language), first_line)
       end
 
       def create_section(first_line, text, level: first_line.section_level)
