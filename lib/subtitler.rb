@@ -12,15 +12,19 @@ require_relative 'subtitler/vtt'
 require_relative 'subtitler/ass'
 
 class Subtitler
+  STATUS_SEPARATING   = 'separating voice'
+  STATUS_TRANSCRIBING = 'transcribing'
 
   BACKEND_CLASS = const_get ENV['SUBTITLER'].to_sym if ENV['SUBTITLER']
 
   extend BACKEND_CLASS
 
-  def self.transcribe(path, separate_voice: true, **options)
+  def self.transcribe(path, separate_voice: true, stl: nil, **options)
     return transcribe_with_backend(path, **options) unless separate_voice
 
+    stl&.update STATUS_SEPARATING
     VoiceSeparator.with_stems(path) do |stems|
+      stl&.update STATUS_TRANSCRIBING
       transcribe_with_backend(stems.vocals, **options)
     end
   end

@@ -58,7 +58,7 @@ RSpec.describe Zipper::Subtitle do
       stl: nil,
       info: SymMash.new
     )
-    allow(Subtitler).to receive(:transcribe).with('video.mp4').and_return(subtitle)
+    allow(Subtitler).to receive(:transcribe).with('video.mp4', stl: nil).and_return(subtitle)
 
     structured = described_class.prepare(zipper)
 

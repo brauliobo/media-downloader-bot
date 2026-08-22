@@ -44,8 +44,7 @@ class Zipper
       subtitle ||= fetch(zipper) unless zipper.opts.gensubs
 
       unless subtitle
-        zipper.stl&.update 'transcribing'
-        subtitle = Subtitler.transcribe(zipper.infile)
+        subtitle = Subtitler.transcribe(zipper.infile, stl: zipper.stl)
         normalize_language!(subtitle)
         subtitle.normalize_entries!
         zipper.info.language ||= subtitle.language if zipper.info.respond_to?(:language)
