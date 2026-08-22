@@ -8,7 +8,7 @@ module Ewprs
     OPENING_QUOTE = /(?:&(?:ldquo|lsquo|quot);|["“‘])/
     HONORIFIC_ABBREVIATION = /\b(?:Dr|Mr|Mrs|Ms|Prof|Sr|Sra|St)\z/i
     NO_BOUNDARY_TOKENS = /(?!)\z/
-    SENTENCE_END = '[.!?…。！？]'
+    SENTENCE_END = '(?:[.!?…](?!\d)|[。！？])'
     CLOSING_QUOTES = '["”’」』】）]*'
     CJK_CHARACTER = '[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]'
 

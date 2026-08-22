@@ -50,6 +50,14 @@ RSpec.describe Ewprs::SentenceSplitter do
     )
   end
 
+  it 'keeps grouped numeric values in the same sentence' do
+    text = 'There were 1.000 People and 3.14 Units. Then they left.'
+
+    expect(described_class.split(text, max_chars: 800)).to eq(
+      ['There were 1.000 People and 3.14 Units.', 'Then they left.']
+    )
+  end
+
   it 'keeps an honorific and name in the same sentence' do
     text = 'Hypnotism was used to cure disease by Dr. James Braid. This method spread.'
 
