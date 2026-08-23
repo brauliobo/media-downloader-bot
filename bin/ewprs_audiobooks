@@ -35,25 +35,6 @@ end
 
 FileUtils.mkdir_p(output)
 
-entries = if opts[:all].to_s == '1'
-  catalog.available_discourses
-else
-  [catalog.find(opts[:only] || 'Laying_of_the_Foundation_Stone') || raise('audiobook not found')]
-end
-books = opts[:books].to_s == '1' ? catalog.books : []
-
-if opts[:plan].to_s == '1'
-  puts JSON.pretty_generate(
-    output: output,
-    discourses: entries.size,
-    books: books.size,
-    operation: edit ? 'edit' : 'publish',
-    regenerate: regenerate,
-    uploads: entries.size + books.size
-  )
-  exit
-end
-
 apply = opts[:apply].to_s == '1'
 raise 'edit requires apply=1' if edit && !apply
 if apply
@@ -72,6 +53,26 @@ if apply
   else
     {forum_topic_id: forum_topic_id, name: topic_name}
   end
+  puts JSON.pretty_generate(chat_id: chat_id, topic: topic)
+end
+
+entries = if opts[:all].to_s == '1'
+  catalog.available_discourses
+else
+  [catalog.find(opts[:only] || 'Laying_of_the_Foundation_Stone') || raise('audiobook not found')]
+end
+books = opts[:books].to_s == '1' ? catalog.books : []
+
+if opts[:plan].to_s == '1'
+  puts JSON.pretty_generate(
+    output: output,
+    discourses: entries.size,
+    books: books.size,
+    operation: edit ? 'edit' : 'publish',
+    regenerate: regenerate,
+    uploads: entries.size + books.size
+  )
+  exit
 end
 batch = Audiobook::Ewprs::Batch.new(
   catalog: catalog, output: output, jobs: opts[:jobs] || 5, manifest: opts[:manifest], upload_dir: opts[:upload_dir],

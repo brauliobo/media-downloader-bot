@@ -358,6 +358,11 @@ module Audiobook
       return if @publication_detected
 
       @publication_detected = true
+      if @opts.html_title.present?
+        @author_gender ||= 'male'
+        return
+      end
+
       sample = publication_sample
       return if sample.blank?
 

@@ -1,0 +1,14 @@
+ja:
+  audiobook:
+    ewprs:
+      caption:
+        type: "種類：%{kind}"
+        date_place: "日付/場所：%{value}"
+        published_in: "出版：%{value}"
+        chapters: "章：%{count}/%{total}"
+        language: "言語：%{language}"
+        kinds:
+          discourse: 講話
+          book: 書籍
+        languages:
+          ja: 日本語

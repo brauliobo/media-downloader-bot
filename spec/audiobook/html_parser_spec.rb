@@ -51,6 +51,19 @@ RSpec.describe Audiobook::Parsers::Html do
     end
   end
 
+  it 'skips LLM publication detection when an explicit HTML title is supplied' do
+    opts = SymMash.new(html_title: 'Fixed title', html_language: 'ja', html_block_comments: true)
+    expect(Language).not_to receive(:book_metadata)
+
+    with_html('<h1>English title</h1><p><!-- block type=paragraph -->A complete sentence.<!-- /block --></p>') do |path|
+      book = Audiobook::Book.from_input(path, opts: opts)
+
+      expect(book.metadata.title).to eq('Fixed title')
+      expect(book.metadata.language).to eq('ja')
+      expect(book.author_gender).to eq('male')
+    end
+  end
+
   it 'preserves a block language on complete sentences and in serialized books' do
     html = <<~HTML
       <div class="discourse_title">Language metadata</div>

@@ -15,7 +15,9 @@ module Audiobook::Ewprs
       'ar' => 'Arabic', 'de' => 'German', 'en' => 'English', 'es' => 'Spanish', 'fr' => 'French',
       'ja' => 'Japanese', 'pt' => 'Portuguese', 'zh' => 'Chinese'
     }.freeze
-    VOICE_ACCENTS  = {'pt' => 'portuguese accent', 'zh' => 'chinese accent'}.freeze
+    VOICE_ACCENTS  = {
+      'ja' => 'japanese accent', 'pt' => 'portuguese accent', 'zh' => 'chinese accent'
+    }.freeze
 
     Entry = Struct.new(:kind, :title, :path, :info, :sources, :book_refs, :chapters, keyword_init: true) do
       def slug = File.basename(path, File.extname(path))
