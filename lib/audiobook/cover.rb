@@ -6,54 +6,17 @@ module Audiobook
     MIN_AREA_COVERAGE = 0.5
     MIN_AXIS_COVERAGE = 0.5
 
-    attr_reader :source_path, :page_number, :image_width, :image_height, :area_coverage, :page_width, :page_height
+    attr_reader :source_path, :page_number, :page_width, :page_height
 
-    def self.detect(pdf_path, page:)
-      output, stderr, status = Sh.run [
-        'pdfimages', '-f', page.number.to_s, '-l', page.number.to_s, '-list', pdf_path
-      ]
-      Sh.assert_success!('PDF cover inspection failed', stderr, status: status)
-
-      images = output.lines.filter_map { |line| image_metrics(line, page) }
-      image  = images.max_by { |candidate| candidate.area_coverage }
-      return unless image&.large? || stacked_cover?(images)
-
-      from_page(pdf_path, page, image: image)
+    def self.from_page(pdf_path, page)
+      new(source_path: pdf_path, page_number: page.number, page_width: page.width, page_height: page.height)
     end
 
-    def self.from_page(pdf_path, page, image: nil)
-      new(
-        source_path:   pdf_path,
-        page_number:   page.number,
-        image_width:   image&.width.to_f,
-        image_height:  image&.height.to_f,
-        area_coverage: image&.area_coverage.to_f,
-        page_width:    page.width,
-        page_height:   page.height,
-      )
-    end
-
-    def self.stacked_cover?(images)
-      return false if images.size < 2
-
-      page_width  = images.first.page_width
-      page_height = images.first.page_height
-      return false unless page_width.positive? && page_height.positive?
-
-      area   = images.sum(&:area_coverage)
-      width  = images.map(&:display_width).max / page_width
-      height = images.sum(&:display_height) / page_height
-      area >= MIN_AREA_COVERAGE && width >= MIN_AXIS_COVERAGE && height >= MIN_AXIS_COVERAGE
-    end
-
-    def initialize(source_path:, page_number:, image_width:, image_height:, area_coverage:, page_width:, page_height:)
-      @source_path   = source_path
-      @page_number   = page_number
-      @image_width   = image_width
-      @image_height  = image_height
-      @area_coverage = area_coverage
-      @page_width    = page_width
-      @page_height   = page_height
+    def initialize(source_path:, page_number:, page_width:, page_height:)
+      @source_path = source_path
+      @page_number = page_number
+      @page_width  = page_width
+      @page_height = page_height
     end
 
     def thumbnail(dir:, base:)

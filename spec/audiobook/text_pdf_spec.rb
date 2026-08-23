@@ -70,6 +70,20 @@ RSpec.describe Audiobook::TextPdf do
     end
   end
 
+  it 'rasterizes the first source page as the cover even without an image' do
+    sentence = Audiobook::Sentence.new('Title page text.')
+    book = Audiobook::Book.allocate
+    book.instance_variable_set(:@pages, [Audiobook::Page.new(1, [Audiobook::Paragraph.new([sentence])])])
+    book.instance_variable_set(:@metadata, SymMash.new(language: 'pt', title: 'Book', source_path: '/tmp/book.pdf'))
+    pdf = described_class.new(book, source_pdf: '/tmp/book.pdf')
+    allow(pdf).to receive(:rasterize_page).with(1, 'cover').and_return('cover.png')
+
+    html = pdf.build_html
+
+    expect(html).to include('<img class="cover" src="cover.png"')
+    expect(html).to include('Title page text.')
+  end
+
   it 'embeds the cover and keeps original page text without dumping cover OCR' do
     skip 'chromium not available' unless system('which', 'chromium', out: File::NULL, err: File::NULL)
 

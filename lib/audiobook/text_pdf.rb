@@ -199,17 +199,19 @@ module Audiobook
     end
 
     def cover_page
-      cover&.page_number
+      cover&.page_number || (1 if source_pdf)
     end
 
     def source_pdf
-      @source_pdf ||= cover&.source_path || infer_source_pdf
+      @source_pdf ||= cover&.source_path.presence || infer_source_pdf
     end
 
     def infer_source_pdf
-      @book.pages.flat_map(&:items).grep(Image).map(&:path).find { |path|
-        path.to_s =~ /\.pdf#page=/i
-      }&.sub(/#page=\d+\z/i, '')
+      path = @book.metadata&.source_path.presence ||
+        @book.pages.flat_map(&:items).grep(Image).map(&:path).find { |item_path|
+          item_path.to_s =~ /\.pdf#page=/i
+        }&.sub(/#page=\d+\z/i, '')
+      path if path && File.exist?(path.to_s)
     end
 
     def rasterize_page(page_num, name)

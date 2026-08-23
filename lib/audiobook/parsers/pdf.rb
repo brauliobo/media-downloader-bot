@@ -43,7 +43,7 @@ module Audiobook
         end
 
         first = document.pages.first
-        cover = Cover.detect(pdf_path, page: first) if first
+        cover = Cover.from_page(pdf_path, first) if first
 
         SymMash.new(
           metadata: SymMash.new(
