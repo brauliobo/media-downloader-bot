@@ -69,7 +69,7 @@ module Dubbing
     private
 
     def normalize_target_lang
-      Subtitler.normalize_lang(@opts.dub_lang || @opts.slang || @opts.lang) || DEFAULT_TARGET_LANG
+      Subtitler.normalize_lang(@opts.dub_lang || @opts.lang || @opts.slang) || DEFAULT_TARGET_LANG
     end
 
     def translated_sentences(subtitle)

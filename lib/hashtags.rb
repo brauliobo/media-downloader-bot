@@ -17,8 +17,8 @@ class Hashtags
     },
   }.freeze
 
-  def self.generate(transcription, lang: nil, language: nil)
-    new.call(transcription, language: language || lang)
+  def self.generate(transcription, lang: nil)
+    new.call(transcription, lang: lang)
   end
 
   def initialize(backend: AI::Codex, model: MODEL, effort: EFFORT)
@@ -27,16 +27,15 @@ class Hashtags
     @effort  = effort
   end
 
-  def call(transcription, lang: nil, language: nil)
+  def call(transcription, lang: nil)
     text = transcription_text(transcription)
     return '' if text.strip.empty?
 
-    language = language || lang
-    language ||= transcription.language if transcription.is_a?(Subtitler::Subtitle)
-    language_rule = if language.to_s.strip.empty?
+    lang ||= transcription.language if transcription.is_a?(Subtitler::Subtitle)
+    language_rule = if lang.to_s.strip.empty?
       'Use the language of the transcript.'
     else
-      "Write every hashtag in #{language}."
+      "Write every hashtag in #{lang}."
     end
 
     prompt = <<~PROMPT

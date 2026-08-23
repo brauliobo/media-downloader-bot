@@ -57,9 +57,9 @@ RSpec.describe Processors::Base do
       [
         [{dub: 'pt'}, {dub: 1, dub_lang: 'pt', sub_mode: 'language', sub_lang: 'pt'}],
         [{sub: 'pt'}, {sub: 'pt', sub_mode: 'language', sub_lang: 'pt'}],
-        [{lang: 'pt'}, {slang: 'pt', alang: 'pt'}],
+        [{lang: 'pt'}, {lang: 'pt', slang: 'pt', alang: 'pt'}],
         [{dub: 'pt', lang: 'es'}, {
-          dub: 1, dub_lang: 'pt', sub_mode: 'language', sub_lang: 'pt', slang: 'es', alang: 'es'
+          dub: 1, dub_lang: 'pt', sub_mode: 'language', sub_lang: 'pt', lang: 'es', slang: 'es', alang: 'es'
         }],
       ].each do |input, expected|
         opts = SymMash.new(input)
@@ -67,7 +67,7 @@ RSpec.describe Processors::Base do
         described_class.normalize_options(opts)
 
         expect(opts).to include(expected)
-        expect(opts[:lang]).to be_nil
+        expect(opts[:lang]).to eq(input[:lang])
         expect(opts.slang).to be_nil unless input.key?(:lang)
         expect(opts.alang).to be_nil unless input.key?(:lang)
       end
@@ -95,6 +95,14 @@ RSpec.describe Processors::Base do
 
       expect(opts.sub_mode).to be_nil
       expect(opts.sub_lang).to be_nil
+    end
+
+    it 'lets lang= replace an existing subtitle language' do
+      opts = SymMash.new(slang: 'en', alang: 'en', lang: 'pt')
+
+      described_class.normalize_options(opts)
+
+      expect(opts).to include(lang: 'pt', slang: 'pt', alang: 'pt')
     end
 
     it 'canonicalizes gensub as gensubs' do

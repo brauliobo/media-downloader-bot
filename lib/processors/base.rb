@@ -4,6 +4,7 @@ require 'active_support/core_ext/module/delegation'
 require_relative '../output'
 require_relative '../utils/input_parser'
 require_relative '../context'
+require_relative 'language_opts'
 
 module Processors
   class Base
@@ -102,10 +103,6 @@ module Processors
         opts[key.to_sym] = v
       end
 
-      if key == 'lang'
-        opts.delete(:slang)
-        opts.delete(:alang)
-      end
       normalize_options opts
       apply_process_opts opts if key == 'nice'
       opts
@@ -116,7 +113,7 @@ module Processors
       normalize_gensubs_opt opts
       normalize_dub_opt opts
       normalize_sub_opt opts
-      expand_lang_opt opts
+      LanguageOpts.expand opts
     end
 
     def self.normalize_hashtags_opt(opts)
@@ -160,15 +157,6 @@ module Processors
         opts.sub_mode = 'language'
         opts.sub_lang = value
       end
-      opts
-    end
-
-    def self.expand_lang_opt(opts)
-      lang = opts.delete(:lang)
-      return opts unless lang.present?
-
-      opts.slang ||= lang
-      opts.alang ||= lang
       opts
     end
 

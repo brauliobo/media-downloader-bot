@@ -104,6 +104,17 @@ RSpec.describe Processors::Media do
       expect(i.info.hashtags).to eq('#atencao')
     end
 
+    it 'uses lang= as the hashtag language' do
+      opts = SymMash.new(hashtags: 1, lang: 'pt')
+      Processors::Base.normalize_options(opts)
+      i = input(fn_in: '/tmp/in.mp4', opts: opts)
+      allow(Hashtags).to receive(:generate).with(transcript, lang: 'pt').and_return('#saude')
+
+      processor.send(:generate_hashtags, i)
+
+      expect(i.info.hashtags).to eq('#saude')
+    end
+
     it 'uses the dub language when slang is unset' do
       i = input(fn_in: '/tmp/in.mp4', opts: SymMash.new(hashtags: 1, dub: 1, dub_lang: 'pt'))
       allow(Hashtags).to receive(:generate).with(transcript, lang: 'pt').and_return('#saude')
