@@ -80,7 +80,12 @@ def separate(file: UploadFile = File(...)):
             mix = np.stack((mix, mix))
         mix_orig = mix.copy()
         with lock:
+            torch.cuda.synchronize()
+            torch.cuda.reset_peak_memory_stats()
             vocals = bigshifts_wrapper(config, model, mix, DEVICE, "bs_roformer", bigshifts=BIGSHIFTS)["vocals"]
+            torch.cuda.synchronize()
+            peak_allocated = torch.cuda.max_memory_allocated()
+            peak_reserved = torch.cuda.max_memory_reserved()
         sf.write(root / "vocals.wav", vocals.T, sample_rate, subtype="PCM_16")
         sf.write(root / "no_vocals.wav", (mix_orig - vocals).T, sample_rate, subtype="PCM_16")
 
@@ -92,6 +97,10 @@ def separate(file: UploadFile = File(...)):
             archive,
             media_type="application/zip",
             filename="stems.zip",
+            headers={
+                "X-BS-RoFormer-Peak-Allocated-MiB": f"{peak_allocated / 1024 ** 2:.1f}",
+                "X-BS-RoFormer-Peak-Reserved-MiB": f"{peak_reserved / 1024 ** 2:.1f}",
+            },
             background=BackgroundTask(workdir.cleanup),
         )
     except HTTPException:
