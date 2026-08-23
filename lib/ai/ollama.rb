@@ -1,3 +1,5 @@
+require_relative '../utils/http'
+
 module AI
   class Ollama
     API           = ENV['OLLAMA_HOST']

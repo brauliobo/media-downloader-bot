@@ -2,6 +2,7 @@ require 'cgi'
 require 'concurrent'
 require 'iso-639'
 require 'net/http'
+require_relative '../utils/http'
 
 module Ewprs
   class Translator
@@ -66,13 +67,6 @@ module Ewprs
       'without any delay'      => "The English phrase \"without any delay\" means immediately. #{DO_NOT_COPY_ENGLISH}",
       'trifarious'             => "The English adjective \"trifarious\" means having three aspects. #{DO_NOT_COPY_ENGLISH}"
     }.freeze
-    TRANSPORT_ERRORS      = [
-      EOFError, Errno::ECONNRESET, Errno::ECONNREFUSED, Net::OpenTimeout, Net::ReadTimeout
-    ].freeze
-    RETRYABLE_HTTP_STATUS = [500, 502, 503, 504].freeze
-    TRANSPORT_RETRIES     = 3
-    TRANSPORT_RETRY_DELAY = 2
-
     attr_reader :jobs
 
     def initialize(jobs: nil)
@@ -373,26 +367,8 @@ module Ewprs
         temperature: 0,
         max_tokens:  max_tokens,
       }
-      retries = 0
-      begin
-        response = @request_semaphore.acquire do
-          Utils::HTTP.post "#{host.delete_suffix('/')}#{API_PATH}", options.to_json, HEADERS
-        end
-      rescue *TRANSPORT_ERRORS
-        Utils::HTTP.reset!
-        raise if retries >= TRANSPORT_RETRIES
-
-        retries += 1
-        sleep TRANSPORT_RETRY_DELAY
-        retry
-      rescue Mechanize::ResponseCodeError => error
-        Utils::HTTP.reset!
-        raise unless RETRYABLE_HTTP_STATUS.include?(error.response_code.to_i)
-        raise if retries >= TRANSPORT_RETRIES
-
-        retries += 1
-        sleep TRANSPORT_RETRY_DELAY
-        retry
+      response = @request_semaphore.acquire do
+        Utils::HTTP.post "#{host.delete_suffix('/')}#{API_PATH}", options.to_json, HEADERS
       end
       JSON.parse(response.body).fetch('choices').fetch(0).fetch('message').fetch('content').strip
     end

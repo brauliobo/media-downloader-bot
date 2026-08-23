@@ -22,4 +22,17 @@ RSpec.describe Bot::Status do
     expect(cleaned).to eq(false)
     expect(status.formatted).to eq('failed')
   end
+
+  it 'posts a short sanitized exception without the backtrace' do
+    updates = []
+    status = described_class.new { |text| updates << text }
+    error  = Nokogiri::XML::SyntaxError.new("PCDATA invalid Char value 1\n#{'x' * 5000}")
+    error.set_backtrace(['lib/audiobook/parsers/pdf.rb:99'])
+
+    status.error('Audiobook generation failed', exception: error)
+
+    expect(updates.last).to start_with('Audiobook generation failed: Nokogiri::XML::SyntaxError:')
+    expect(updates.last).not_to include('parsers/pdf.rb')
+    expect(updates.last.length).to be <= 3600
+  end
 end

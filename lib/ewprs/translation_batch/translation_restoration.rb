@@ -1,4 +1,5 @@
 require 'cgi'
+require_relative '../../utils/retry'
 
 module Ewprs
   class TranslationBatch
@@ -8,17 +9,20 @@ module Ewprs
       private
 
       def restore_tokens_with_retries(unit, output)
-        retries = 0
         attempted_projections = {}
         allow_moved_editorial = output.to_s.scan(EDITORIAL_TAG) == unit.prepared.scan(EDITORIAL_TAG)
-        begin
-          output = normalize_target_language(output.to_s)
-          output = project_broken_quotes(output)
-          output = project_cjk_work_titles(unit, output)
-          output = strip_echoed_protected_ascii(unit, output)
-          validator.validate!(source: unit.prepared, translated: output)
-          restore_tokens(unit, output, allow_moved_editorial: allow_moved_editorial)
-        rescue ProtectedTokenError, TranslationValidator::Error => error
+        attempt = 0
+        Utils::Retry.call(tries: TOKEN_RETRIES + 1, sleep: false, on: [ProtectedTokenError, TranslationValidator::Error]) do
+          attempt += 1
+          begin
+            output = normalize_target_language(output.to_s)
+            output = strip_introduced_foreign_scripts(unit.prepared, output)
+            output = project_broken_quotes(output)
+            output = project_cjk_work_titles(unit, output)
+            output = strip_echoed_protected_ascii(unit, output)
+            validator.validate!(source: unit.prepared, translated: output)
+            restore_tokens(unit, output, allow_moved_editorial: allow_moved_editorial)
+          rescue ProtectedTokenError, TranslationValidator::Error => error
           projected = nil
           if error.respond_to?(:code) && error.code == :quotes
             tagged = project_mistaken_quoted_letter_tags(output)
@@ -158,7 +162,7 @@ module Ewprs
               retry
             end
           end
-          if retries >= TOKEN_RETRIES
+          if attempt > TOKEN_RETRIES
             stdout.puts "failed invalid translation #{unit.key}: #{error.message}"
             stdout.puts "source: #{unit.source.inspect}"
             stdout.puts "prepared: #{unit.prepared.inspect}"
@@ -167,13 +171,13 @@ module Ewprs
             raise
           end
 
-          retries += 1
-          stdout.puts "retrying invalid translation #{unit.key} (#{retries}/#{TOKEN_RETRIES}): #{error.message}"
+          stdout.puts "retrying invalid translation #{unit.key} (#{attempt}/#{TOKEN_RETRIES}): #{error.message}"
           output = translator.repair_markup(
             unit.prepared, invalid: output, issue: error.message,
             tokens: repair_token_values(unit.tokens), from: source_language, to: target
           )
-          retry
+          raise error
+          end
         end
       end
 
@@ -300,6 +304,9 @@ module Ewprs
       def normalize_target_language(value, strip_glue: true)
         value = value.tr('，？！：；．', ',?!:;.')
         value = strip_cjk_leftover_glue(value) if strip_glue && TranslationValidator::CJK_TARGET.key?(target)
+        if target == 'de'
+          value = value.gsub(/\b[Ii]lliterate\b/) { |word| word.start_with?('I') ? 'Ungebildete' : 'ungebildete' }
+        end
         return value unless target == 'fr'
 
         value = value.gsub('整个系统违背了人类心理，因此产量永远不会增加。',
@@ -331,12 +338,14 @@ module Ewprs
           .gsub('Ma&#x301;gadhii language of that time', 'la langue Ma&#x301;gadhii de l’époque')
           .gsub('Vargiiya Ba and Antahstha Va to Osadhipati',
                 'Ba Vargiiya et Va Antahstha jusqu’à Osadhipati')
-          .gsub('Human Life and Its', 'La vie humaine et son')
-          .gsub('has been formed by adding the Farsi suffix',
-                'a été formé par l’ajout du suffixe persan')
-          .gsub(/\bNucleus\b/, 'noyau')
-        value = value.gsub(/\bsalvation\b/i) do |word|
-          Regexp.last_match.pre_match.split(/[.!?]/).last.to_s.match?(/\bterme anglais\b/i) ? word : 'salut'
+        value = replace_unquoted(
+          value, 'has been formed by adding the Farsi suffix',
+          'a été formé par l’ajout du suffixe persan'
+        )
+        value = replace_unquoted(value, 'Human Life and Its', 'La vie humaine et son')
+        value = replace_unquoted(value, /\bNucleus\b/, 'noyau')
+        value = replace_unquoted(value, /\bsalvation\b/i) do |word, pre|
+          pre.to_s.split(/[.!?]/).last.to_s.match?(/\bterme anglais\b/i) ? word : 'salut'
         end
         value = value.gsub(/\bla salut\b/i, 'le salut').gsub(/\bune salut\b/i, 'un salut')
           .gsub(/\bune telle salut\b/i, 'un tel salut').gsub(/\bsa propre salut\b/i, 'son propre salut')
@@ -350,6 +359,34 @@ module Ewprs
         value.gsub(/\b([Cc])e\s+[uU]nivers\b/) do
           Regexp.last_match(1) == 'C' ? 'Cet univers' : 'cet univers'
         end
+      end
+
+      def strip_introduced_foreign_scripts(source, translated)
+        return translated unless TranslationValidator::LATIN_TARGETS.key?(target)
+
+        allowed = source.to_s.scan(TranslationValidator::NON_LATIN_ARTIFACT).tally
+        allowed.default = 0
+        translated.to_s.gsub(TranslationValidator::NON_LATIN_ARTIFACT) do |character|
+          next character if (allowed[character] -= 1) >= 0
+
+          ''
+        end
+      end
+
+      def replace_unquoted(value, pattern, replacement = nil, &block)
+        held = []
+        hold = ->(span) do
+          held << span
+          "__Q#{held.size}__"
+        end
+        masked = value.to_s.gsub(/&ldquo;.*?&rdquo;|&lsquo;.*?&rsquo;|“.*?”|‘.*?’|«\s*.*?\s*»/mi, &hold)
+        masked = if block
+          masked.gsub(pattern) { |word| block.call(word, $`) }
+        else
+          masked.gsub(pattern, replacement)
+        end
+        held.each_with_index.reverse_each { |span, index| masked.sub!("__Q#{index + 1}__", span) }
+        masked
       end
 
       def strip_cjk_leftover_glue(value)

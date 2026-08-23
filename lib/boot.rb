@@ -25,5 +25,6 @@ require_relative 'exts/peach'
 
 require 'ffmpeg'
 require_relative 'utils/http'
+require_relative 'utils/retry'
 
 FFmpeg.verify!

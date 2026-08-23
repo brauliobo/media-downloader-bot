@@ -1,4 +1,4 @@
-require 'retriable'
+require_relative '../utils/retry'
 require_relative 'speech'
 require_relative '../tts'
 require_relative '../text_helpers'
@@ -70,7 +70,7 @@ module Audiobook
         super # generate silence
       else
         # Retry TTS and fail hard if output is missing
-        Retriable.retriable(tries: 4, base_interval: 0.5, multiplier: 2.0) do
+        Utils::Retry.tts do
           speed, options = AudioFiles.split_speed_options(tts_options)
           TTS.synthesize(text: spoken, lang: lang, out_path: wav_path, **options)
           raise 'TTS produced no audio' unless File.exist?(wav_path) && File.size?(wav_path)

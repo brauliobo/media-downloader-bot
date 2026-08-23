@@ -14,7 +14,6 @@ gem 'dotenv'
 gem 'hashie'
 gem 'json_schemer'
 gem 'chronic'
-gem 'retriable'
 
 gem 'iso-639'
 

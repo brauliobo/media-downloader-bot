@@ -9,6 +9,7 @@ module Audiobook
   module Parsers
     class Pdf < Base
       MAX_PAGES = ENV.fetch('MAX_PDF_PAGES', 2_000).to_i
+      XML_CHAR  = /[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/
 
       def self.extract_data(pdf_path, stl: nil, opts: nil, **_kwargs)
         all_lines = []
@@ -96,7 +97,7 @@ module Audiobook
         ]
         Sh.assert_success!('PDF text extraction failed', stderr, status: status)
 
-        document = Nokogiri::XML(output) { |config| config.strict.nonet }
+        document = Nokogiri::XML(sanitize_xml(output)) { |config| config.strict.nonet }
         document.remove_namespaces!
         pages = document.xpath('//page').each_with_index.map do |page, index|
           page_height = page['height'].to_f
@@ -198,7 +199,7 @@ module Audiobook
         return {} if xml.blank?
 
         fonts = {}
-        document = Nokogiri::XML(xml) { |config| config.nonet }
+        document = Nokogiri::XML(sanitize_xml(xml)) { |config| config.nonet }
         document.remove_namespaces!
         document.xpath('//page').each_with_object({}) do |page, pages|
           page.xpath('./fontspec').each do |font|
@@ -244,6 +245,8 @@ module Audiobook
       def self.pdftohtml_bin
         @pdftohtml_bin ||= %w[pdftohtml].find { system('which', _1, out: File::NULL, err: File::NULL) }
       end
+
+      def self.sanitize_xml(text) = text.to_s.gsub(XML_CHAR, '')
 
       def self.xml_match?(line, fragment, scale)
         top = fragment[:top] * scale

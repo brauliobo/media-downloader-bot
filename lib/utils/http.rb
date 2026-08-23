@@ -2,6 +2,7 @@ require 'mechanize'
 require 'net/http'
 require 'uri'
 require_relative 'safety'
+require_relative 'retry'
 
 module Utils
   class HTTP
@@ -30,6 +31,12 @@ module Utils
       end
 
       delegate_missing_to :client
+
+      def post(...) = request(:post, ...)
+      def get(...)  = request(:get, ...)
+
+      def request(verb, ...) = Retry.http { (Thread.current[:utils_http] || client).public_send(verb, ...) }
+      private :request
 
       def get_public(value, max_bytes: PUBLIC_MAX_BYTES, redirects: PUBLIC_REDIRECTS)
         uri       = URI.parse(value.to_s)

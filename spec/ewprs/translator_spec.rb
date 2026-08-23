@@ -158,66 +158,67 @@ RSpec.describe Ewprs::Translator do
 
   it 'retries brief transport interruptions' do
     calls = 0
-    allow(Utils::HTTP).to receive(:post) do
+    agent = stub_http_client
+    allow(Kernel).to receive(:sleep)
+    allow(agent).to receive(:post) do
       calls += 1
       raise EOFError if calls <= 3
 
       Struct.new(:body).new({choices: [{message: {content: 'Übersetzt'}}]}.to_json)
     end
-    expect(translator).to receive(:sleep).with(2).exactly(3).times
-
     expect(translator.translate_markup('Translated', to: 'de')).to eq('Übersetzt')
     expect(calls).to eq(4)
   end
 
   it 'retries model request timeouts' do
     calls = 0
-    allow(Utils::HTTP).to receive(:post) do
+    agent = stub_http_client
+    allow(Kernel).to receive(:sleep)
+    allow(agent).to receive(:post) do
       calls += 1
       raise Net::ReadTimeout if calls == 1
 
       Struct.new(:body).new({choices: [{message: {content: 'Übersetzt'}}]}.to_json)
     end
-    expect(translator).to receive(:sleep).with(2).once
-
     expect(translator.translate_markup('Translated', to: 'de')).to eq('Übersetzt')
     expect(calls).to eq(2)
   end
 
   it 'retries transient model server responses' do
     calls = 0
+    agent = stub_http_client
     server_error = Mechanize::ResponseCodeError.new(Struct.new(:code).new('500'))
-    allow(Utils::HTTP).to receive(:post) do
+    allow(Kernel).to receive(:sleep)
+    allow(agent).to receive(:post) do
       calls += 1
       raise server_error if calls <= 2
 
       Struct.new(:body).new({choices: [{message: {content: 'Übersetzt'}}]}.to_json)
     end
-    expect(translator).to receive(:sleep).with(2).twice
-
     expect(translator.translate_markup('Translated', to: 'de')).to eq('Übersetzt')
     expect(calls).to eq(3)
   end
 
   it 'translates unmatched smart-quote prose separately after repeated model format failures' do
     calls = 0
+    agent = stub_http_client
     server_error = Mechanize::ResponseCodeError.new(Struct.new(:code).new('500'))
-    allow(Utils::HTTP).to receive(:post) do |_url, body, _headers|
+    allow(Kernel).to receive(:sleep)
+    allow(agent).to receive(:post) do |_url, body, _headers|
       calls += 1
       prompt = JSON.parse(body).dig('messages', 0, 'content')
       raise server_error if prompt.include?('<ewprs-quote-open')
 
       Struct.new(:body).new({choices: [{message: {content: '我的主啊。'}}]}.to_json)
     end
-    expect(translator).to receive(:sleep).with(2).exactly(3).times
-
     expect(translator.translate_markup('&ldquo;Oh my Lord.', to: 'zh')).to eq('&ldquo;我的主啊。')
     expect(calls).to eq(5)
   end
 
   it 'limits transport retries' do
-    expect(Utils::HTTP).to receive(:post).exactly(4).times.and_raise(Errno::ECONNRESET)
-    expect(translator).to receive(:sleep).with(2).exactly(3).times
+    agent = stub_http_client
+    allow(Kernel).to receive(:sleep)
+    expect(agent).to receive(:post).exactly(4).times.and_raise(Errno::ECONNRESET)
 
     expect { translator.translate_markup('Translated', to: 'de') }.to raise_error(Errno::ECONNRESET)
   end

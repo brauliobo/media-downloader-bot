@@ -62,12 +62,22 @@ module Bot
       @error
     end
 
+    TELEGRAM_ERROR_LIMIT = 3500
+
     def error text, *args, exception: nil, **params
       @error = true
-      text = "#{text}\n#{exception.class}: #{exception.message}" if exception
-      text = "#{text}\n#{exception.backtrace.join("\n")}" if exception&.backtrace
+      if exception
+        STDERR.puts "#{text}: #{exception.class}: #{sanitize_error(exception.message)}\n#{Array(exception.backtrace).first(20).join("\n")}"
+        text = "#{text}: #{exception.class}: #{sanitize_error(exception.message)}"
+      end
       send_update text, *args, **params
       nil
+    end
+
+    def sanitize_error(message)
+      clean = message.to_s.encode('UTF-8', invalid: :replace, undef: :replace)
+                     .gsub(/[\x00-\x08\x0B\x0C\x0E-\x1F]/, '')
+      clean.length > TELEGRAM_ERROR_LIMIT ? "#{clean[0, TELEGRAM_ERROR_LIMIT]}…" : clean
     end
 
     def update *args, **params

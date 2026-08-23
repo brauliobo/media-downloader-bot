@@ -103,4 +103,19 @@ RSpec.describe Translator::HyMT2 do
 
     backend.translate('Hello.', from: 'en', to: 'es')
   end
+
+  it 'retries EOF from the translation backend' do
+    calls = 0
+    agent = stub_http_client
+    allow(Kernel).to receive(:sleep)
+    allow(agent).to receive(:post) do
+      calls += 1
+      raise EOFError if calls == 1
+
+      response
+    end
+
+    expect(backend.translate('Hello.', from: 'en', to: 'es')).to eq('É por conta da casa.')
+    expect(calls).to eq(2)
+  end
 end

@@ -28,6 +28,21 @@ RSpec.describe Ewprs::TranslationValidator do
     expect do
       validator.validate!(source: 'O Soul Supreme!', translated: 'O Soul Supreme!')
     end.to raise_error(described_class::Error, /left source prose unchanged/)
+
+    expect(
+      validator.valid?(
+        source: 'Bandhur path dhare shata ba&#x301;dha&#x301;te,',
+        translated: 'Bandhur path dhare shata ba&#x301;dha&#x301;te,'
+      )
+    ).to be(true)
+
+    german = described_class.new(source_language: 'en', target_language: 'de')
+    expect(
+      german.valid?(
+        source: '<I>Ra&#x301;ma</I> &ndash; <I>ra&#x301;</I> plus <I>ma</I>.',
+        translated: '<I>Ra&#x301;ma</I> &ndash; <I>ra&#x301;</I> plus <I>ma</I>.'
+      )
+    ).to be(true)
   end
 
   it 'rejects omitted source prose' do
@@ -119,6 +134,14 @@ RSpec.describe Ewprs::TranslationValidator do
         translated: '&ndash; Pi-pu-phi-shuのまま何もしなくてもよい。'
       )
     ).to be(true)
+
+    chinese = described_class.new(source_language: 'en', target_language: 'zh')
+    expect(
+      chinese.valid?(
+        source: '&ldquo;Pall-mall&rdquo; is pronounced pel-mel rather than pal-mal.',
+        translated: '&ldquo;Pall-mall&rdquo; 的发音是 pel-mel,而不是 pal-mal。'
+      )
+    ).to be(true)
   end
 
   it 'rejects a retained English determiner in mixed Japanese' do
@@ -159,6 +182,14 @@ RSpec.describe Ewprs::TranslationValidator do
       )
     ).to be(true)
 
+    chinese = described_class.new(source_language: 'en', target_language: 'zh')
+    expect(
+      chinese.valid?(
+        source: 'they were specially known as chatra+an=chatra chat +rak=chatra.',
+        translated: '他们被特别称为chatra+an=chatra，即chat +rak=chatra。'
+      )
+    ).to be(true)
+
     expect(
       japanese.valid?(
         source: 'hence __P0007__an__P0008__ must be used, not __P0001__a-rta__P0002__.',
@@ -187,6 +218,14 @@ RSpec.describe Ewprs::TranslationValidator do
         translated: 'yama and niyamaは最初の二支である。'
       )
     end.to raise_error(described_class::Error, /retained English coordinator/)
+
+    chinese = described_class.new(source_language: 'en', target_language: 'zh')
+    expect(
+      chinese.valid?(
+        source: 'They include (Kerala&#146;s Na&#x301;ya&#x301;r and Tamil nadu&#146;s Pilla&#x301;i groups).',
+        translated: '它们包括(Kerala&#146;s Na&#x301;ya&#x301;r and Tamil nadu&#146;s Pilla&#x301;i groups)。'
+      )
+    ).to be(true)
 
     expect do
       japanese.validate!(

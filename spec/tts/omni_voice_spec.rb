@@ -131,6 +131,7 @@ RSpec.describe TTS::OmniVoice do
   it 'uses a finite timeout for synthesis requests' do
     agent = double
 
+    allow(Utils::HTTP).to receive(:client).and_return(agent)
     expect(Utils::HTTP).to receive(:client)
       .with(timeout: TTS::HTTPBackend::REQUEST_TIMEOUT)
       .and_return(agent)

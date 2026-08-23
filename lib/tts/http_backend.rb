@@ -128,12 +128,12 @@ class TTS
       wav
     end
 
-    def post_form(agent, url, form, file_path)
-      return agent.post(url, form) unless file_path
+    def post_form(_agent, url, form, file_path)
+      return Utils::HTTP.post(url, form) unless file_path
 
       File.open(file_path) do |file|
         form['audio'] = file
-        agent.post(url, form)
+        Utils::HTTP.post(url, form)
       end
     end
 

@@ -61,6 +61,26 @@ RSpec.describe Audiobook::Parsers::Pdf do
     expect(info.pages).to eq(10)
   end
 
+  it 'parses pdftotext bbox XML that contains XML 1.0 illegal control bytes' do
+    xml = <<~XML
+      <doc>
+        <page width="612" height="792">
+          <line yMin="10" yMax="20" xMin="10" xMax="100">
+            <word yMin="10" yMax="20" xMin="10" xMax="50">condiç#{1.chr}#{3.chr}#{2.chr}</word>
+            <word yMin="10" yMax="20" xMin="55" xMax="90">normal</word>
+          </line>
+        </page>
+      </doc>
+    XML
+    status = instance_double(Process::Status, success?: true)
+    allow(Sh).to receive(:run).and_return([xml, '', status])
+    allow(described_class).to receive(:pdftohtml_bin).and_return(nil)
+
+    pages = described_class.extract_document_range('book.pdf', first_page: 1, last_page: 1)
+
+    expect(pages.first.lines.first.text).to eq("condiç normal")
+  end
+
   it 'limits the real Poppler extraction to the requested page range' do
     document = described_class.extract_document(
       fixture_path('image-text-handler.pdf'),

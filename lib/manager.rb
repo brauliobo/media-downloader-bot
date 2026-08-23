@@ -3,7 +3,6 @@ require_relative 'boot'
 require 'tmpdir'
 require 'mechanize'
 require 'roda'
-require 'retriable'
 require 'ostruct'
 
 require_relative 'bot/user_queue'
@@ -51,23 +50,19 @@ EOS
 
   # Simple retry helper with Telegram-aware sleep.
   # Yields the current attempt index (0 for first call) to the block.
-  # Customization via kwargs: :tries, :base_interval, :multiplier, :on, :max_interval,
-  # :randomization_factor, :retry_after_extractor (-> ex { seconds.to_f }), :on_retry (hook).
-  def self.retriable(**opts)
-    defaults = { tries: 3, base_interval: 0.3, multiplier: 2.0, on: [StandardError] }
+  def self.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0, on: [StandardError], **opts)
     user_on_retry = opts.delete(:on_retry)
-    retry_after_extractor = opts.delete(:retry_after_extractor) || ->(ex){
-      m = ex.message.to_s[/retry after (\d+(?:\.\d+)?)/, 1] rescue nil
+    retry_after_extractor = opts.delete(:retry_after_extractor) || ->(ex) {
+      m = ex.message.to_s[/retry after (\d+(?:\.\d+)?)/, 1]
       m ? m.to_f : 0.0
     }
-
-    attempt = 0
-    Retriable.retriable(**defaults.merge(opts), on_retry: ->(ex, try, elapsed, next_interval) do
-      ra = begin retry_after_extractor.call(ex).to_f rescue 0 end
-      sleep ra if ra > 0
-      attempt = try + 1
-      user_on_retry&.call(ex, try, elapsed, next_interval)
-    end) do
+    attempt = -1
+    Utils::Retry.call(tries:, interval: base_interval, multiplier:, on:, on_retry: ->(ex) {
+      ra = (retry_after_extractor.call(ex).to_f rescue 0)
+      Kernel.sleep(ra) if ra.positive?
+      user_on_retry&.call(ex)
+    }, **opts) do
+      attempt += 1
       yield(attempt)
     end
   end

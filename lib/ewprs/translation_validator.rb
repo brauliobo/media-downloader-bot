@@ -67,7 +67,7 @@ module Ewprs
         yielding
         knowable knows soybean
       ].to_h { |word| [word, true] }.freeze,
-      'de' => %w[definition plus].to_h { |word| [word, true] }.freeze
+      'de' => %w[definition].to_h { |word| [word, true] }.freeze
     }.freeze
     SOURCE_PROSE_CONNECTORS = {
       'en' => %w[
@@ -136,8 +136,8 @@ module Ewprs
     EMPTY_SMART_QUOTES = /(?:&ldquo;\s*&rdquo;|&lsquo;\s*&rsquo;|“\s*”|‘\s*’|«\s*»)/i
     NON_LATIN_ARTIFACT = /[\p{Han}\p{Cyrillic}\uFF00-\uFFEF]/u
     CJK_SCRIPT = /[\p{Han}\p{Hiragana}\p{Katakana}]/
-    CJK_RETAINED_DETERMINER = /(?<![A-Za-z\p{M}])(?:the|an|this|that|these|those|said|regarding|so-called)(?![A-Za-z\p{M}])/iu
-    CJK_RETAINED_COORDINATOR = /(?<![A-Za-z])[A-Za-z][A-Za-z\p{M}'’-]{0,24}\s+and\s+[A-Za-z]/u
+    CJK_RETAINED_DETERMINER = /(?<![A-Za-z\p{M}+=])(?:the|an|this|that|these|those|said|regarding|so-called)(?![A-Za-z\p{M}=])/iu
+    CJK_RETAINED_COORDINATOR = /(?<![A-Za-z\p{M}])[A-Za-z]{2,24}\s+and\s+[A-Za-z]/u
     LATIN_TARGETS = %w[de en es fr pt].to_h { |language| [language, true] }.freeze
 
     attr_reader :source_language, :target_language
@@ -438,7 +438,7 @@ module Ewprs
         raise Error.new(:target_language, "retained English determiner: #{determiner}")
       end
 
-      coordinator = retained_cjk_coordinator(unquoted)
+      coordinator = retained_cjk_coordinator(unquoted.gsub(/\([^()]*\)/, ' '))
       return unless coordinator
 
       raise Error.new(:target_language, "retained English coordinator: #{coordinator}")
@@ -509,7 +509,7 @@ module Ewprs
     end
 
     def english_hyphen_part?(part, dictionary, anchors)
-      dictionary.key?(part) || anchors.key?(part) || part.match?(ENGLISH_HYPHEN_TAIL)
+      dictionary.key?(part) || anchors.key?(part) || (part.size >= 5 && part.match?(ENGLISH_HYPHEN_TAIL))
     end
 
     def strip_quoted_spans(text)
@@ -553,7 +553,10 @@ module Ewprs
       return false if words.size < 2 || formula_or_reference?(source)
       return false if protected_source_fragment?(source)
 
-      source_words(words) >= 2 || source_suffix_words(words) >= 2 || source_prose_anchor?(words, source: source)
+      english = source_words(words)
+      return true if english >= 2 || source_suffix_words(words) >= 2
+
+      english.positive? && source_prose_anchor?(words, source: source)
     end
 
     def formula_or_reference?(source)

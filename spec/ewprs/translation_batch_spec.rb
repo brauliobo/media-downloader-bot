@@ -219,6 +219,36 @@ RSpec.describe Ewprs::TranslationBatch do
       'Ce noyau subit une grossification supplémentaire vers le salut. ' \
       'L’Entité suprême est un flux continu de cognition. Le terme anglais est salvation.'
     )
+
+    expect(
+      french.send(:normalize_target_language, 'paru dans Fiesch as &ldquo;The Nucleus&rdquo;.')
+    ).to eq('paru dans Fiesch as &ldquo;The Nucleus&rdquo;.')
+
+    expect(
+      french.send(
+        :normalize_target_language,
+        'Publié en anglais sous le titre &ldquo;Devotion: The Only Way of Salvation&rdquo;.'
+      )
+    ).to eq('Publié en anglais sous le titre &ldquo;Devotion: The Only Way of Salvation&rdquo;.')
+
+    expect(
+      french.send(
+        :normalize_target_language,
+        'Le sujet est &ldquo;Human Life and Its [[Goal]]&rdquo;.'
+      )
+    ).to eq('Le sujet est &ldquo;Human Life and Its [[Goal]]&rdquo;.')
+  end
+
+  it 'strips introduced Han from Latin restorations and leftover English from German' do
+    portuguese = described_class.new(root: root, target: 'pt', cache: cache, translator: translator, stdout: StringIO.new)
+    expect(
+      portuguese.send(:strip_introduced_foreign_scripts, 'the whole winter.', 'o整个 inverno.')
+    ).to eq('o inverno.')
+
+    german = described_class.new(root: root, target: 'de', cache: cache, translator: translator, stdout: StringIO.new)
+    expect(
+      german.send(:normalize_target_language, 'Doch illiterate Außenstehende würden das nie wagen.')
+    ).to eq('Doch ungebildete Außenstehende würden das nie wagen.')
   end
 
   it 'normalizes fullwidth punctuation before target-script validation' do
@@ -1305,6 +1335,17 @@ RSpec.describe Ewprs::TranslationBatch do
     expect(unit.tokens).to eq(
       '__P0001__' => '&ldquo;The Cimmerian Darkness at Long Last Penetrated&rdquo;'
     )
+  end
+
+  it 'does not protect etymology after a quoted term with a nested gloss' do
+    source = 'Many people believe that the word &ldquo;Baun&#x32D;ga&#x301;l&rdquo; ' \
+             '[&ldquo;Bengal&rdquo;] has been formed by adding the Farsi suffix a&#x301;l ' \
+             'to the root &ldquo;Vaun&#x32D;ga&rdquo;.'
+    unit = batch.send(:prepare_unit, 'quoted-etymology-gloss', source)
+
+    expect(unit.prepared).to include('has been formed by adding the Farsi suffix')
+    expect(unit.prepared).to include('to the root')
+    expect(unit.tokens.values.join).not_to include('has been formed by adding the Farsi suffix')
   end
 
   it 'protects quoted source-language examples in linguistic contexts' do

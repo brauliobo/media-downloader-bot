@@ -258,7 +258,7 @@ module Ewprs
       (?<prefix>
         \b(?:(?:use|uses|using|word|phrase|sentence|expression|term)\s+|(?:say|says|said)\s*:\s*)
       )
-      (?<example>&ldquo;.*?&rdquo;)
+      (?<example>&ldquo;(?:(?!&ldquo;|&rdquo;).)*&rdquo;)
     }ix
     UNQUOTED_PUBLICATION_TITLE = %r{
       (?<=\bincluded\sin\s)

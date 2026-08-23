@@ -1,5 +1,4 @@
-require 'retriable'
-
+require_relative 'utils/retry'
 require_relative 'tts/piper'
 require_relative 'tts/chatterbox'
 require_relative 'tts/coqui_tts'
@@ -23,9 +22,7 @@ class TTS
     errors = Queue.new
 
     process_batch = lambda do |batch|
-      Retriable.retriable(tries: 4, base_interval: 0.5, multiplier: 2.0) do
-        BACKEND.synthesize_batch(items: batch, **args)
-      end
+      Utils::Retry.tts { BACKEND.synthesize_batch(items: batch, **args) }
       on_batch&.call(batch)
     rescue StandardError => error
       errors << error

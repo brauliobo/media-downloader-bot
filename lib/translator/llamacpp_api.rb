@@ -1,4 +1,5 @@
 require 'iso-639'
+require_relative '../utils/http'
 
 class Translator
   module LlamacppApi

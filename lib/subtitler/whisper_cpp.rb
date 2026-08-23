@@ -1,6 +1,7 @@
 require 'tempfile'
 
 require_relative '../zipper'
+require_relative '../utils/http'
 require_relative 'subtitle'
 require_relative 'timestamps'
 
