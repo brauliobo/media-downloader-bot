@@ -1,0 +1,39 @@
+[Unit]
+Description=BS-RoFormer voice separation backend on GPU %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+SyslogIdentifier=bs-roformer-gpu%i
+User=braulio
+Nice=19
+UMask=0077
+
+WorkingDirectory=/srv/Music-Source-Separation-Training
+Environment=CUDA_VISIBLE_DEVICES=%i
+Environment=BS_ROFORMER_DEVICE=cuda
+Environment=BS_ROFORMER_REPOSITORY=/srv/Music-Source-Separation-Training
+Environment=BS_ROFORMER_CONFIG=/srv/Music-Source-Separation-Training/configs/viperx/model_bs_roformer_ep_317_sdr_12.9755.yaml
+Environment=BS_ROFORMER_CHECKPOINT=/srv/bs-roformer-models/model_bs_roformer_ep_317_sdr_12.9755.ckpt
+Environment=HF_HOME=/var/cache/bs-roformer-%i/huggingface
+Environment=TORCH_HOME=/var/cache/bs-roformer-%i/torch
+Environment=PYTHONDONTWRITEBYTECODE=1
+CacheDirectory=bs-roformer-%i
+RuntimeDirectory=bs-roformer-%i
+ExecCondition=/usr/bin/test %i -eq 0
+ExecStart=/srv/Music-Source-Separation-Training/runtime/bin/python -m uvicorn bs_roformer_service:app --app-dir /home/braulio/Projects/media-downloader-bot/services/voice_separation --host 127.0.0.1 --port 8085 --workers 1
+ExecStartPost=/usr/bin/curl --fail --silent --show-error --retry 300 --retry-delay 2 --retry-connrefused --retry-all-errors --retry-max-time 600 --max-time 2 http://127.0.0.1:8085/health/ready
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+Restart=always
+RestartSec=30
+TimeoutStartSec=12min
+TimeoutStopSec=2min
+
+[Install]
+WantedBy=multi-user.target
