@@ -51,7 +51,7 @@ RSpec.describe Ewprs::Translator do
   it 'provides source-language meaning for rare English terms' do
     expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
       prompt = JSON.parse(body).dig('messages', 0, 'content')
-      expect(prompt).to include('Interpret the English adjective "trifarious" as "threefold".')
+      expect(prompt).to include('The English adjective "trifarious" means having three aspects.')
       Struct.new(:body).new(
         {choices: [{message: {content: 'Dreifache Ausdrucksweise'}}]}.to_json
       )
@@ -64,15 +64,19 @@ RSpec.describe Ewprs::Translator do
     expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
       prompt = JSON.parse(body).dig('messages', 0, 'content')
       expect(prompt).to include(
-        'Interpret the phrase "all of North Bengal" to mean every part of the geographic region North Bengal.',
-        'Interpret the English adjective "illustrative" as "serving as examples".',
-        'Interpret the English word "definition" as "statement of meaning".',
-        'Interpret the English noun "feeder" as "one who nourishes or supplies".',
-        'Interpret the English adjective "descended" as "derived from an earlier language".',
-        'Interpret the English adjective "illiterate" as "unable to read or write".',
-        'Interpret the English noun "linseed" as "flax seed".',
-        'Interpret the English adverb "respectively" as "in the same order".',
+        'The phrase "all of North Bengal" means every part of that geographic region.',
+        'The English adjective "illustrative" means given to illustrate.',
+        'The English word "definition" means an explanation of what a term means.',
+        'The English noun "feeder" means someone who nourishes or supplies.',
+        'The English adjective "descended" means derived from an earlier language.',
+        'The English adjective "illiterate" means lacking literacy.',
+        'The English noun "linseed" means the seed of the flax plant.',
+        'The English adverb "respectively" means each in the order already given.',
         'This phrase introduces a list of examples. Translate every word of the phrase.'
+      )
+      expect(prompt).not_to include(
+        'as "serving as examples"', 'as "statement of meaning"', 'as "flax seed"',
+        'as "unable to read or write"', 'as "in the same order"'
       )
       Struct.new(:body).new(
         {choices: [{message: {content: 'In der gesamten Region Nordbengalen gibt es anschauliche Beispiele.'}}]}.to_json
@@ -84,6 +88,33 @@ RSpec.describe Ewprs::Translator do
     expect(translator.translate_markup(source, to: 'de')).to eq(
       'In der gesamten Region Nordbengalen gibt es anschauliche Beispiele.'
     )
+  end
+
+  it 'hints English discourse openers without offering copyable English glosses' do
+    expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
+      prompt = JSON.parse(body).dig('messages', 0, 'content')
+      expect(prompt).to include('The English preposition means as stated by that source.')
+      expect(prompt).to include('This UI label means extra information available on the website.')
+      expect(prompt).not_to include('as "according to"')
+      Struct.new(:body).new({choices: [{message: {content: 'マハルシによれば、詩句が続く。'}}]}.to_json)
+    end
+
+    expect(
+      translator.translate_markup(
+        'According to the sage, see the online additional information.', to: 'ja'
+      )
+    ).to eq('マハルシによれば、詩句が続く。')
+  end
+
+  it 'paraphrases similarly without telling the model to copy English in the same way' do
+    expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
+      prompt = JSON.parse(body).dig('messages', 0, 'content')
+      expect(prompt).to include('The English adverb means likewise or analogously.')
+      expect(prompt).not_to include('as "in the same way"')
+      Struct.new(:body).new({choices: [{message: {content: '同じように、心は広がる。'}}]}.to_json)
+    end
+
+    expect(translator.translate_markup('Similarly, the mind expands.', to: 'ja')).to eq('同じように、心は広がる。')
   end
 
   it 'uses explicit jobs as distributed request concurrency' do
@@ -310,6 +341,16 @@ RSpec.describe Ewprs::Translator do
     )
   end
 
+  it 'keeps a quoted single letter when preserving smart quotes' do
+    expect(translator).to receive(:translate_markup).with(
+      ['The Cosmic', 'remains.'], from: 'en', to: 'ja'
+    ).and_return(['宇宙の', 'が残る。'])
+
+    expect(
+      translator.translate_preserving_smart_quotes('The Cosmic &ldquo;I&rdquo; remains.', to: 'ja')
+    ).to eq('宇宙の &ldquo;I&rdquo; が残る。')
+  end
+
   it 'uses mandatory XML tags as an alternate protected-placeholder channel' do
     expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
       prompt = JSON.parse(body).dig('messages', 0, 'content')
@@ -326,6 +367,28 @@ RSpec.describe Ewprs::Translator do
     expect(
       translator.translate_preserving_placeholders('The natural __P0001__ remains.', to: 'de')
     ).to eq('Das natürliche __P0001__ bleibt bestehen.')
+  end
+
+  it 'retranslates spelled numbers between placeholders when XML keeps only digits' do
+    allow(Utils::HTTP).to receive(:post) do |_url, body, _headers|
+      prompt = JSON.parse(body).dig('messages', 0, 'content')
+      content = if prompt.include?('<ewprs-p')
+                  '700 <ewprs-p id="1"/> 700 <ewprs-p id="2"/>'
+                elsif prompt.include?('Seven hundred (700)')
+                  '七百 (700)'
+                elsif prompt.match?(/\n\nSeven hundred\z/)
+                  '七百'
+                elsif prompt.match?(/\n\n700\z/)
+                  '700'
+                end
+      Struct.new(:body).new({choices: [{message: {content: content}}]}.to_json)
+    end
+
+    expect(
+      translator.translate_preserving_placeholders(
+        'Seven hundred __P0001__700__P0002__', values: {'__P0001__' => '(', '__P0002__' => ')'}, to: 'ja'
+      )
+    ).to eq('七百 __P0001__700__P0002__')
   end
 
   it 'exposes protected values inside semantic XML tags' do
@@ -508,6 +571,15 @@ RSpec.describe Ewprs::Translator do
     )
   end
 
+  it 'retranslates echoed slash-separated titles as smaller fragments' do
+    source = '__P0001__ and Dance / The Psychic Order'
+    expect(translator).to receive(:translate_markup).with(
+      ['__P0001__ and Dance', 'The Psychic Order'], from: 'en', to: 'ja'
+    ).and_return(['__P0001__ と舞踏', '精神的秩序'])
+
+    expect(translator.translate_by_clauses(source, to: 'ja')).to eq('__P0001__ と舞踏 / 精神的秩序')
+  end
+
   it 'does not seed placeholders into unprotected translation prompts' do
     expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
       prompt = JSON.parse(body).dig('messages', 0, 'content')
@@ -602,7 +674,7 @@ RSpec.describe Ewprs::Translator do
       prompt = JSON.parse(body).dig('messages', 0, 'content')
       expect(prompt).to include(
         'Translate this English sentence completely into German.',
-        'Interpret the English verb "inject" as "introduce or instill".',
+        'The English verb "inject" means to put a quality into a person or group.',
         source
       )
       expect(prompt).not_to include(invalid, 'Invalid translation to correct:')

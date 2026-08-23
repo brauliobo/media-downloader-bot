@@ -13,10 +13,20 @@ module Ewprs
         allow_moved_editorial = output.to_s.scan(EDITORIAL_TAG) == unit.prepared.scan(EDITORIAL_TAG)
         begin
           output = normalize_target_language(output.to_s)
+          output = project_broken_quotes(output)
+          output = project_cjk_work_titles(unit, output)
+          output = strip_echoed_protected_ascii(unit, output)
           validator.validate!(source: unit.prepared, translated: output)
           restore_tokens(unit, output, allow_moved_editorial: allow_moved_editorial)
         rescue ProtectedTokenError, TranslationValidator::Error => error
           projected = nil
+          if error.respond_to?(:code) && error.code == :quotes
+            tagged = project_mistaken_quoted_letter_tags(output)
+            if tagged != output
+              output = tagged
+              retry
+            end
+          end
           projected = remove_duplicated_placeholders(unit, output) if error.message.match?(/unexpected:/)
           if projected && projected != output
             output = projected
@@ -40,8 +50,17 @@ module Ewprs
           end
           project_editorial = error.message.match?(/changed editorial tags|changed editorial brackets/)
           project_editorial ||= error.is_a?(ProtectedTokenError) && unit.prepared.match?(EDITORIAL_TAG)
-          project_editorial &&= !attempted_projections[:editorial]
-          if project_editorial
+          untranslated_editorial = unit.prepared.match?(EDITORIAL_TAG) &&
+                                   error.respond_to?(:code) &&
+                                   %i[untranslated target_language].include?(error.code)
+          if (project_editorial || untranslated_editorial) &&
+             !attempted_projections[:editorial_segments] &&
+             TranslationValidator::CJK_TARGET.key?(target)
+            attempted_projections[:editorial_segments] = true
+            projected = translator.translate_preserving_editorial_tags(
+              unit.prepared, from: source_language, to: target
+            )
+          elsif project_editorial && !attempted_projections[:editorial]
             attempted_projections[:editorial] = true
             projected = project_missing_editorial_tags(unit, output)
             projected ||= translator.translate_preserving_editorial_tags(
@@ -81,9 +100,12 @@ module Ewprs
               retry
             end
           end
-          clause_projection = error.respond_to?(:code) && error.code == :untranslated && unit.prepared.match?(/[,;]/)
+          clause_projection = error.respond_to?(:code) &&
+                              %i[untranslated target_language].include?(error.code) &&
+                              unit.prepared.match?(/\s/)
           clause_projection &&= !unit.prepared.match?(PLACEHOLDER) ||
-                                error.message.match?(/source-language word|retained English phrase/)
+                                error.message.match?(/source-language word|retained English phrase/) ||
+                                unit.prepared.match?(%r{[ \t]/[ \t]})
           if clause_projection && !attempted_projections[:clauses]
             attempted_projections[:clauses] = true
             projected = translator.translate_by_clauses(
@@ -100,6 +122,8 @@ module Ewprs
           project_placeholders ||= error.respond_to?(:code) && error.code == :delimiters &&
                                    unit.prepared.match?(PLACEHOLDER)
           project_placeholders ||= error.respond_to?(:code) && error.code == :markers &&
+                                   unit.prepared.match?(PLACEHOLDER)
+          project_placeholders ||= error.respond_to?(:code) && error.code == :target_language &&
                                    unit.prepared.match?(PLACEHOLDER)
           project_order = error.is_a?(ProtectedTokenError) && error.message.match?(/reordered structural tokens/)
           project_order ||= error.respond_to?(:code) && error.code == :delimiters &&
@@ -153,6 +177,61 @@ module Ewprs
         end
       end
 
+      def project_mistaken_quoted_letter_tags(output)
+        project_broken_quotes(output)
+      end
+
+      QUOTE_TRANSPORT = %r{
+        (?:&lt;|</?)?[A-Za-z]?ewprs-(?:(?:single-)?quote-(?:open|close))
+        (?:\s+id\s*=\s*(?:&quot;|["'])?\d+(?:&quot;|["'])?)?
+        \s*(?:/>|/?>|&gt;|/&gt;)?
+      }ix
+
+      def project_broken_quotes(output)
+        output.to_s
+          .gsub(/(<|&lt;)([A-Za-z])(?=ewprs-(?:(?:single-)?quote-(?:open|close)))/i, '\1\2>')
+          .gsub(QUOTE_TRANSPORT, '')
+          .gsub(/<(?=[A-Za-z](?:&(?:rdquo|rsquo);|[”’]))/, '&ldquo;')
+          .gsub(/&(l|r)([sd])quo(?!;)/i, '&\1\2quo;')
+      end
+
+      CJK_WORK_TITLE = /
+        \b(?:The|A|An)\s+[A-Z][A-Za-z'’:-]*
+        (?:\s+(?:a|an|and|for|from|in|of|on|or|the|to|with|[A-Z][A-Za-z'’:-]*))+
+      /x
+      CJK_TITLE_CASE = /
+        \b[A-Z][A-Za-z'’:-]*
+        (?:\s+(?:a|an|and|for|from|in|of|on|or|the|to|with|[A-Z][A-Za-z'’:-]*)){4,}
+      /x
+
+      def project_cjk_work_titles(unit, output)
+        return output unless TranslationValidator::CJK_TARGET.key?(target)
+        return output unless output.match?(TranslationValidator::CJK_SCRIPT)
+
+        titles = "#{unit.source} #{unit.prepared}".scan(Regexp.union(CJK_WORK_TITLE, CJK_TITLE_CASE))
+        titles = titles.uniq.sort_by { |title| -title.size }
+        titles.reduce(output.to_s) do |projected, title|
+          next projected if projected.match?(/『#{Regexp.escape(title)}』/)
+
+          wrapped = "『#{title}』"
+          projected = projected.gsub(/&ldquo;#{Regexp.escape(title)}[.,;:]?&rdquo;/, wrapped)
+          projected = projected.gsub(/“#{Regexp.escape(title)}[.,;:]?”/, wrapped)
+          next projected if projected.include?(wrapped)
+          next projected unless projected.include?(title)
+
+          projected.gsub(title, wrapped)
+        end.then { |projected| fill_cjk_empty_quotes(projected) }
+      end
+
+      def fill_cjk_empty_quotes(value)
+        value.to_s.gsub(
+          /「」(?<tail>と呼ばれる|という|と呼ばれて(?:いる|います))?[[:space:]]*(?:&ldquo;(?<quoted>[^&]+)&rdquo;|“(?<smart>[^”]+)”|(?<latin>[\p{Latin}\p{M}'’.-]+))/
+        ) do
+          inner = Regexp.last_match[:quoted] || Regexp.last_match[:smart] || Regexp.last_match[:latin]
+          "「#{inner}」#{Regexp.last_match[:tail]}"
+        end
+      end
+
       def remove_duplicated_placeholders(unit, output)
         expected = unit.prepared.scan(PLACEHOLDER).tally
         seen = Hash.new(0)
@@ -166,21 +245,25 @@ module Ewprs
         expected = unit.prepared.scan(PLACEHOLDER).tally
         actual = output.to_s.scan(PLACEHOLDER).tally
         projected = output.to_s.dup
-        unit.tokens.each do |marker, value|
-          missing = expected.fetch(marker, 0) - actual.fetch(marker, 0)
-          next unless missing.positive?
+        missing = unit.tokens.flat_map do |marker, value|
+          count = expected.fetch(marker, 0) - actual.fetch(marker, 0)
+          next [] unless count.positive?
 
           projectable = value.gsub(UNIT_MARKER, ' ').gsub(/[\[\]{}()]/, ' ').strip
-          next if projectable.empty? || projectable.match?(/[<>⟦⟧]/)
+          next [] if projectable.empty? || projectable.match?(/[<>⟦⟧]/)
 
           visible = CGI.unescapeHTML(projectable).unicode_normalize(:nfd)
-          next unless visible.match?(/\p{M}/u)
+          next [] unless visible.match?(/\p{M}/u)
 
-          plain = visible.gsub(/\p{M}/u, '')
+          [[marker, value, visible.gsub(/\p{M}/u, '')]] * count
+        end
+        missing.group_by { |_marker, _value, plain| plain }.each do |plain, group|
           pattern = exact_phrase_pattern(plain)
-          next unless projected.scan(pattern).size == missing
+          next unless projected.scan(pattern).size == group.size
 
-          missing.times { projected.sub!(pattern, marker) }
+          group.sort_by { |_marker, value, _plain| -value.size }.each do |marker, _value, _plain|
+            projected.sub!(pattern, marker)
+          end
         end
         projected
       end
@@ -214,8 +297,9 @@ module Ewprs
         end
       end
 
-      def normalize_target_language(value)
+      def normalize_target_language(value, strip_glue: true)
         value = value.tr('，？！：；．', ',?!:;.')
+        value = strip_cjk_leftover_glue(value) if strip_glue && TranslationValidator::CJK_TARGET.key?(target)
         return value unless target == 'fr'
 
         value = value.gsub('整个系统违背了人类心理，因此产量永远不会增加。',
@@ -268,6 +352,75 @@ module Ewprs
         end
       end
 
+      def strip_cjk_leftover_glue(value)
+        return value unless value.match?(TranslationValidator::CJK_SCRIPT)
+
+        held = []
+        hold = ->(span) do
+          held << span
+          "__Q#{held.size}__"
+        end
+        masked = value.gsub(/&ldquo;.*?&rdquo;|&lsquo;.*?&rsquo;|『.*?』|「.*?」|".*?"/mi, &hold)
+        masked = masked.gsub(/&(?:#\d+|#x[\da-f]+|[a-z][\w]*);/i, &hold)
+        masked = masked.gsub(Regexp.union(
+          TranslationValidator::RETAINED_ENGLISH_IDIOMS.keys +
+            TranslationValidator::ENGLISH_DISCOURSE_OPENERS.keys
+        ), &hold)
+        glue = '(?:the|an|this|that|these|those|in|on|at|from|to|of|for|with|by|and|or|said|regarding|so-called)'
+        cjk  = TranslationValidator::CJK_SCRIPT
+        coordinator = target == 'zh' ? '和' : 'と'
+        masked = masked.gsub(/(?<![\p{Latin}\p{M}#;])#{glue}\s*(?=#{cjk})/iu, '')
+          .gsub(/(#{cjk}[[:punct:]]*)\s*#{glue}(?![\p{Latin}\p{M}#&;_])/iu, '\1')
+          .gsub(/\b(?:in|on|at|from|to|of|for|with|by)\s+(?=[\p{Latin}\p{M}'’-]+\s*#{cjk})/iu, '')
+          .gsub(/(?<=[\p{Latin}\p{M}'’-])\s+said\b,?/iu, '')
+          .gsub(/\bregarding\b,?/iu, '')
+          .gsub(/(?<![A-Za-z])([A-Za-z][A-Za-z\p{M}'’-]{0,24})\s+and\s+(?=[A-Za-z])/u, "\\1#{coordinator}")
+          .sub(/\A[ \t]+/, '')
+        held.each_with_index.reverse_each { |span, index| masked.sub!("__Q#{index + 1}__", span) }
+        masked
+      end
+
+      def strip_echoed_protected_ascii(unit, output)
+        return output unless TranslationValidator::CJK_TARGET.key?(target)
+
+        held = []
+        hold = ->(span) do
+          held << span
+          "__Q#{held.size}__"
+        end
+        projected = output.to_s.gsub(/&ldquo;.*?&rdquo;|&lsquo;.*?&rsquo;|『.*?』|「.*?」|".*?"/mi, &hold)
+        unit.tokens.flat_map { |marker, value| [marker, value] }.uniq.sort_by { |span| -span.size }.each do |span|
+          next if span.empty?
+
+          projected.gsub!(span, &hold)
+        end
+        unit.tokens.each do |marker, value|
+          present = output.to_s.include?(marker) || output.to_s.include?(value)
+          next unless present
+
+          unicode = CGI.unescapeHTML(value.gsub(MARKUP, '').gsub(UNIT_MARKER, ''))
+          next unless unicode.match?(/\p{M}/)
+
+          ascii = ascii_fold_protected(value)
+          collisions = unit.tokens.except(marker).values.flat_map { |other| [other, ascii_fold_protected(other)] }
+          echoes = [ascii, unicode, unicode.unicode_normalize(:nfc), unicode.unicode_normalize(:nfd)]
+          echoes.uniq.each do |echo|
+            next if echo.size < 4 || echo == value || echo.include?('&')
+            next if collisions.any? { |other| other.include?(echo) }
+            next if value.match?(exact_phrase_pattern(echo))
+
+            projected.gsub!(exact_phrase_pattern(echo), '')
+          end
+        end
+        held.each_with_index.reverse_each { |span, index| projected.sub!("__Q#{index + 1}__", span) }
+        projected
+      end
+
+      def ascii_fold_protected(value)
+        CGI.unescapeHTML(value.gsub(MARKUP, '').gsub(UNIT_MARKER, ''))
+           .unicode_normalize(:nfd).gsub(/\p{M}/, '').gsub(/[^A-Za-z]/, '')
+      end
+
       def project_missing_editorial_tags(unit, output)
         editorials = unit.prepared.scan(%r{(<span data-ewprs="[12][12]">)(.*?)</span>}mi)
         return if editorials.empty?
@@ -287,7 +440,7 @@ module Ewprs
       end
 
       def exact_phrase_pattern(value)
-        boundary = target == 'zh' ? '\p{Latin}\p{M}' : '\p{L}\p{M}'
+        boundary = TranslationValidator::CJK_TARGET.key?(target) ? '\p{Latin}\p{M}' : '\p{L}\p{M}'
         opening = value.match?(/\A[\p{L}\p{M}]/u) ? "(?<![#{boundary}])" : ''
         closing = value.match?(/[\p{L}\p{M}]\z/u) ? "(?![#{boundary}])" : ''
         Regexp.new("#{opening}#{Regexp.escape(value)}#{closing}", Regexp::IGNORECASE)
@@ -344,6 +497,7 @@ module Ewprs
         translated = restore_editorial_tags(output).split(/(#{PLACEHOLDER})/).map do |part|
           unit.tokens.fetch(part) { preserve_entities(CGI.escapeHTML(part), source: unit.source) }
         end.join
+        translated = project_broken_quotes(translated)
         validate_restored_translation!(unit, "#{unit.leading}#{translated}#{unit.trailing}")
       end
 
@@ -506,12 +660,15 @@ module Ewprs
       end
 
       def nested_editorial_token?(value)
-        value.match?(/\A\[\[#{UNIT_MARKER}\]\]\z/) ||
-          value.match?(UNIT_MARKER) && value.match?(EDITORIAL_BRACKET)
+        return true if value.match?(/\A\[\[#{UNIT_MARKER}\]\]\z/)
+        return false if TranslationValidator::CJK_TARGET.key?(target)
+
+        value.match?(UNIT_MARKER) && value.match?(EDITORIAL_BRACKET)
       end
 
       def validate_restored_translation!(unit, translation)
-        translation = normalize_target_language(translation)
+        translation = strip_echoed_protected_ascii(unit, translation)
+        translation = normalize_target_language(translation, strip_glue: false)
         translation = normalize_duplicate_dashes(translation)
         source_structure = restore_editorial_tags(unit.prepared).gsub(PLACEHOLDER) do |marker|
           unit.tokens.fetch(marker)
@@ -521,7 +678,10 @@ module Ewprs
         end
 
         validation_source, validation_translation = project_nested_values(unit, translation)
-        if unit.source && !html_structure_compatible?(validation_source, validation_translation)
+        if unit.source && !html_structure_compatible?(
+          validation_source, validation_translation,
+          allow_moved_inline_nesting: TranslationValidator::CJK_TARGET.key?(target)
+        )
           raise TranslationValidator::Error.new(:markup, 'translation changed HTML tag sequence')
         end
 

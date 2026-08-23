@@ -19,6 +19,7 @@ module Ewprs
         (</b\s*>)
       }ix
       LIST_ITEM_PREFIX = /\A(?<prefix>(?:[A-Za-z]|\d{1,3})\)\s+)(?<content>.+)\z/m
+      BOILERPLATE_ENGLISH = /\b(?:copyright|all rights reserved)\b/i
 
       private
 
@@ -40,6 +41,7 @@ module Ewprs
         template = template.gsub(TEXT_NODE) do |value|
           translatable?(value) ? register_content(value) : value
         end
+        template = unitize_attributes(template)
         @document_protected.each { |marker, value| template.gsub!(marker, value) }
         template
       ensure
@@ -72,6 +74,24 @@ module Ewprs
         end
       end
 
+      def unitize_attributes(template)
+        template.gsub(NAVIGATION_ATTRIBUTE) do
+          name, equals, quote, value = Regexp.last_match.captures
+          "#{name}#{equals}#{quote}#{register_attribute_value(value)}#{quote}"
+        end
+      end
+
+      def register_attribute_value(value)
+        match = value.match(BOOK_NAV_CHROME)
+        if match
+          "#{register_unit(match[1])}#{register_content(match[2])}"
+        elsif translatable?(value)
+          register_unit(value)
+        else
+          value
+        end
+      end
+
       def unitize_grouped(template, pattern, force_translation: false)
         template.gsub(pattern) do
           content = Regexp.last_match(2)
@@ -87,9 +107,17 @@ module Ewprs
       def translatable?(value, force_translation: false)
         core = value.to_s.strip
         return false if core.empty? || core.match?(UNIT_MARKER)
-        return false if !force_translation && validator.protected_source_fragment?(core)
+        if !force_translation && validator.protected_source_fragment?(core) &&
+           !core.match?(BOILERPLATE_ENGLISH)
+          return mixed_english_glue?(core)
+        end
 
         core.gsub(PROTECTED_MARKER, '').match?(/[A-Za-z]/)
+      end
+
+      def mixed_english_glue?(source)
+        (source.match?(LEADING_ENGLISH_GLUE) && source.match?(MARKED_WORD)) ||
+          source.match?(ENGLISH_GLUE_BEFORE_MARKED)
       end
 
       def register_unit(source)
@@ -99,7 +127,9 @@ module Ewprs
       end
 
       def register_content(source, force_translation: false)
-        return protect_content(source) if !force_translation && non_english_verse?(source)
+        return protect_content(source) if !force_translation && non_english_verse?(source) &&
+                                          !source.match?(BOILERPLATE_ENGLISH) &&
+                                          !mixed_english_glue?(source)
 
         source.split(/(#{STRUCTURAL_MARKUP})/).map do |part|
           if part.empty?
@@ -107,11 +137,8 @@ module Ewprs
           elsif part.match?(/\A#{STRUCTURAL_MARKUP}\z/)
             part
           else
-            if translatable?(part, force_translation: force_translation)
-              register_sentences(part, force_translation: force_translation)
-            else
-              part
-            end
+            translatable?(part, force_translation: force_translation) ?
+              register_sentences(part, force_translation: force_translation) : part
           end
         end.join
       end

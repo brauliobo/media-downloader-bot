@@ -26,32 +26,45 @@ module Ewprs
     NATURAL_SMART_QUOTE  = /[“”„‟«»‘’‚‛‹›]/
     TRANSLATION_BOUNDARY = /(#{SMART_QUOTE}|<span data-ewprs="[12][12]">|<\/span>)/i
     QUOTED_PROSE_INSTRUCTION = 'Translate prose inside quotation marks too; quotation marks do not denote protected text.'
+    DO_NOT_COPY_ENGLISH = 'Translate that meaning; do not copy English words.'
     SOURCE_TERM_HINTS = {
-      'all of North Bengal'    => 'Interpret the phrase "all of North Bengal" to mean every part of the geographic ' \
-                                  'region North Bengal. Translate that meaning; do not copy this explanation.',
-      'all of South East Asia' => 'Before translating, interpret the exact English phrase "all of South East Asia" ' \
-                                  'as "throughout Southeast Asia".',
-      'anchoring'              => 'Interpret the English word "anchoring" as "firmly establishing".',
-      'cause your downfall'    => 'Interpret the English phrase "cause your downfall" as "bring ruin upon a person".',
-      'definition'             => 'Interpret the English word "definition" as "statement of meaning".',
-      'descended'              => 'Interpret the English adjective "descended" as "derived from an earlier language".',
-      'each of these five'     => 'Interpret the English phrase "each of these five" as "every one of these five".',
+      'all of North Bengal'    => 'The phrase "all of North Bengal" means every part of that geographic region. ' \
+                                  'Do not copy this explanation.',
+      'all of South East Asia' => "The phrase \"all of South East Asia\" means the entire Southeast Asian region. #{DO_NOT_COPY_ENGLISH}",
+      'anchoring'              => "The English word \"anchoring\" means establishing firmly. #{DO_NOT_COPY_ENGLISH}",
+      'cause your downfall'    => "The English phrase \"cause your downfall\" means to bring ruin on someone. #{DO_NOT_COPY_ENGLISH}",
+      'definition'             => "The English word \"definition\" means an explanation of what a term means. #{DO_NOT_COPY_ENGLISH}",
+      'descended'              => "The English adjective \"descended\" means derived from an earlier language. #{DO_NOT_COPY_ENGLISH}",
+      'each of these five'     => "The English phrase \"each of these five\" means every one among those five. #{DO_NOT_COPY_ENGLISH}",
       'edition'                => 'In bibliographic prose, translate "Edition" as the target-language word for a ' \
                                   'publication edition.',
-      'extro-internal'         => 'Interpret the English adjective "extro-internal" as "from the external toward the internal".',
-      'feeder'                 => 'Interpret the English noun "feeder" as "one who nourishes or supplies".',
-      'illiterate'             => 'Interpret the English adjective "illiterate" as "unable to read or write".',
-      'illustrative'           => 'Interpret the English adjective "illustrative" as "serving as examples".',
-      'inculcating'            => 'Interpret the English verb "inculcating" as "firmly instilling".',
-      'inject'                 => 'Interpret the English verb "inject" as "introduce or instill".',
-      'linseed'                => 'Interpret the English noun "linseed" as "flax seed".',
-      'literally'              => 'Interpret the English adverb "literally" as "in the literal sense".',
-      'respectively'           => 'Interpret the English adverb "respectively" as "in the same order".',
-      'similarly'              => 'Interpret the English adverb "similarly" as "in the same way".',
+      'extro-internal'         => "The coined adjective \"extro-internal\" describes motion from outside toward inside. #{DO_NOT_COPY_ENGLISH}",
+      'intro-external'         => "The coined adjective \"intro-external\" describes motion from inside toward outside. #{DO_NOT_COPY_ENGLISH}",
+      'feeder'                 => "The English noun \"feeder\" means someone who nourishes or supplies. #{DO_NOT_COPY_ENGLISH}",
+      'illiterate'             => "The English adjective \"illiterate\" means lacking literacy. #{DO_NOT_COPY_ENGLISH}",
+      'illustrative'           => "The English adjective \"illustrative\" means given to illustrate. #{DO_NOT_COPY_ENGLISH}",
+      'inculcating'            => "The English verb \"inculcating\" means instilling firmly. #{DO_NOT_COPY_ENGLISH}",
+      'inject'                 => "The English verb \"inject\" means to put a quality into a person or group. #{DO_NOT_COPY_ENGLISH}",
+      'linseed'                => "The English noun \"linseed\" means the seed of the flax plant. #{DO_NOT_COPY_ENGLISH}",
+      'literally'              => "The English adverb \"literally\" means in a non-figurative or exact sense. #{DO_NOT_COPY_ENGLISH}",
+      'respectively'           => "The English adverb \"respectively\" means each in the order already given. #{DO_NOT_COPY_ENGLISH}",
+      'according to'           => "The English preposition means as stated by that source. #{DO_NOT_COPY_ENGLISH}",
+      'all-pervasive'          => "The English adjective means present everywhere. #{DO_NOT_COPY_ENGLISH}",
+      'beginning of book'      => "This UI label means the start of the book. #{DO_NOT_COPY_ENGLISH}",
+      'however'                => "The English adverb means in contrast or nevertheless. #{DO_NOT_COPY_ENGLISH}",
+      'in the same way'        => "The English idiom means likewise or analogously. #{DO_NOT_COPY_ENGLISH}",
+      'likewise'               => "The English adverb means in the same manner. #{DO_NOT_COPY_ENGLISH}",
+      'next chapter'           => "This UI label means the following chapter. #{DO_NOT_COPY_ENGLISH}",
+      'online additional information' =>
+        "This UI label means extra information available on the website. #{DO_NOT_COPY_ENGLISH}",
+      'previous chapter'       => "This UI label means the preceding chapter. #{DO_NOT_COPY_ENGLISH}",
+      'self-illuminating'      => "The English adjective means shining by its own light. #{DO_NOT_COPY_ENGLISH}",
+      'similarly'              => "The English adverb means likewise or analogously. #{DO_NOT_COPY_ENGLISH}",
+      'therefore'              => "The English adverb means for that reason. #{DO_NOT_COPY_ENGLISH}",
       'some examples are'      => 'This phrase introduces a list of examples. Translate every word of the phrase.',
-      'those endeavours'       => 'Interpret the English phrase "those endeavours" as "such efforts".',
-      'without any delay'      => 'Interpret the English phrase "without any delay" as "immediately".',
-      'trifarious'             => 'Interpret the English adjective "trifarious" as "threefold".'
+      'those endeavours'       => "The English phrase \"those endeavours\" means that kind of work. #{DO_NOT_COPY_ENGLISH}",
+      'without any delay'      => "The English phrase \"without any delay\" means immediately. #{DO_NOT_COPY_ENGLISH}",
+      'trifarious'             => "The English adjective \"trifarious\" means having three aspects. #{DO_NOT_COPY_ENGLISH}"
     }.freeze
     TRANSPORT_ERRORS      = [
       EOFError, Errno::ECONNRESET, Errno::ECONNREFUSED, Net::OpenTimeout, Net::ReadTimeout
@@ -109,11 +122,11 @@ module Ewprs
         next if index.odd?
 
         core = parts[index].strip
-        core unless core.empty?
+        core unless core.empty? || core.match?(/\A[A-Za-z]\z/)
       end
       translated = Array(translate_markup(prose, from: from, to: to)).each
       parts.each_with_index.map do |part, index|
-        next part if index.odd? || part.strip.empty?
+        next part if index.odd? || part.strip.empty? || part.strip.match?(/\A[A-Za-z]\z/)
 
         part.sub(part.strip, translated.next.gsub(SMART_QUOTE, ''))
       end.join
@@ -139,10 +152,12 @@ module Ewprs
       output = translate_with_xml_placeholders(text, values: values, from: from, to: to)
       expected = text.to_s.scan(INTERNAL_PLACEHOLDER).tally
       if output.scan(INTERNAL_PLACEHOLDER).tally == expected
-        return output unless output == text.to_s
+        if output != text.to_s && letters?(output)
+          return output
+        end
 
         natural = translate_with_natural_placeholders(text, values: values, from: from, to: to)
-        return natural if natural && natural != text.to_s
+        return natural if natural && natural != text.to_s && letters?(natural)
 
         return translate_between_placeholders(text, from: from, to: to)
       end
@@ -165,7 +180,7 @@ module Ewprs
     end
 
     def translate_by_clauses(text, from: 'en', to:)
-      parts = text.to_s.split(/([,;][ \t]*)/)
+      parts = text.to_s.split(/([,;][ \t]*|[ \t]+\/[ \t]+)/)
       indexes = parts.each_index.select { |index| index.even? && !parts[index].strip.empty? }
       sources = indexes.map { |index| parts[index].strip }
       translations = Array(translate_markup(sources, from: from, to: to))
@@ -190,6 +205,10 @@ module Ewprs
     end
 
     private
+
+    def letters?(text)
+      text.to_s.gsub(INTERNAL_PLACEHOLDER, '').match?(/\p{L}/u)
+    end
 
     def translate_between_placeholders(text, from:, to:)
       parts = text.to_s.split(/(#{INTERNAL_PLACEHOLDER})/)
@@ -360,12 +379,14 @@ module Ewprs
           Utils::HTTP.post "#{host.delete_suffix('/')}#{API_PATH}", options.to_json, HEADERS
         end
       rescue *TRANSPORT_ERRORS
+        Utils::HTTP.reset!
         raise if retries >= TRANSPORT_RETRIES
 
         retries += 1
         sleep TRANSPORT_RETRY_DELAY
         retry
       rescue Mechanize::ResponseCodeError => error
+        Utils::HTTP.reset!
         raise unless RETRYABLE_HTTP_STATUS.include?(error.response_code.to_i)
         raise if retries >= TRANSPORT_RETRIES
 

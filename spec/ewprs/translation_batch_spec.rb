@@ -92,6 +92,84 @@ RSpec.describe Ewprs::TranslationBatch do
     expect(result[:protected_elements]).to eq(7)
   end
 
+  it 'unitizes English copyright boilerplate next to a protected organization name' do
+    html = "<p class=para_copyright><div class=copyright>&copy; Copyright 2009\r\n" \
+           "A&#x301;nanda Ma&#x301;rga Praca&#x301;raka Sam&#x301;gha (Central)\r\n" \
+           'All Rights Reserved</div></p>'
+    template = batch.send(:unitize, html)
+    sources = batch.instance_variable_get(:@units).values.map(&:source)
+
+    expect(sources).to include('&copy; Copyright 2009')
+    expect(sources).to include('All Rights Reserved')
+    expect(template).to include('A&#x301;nanda Ma&#x301;rga Praca&#x301;raka Sam&#x301;gha (Central)')
+    expect(template).not_to include('All Rights Reserved')
+  end
+
+  it 'unitizes book navigation title and alt attributes and reuses chapter titles' do
+    html = '<div class=book_chapter_title>Preface</div>' \
+           '<a href="#ch2" title="Next chapter: Preface">' \
+           '<img src="n.gif" Alt="Next chapter: Preface" /></a>' \
+           '<a href="#top" title="Beginning of book">' \
+           '<img src="t.gif" Alt="Beginning of book" /></a>'
+    template = batch.send(:unitize, html)
+    sources = batch.instance_variable_get(:@units).values.map(&:source)
+
+    expect(template).not_to include('Next chapter:')
+    expect(template).not_to include('Beginning of book')
+    expect(sources).to include('Next chapter: ')
+    expect(sources).to include('Beginning of book')
+    expect(sources).to include('Preface')
+    expect(sources.count('Preface')).to eq(1)
+
+    translations = batch.instance_variable_get(:@units).to_h do |key, unit|
+      [key, unit.source.gsub('Next chapter: ', 'Próximo capítulo: ').gsub('Beginning of book', 'Início do livro')]
+    end
+    rendered = batch.send(:render, described_class::Document.new(template: template), translations)
+
+    expect { batch.send(:validate_structure!, html, rendered) }.not_to raise_error
+    expect(rendered).to include('title="Próximo capítulo: Preface"')
+    expect(rendered).to include('title="Início do livro"')
+  end
+
+  it 'unitizes English chapter chrome even when the chapter title is a marked foreign fragment' do
+    html = '<a href="#ch1" title="Previous chapter: Ta&#x301;ttvika Diipika&#x301; (Dvitiiya Parva)">' \
+           '<img Alt="Previous chapter: Ta&#x301;ttvika Diipika&#x301; (Dvitiiya Parva)" /></a>'
+    template = batch.send(:unitize, html)
+    sources = batch.instance_variable_get(:@units).values.map(&:source)
+
+    expect(template).not_to include('Previous chapter:')
+    expect(sources).to include('Previous chapter: ')
+    expect(template).to include('Ta&#x301;ttvika Diipika&#x301; (Dvitiiya Parva)')
+  end
+
+  it 'unitizes English discourse openers attached to marked linguistic formulas' do
+    source = 'Similarly, ni &ndash; var + anat&#x301; = niva&#x301;ran&#x301;a.'
+    template = batch.send(:register_content, source)
+    sources = batch.instance_variable_get(:@units).values.map(&:source)
+
+    expect(template).to match(/⟦U[0-9a-f]{64}⟧/)
+    expect(sources.join).to include('Similarly')
+    expect(template).not_to include('Similarly')
+  end
+
+  it 'unitizes leading unmarked English before a marked term or formula' do
+    article = batch.send(:register_content, 'The aham&#x301;ka&#x301;ra [doer-I] affects life.')
+    formula = batch.send(:register_content, 'The verbal root us&#x301; + ghain&#x32D; = os&#x301;adhi.')
+    title = batch.send(:register_content, 'In the Land of Hat&#x301;t&#x301;ama&#x301;la&#x301; Part 1')
+    sources = batch.instance_variable_get(:@units).values.map(&:source)
+
+    expect(article).to match(/\A⟦U[0-9a-f]{64}⟧\z/)
+    expect(formula).to match(/⟦U[0-9a-f]{64}⟧/)
+    expect(title).to match(/\A⟦U[0-9a-f]{64}⟧\z/)
+    expect(article).not_to include('The aham')
+    expect(formula).not_to include('The verbal root')
+    expect(sources).not_to include('The ')
+    expect(sources).not_to include('In the ')
+    expect(sources).to include('The aham&#x301;ka&#x301;ra [doer-I] affects life.')
+    expect(sources).to include('The verbal root us&#x301; + ghain&#x32D; = os&#x301;adhi.')
+    expect(sources).to include('In the Land of Hat&#x301;t&#x301;ama&#x301;la&#x301; Part 1')
+  end
+
   it 'unitizes documents without protected content' do
     template = batch.send(:unitize, '<html><body><p>English sentence.</p></body></html>')
 
@@ -1207,6 +1285,17 @@ RSpec.describe Ewprs::TranslationBatch do
     expect(unit.tokens).to eq('__P0001__' => 'Prout in a Nutshell 21')
   end
 
+  it 'does not treat a Part-numbered discourse title as a standalone publication' do
+    unit = batch.send(
+      :prepare_unit, 'part-discourse-title',
+      'In the Land of Hat&#x301;t&#x301;ama&#x301;la&#x301; Part 1'
+    )
+
+    expect(unit.prepared).not_to eq('__P0001__')
+    expect(unit.prepared).to include('In the Land of')
+    expect(unit.prepared).to include('Part 1')
+  end
+
   it 'protects a quoted work introduced as a title' do
     unit = batch.send(
       :prepare_unit, 'introduced-title',
@@ -1725,6 +1814,58 @@ RSpec.describe Ewprs::TranslationBatch do
     )
   end
 
+  it 'retranslates CJK units with dropped editorial spans by tagged segments' do
+    prepared = 'This will help the person to be serene <span data-ewprs="11">about the punishment</span> ' \
+               'and alert about the consequences of any __P0001__ evil act.'
+    unit = described_class::Unit.new(
+      key: 'cjk-editorial-segments',
+      source: 'This will help the person to be serene [about the punishment] and alert about the ' \
+              'consequences of any [future] evil act.',
+      prepared: prepared, tokens: {'__P0001__' => '[future]'},
+      leading: '', trailing: ''
+    )
+    projected = 'これにより、その人は<span data-ewprs="11">罰について</span>穏やかな心持ちでいられ、' \
+                '__P0001__どんな悪しき行為の結果にも警戒できるようになるでしょう。'
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).to receive(:translate_preserving_editorial_tags).with(
+      prepared, from: 'en', to: 'ja'
+    ).and_return(projected)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(
+      batch.send(
+        :restore_tokens_with_retries, unit,
+        'これにより、その人は罰について穏やかな心持ちでいられ、__P0001__どんな悪しき行為の結果にも警戒できるようになるでしょう。'
+      )
+    ).to eq(
+      'これにより、その人は[罰について]穏やかな心持ちでいられ、' \
+      '[future]どんな悪しき行為の結果にも警戒できるようになるでしょう。'
+    )
+  end
+
+  it 'retranslates echoed English inside CJK editorial spans by tagged segments' do
+    prepared = 'He or she adopts an expression <span data-ewprs="11">as if he or she is</span> unwilling to eat meat.'
+    unit = described_class::Unit.new(
+      key: 'cjk-echoed-editorial-span', source: 'He or she adopts an expression [as if he or she is] unwilling to eat meat.',
+      prepared: prepared, tokens: {}, leading: '', trailing: ''
+    )
+    projected = '彼または彼女は、<span data-ewprs="11">あたかも</span>肉を食べたくないかのような表情を取る。'
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).to receive(:translate_preserving_editorial_tags).with(
+      prepared, from: 'en', to: 'ja'
+    ).and_return(projected)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(
+      batch.send(
+        :restore_tokens_with_retries, unit,
+        '彼または彼女は、肉を食べたくないかのような表情を取る。<span data-ewprs="11">as if he or she is</span>'
+      )
+    ).to eq('彼または彼女は、[あたかも]肉を食べたくないかのような表情を取る。')
+  end
+
   it 'falls back to bounded repair when editorial projection remains invalid' do
     unit = described_class::Unit.new(
       key: 'editorial-projection-scope', source: 'Music [the seven notes] <i>term</i>.',
@@ -1832,6 +1973,14 @@ RSpec.describe Ewprs::TranslationBatch do
     translated = '<p><i>second</i> e <i>first</i></p>'
 
     expect { batch.send(:validate_structure!, source, translated) }.not_to raise_error
+  end
+
+  it 'allows CJK translations to nest balanced inline tags with the same counts' do
+    source = '<p><i>katala</i> in place of <i>katara</i></p>'
+    translated = '<p><i>kataraの代わりに<i>katala</i></i></p>'
+    japanese = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect { japanese.send(:validate_structure!, source, translated) }.not_to raise_error
   end
 
   it 'rejects unbalanced inline tags when the source markup is balanced' do
@@ -2069,6 +2218,365 @@ RSpec.describe Ewprs::TranslationBatch do
     )
   end
 
+  it 'restores a quoted letter mistaken for an HTML tag' do
+    prepared = 'The Cosmic &ldquo;I&rdquo; remains.'
+    unit = described_class::Unit.new(
+      key: 'quoted-letter-tag', source: prepared, prepared: prepared,
+      tokens: {}, leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(
+      batch.send(:restore_tokens_with_retries, unit, '宇宙の<I&rdquo;が残る。')
+    ).to eq('宇宙の&ldquo;I&rdquo;が残る。')
+  end
+
+  it 'restores leaked quote markup and missing quote-entity semicolons' do
+    prepared = 'The unit &ldquo;I&rdquo; remains.'
+    unit = described_class::Unit.new(
+      key: 'leaked-quote-xml', source: prepared, prepared: prepared,
+      tokens: {}, leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    result = batch.send(
+      :restore_tokens_with_retries, unit,
+      '単位&ldquoがあるとき;I&rdquo;が残る。</ewprs-quote-open id="1"/>'
+    )
+    expect(result).to include('&ldquo;', '&rdquo;')
+    expect(result).not_to include('ewprs-quote')
+  end
+
+  it 'splits an italic letter fused onto leaked quote transport' do
+    prepared = 'Seek him in your small &ldquo;I&rdquo; feeling.'
+    unit = described_class::Unit.new(
+      key: 'fused-italic-quote', source: prepared, prepared: prepared,
+      tokens: {}, leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    result = batch.send(
+      :restore_tokens_with_retries, unit,
+      'あなたの小さな&lt;Iewprs-quote-open id=&quot;1&quot;/&gt;私&lt;Iewprs-quote-close id=&quot;2&quot;/&gt;という気持ち。'
+    )
+    expect(result).to include('小さな')
+    expect(result).not_to include('ewprs-quote')
+    expect(result).not_to include('Iewprs')
+  end
+
+  it 'retranslates a copied English editorial span that failed as leftover English' do
+    prepared = 'But when the mind moves upward it is called anurakti <span data-ewprs="11">attraction for the Great</span>.'
+    unit = described_class::Unit.new(
+      key: 'editorial-determiner-echo',
+      source: 'But when the mind moves upward it is called anurakti [attraction for the Great].',
+      prepared: prepared, tokens: {}, leading: '', trailing: ''
+    )
+    projected = 'しかし、心が上向くとき、それはアヌラクティ、<span data-ewprs="11">偉大なるものへの魅力</span>と呼ばれる。'
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).to receive(:translate_preserving_editorial_tags).with(
+      prepared, from: 'en', to: 'ja'
+    ).and_return(projected)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(
+      batch.send(
+        :restore_tokens_with_retries, unit,
+        'しかし、心が上向くとき、それはアヌラクティ、すなわち「偉大なるものへの魅力」と呼ばれる。<span data-ewprs="11">attraction for the Great</span>'
+      )
+    ).to eq('しかし、心が上向くとき、それはアヌラクティ、[偉大なるものへの魅力]と呼ばれる。')
+  end
+
+  it 'quotes leftover English work titles in Japanese citations' do
+    prepared = 'Shrii Prabhat Ranjan Sarkar, The Liberation of Intellect: Neohumanism, 1982. &ndash;Trans.'
+    unit = described_class::Unit.new(
+      key: 'citation-work-title', source: prepared, prepared: prepared,
+      tokens: {}, leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(
+      batch.send(
+        :restore_tokens_with_retries, unit,
+        'Shrii Prabhat Ranjan Sarkar, The Liberation of Intellect: Neohumanism, 1982. &ndash;翻訳。'
+      )
+    ).to include('『The Liberation of Intellect: Neohumanism』')
+  end
+
+  it 'retranslates leftover English around placeholders after a determiner failure' do
+    unit = described_class::Unit.new(
+      key: 'placeholder-determiner-tail',
+      source: 'Samadhi on the indriyas.',
+      prepared: '__P0001__ on the indriyas.',
+      tokens: {'__P0001__' => 'Sama&#x301;dhi'}, leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).to receive(:translate_preserving_placeholders).with(
+      unit.prepared, values: {'__P0001__' => 'Sama&#x301;dhi'}, from: 'en', to: 'ja'
+    ).and_return('感官における__P0001__。')
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(
+      batch.send(:restore_tokens_with_retries, unit, '__P0001__ on the indriyas')
+    ).to eq('感官におけるSama&#x301;dhi。')
+  end
+
+  it 'does not strip an ascii fold nested inside another protected token' do
+    prepared = 'If we call the process __P0001__, then the waves of __P0002__ are __P0003__.'
+    unit = described_class::Unit.new(
+      key: 'parinama-fold',
+      source: 'If we call the process svarupa parinama, then the waves of kala&#x301; are parin&#x301;a&#x301;ma.',
+      prepared: prepared,
+      tokens: {
+        '__P0001__' => 'svarupa parinama',
+        '__P0002__' => 'kala&#x301;',
+        '__P0003__' => 'parin&#x301;a&#x301;ma'
+      },
+      leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    result = batch.send(
+      :restore_tokens_with_retries, unit,
+      '過程を__P0001__と呼ぶ。__P0002__の波動はparinamaである__P0003__。'
+    )
+    expect(result).to include('svarupa parinama', 'kala&#x301;', 'parin&#x301;a&#x301;ma')
+  end
+
+  it 'does not strip an ascii fold that is another protected token' do
+    prepared = '__P0001__, on the other hand, __P0002__ will be useless.'
+    unit = described_class::Unit.new(
+      key: 'shastra-fold',
+      source: 'Without sha&#x301;stra, on the other hand, shastra will be useless.',
+      prepared: prepared,
+      tokens: {'__P0001__' => 'Without sha&#x301;stra', '__P0002__' => 'shastra'},
+      leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(
+      batch.send(:restore_tokens_with_retries, unit, '__P0001__に対して、__P0002__は無意味になる。')
+    ).to include('sha&#x301;stra').and include('shastra')
+  end
+
+  it 'drops leftover English glue beside Japanese prose' do
+    prepared = 'The purpose of maethuna __P0001__ is to raise the __P0002__.'
+    unit = described_class::Unit.new(
+      key: 'cjk-glue', source: 'The purpose of maethuna sadhana is to raise the kundalinii.',
+      prepared: prepared, tokens: {'__P0001__' => 'sa&#x301;dhana&#x301;', '__P0002__' => 'kulakun&#x301;d&#x301;alinii'},
+      leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(
+      batch.send(:restore_tokens_with_retries, unit, 'the目的 of maethuna __P0001__は、__P0002__を高める。')
+    ).to eq('目的 maethuna sa&#x301;dhana&#x301;は、kulakun&#x301;d&#x301;aliniiを高める。')
+  end
+
+  it 'strips a leftover determiner glued to Japanese through punctuation' do
+    unit = described_class::Unit.new(
+      key: 'cjk-colon-the', source: 'Use: The', prepared: 'Use: The',
+      tokens: {}, leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(batch.send(:restore_tokens_with_retries, unit, '使用法:The')).to eq('使用法:')
+  end
+
+  it 'replaces leftover English and between transliterated terms in Japanese' do
+    unit = described_class::Unit.new(
+      key: 'yama-and-niyama', source: 'Follow yama and niyama strictly.',
+      prepared: 'Follow yama and niyama strictly.', tokens: {}, leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(
+      batch.send(:restore_tokens_with_retries, unit, 'yama and niyamaを厳格に守れ。')
+    ).to eq('yamaとniyamaを厳格に守れ。')
+  end
+
+  it 'strips leftover so-called beside Japanese' do
+    unit = described_class::Unit.new(
+      key: 'so-called-ahimsa', source: 'The so-called ahimsa is hypocrisy.',
+      prepared: 'The so-called ahimsa is hypocrisy.', tokens: {}, leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(
+      batch.send(:restore_tokens_with_retries, unit, 'いわゆるso-called ahimsaは偽善である。')
+    ).to eq('いわゆる ahimsaは偽善である。')
+  end
+
+  it 'strips leftover English in before a latin term glued to Japanese' do
+    unit = described_class::Unit.new(
+      key: 'in-yoga-philosophy', source: 'Paramashiva in yoga philosophy.',
+      prepared: 'Paramashiva in yoga philosophy.', tokens: {}, leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(
+      batch.send(:restore_tokens_with_retries, unit, 'Paramashiva in yoga哲学。')
+    ).to eq('Paramashiva yoga哲学。')
+  end
+
+  it 'strips leftover English by after Japanese before an editorial bracket' do
+    unit = described_class::Unit.new(
+      key: 'cjk-by-bracket', source: 'One year later by [that is, after the rains].',
+      prepared: 'One year later by [that is, after the rains].', tokens: {}, leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(
+      batch.send(:restore_tokens_with_retries, unit, '1年後と言うby [つまり雨季の後]。')
+    ).to eq('1年後と言う [つまり雨季の後]。')
+  end
+
+  it 'fills empty Japanese quotes from the following latin name' do
+    unit = described_class::Unit.new(
+      key: 'empty-cjk-quotes', source: 'It is called Paramashiva in yoga philosophy.',
+      prepared: 'It is called Paramashiva in yoga philosophy.', tokens: {}, leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(
+      batch.send(:restore_tokens_with_retries, unit, '「」と呼ばれる Paramashiva in yoga哲学。')
+    ).to eq('「Paramashiva」と呼ばれる yoga哲学。')
+  end
+
+  it 'keeps protected marked terms that look like English glue' do
+    prepared = 'The so-called Buddhist Tantrics also say, __P0001__ hummm.'
+    unit = described_class::Unit.new(
+      key: 'onm-mantra', source: 'The so-called Buddhist Tantrics also say, On&#x32D;m&#x301; man&#x301;ipadme hummm.',
+      prepared: prepared, tokens: {'__P0001__' => 'On&#x32D;m&#x301; man&#x301;ipadme'},
+      leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(
+      batch.send(:restore_tokens_with_retries, unit, 'いわゆる仏教のタントラでも、__P0001__ うーん、と言っている。')
+    ).to include('On&#x32D;m&#x301; man&#x301;ipadme')
+  end
+
+  it 'keeps a protected mantra after Japanese and drops its ascii echo' do
+    prepared = 'another name for __P0001__, the cosmic sound'
+    unit = described_class::Unit.new(
+      key: 'onmkara-echo',
+      source: 'another name for on&#x32D;m&#x301;ka&#x301;ra, the cosmic sound',
+      prepared: prepared, tokens: {'__P0001__' => 'on&#x32D;m&#x301;ka&#x301;ra'},
+      leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(
+      batch.send(
+        :restore_tokens_with_retries, unit,
+        'これは__P0001__の別名でもあり、耳に届くonmkaraの音である。'
+      )
+    ).to eq('これはon&#x32D;m&#x301;ka&#x301;raの別名でもあり、耳に届くの音である。')
+  end
+
+  it 'restores a two-token cosmic-sound sentence with an ascii mantra echo' do
+    prepared = 'The resonance of the collective vibrations of the universe is called the flute sound of __P0001__, another name for __P0002__, the cosmic sound which reaches the ears of spiritual aspirants in various ways.'
+    unit = described_class::Unit.new(
+      key: 'onmkara-flute',
+      source: 'The resonance of the collective vibrations of the universe is called the flute sound of Krs&#x301;n&#x301;a, another name for on&#x32D;m&#x301;ka&#x301;ra, the cosmic sound which reaches the ears of spiritual aspirants in various ways.',
+      prepared: prepared,
+      tokens: {'__P0001__' => 'Krs&#x301;n&#x301;a', '__P0002__' => 'on&#x32D;m&#x301;ka&#x301;ra'},
+      leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    result = batch.send(
+      :restore_tokens_with_retries, unit,
+      '宇宙の集合的振動の共鳴は__P0001__のフルートの音と呼ばれ、これは__P0002__の別名でもあり、様々な方法で霊的な探求者たちの耳に届くonmkaraの音である。'
+    )
+    expect(result).to include('Krs&#x301;n&#x301;a', 'on&#x32D;m&#x301;ka&#x301;ra')
+    expect(result).not_to include('onmkara')
+  end
+
+  it 'keeps a protected name that ends with an before Japanese' do
+    prepared = 'King __P0001__ was the king of this __P0002__.'
+    unit = described_class::Unit.new(
+      key: 'shalivahan', source: 'King Sha&#x301;liva&#x301;han was the king of this Samatat&#x301;.',
+      prepared: prepared,
+      tokens: {'__P0001__' => 'Sha&#x301;liva&#x301;han', '__P0002__' => 'Samatat&#x301;'},
+      leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(
+      batch.send(:restore_tokens_with_retries, unit, '__P0001__王は、この__P0002__の王でした。')
+    ).to eq('Sha&#x301;liva&#x301;han王は、このSamatat&#x301;の王でした。')
+  end
+
+  it 'keeps a protected pronunciation that ends with in before Japanese' do
+    prepared = 'Similarly __P0001__ is pronounced as __P0002__.'
+    unit = described_class::Unit.new(
+      key: 'pain-pronunciation', source: 'Similarly pa&#x301;nii is pronounced as pa&#x301;in.',
+      prepared: prepared, tokens: {'__P0001__' => 'pa&#x301;nii', '__P0002__' => 'pa&#x301;in'},
+      leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(
+      batch.send(:restore_tokens_with_retries, unit, '同様に、__P0001__も__P0002__と同じように発音される。')
+    ).to eq('同様に、pa&#x301;niiもpa&#x301;inと同じように発音される。')
+  end
+
+  it 'keeps double spaces inside a protected italic publication title' do
+    prepared = 'This discourse was formerly in __P0001__'
+    unit = described_class::Unit.new(
+      key: 'italic-prout-spaces',
+      source: 'This discourse was formerly in <i>Prout in a  Nutshell Part 6.</i>',
+      prepared: prepared, tokens: {'__P0001__' => '<i>Prout in a  Nutshell Part 6.</i>'},
+      leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(
+      batch.send(:restore_tokens_with_retries, unit, 'この論考はかつて __P0001__ にありました。')
+    ).to include('<i>Prout in a  Nutshell Part 6.</i>')
+  end
+
   it 'allows adjacent quoted terms after restoring a protected quotation' do
     unit = described_class::Unit.new(
       key: 'adjacent-restored-quotes',
@@ -2140,6 +2648,39 @@ RSpec.describe Ewprs::TranslationBatch do
     )
   end
 
+  it 'retranslates a retained English idiom in Japanese by clauses' do
+    prepared = 'They serve others. In the same way, God is pleased.'
+    unit = described_class::Unit.new(
+      key: 'same-way-idiom', source: prepared, prepared: prepared,
+      tokens: {}, leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).to receive(:translate_by_clauses).with(
+      prepared, from: 'en', to: 'ja'
+    ).and_return('彼らは他者に仕える。同じように、神は喜ばれる。')
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(
+      batch.send(:restore_tokens_with_retries, unit, '彼らは他者に仕える。 in the same way、神は喜ばれる。')
+    ).to eq('彼らは他者に仕える。同じように、神は喜ばれる。')
+  end
+
+  it 'retranslates an echoed two-word fragment by clauses' do
+    unit = described_class::Unit.new(
+      key: 'in-the-fragment', source: 'In the', prepared: 'In the',
+      tokens: {}, leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).to receive(:translate_by_clauses).with(
+      'In the', from: 'en', to: 'ja'
+    ).and_return('その')
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(batch.send(:restore_tokens_with_retries, unit, 'In the')).to eq('その')
+  end
+
   it 'retranslates retained bibliographic words by clauses around placeholders' do
     prepared = 'Third publication as __P0001__, Third Edition, 1987.'
     unit = described_class::Unit.new(
@@ -2159,6 +2700,24 @@ RSpec.describe Ewprs::TranslationBatch do
         'Dritte Veröffentlichung als __P0001__, Third Edition, 1987.'
       )
     ).to eq('Dritte Veröffentlichung als a title, Dritte Auflage, 1987.')
+  end
+
+  it 'retranslates an echoed slash-separated title around placeholders by clauses' do
+    prepared = '__P0001__ and Dance / The Psychic Order'
+    unit = described_class::Unit.new(
+      key: 'slash-title-clauses', source: 'Kiirtana and Dance / The Psychic Order',
+      prepared: prepared, tokens: {'__P0001__' => 'Kiirtana'}, leading: '', trailing: ''
+    )
+    translator = instance_double(Ewprs::Translator)
+    expect(translator).to receive(:translate_by_clauses).with(
+      prepared, from: 'en', to: 'ja'
+    ).and_return('__P0001__ と舞踏 / 精神的秩序')
+    expect(translator).not_to receive(:repair_markup)
+    batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
+
+    expect(batch.send(:restore_tokens_with_retries, unit, prepared)).to eq(
+      'Kiirtana と舞踏 / 精神的秩序'
+    )
   end
 
   it 'reprojects delimiter-bearing placeholders when translation changes their order' do
@@ -2314,6 +2873,50 @@ RSpec.describe Ewprs::TranslationBatch do
     expect(batch.send(:structural_token?, "(#{nested_marker})")).to be(false)
   end
 
+  it 'lets CJK reorder nested square-bracket gloss tokens' do
+    japanese = described_class.new(
+      root: root, target: 'ja', cache: cache, translator: translator, stdout: StringIO.new
+    )
+    nucleus = japanese.send(:register_unit, 'the Nucleus Consciousness')
+    pineal = japanese.send(:register_unit, 'corresponding to the pineal gland')
+    unit = described_class::Unit.new(
+      key: 'cjk-gloss-order',
+      source: 'unite it with Paramashiva [the Nucleus Consciousness] at the sahasra&#x301;ra cakra [corresponding to the pineal gland].',
+      prepared: 'unite it with __P0001__ at the __P0002__.',
+      tokens: {
+        '__P0001__' => "Paramashiva [#{nucleus}]",
+        '__P0002__' => "sahasra&#x301;ra cakra [#{pineal}]"
+      },
+      leading: '', trailing: ''
+    )
+
+    expect(japanese.send(:restore_tokens, unit, '__P0002__においてそれを__P0001__と結合させる。'))
+      .to include('sahasra&#x301;ra cakra', 'Paramashiva')
+  end
+
+  it 'reprojects duplicate ascii folds onto each missing transliterated token' do
+    japanese = described_class.new(
+      root: root, target: 'ja', cache: cache, translator: translator, stdout: StringIO.new
+    )
+    those = japanese.send(:register_unit, 'those')
+    unit = described_class::Unit.new(
+      key: 'duplicate-ascii-fold',
+      prepared: 'but he is __P0001__ for all __P0002__ objects, people, etc.',
+      tokens: {
+        '__P0001__' => 'bhiis&#x301;an&#x301;a',
+        '__P0002__' => "#{those} bhiis&#x301;an&#x301;a"
+      },
+      leading: '', trailing: ''
+    )
+
+    expect(
+      japanese.send(
+        :project_missing_transliterated_tokens, unit,
+        'しかし、彼はすべての bhiisanaの対象である物体や人々などに対して bhiisanaである。'
+      )
+    ).to include('__P0001__', '__P0002__')
+  end
+
   it 'uses ordered projection when a nested editorial moves past a parenthetical' do
     nested_marker = batch.send(:register_unit, 'not')
     unit = described_class::Unit.new(
@@ -2384,18 +2987,21 @@ RSpec.describe Ewprs::TranslationBatch do
   end
 
   it 'does not insert Latin spacing into non-Latin target text' do
-    chinese = described_class.new(
-      root: root, target: 'zh', cache: cache, translator: translator, stdout: StringIO.new
-    )
-    unit = described_class::Unit.new(
-      key: 'chinese-term-boundary', source: 'This is Brahma.',
-      prepared: 'This is __P0001__.', tokens: {'__P0001__' => 'Brahma'},
-      leading: '', trailing: ''
-    )
+    {
+      'zh' => '这是__P0001__概念',
+      'ja' => 'これは__P0001__の概念'
+    }.each do |language, output|
+      batch = described_class.new(
+        root: root, target: language, cache: cache, translator: translator, stdout: StringIO.new
+      )
+      unit = described_class::Unit.new(
+        key: "#{language}-term-boundary", source: 'This is Brahma.',
+        prepared: 'This is __P0001__.', tokens: {'__P0001__' => 'Brahma'},
+        leading: '', trailing: ''
+      )
 
-    expect(chinese.send(:normalize_protected_boundaries, unit, '这是__P0001__概念')).to eq(
-      '这是__P0001__概念'
-    )
+      expect(batch.send(:normalize_protected_boundaries, unit, output)).to eq(output)
+    end
   end
 
   it 'allows complete protected inline elements to follow target-language grammar' do

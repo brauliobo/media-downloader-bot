@@ -54,6 +54,14 @@ RSpec.describe Audiobook::Ewprs::Catalog do
     end
   end
 
+  it 'uses Japanese as a catalog language name' do
+    Dir.mktmpdir('ewprs-') do |root|
+      catalog = described_class.new(root, language: 'ja')
+
+      expect(catalog.language_name).to eq('Japanese')
+    end
+  end
+
   it 'configures Chinese parsing and narration' do
     Dir.mktmpdir('ewprs-') do |root|
       entry = described_class::Entry.new(kind: :discourse, title: 'Chinese title', path: '/tmp/discourse.html')

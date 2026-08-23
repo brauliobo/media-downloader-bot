@@ -1,0 +1,20 @@
+[Unit]
+Description=EWPRS Hy-MT2 corpus translation (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+SyslogIdentifier=ewprs-translate-%i
+Nice=10
+KillMode=mixed
+TimeoutStartSec=infinity
+TimeoutStopSec=30
+
+WorkingDirectory=/home/braulio/Projects/media-downloader-bot
+ExecStart=/home/braulio/.rvm/wrappers/ruby-3.4.4/bundle exec ruby bin/ewprs_translate apply=1 source=/home/braulio/Projects/eewprs-%i from=en to=%i source_ref=7.5 branch=7.5-%i jobs=9
+StandardOutput=append:/home/braulio/Projects/media-downloader-bot/tmp/ewprs_translations/7.5-%i.run.log
+StandardError=append:/home/braulio/Projects/media-downloader-bot/tmp/ewprs_translations/7.5-%i.run.log
+
+[Install]
+WantedBy=default.target

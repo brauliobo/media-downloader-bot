@@ -38,11 +38,192 @@ RSpec.describe Ewprs::TranslationValidator do
     end.to raise_error(described_class::Error, /omitted source prose/)
   end
 
-  it 'allows Chinese to omit an English article before protected content' do
-    chinese = described_class.new(source_language: 'en', target_language: 'zh')
+  it 'rejects the frozen English idiom in the same way for non-English targets' do
+    {
+      'ja' => '同様に in the same way 喜ばれる。',
+      'zh' => '同样 in the same way 喜悦。',
+      'pt' => 'Do mesmo modo in the same way Deus se agrada.',
+      'es' => 'Del mismo modo in the same way Dios se complace.',
+      'fr' => 'De même in the same way Dieu est content.',
+      'ar' => 'بالمثل in the same way يُسَر.',
+      'de' => 'Ebenso in the same way ist Er erfreut.'
+    }.each do |language, translated|
+      validator = described_class.new(source_language: 'en', target_language: language)
+      expect do
+        validator.validate!(source: 'Similarly, Paramá Puruśa is pleased.', translated: translated)
+      end.to raise_error(described_class::Error, /retained English phrase/)
+    end
 
-    expect(chinese.valid?(source: 'The __P0001__', translated: '__P0001__')).to be(true)
-    expect(chinese.valid?(source: 'The', translated: '')).to be(false)
+    japanese = described_class.new(source_language: 'en', target_language: 'ja')
+    expect do
+      japanese.validate!(
+        source: 'This script is similar to Tibetan in some ways.',
+        translated: 'この文字はチベット文字といくつかin the same way類似している。'
+      )
+    end.to raise_error(described_class::Error, /retained English phrase/)
+  end
+
+  it 'rejects leftover English discourse openers outside quotes' do
+    japanese = described_class.new(source_language: 'en', target_language: 'ja')
+    {
+      'According to Maharsi Patañjali, the verse follows.' =>
+        'According to Maharsi Patañjali、次の詩句が続く。',
+      'Similarly, the suffix is added.' => 'Similarly, 接尾辞が付く。',
+      'Therefore, the verse is cited.' => 'Therefore, その詩句が引用される。',
+      'Likewise, the question is asked.' => 'Likewise, その問いが発せられる。',
+      'Parama Purusa, however, is abhiista.' => 'パラマ・プルシャは however 願望の対象である。',
+      'See the online additional information.' => '「Online additional information」を見る。'
+    }.each do |source, translated|
+      expect do
+        japanese.validate!(source: source, translated: translated)
+      end.to raise_error(described_class::Error, /retained English/)
+    end
+  end
+
+  it 'keeps according to inside a quoted English title' do
+    japanese = described_class.new(source_language: 'en', target_language: 'ja')
+
+    expect(
+      japanese.valid?(
+        source: 'It also appeared as &ldquo;You Live According to God&#146;s Desire&rdquo;.',
+        translated: '『You Live According to God&#146;s Desire』としても掲載されていた。'
+      )
+    ).to be(true)
+  end
+
+  it 'rejects leftover hyphenated English in Japanese except coined motion terms' do
+    japanese = described_class.new(source_language: 'en', target_language: 'ja')
+
+    expect do
+      japanese.validate!(
+        source: 'He is all-pervasive and self-illuminating.',
+        translated: '彼はall-pervasiveでself-illuminatingである。'
+      )
+    end.to raise_error(described_class::Error, /retained English compound/)
+
+    expect(
+      japanese.valid?(
+        source: 'This movement is extro-internal and intro-external.',
+        translated: 'この動きはextro-internalかつintro-externalである。'
+      )
+    ).to be(true)
+    expect(
+      japanese.valid?(
+        source: 'Hence, mrga-carma means the skin of any wild animal.',
+        translated: 'したがって、mrga-carmaとはどんな野生動物の皮のことである。'
+      )
+    ).to be(true)
+    expect(
+      japanese.valid?(
+        source: 'You can also remain idle &ndash; Pi-pu-phi-shu.',
+        translated: '&ndash; Pi-pu-phi-shuのまま何もしなくてもよい。'
+      )
+    ).to be(true)
+  end
+
+  it 'rejects a retained English determiner in mixed Japanese' do
+    japanese = described_class.new(source_language: 'en', target_language: 'ja')
+
+    expect do
+      japanese.validate!(
+        source: 'The ahaḿkára affects human life.',
+        translated: 'The ahaḿkáraは人間の生活に影響する。'
+      )
+    end.to raise_error(described_class::Error, /retained English determiner/)
+
+    expect(
+      japanese.valid?(
+        source: 'It appeared as &ldquo;The Sound of God&rdquo;.',
+        translated: '『The Sound of God』として現れた。'
+      )
+    ).to be(true)
+
+    expect(
+      japanese.valid?(
+        source: 'but he is bhiis&#x301;an&#x301;a for all those objects.',
+        translated: 'しかし、彼はすべての物体にとってbhiis&#x301;an&#x301;aなのである。'
+      )
+    ).to be(true)
+
+    expect(
+      japanese.valid?(
+        source: 'Shrii Prabhat Ranjan Sarkar, The Liberation of Intellect: Neohumanism, 1982. &ndash;Trans.',
+        translated: 'Shrii Prabhat Ranjan Sarkar, 『The Liberation of Intellect: Neohumanism』, 1982. &ndash;翻訳。'
+      )
+    ).to be(true)
+
+    expect(
+      japanese.valid?(
+        source: 'the negation <I>a</I> is added before consonants and <I>an</I> before vowels.',
+        translated: '否定辞の<I>a</I>は子音の前に、<I>an</I>は母音の前に置かれる。'
+      )
+    ).to be(true)
+
+    expect(
+      japanese.valid?(
+        source: 'hence __P0007__an__P0008__ must be used, not __P0001__a-rta__P0002__.',
+        translated: 'よって__P0007__an__P0008__を使い、__P0001__a-rta__P0002__は使わない。'
+      )
+    ).to be(true)
+
+    expect(
+      japanese.valid?(
+        source: 'the negation <I>a</I> is added before consonants and <I>an</I> before vowels.',
+        translated: '否定辞の<I>a</I>は子音の前に、<I>an</I>は母音の前に置かれる。',
+        protected_values: ['<I>', '</I>', '<I>a</I>']
+      )
+    ).to be(true)
+
+    expect do
+      japanese.validate!(
+        source: 'Lord Shiva said, Brahmaeváham.',
+        translated: 'Lord Shiva said, Brahmaeváham。救済は可能である。'
+      )
+    end.to raise_error(described_class::Error, /retained English determiner: said/)
+
+    expect do
+      japanese.validate!(
+        source: 'yama and niyama are the first two limbs.',
+        translated: 'yama and niyamaは最初の二支である。'
+      )
+    end.to raise_error(described_class::Error, /retained English coordinator/)
+
+    expect do
+      japanese.validate!(
+        source: 'The so-called ahiḿsá is hypocrisy.',
+        translated: 'いわゆるso-called ahiḿsáは偽善である。'
+      )
+    end.to raise_error(described_class::Error, /retained English (?:determiner|compound): so-called/)
+  end
+
+  it 'rejects leaked English glosses from translator hints' do
+    japanese = described_class.new(source_language: 'en', target_language: 'ja')
+    {
+      'The word is used literally here.' => 'ここはin the literal sense使われる。',
+      'A, B and C respectively.' => 'A、B、Cはin the same orderである。',
+      'This movement is extro-internal.' => 'この動きはfrom the external toward the internalである。',
+      'Give a definition.' => 'それはstatement of meaningである。',
+      'They were illiterate.' => '彼らはunable to read or writeであった。',
+      'Some illustrative cases follow.' => 'いくつかserving as examplesがある。',
+      'Oil from linseed.' => 'flax seedから油を取る。',
+      'It spread through all of South East Asia.' => 'throughout Southeast Asiaに広がった。',
+      'They inject fear into others.' => '彼らはintroduce or instillする。',
+      'Those endeavours require strength.' => 'such effortsが必要である。',
+      'All Rights Reserved' => 'All Rights Reserved'
+    }.each do |source, translated|
+      expect do
+        japanese.validate!(source: source, translated: translated)
+      end.to raise_error(described_class::Error, /retained English phrase/)
+    end
+  end
+
+  it 'allows Chinese and Japanese to omit an English article before protected content' do
+    %w[zh ja].each do |language|
+      validator = described_class.new(source_language: 'en', target_language: language)
+
+      expect(validator.valid?(source: 'The __P0001__', translated: '__P0001__')).to be(true)
+      expect(validator.valid?(source: 'The', translated: '')).to be(false)
+    end
   end
 
   it 'allows Arabic to omit an English article before protected content' do
@@ -121,19 +302,20 @@ RSpec.describe Ewprs::TranslationValidator do
     expect(german.valid?(source: source, translated: translated)).to be(true)
   end
 
-  it 'allows a Latin protected term next to Chinese prose without accepting Latin extensions' do
-    chinese = described_class.new(source_language: 'en', target_language: 'zh')
+  it 'allows a Latin protected term next to Chinese or Japanese prose without accepting Latin extensions' do
+    {
+      'zh' => ['mantra正在被诵读。', 'mantram正在被诵读。'],
+      'ja' => ['mantraが唱えられている。', 'mantramが唱えられている。']
+    }.each do |language, (valid, invalid)|
+      validator = described_class.new(source_language: 'en', target_language: language)
 
-    expect(
-      chinese.valid?(
-        source: 'The mantra is recited.', translated: 'mantra正在被诵读。', protected_values: ['mantra']
-      )
-    ).to be(true)
-    expect do
-      chinese.validate!(
-        source: 'The mantra is recited.', translated: 'mantram正在被诵读。', protected_values: ['mantra']
-      )
-    end.to raise_error(described_class::Error, /changed protected source text: mantra/)
+      expect(
+        validator.valid?(source: 'The mantra is recited.', translated: valid, protected_values: ['mantra'])
+      ).to be(true)
+      expect do
+        validator.validate!(source: 'The mantra is recited.', translated: invalid, protected_values: ['mantra'])
+      end.to raise_error(described_class::Error, /changed protected source text: mantra/)
+    end
   end
 
   it 'allows a Latin protected term next to Arabic prose without accepting Latin extensions' do
@@ -175,15 +357,20 @@ RSpec.describe Ewprs::TranslationValidator do
     end.to raise_error(described_class::Error, /changed paired delimiters/)
   end
 
-  it 'allows intact balanced delimiter groups to follow target grammar' do
-    chinese = described_class.new(source_language: 'en', target_language: 'zh')
+  it 'allows intact balanced delimiter groups to follow CJK grammar' do
+    {
+      'zh' => '根据samskaras [心理动量]形成一种形态(心智体)',
+      'ja' => 'samskaras [心的運動量]に従って形態(心的身体)を形成する'
+    }.each do |language, translated|
+      validator = described_class.new(source_language: 'en', target_language: language)
 
-    expect(
-      chinese.valid?(
-        source: 'a form (mental body) according to samskaras [mental momenta]',
-        translated: '根据samskaras [心理动量]形成一种形态(心智体)'
-      )
-    ).to be(true)
+      expect(
+        validator.valid?(
+          source: 'a form (mental body) according to samskaras [mental momenta]',
+          translated: translated
+        )
+      ).to be(true)
+    end
   end
 
   it 'rejects newly escaped HTML character references' do
@@ -296,6 +483,13 @@ RSpec.describe Ewprs::TranslationValidator do
         source: 'This body is derived from Bhuvar Loka of the cosmic mind.',
         translated: 'Dieser Körper stammt aus Bhuvar Loka of the cosmic mind.',
         protected_values: ['Bhuvar Loka']
+      )
+    end.to raise_error(described_class::Error, /retained English phrase/)
+
+    expect do
+      german.validate!(
+        source: 'Similarly, the devotee serves all beings.',
+        translated: 'Ebenso dient der Geweihte in the same way allen Wesen.'
       )
     end.to raise_error(described_class::Error, /retained English phrase/)
 
@@ -536,6 +730,14 @@ RSpec.describe Ewprs::TranslationValidator do
       )
     ).to be(true)
     expect(validator.protected_source_fragment?('Sa no buddhya shubhayá saḿyunaktu')).to be(true)
+    expect(
+      validator.protected_source_fragment?('Similarly, ni &ndash; var + anat́ = nivárańa.')
+    ).to be(false)
+    expect(
+      validator.protected_source_fragment?(
+        'Parama Purusa, however, is abhiista, all-pervasive, self-illuminating.'
+      )
+    ).to be(false)
   end
 
   it 'does not protect English prose that contains marked source-language terms' do

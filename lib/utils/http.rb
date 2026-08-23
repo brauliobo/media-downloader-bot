@@ -11,10 +11,22 @@ module Utils
     class << self
 
       def client(timeout: ENV['HTTP_TIMEOUT']&.to_i || 30.minutes)
-        Thread.current[:utils_http] ||= Mechanize.new
-        Thread.current[:utils_http].open_timeout = timeout
-        Thread.current[:utils_http].read_timeout = timeout
-        Thread.current[:utils_http]
+        agent = Thread.current[:utils_http] ||= Mechanize.new { |shared|
+          shared.keep_alive = false
+          shared.idle_timeout = 0
+        }
+        agent.keep_alive = false
+        agent.idle_timeout = 0
+        agent.open_timeout = timeout
+        agent.read_timeout = timeout
+        agent.write_timeout = timeout
+        agent
+      end
+
+      def reset!
+        agent = Thread.current[:utils_http]
+        Thread.current[:utils_http] = nil
+        agent&.shutdown
       end
 
       delegate_missing_to :client

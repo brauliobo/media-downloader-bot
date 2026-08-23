@@ -13,7 +13,7 @@ module Ewprs
 
     MARKUP = /<!--.*?-->|<[^>]+>/m
     MARKER = /__P\d{4}__|⟦[UP][^⟧]*⟧/
-    INTERNAL_TRANSPORT_MARKER = /ZXQEWPRS|(?:<|&lt;)ewprs-|&lt;span\b[^>]*(?:data-ewprs|data=&quot;ewprs)/i
+    INTERNAL_TRANSPORT_MARKER = /ZXQEWPRS|(?:&lt;|<\/?)?[A-Za-z]?ewprs-|&lt;span\b[^>]*(?:data-ewprs|data=&quot;ewprs)/i
     ESCAPED_CHARACTER_REFERENCE = /&amp;(?=(?:#\d+|#x[\da-f]+|[a-z][\w]+))/i
     WORD = /\p{L}[\p{L}\p{M}]*(?:[-'’]\p{L}[\p{L}\p{M}]*)*/u
     FORMULA_EXPRESSION = %r{
@@ -59,6 +59,8 @@ module Ewprs
         includes included instance kinds language languages later leg literature little
         machine meaning means meditation millet moved name next organ organs organization
         east eastern offering overjoyed path peace pahari peanut philosophy prefix
+        previous chapter beginning similarly therefore likewise however according
+        moreover furthermore nevertheless nonetheless consequently
         propensities published recognizes religion remain remains remembering school science
         secondly seed self-knowledge says shyness sorghum spelled starts stick supreme
         ten these triple varieties using vaishnavite vocal war western wife within would
@@ -84,10 +86,37 @@ module Ewprs
     TARGET_SHARED_PHRASES = {
       'de' => [%w[negative evolution].freeze].freeze
     }.freeze
+    CJK_TARGET = %w[ja zh].to_h { |language| [language, true] }.freeze
+    OMITTABLE_ARTICLES = %w[a an the].to_h { |word| [word, true] }.freeze
     OMITTABLE_SOURCE_WORDS = {
-      'ar' => %w[a an the].to_h { |word| [word, true] }.freeze,
-      'zh' => %w[a an the].to_h { |word| [word, true] }.freeze
+      'ar' => OMITTABLE_ARTICLES,
+      'ja' => OMITTABLE_ARTICLES,
+      'zh' => OMITTABLE_ARTICLES
     }.freeze
+    def self.retained_english_span(phrase)
+      /(?<![A-Za-z])#{Regexp.escape(phrase)}(?![A-Za-z])/i
+    end
+    def self.retained_english_phrases(*phrases)
+      phrases.to_h { |phrase| [retained_english_span(phrase), 'retained English phrase'] }
+    end
+    RETAINED_ENGLISH_IDIOMS = retained_english_phrases(
+      'in the same way', 'in the literal sense', 'in the same order',
+      'from the external toward', 'statement of meaning', 'unable to read or write',
+      'serving as examples', 'flax seed', 'throughout Southeast Asia',
+      'introduce or instill', 'such efforts', 'all rights reserved',
+      'online additional information', 'next chapter', 'previous chapter', 'beginning of book'
+    ).freeze
+    ENGLISH_DISCOURSE_OPENERS = retained_english_phrases(
+      'according to', 'in addition', 'for example', 'for instance',
+      'similarly', 'therefore', 'likewise', 'however', 'moreover',
+      'furthermore', 'nevertheless', 'nonetheless', 'consequently'
+    ).freeze
+    ALLOWED_ENGLISH_HYPHENS = %w[extro-internal intro-external].to_h { |word| [word, true] }.freeze
+    ENGLISH_HYPHEN_HEADS = %w[
+      all self well so non over under out up down mid cross half full ever never
+    ].to_h { |word| [word, true] }.freeze
+    ENGLISH_HYPHEN_TAIL = /(?:ing|ed|er|est|ive|ous|al|ly|ness|ment|tion|sion|able|ible|ful|less|ward|wise|ized|izing)\z/
+    ENGLISH_HYPHENATED_COMPOUND = /(?<![A-Za-z])[A-Za-z]{2,}(?:-[A-Za-z]{2,})+(?![A-Za-z])/
     TARGET_INVALID_PHRASES = {
       'de' => {
         /\bdefinition of\b/i => 'retained English definition prose',
@@ -106,6 +135,9 @@ module Ewprs
     DOUBLE_SMART_QUOTE = /&(?:l|r)dquo;|[“”„«»]/i
     EMPTY_SMART_QUOTES = /(?:&ldquo;\s*&rdquo;|&lsquo;\s*&rsquo;|“\s*”|‘\s*’|«\s*»)/i
     NON_LATIN_ARTIFACT = /[\p{Han}\p{Cyrillic}\uFF00-\uFFEF]/u
+    CJK_SCRIPT = /[\p{Han}\p{Hiragana}\p{Katakana}]/
+    CJK_RETAINED_DETERMINER = /(?<![A-Za-z\p{M}])(?:the|an|this|that|these|those|said|regarding|so-called)(?![A-Za-z\p{M}])/iu
+    CJK_RETAINED_COORDINATOR = /(?<![A-Za-z])[A-Za-z][A-Za-z\p{M}'’-]{0,24}\s+and\s+[A-Za-z]/u
     LATIN_TARGETS = %w[de en es fr pt].to_h { |language| [language, true] }.freeze
 
     attr_reader :source_language, :target_language
@@ -143,7 +175,7 @@ module Ewprs
           protected_context: counts.any? || source.to_s.match?(MARKER)
         )
         validate_retained_source_words!(unprotected_source, unprotected_translation)
-        validate_target_language!(unprotected_translation)
+        validate_target_language!(source, unprotected_translation)
       end
       validate_sentence_duplicates!(source, translated)
       true
@@ -226,7 +258,7 @@ module Ewprs
       translated_text = visible_text(translated)
       source_profile = balanced_delimiter_profile(source_text)
       translated_profile = balanced_delimiter_profile(translated_text)
-      changed = if target_language == 'zh' && source_profile
+      changed = if CJK_TARGET.key?(target_language) && source_profile
         source_profile != translated_profile
       else
         source_text.scan(DELIMITER) != translated_text.scan(DELIMITER)
@@ -384,15 +416,110 @@ module Ewprs
       raise Error.new(:untranslated, "translation retained source-language word: #{retained[2].downcase}")
     end
 
-    def validate_target_language!(translated)
-      invalid = TARGET_INVALID_PHRASES.fetch(target_language, {}).find do |pattern, _message|
-        visible_text(translated).match?(pattern)
+    def validate_target_language!(source, translated)
+      translated = mask_pedagogical_articles(source, translated)
+      visible = visible_text(translated)
+      unquoted = strip_quoted_spans(visible)
+      invalid = target_invalid_phrases.find { |pattern, _message| visible.match?(pattern) }
+      invalid ||= english_discourse_openers.find { |pattern, _message| unquoted.match?(pattern) }
+      if invalid
+        pattern, message = invalid
+        phrase = (visible[pattern] || unquoted[pattern])
+        raise Error.new(:target_language, "#{message}: #{phrase}")
       end
-      return unless invalid
 
-      pattern, message = invalid
-      phrase = visible_text(translated)[pattern]
-      raise Error.new(:target_language, "#{message}: #{phrase}")
+      compound = retained_cjk_hyphenated_compound(unquoted)
+      if compound
+        raise Error.new(:target_language, "retained English compound: #{compound}")
+      end
+
+      determiner = retained_cjk_determiner(unquoted, source)
+      if determiner
+        raise Error.new(:target_language, "retained English determiner: #{determiner}")
+      end
+
+      coordinator = retained_cjk_coordinator(unquoted)
+      return unless coordinator
+
+      raise Error.new(:target_language, "retained English coordinator: #{coordinator}")
+    end
+
+    def target_invalid_phrases
+      phrases = TARGET_INVALID_PHRASES.fetch(target_language, {})
+      return phrases if target_language == 'en' || source_language == target_language
+
+      RETAINED_ENGLISH_IDIOMS.merge(phrases)
+    end
+
+    def english_discourse_openers
+      return {} if target_language == 'en' || source_language == target_language
+
+      ENGLISH_DISCOURSE_OPENERS
+    end
+
+    PEDAGOGICAL_ARTICLE = /(?:#{MARKER}|<I>)\s*(a|an|the)\s*(?:#{MARKER}|<\/I>)/i
+
+    def mask_pedagogical_articles(source, translated)
+      allowed = source.to_s.scan(PEDAGOGICAL_ARTICLE).flatten.map(&:downcase)
+      return translated if allowed.empty?
+
+      translated.to_s.gsub(PEDAGOGICAL_ARTICLE) do |match|
+        article = Regexp.last_match(1)
+        allowed.include?(article.downcase) ? match.sub(/#{Regexp.escape(article)}/i, ' ') : match
+      end
+    end
+
+    def retained_cjk_determiner(text, source)
+      return unless CJK_TARGET.key?(target_language)
+      return unless text.match?(CJK_SCRIPT)
+
+      pedagogical = source.to_s.scan(PEDAGOGICAL_ARTICLE).flatten.map(&:downcase).uniq
+      unless pedagogical.empty?
+        text = text.gsub(/\b(?:#{pedagogical.map { |article| Regexp.escape(article) }.join('|')})\b/i, ' ')
+      end
+      text[CJK_RETAINED_DETERMINER]
+    end
+
+    def retained_cjk_coordinator(text)
+      return unless CJK_TARGET.key?(target_language)
+      return unless text.match?(CJK_SCRIPT)
+
+      text[CJK_RETAINED_COORDINATOR]
+    end
+
+    def retained_cjk_hyphenated_compound(text)
+      return unless CJK_TARGET.key?(target_language)
+
+      dictionary = SOURCE_WORDS.fetch(source_language, {})
+      anchors = SOURCE_PROSE_ANCHORS.fetch(source_language, {})
+      text.to_s.scan(ENGLISH_HYPHENATED_COMPOUND).find do |word|
+        key = word.downcase
+        next false if ALLOWED_ENGLISH_HYPHENS.key?(key)
+
+        english_hyphenated_compound?(key, dictionary, anchors)
+      end
+    end
+
+    def english_hyphenated_compound?(word, dictionary, anchors)
+      parts = word.split('-')
+      return false if parts.size < 2
+      return true if ENGLISH_HYPHEN_HEADS.key?(parts.first) && english_hyphen_part?(parts.last, dictionary, anchors)
+
+      parts.all? { |part| english_hyphen_part?(part, dictionary, anchors) }
+    end
+
+    def english_hyphen_part?(part, dictionary, anchors)
+      dictionary.key?(part) || anchors.key?(part) || part.match?(ENGLISH_HYPHEN_TAIL)
+    end
+
+    def strip_quoted_spans(text)
+      text.to_s
+          .gsub(/&ldquo;.*?&rdquo;/mi, ' ')
+          .gsub(/&lsquo;.*?&rsquo;/mi, ' ')
+          .gsub(/“.*?”/m, ' ')
+          .gsub(/「.*?」/m, ' ')
+          .gsub(/『.*?』/m, ' ')
+          .gsub(/".*?"/m, ' ')
     end
 
     def validate_sentence_duplicates!(source, translated)

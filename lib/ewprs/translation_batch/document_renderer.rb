@@ -12,7 +12,10 @@ module Ewprs
       end
 
       def validate_structure!(source, translated)
-        raise 'HTML structure changed during translation' unless html_structure_compatible?(source, translated)
+        raise 'HTML structure changed during translation' unless html_structure_compatible?(
+          source, translated,
+          allow_moved_inline_nesting: TranslationValidator::CJK_TARGET.key?(target)
+        )
 
         source_slokas = matches(source, PROTECTED_ELEMENT).select { |value| value.match?(/Para_Sloka/) }
         translated_slokas = matches(translated, PROTECTED_ELEMENT).select { |value| value.match?(/Para_Sloka/) }

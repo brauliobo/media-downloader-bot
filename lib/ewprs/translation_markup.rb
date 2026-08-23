@@ -34,7 +34,13 @@ module Ewprs
     ATTACHED_EDITORIAL = /(?<prefix>\b[A-Za-z][A-Za-z'’-]*)(?<editorial>#{EDITORIAL_CONTENT})/
     STRUCTURAL_MARKUP = %r{#{FOOTNOTE}|#{EMPTY_INLINE_ELEMENT}|<br\s*/?>|</?(?:table|thead|tbody|tfoot|tr|td|th|ul|ol|li)\b[^>]*>}i
     TEXT_NODE        = /(?<=>)([^<]+)(?=<)/m
+    NAVIGATION_ATTRIBUTE = /
+      (?<=[\s])(?<name>title|alt)(?<equals>\s*=\s*)(?<quote>["'])(?<value>.*?)\k<quote>
+    /ix
+    BOOK_NAV_CHROME = /\A((?:Next chapter|Previous chapter):\s*)(.*)\z/i
     MARKED_WORD      = /(?<![A-Za-z])(?:[A-Za-z][A-Za-z'’-]*)(?:(?:&#x(?:301|32D);)[A-Za-z'’-]*)+(?![A-Za-z])/i
+    LEADING_ENGLISH_GLUE = /\A(?:(?:The|An|This|That|These|Those|In|On|At|From|To|Of|For|With|By|A|the|an|a|this|that|these|those|in|on|at|from|to|of|for|with|by)\s+)/
+    ENGLISH_GLUE_BEFORE_MARKED = /(?<![A-Za-z])(?:The|An|This|That|These|Those|In|On|At|From|To|Of|For|With|By|A|the|an|a|this|that|these|those|in|on|at|from|to|of|for|with|by)\s+(?=#{MARKED_WORD.source}|<i\b|<em\b|[+=→])/i
     ASCII_TRANSLITERATED_WORD = /(?<![A-Za-z])[A-Za-z]*(?:aa|ii|uu)[A-Za-z]*(?![A-Za-z])/i
     PROPER_NOUN_GLOSS = %r{
       (?<prefix>\b(?i:at|from|in|near|of)\s+)
@@ -186,6 +192,7 @@ module Ewprs
     STANDALONE_NUMBERED_TITLE = %r{
       \A#{TITLE_CAPITALIZED_WORD}
       (?:\s+(?:a|an|and|for|from|in|of|on|or|the|to|with|#{TITLE_CAPITALIZED_WORD})){2,}
+      (?<!\bPart)(?<!\bVolume)
       \s+\d+\z
     }ix
     ITALIC_EDITION_TITLE = %r{
@@ -300,9 +307,9 @@ module Ewprs
     ESCAPED_ENTITY   = /&amp;(?=(?:#\d+|#x[\da-f]+|[a-z][\w]+);)/i
     HTML_STRUCTURE   = /<!--.*?-->|<[^>]+>/m
 
-    def html_structure_compatible?(source, translated)
-      source_structure = source.to_s.scan(HTML_STRUCTURE)
-      translated_structure = translated.to_s.scan(HTML_STRUCTURE)
+    def html_structure_compatible?(source, translated, allow_moved_inline_nesting: false)
+      source_structure = html_structure(source)
+      translated_structure = html_structure(translated)
       return true if translated_structure == source_structure
 
       inline = ->(tag) { tag.match?(/\A<\/?(?:i|em)\b[^>]*>\z/i) }
@@ -314,8 +321,21 @@ module Ewprs
       return source_inline == translated_inline if source_inline.length <= 2
       return true unless inline_tags_balanced?(source_inline)
 
-      inline_tags_balanced?(translated_inline) &&
-        inline_tag_shape(source_inline) == inline_tag_shape(translated_inline)
+      return false unless inline_tags_balanced?(translated_inline)
+      return true if allow_moved_inline_nesting
+
+      inline_tag_shape(source_inline) == inline_tag_shape(translated_inline)
+    end
+
+    def html_structure(html)
+      html.to_s.scan(HTML_STRUCTURE).map { |tag| blank_navigation_attributes(tag) }
+    end
+
+    def blank_navigation_attributes(tag)
+      tag.gsub(NAVIGATION_ATTRIBUTE) do
+        name, equals, quote, = Regexp.last_match.captures
+        "#{name}#{equals}#{quote}#{quote}"
+      end
     end
 
     def inline_tags_balanced?(tags)
@@ -336,6 +356,7 @@ module Ewprs
     def inline_tag_shape(tags)
       tags.map { |tag| tag.match?(%r{\A</}) ? :close : :open }
     end
-    private :html_structure_compatible?, :inline_tags_balanced?, :inline_tag_shape
+    private :html_structure_compatible?, :html_structure, :blank_navigation_attributes, :inline_tags_balanced?,
+            :inline_tag_shape
   end
 end
