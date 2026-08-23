@@ -89,15 +89,37 @@ RSpec.describe Processors::Media do
   end
 
   describe '#generate_hashtags' do
+    let(:transcript) { Subtitler::Subtitle.new(language: 'en', text: 'Mindfulness and health.') }
+
+    before do
+      allow(Subtitler).to receive(:transcribe).with('/tmp/in.mp4', stl: nil).and_return(transcript)
+    end
+
     it 'transcribes the input and uses an explicit language for hashtags' do
-      transcript = Subtitler::Subtitle.new(language: 'en', text: 'Mindfulness and health.')
       i = input(fn_in: '/tmp/in.mp4', opts: SymMash.new(hashtags: 1, slang: 'pt'))
-      allow(Subtitler).to receive(:transcribe).with(i.fn_in, stl: nil).and_return(transcript)
       allow(Hashtags).to receive(:generate).with(transcript, lang: 'pt').and_return('#atencao')
 
       processor.send(:generate_hashtags, i)
 
       expect(i.info.hashtags).to eq('#atencao')
+    end
+
+    it 'uses the dub language when slang is unset' do
+      i = input(fn_in: '/tmp/in.mp4', opts: SymMash.new(hashtags: 1, dub: 1, dub_lang: 'pt'))
+      allow(Hashtags).to receive(:generate).with(transcript, lang: 'pt').and_return('#saude')
+
+      processor.send(:generate_hashtags, i)
+
+      expect(i.info.hashtags).to eq('#saude')
+    end
+
+    it 'prefers caption language over dub language' do
+      i = input(fn_in: '/tmp/in.mp4', opts: SymMash.new(hashtags: 1, dub: 1, dub_lang: 'pt', clang: 'es'))
+      allow(Hashtags).to receive(:generate).with(transcript, lang: 'es').and_return('#salud')
+
+      processor.send(:generate_hashtags, i)
+
+      expect(i.info.hashtags).to eq('#salud')
     end
   end
 
