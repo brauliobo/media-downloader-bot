@@ -21,7 +21,7 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 CacheDirectory=bs-roformer-%i
 RuntimeDirectory=bs-roformer-%i
 ExecCondition=/usr/bin/test %i -eq 0
-ExecStart=/srv/Music-Source-Separation-Training/runtime/bin/python -m uvicorn bs_roformer_service:app --app-dir /home/braulio/Projects/media-downloader-bot/services/voice_separation --host 127.0.0.1 --port 8085 --workers 1
+ExecStart=/srv/Music-Source-Separation-Training/.venv/bin/python -m uvicorn bs_roformer_service:app --app-dir /home/braulio/Projects/media-downloader-bot/services/voice_separation --host 127.0.0.1 --port 8085 --workers 1
 ExecStartPost=/usr/bin/curl --fail --silent --show-error --retry 300 --retry-delay 2 --retry-connrefused --retry-all-errors --retry-max-time 600 --max-time 2 http://127.0.0.1:8085/health/ready
 
 NoNewPrivileges=yes

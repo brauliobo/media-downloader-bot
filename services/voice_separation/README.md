@@ -34,8 +34,8 @@ Install the inference runtime and the published checkpoint under `/srv`:
 ```sh
 git clone https://github.com/ZFTurbo/Music-Source-Separation-Training.git /srv/Music-Source-Separation-Training
 cd /srv/Music-Source-Separation-Training
-uv venv --python 3.11 runtime
-uv pip install --python runtime/bin/python -e '.[bs_roformer]' fastapi uvicorn python-multipart
+uv venv --python 3.11 .venv
+uv pip install --python .venv/bin/python -e '.[bs_roformer]' fastapi uvicorn python-multipart
 mkdir -p /srv/bs-roformer-models
 curl -L --fail -o /srv/bs-roformer-models/model_bs_roformer_ep_317_sdr_12.9755.ckpt \
   https://huggingface.co/RomanSolovyev/BS-RoFormer/resolve/main/model_bs_roformer_ep_317_sdr_12.9755.ckpt
