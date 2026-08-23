@@ -1,5 +1,6 @@
 # private
 .bundle
+.codex/
 .env
 .env.local
 .env.user

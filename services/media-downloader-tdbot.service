@@ -25,6 +25,8 @@ RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
 WorkingDirectory=/srv/media-downloader-tdbot
 ReadWritePaths=/srv/media-downloader-tdbot
 PrivateTmp=true
+Environment=HOME=/srv/media-downloader-tdbot
+Environment=CODEX_HOME=/srv/media-downloader-tdbot/.codex
 ExecStart=/usr/local/rvm/wrappers/ruby-3.4.4/bundle exec bin/tdbot
 
 Environment=BUNDLE_DEPLOYMENT=true

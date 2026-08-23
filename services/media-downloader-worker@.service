@@ -16,6 +16,8 @@ RuntimeDirectoryMode=0755
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 WorkingDirectory=/srv/media-downloader-bot
 ReadWritePaths=/srv/media-downloader-bot
+Environment=HOME=/srv/media-downloader-bot
+Environment=CODEX_HOME=/srv/media-downloader-bot/.codex
 ExecStart=/usr/local/rvm/wrappers/ruby-3.4.4/bundle exec bin/worker
 ExecReload=/bin/kill -TERM $MAINPID
 

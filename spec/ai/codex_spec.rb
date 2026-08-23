@@ -6,10 +6,11 @@ RSpec.describe AI::Codex do
     it 'runs codex exec non-interactively and returns the last message' do
       status = instance_double(Process::Status, success?: true)
 
-      expect(Open3).to receive(:capture3) do |*args, stdin_data:|
+      expect(Open3).to receive(:capture3) do |env, *args, stdin_data:|
         output_file = args[args.index('-o') + 1]
         File.write(output_file, 'answer')
 
+        expect(env['CODEX_HOME']).to eq(ENV['CODEX_HOME'].to_s.empty? ? File.join(Dir.home, '.codex') : ENV['CODEX_HOME'])
         expect(args).to include('codex', 'exec', '--sandbox', 'read-only', '-c', 'approval_policy=never')
         expect(args).to include('--ephemeral', '--skip-git-repo-check', '--color', 'never')
         expect(args.last).to eq('-')
@@ -34,7 +35,7 @@ RSpec.describe AI::Codex do
   it 'passes the requested reasoning effort to codex' do
     status = instance_double(Process::Status, success?: true)
 
-    expect(Open3).to receive(:capture3) do |*args, stdin_data:|
+    expect(Open3).to receive(:capture3) do |_env, *args, stdin_data:|
       output_file = args[args.index('-o') + 1]
       File.write(output_file, 'answer')
 

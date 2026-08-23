@@ -23,7 +23,9 @@ module AI
         cmd += ['-c', "model_reasoning_effort=#{effort}"] unless effort.to_s.strip.empty?
         cmd << '-'
 
-        _out, err, st = Open3.capture3(*cmd, stdin_data: text)
+        env = ENV.to_h
+        env['CODEX_HOME'] = File.join(Dir.home, '.codex') if env['CODEX_HOME'].to_s.empty?
+        _out, err, st = Open3.capture3(env, *cmd, stdin_data: text)
         raise "codex failed (#{st.exitstatus}): #{err}" unless st.success?
 
         out_file.rewind
