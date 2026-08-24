@@ -2,14 +2,15 @@ module Bot
   module MsgHelpers
     extend ActiveSupport::Concern
 
-    ADMIN_CHAT_ID  = ENV['ADMIN_CHAT_ID']&.to_i
-    REPORT_CHAT_ID = ENV['REPORT_CHAT_ID']&.to_i
+    ADMIN_CHAT_ID       = ENV['ADMIN_CHAT_ID']&.to_i
+    REPORT_CHAT_ID      = ENV['REPORT_CHAT_ID']&.to_i
+    MEDIA_CAPTION_LIMIT = 1024
 
     included do
       class_attribute :error_delete_time
       self.error_delete_time = 30.seconds
       class_attribute :max_caption
-      self.max_caption = 1024
+      self.max_caption = MEDIA_CAPTION_LIMIT
     end
 
     def msg_limit i, size: self.max_caption, percent: 100

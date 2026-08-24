@@ -17,7 +17,6 @@ module Bot
     ]
 
     self.error_delete_time = 3.hours
-    self.max_caption = 1024
 
     class_attribute :tg
     delegate_missing_to :tg

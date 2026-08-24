@@ -6,7 +6,6 @@ require_relative 'base'
 require_relative 'caption'
 require_relative 'jobs'
 require_relative 'rate_limiter'
-require_relative '../utils/url'
 require_relative '../td_bot/chat_identifier'
 require_relative '../td_bot/post_editor'
 
@@ -16,7 +15,6 @@ module Bot
     include RateLimiter
 
     self.max_caption = 4096
-    MEDIA_CAPTION_LIMIT = 1024
     MEDIA_SEND_TIMEOUT = 1_800
     SEND_OUTCOME_LIMIT = 1_000
     SendOutcome = Struct.new(:message_id, :error, keyword_init: true)
@@ -111,7 +109,7 @@ module Bot
     def send_message(msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, cancel_job: nil, **params)
       t = type.to_s
       media_type, params = normalize_params(params, type: type) unless t.in?(%w[message text])
-      text = Caption.normalize(text, parse_mode: parse_mode) if media_type
+      text = media_caption(msg, text, parse_mode) if media_type
       ret = with_rate_limit('send_message') do
         throttle!
         reply_to = incoming_message_id(msg, :id, :message_id)
@@ -135,7 +133,7 @@ module Bot
 
     def send_album(msg, text, uploads:, parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **_params)
       sent  = []
-      album = Album.new(uploads, album_caption_text(msg, text, parse_mode))
+      album = Album.new(uploads, media_caption(msg, text, parse_mode))
 
       album.batches.each do |batch|
         result = with_rate_limit('send_album') do
@@ -157,28 +155,8 @@ module Bot
       sent
     end
 
-    def album_caption_text(msg, text, parse_mode)
-      text = Caption.normalize(text, parse_mode: parse_mode)
-      return text if text.size <= MEDIA_CAPTION_LIMIT
-
-      send_message(msg, text, parse_mode: parse_mode)
-      truncate_album_caption(text, MEDIA_CAPTION_LIMIT)
-    end
-
-    def truncate_album_caption(text, limit)
-      suffix = Utils::Url.trailing_display_urls(text)
-      return truncate_markdown_caption(text, limit) unless suffix && suffix.size < limit
-
-      body = text.to_s.delete_suffix(suffix).rstrip
-      [truncate_markdown_caption(body, limit - suffix.size), suffix].join
-    end
-
-    def truncate_markdown_caption(text, limit)
-      caption = text.to_s.first(limit)
-      caption = caption[0...-1] if caption.end_with?('\\')
-      return caption unless caption.scan(/(?<!\\)_/).size.odd?
-
-      caption.size < limit ? "#{caption}_" : "#{caption[0...-1]}_"
+    def media_caption(msg, text, parse_mode)
+      Caption.prepare(text, parse_mode: parse_mode) { |full| send_message(msg, full, parse_mode: parse_mode) }
     end
 
     def send_album_items(msg, batch, parse_mode)

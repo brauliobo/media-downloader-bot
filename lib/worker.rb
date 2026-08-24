@@ -191,7 +191,7 @@ class Worker
   end
 
   def caption_limit
-    service.respond_to?(:max_caption) ? service.max_caption : 1024
+    service.respond_to?(:max_caption) ? service.max_caption : Bot::MsgHelpers::MEDIA_CAPTION_LIMIT
   end
 
   def caption_for(input)
