@@ -1,6 +1,6 @@
 class Context
   # Request
-  attr_accessor :msg, :line, :url, :opts, :session
+  attr_accessor :msg, :line, :url, :opts, :session, :gallery_rows
 
   # Execution
   attr_accessor :dir, :tmp, :service

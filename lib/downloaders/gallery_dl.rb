@@ -63,11 +63,18 @@ module Downloaders
       status.respond_to?(:success?) ? status.success? : status == 0
     end
 
+    def self.content_from(rows)
+      row  = Array(rows).find { |item| item.is_a?(Array) && item.first == 2 } ||
+             Array(rows).find { |item| item.is_a?(Array) && item.first == 3 }
+      meta = SymMash.new(row&.last.is_a?(Hash) ? row.last : {})
+      meta.content.presence || meta.title.presence
+    end
+
     def gallery_info
       meta = metadata
       user = meta.user || meta.author || SymMash.new
       SymMash.new(
-        title:       meta.content.presence || meta.title.presence || File.basename(normalized_url.to_s),
+        title:       self.class.content_from(gallery_rows) || File.basename(normalized_url.to_s),
         description: meta.description.presence,
         uploader:    user.nick.presence || user.name.presence,
         display_id:  (meta.tweet_id || meta.id || normalized_url).to_s,
@@ -88,12 +95,12 @@ module Downloaders
     end
 
     def gallery_rows
-      return @gallery_rows if defined?(@gallery_rows)
+      return ctx.gallery_rows unless ctx.gallery_rows.nil?
 
       out, = Sh.run [gallery_dl, '-X', EXTRACTORS, '-j', normalized_url], chdir: tmp
-      @gallery_rows = JSON.parse(out)
+      ctx.gallery_rows = JSON.parse(out)
     rescue StandardError
-      @gallery_rows = []
+      ctx.gallery_rows = []
     end
 
     def cookie_path

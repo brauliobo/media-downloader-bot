@@ -38,6 +38,18 @@ RSpec.describe Downloaders::GalleryDl do
       expect(described_class.supports?(ctx)).to eq(false)
     end
 
+    it 'keeps single-video tweet metadata for yt-dlp captions' do
+      rows = [
+        [2, {content: "full tweet\n\nwith note text", user: {nick: 'NEXTA'}, tweet_id: 1}],
+        [3, 'https://example.com/video.mp4', {type: 'video'}]
+      ]
+      allow(Sh).to receive(:run).and_return([rows.to_json, '', 0])
+
+      expect(described_class.supports?(ctx)).to eq(false)
+      expect(ctx.gallery_rows).to eq(JSON.parse(rows.to_json))
+      expect(described_class.content_from(ctx.gallery_rows)).to eq("full tweet\n\nwith note text")
+    end
+
     it 'loads bundled extractors for YouTube community posts' do
       ctx.url = 'https://youtube.com/post/Ugkx0123456789_-'
       rows = [[3, 'https://yt3.ggpht.com/image=s0?imgmax=0', {type: 'image'}]]

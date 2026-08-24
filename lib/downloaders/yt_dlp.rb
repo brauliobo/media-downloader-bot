@@ -192,11 +192,21 @@ module Downloaders
     def format_title(info, i, mult)
       t = info.track || info.title
       t = info.description || t if info.webpage_url.include?('instagram.com')
-      if info.description && info.webpage_url.to_s.match?(%r{(?:^|://)(?:[^/]+\.)?(?:x|twitter)\.com/.+/status/}) && t.to_s.strip.end_with?('...')
-        t = info.description
-      end
+      t = twitter_full_text(info) || t
       t = format('%02d %s', i + 1, t) if mult && opts.number
       t
+    end
+
+    def twitter_status?(url)
+      url.to_s.match?(%r{(?:^|://)(?:[^/]+\.)?(?:x|twitter)\.com/.+/status/})
+    end
+
+    def twitter_full_text(info)
+      return unless twitter_status?(info.webpage_url)
+      content = Downloaders::GalleryDl.content_from(ctx.gallery_rows)
+      info.description = content if content
+      return content if content
+      info.description if info.description && info.title.to_s.match?(/\.\.\.(?:\s+#\d+)?\s*\z/)
     end
 
     def check_duration!(info)

@@ -237,5 +237,37 @@ RSpec.describe Downloaders::YtDlp do
 
       expect(input.info.title).to eq('As always, the Russian invaders are stealing anything that is lying around.')
     end
+
+    it 'uses full x.com descriptions when yt-dlp appends a video index' do
+      info = SymMash.new(
+        webpage_url: 'https://x.com/nexta_tv/status/2091885684243988758',
+        display_id:  '2091885684243988758',
+        _filename:   'status.mp4',
+        duration:    10,
+        title:       'NEXTA - 🥹 A touching moment: a serviceman asked Zelenskyy for a selfie during... #1',
+        description: '🥹 A touching moment: a serviceman asked Zelenskyy for a selfie during an award ceremony'
+      )
+
+      input = downloader.send(:build_input, info, 0, false)
+
+      expect(input.info.title).to eq('🥹 A touching moment: a serviceman asked Zelenskyy for a selfie during an award ceremony')
+    end
+
+    it 'prefers gallery-dl note tweet text over truncated yt-dlp metadata' do
+      ctx.gallery_rows = [[2, {content: "full tweet\n\nwith note text"}]]
+      info = SymMash.new(
+        webpage_url: 'https://x.com/nexta_tv/status/2091885684243988758',
+        display_id:  '2091885684243988758',
+        _filename:   'status.mp4',
+        duration:    10,
+        title:       'NEXTA - 🥹 A touching moment: a serviceman asked Zelenskyy for a selfie during... #1',
+        description: 'truncated legacy full_text https://t.co/UnVMfIYUCn'
+      )
+
+      input = downloader.send(:build_input, info, 0, false)
+
+      expect(input.info.title).to eq("full tweet\n\nwith note text")
+      expect(input.info.description).to eq("full tweet\n\nwith note text")
+    end
   end
 end
