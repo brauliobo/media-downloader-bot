@@ -83,5 +83,23 @@ RSpec.describe Manager do
 
       manager.react(msg)
     end
+
+    it 'cancels inline WITH_WORKER jobs from /stop' do
+      original = ENV['WITH_WORKER']
+      ENV['WITH_WORKER'] = '1'
+      runner   = double
+      allow(Bot::JobRunner).to receive(:new) do |**|
+        allow(runner).to receive(:run)
+        runner
+      end
+      manager.enqueue_message(SymMash.new(from: {id: 123}, chat: {id: 456}, text: 'https://example.com/video'))
+      msg = SymMash.new(from: {id: 123}, chat: {id: 456}, text: '/stop')
+
+      expect(bot).to receive(:send_message).with(msg, Bot::MsgHelpers.me('Stopping 1 job...'))
+
+      manager.react(msg)
+    ensure
+      ENV['WITH_WORKER'] = original
+    end
   end
 end

@@ -177,10 +177,6 @@ module Bot
       tg.answer_callback_query(callback_query_id: callback.id, text: text)
     end
 
-    def fork_workers?
-      true
-    end
-
     def perform_delete_message(msg, id)
       tg.delete_message chat_id: msg.chat.id, message_id: id
     end

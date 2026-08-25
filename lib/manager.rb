@@ -126,13 +126,7 @@ EOS
   end
 
   def enqueue_message(msg)
-    if ENV['WITH_WORKER'] && bot.fork_workers?
-      run_inline_job(msg)
-    elsif ENV['WITH_WORKER']
-      Worker.new(msg, service: bot).process
-    else
-      jobs.submit(msg)
-    end
+    ENV['WITH_WORKER'] ? run_inline_job(msg) : jobs.submit(msg)
   end
 
   def dequeue(timeout: nil)
@@ -277,12 +271,13 @@ EOS
   private
 
   def run_inline_job(msg)
-    job = jobs.register(msg)
-    runner = Bot::JobRunner.new(cancelled: jobs.method(:cancelled?), interrupted: ->(_id) {}, finished: jobs.method(:finish))
+    job    = jobs.register(msg)
+    runner = Bot::JobRunner.new(cancelled: jobs.method(:cancelled?), interrupted: ->(_) {}, finished: jobs.method(:finish))
     runner.run(job[:id]) do
       DB.disconnect if defined? DB
       Process.setproctitle 'media-downloader-tgbot worker'
-      Worker.new(msg, service: bot, job_id: job[:id]).process
+      uri = bot_service_uri
+      Worker.new(msg, service: uri.present? ? Bot::Worker::Client.new(uri) : bot, job_id: job[:id]).process
     end
   end
 

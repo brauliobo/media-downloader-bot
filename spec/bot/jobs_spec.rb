@@ -88,9 +88,9 @@ RSpec.describe Manager, '#enqueue_message' do
     ENV['WITH_WORKER'] = original
   end
 
-  it 'keeps inline TGBot job state in the parent runner' do
+  it 'registers inline jobs so /stop can cancel them' do
     manager = described_class.new
-    bot     = double(fork_workers?: true)
+    bot     = double
     msg     = SymMash.new(from: {id: 123}, chat: {id: 456}, text: 'url')
     runner  = double
     manager.instance_variable_set(:@bot, bot)
