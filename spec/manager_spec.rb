@@ -88,6 +88,7 @@ RSpec.describe Manager do
       original = ENV['WITH_WORKER']
       ENV['WITH_WORKER'] = '1'
       runner   = double
+      allow(bot).to receive(:fork_workers?).and_return(true)
       allow(Bot::JobRunner).to receive(:new) do |**|
         allow(runner).to receive(:run)
         runner

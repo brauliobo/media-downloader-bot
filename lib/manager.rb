@@ -126,7 +126,13 @@ EOS
   end
 
   def enqueue_message(msg)
-    ENV['WITH_WORKER'] ? run_inline_job(msg) : jobs.submit(msg)
+    if ENV['WITH_WORKER'] && bot.fork_workers?
+      run_inline_job(msg)
+    elsif ENV['WITH_WORKER']
+      run_in_process_job(msg)
+    else
+      jobs.submit(msg)
+    end
   end
 
   def dequeue(timeout: nil)
@@ -279,6 +285,13 @@ EOS
       uri = bot_service_uri
       Worker.new(msg, service: uri.present? ? Bot::Worker::Client.new(uri) : bot, job_id: job[:id]).process
     end
+  end
+
+  def run_in_process_job(msg)
+    job = jobs.register(msg)
+    Worker.new(msg, service: bot, job_id: job[:id]).process
+  ensure
+    jobs.finish(job[:id]) if job
   end
 
   def cancel_job_message(result)

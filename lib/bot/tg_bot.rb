@@ -181,6 +181,10 @@ module Bot
       tg.delete_message chat_id: msg.chat.id, message_id: id
     end
 
+    def fork_workers?
+      true
+    end
+
     def job_reply_markup(job_id)
       buttons = if job_id == false
         []
