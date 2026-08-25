@@ -1,4 +1,5 @@
 require 'spec_helper'
+require 'drb/drb'
 
 RSpec.describe Bot::Worker::Client do
   describe '.td_file_id' do
@@ -43,5 +44,30 @@ RSpec.describe Bot::Worker::Client do
     expect(payload['file_id_or_info']).to eq(123)
   ensure
     ENV['BOT_HTTP_TOKEN'] = token
+  end
+
+  it 'round-trips send_message and download_file over DRb' do
+    manager = Manager.new
+    bot     = double
+    seen    = nil
+    msg     = SymMash.new(chat: {id: 1}, from: {id: 2})
+    doc     = Struct.new(:document).new(Struct.new(:id).new(5))
+    manager.instance_variable_set(:@bot, bot)
+    allow(bot).to receive(:send_message).and_return(SymMash.new(message_id: 99, text: 'hi'))
+    allow(bot).to receive(:download_file) do |info, **|
+      seen = info
+      '/tmp/out.pdf'
+    end
+
+    DRb.start_service('druby://127.0.0.1:0', manager)
+    client = described_class.new(DRb.uri)
+    sent   = client.send_message(msg, 'hi')
+    path   = client.download_file(doc, dir: '/tmp')
+
+    expect(sent.message_id).to eq(99)
+    expect(path).to eq('/tmp/out.pdf')
+    expect(seen.document.id).to eq(5)
+  ensure
+    DRb.stop_service
   end
 end

@@ -157,3 +157,21 @@ RSpec.describe Manager, '#cancel_job' do
     expect(manager.jobs.cancelled?(job[:id])).to be(false)
   end
 end
+
+RSpec.describe Manager, '#bot_service_uri' do
+  around do |example|
+    http = ENV['BOT_HTTP']
+    drb  = ENV['BOT_DRB']
+    example.run
+  ensure
+    http.nil? ? ENV.delete('BOT_HTTP') : ENV['BOT_HTTP'] = http
+    drb.nil?  ? ENV.delete('BOT_DRB')  : ENV['BOT_DRB'] = drb
+  end
+
+  it 'prefers DRb over HTTP for inline workers' do
+    ENV['BOT_HTTP'] = 'http://127.0.0.1:1181'
+    ENV['BOT_DRB']  = 'druby://127.0.0.1:1188'
+
+    expect(described_class.new.bot_service_uri).to eq('druby://127.0.0.1:1188')
+  end
+end

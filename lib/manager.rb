@@ -184,7 +184,7 @@ EOS
   end
 
   def bot_service_uri
-    ENV['BOT_HTTP'] || ENV['BOT_DRB']
+    ENV['BOT_DRB'].presence || ENV['BOT_HTTP'].presence
   end
 
   def max_caption
@@ -250,8 +250,8 @@ EOS
     true
   end
 
-  def download_file(...)
-    bot.download_file(...)
+  def download_file(file_id_or_info = nil, **params)
+    bot.download_file(params.delete(:file_id_or_info) || file_id_or_info, **params)
   end
 
   def cancel_job(callback)

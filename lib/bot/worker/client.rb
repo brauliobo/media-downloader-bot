@@ -13,6 +13,7 @@ module Bot
       def initialize(uri)
         @uri = uri
         if uri.start_with?('druby://')
+          DRb.start_service unless DRb.thread
           @drb = DRbObject.new_with_uri(uri)
           @mode = :drb
         elsif uri.start_with?('http://') || uri.start_with?('https://')
