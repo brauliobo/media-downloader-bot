@@ -54,4 +54,30 @@ RSpec.describe Bot::JobRunner do
       expect(runner).to have_received(:signal).with(123, :USR1)
     end
   end
+
+  describe '#run' do
+    it 'cancels a threaded job when /stop marks it cancelled' do
+      started   = Queue.new
+      cancelled = false
+      finished  = false
+      runner    = described_class.new(
+        cancelled:   ->(_id) { cancelled },
+        interrupted: ->(_id) {},
+        finished:    ->(_id) { finished = true },
+      )
+
+      thread = Thread.new do
+        runner.run('job-id', fork: false) do
+          started << true
+          loop { sleep 0.05 }
+        end
+      end
+      started.pop
+      cancelled = true
+      thread.join(2)
+
+      expect(thread).not_to be_alive
+      expect(finished).to eq(true)
+    end
+  end
 end

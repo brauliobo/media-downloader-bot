@@ -24,15 +24,13 @@ else
       described_class.message_send_outcomes.clear
     end
 
-    it 'sends a native TDLib cancel control with status messages' do
+    it 'sends status text without bot-API cancel keyboards' do
       allow(sender).to receive(:send_text).and_return(message_id: 789)
 
       bot.send_message(msg, 'working', cancel_job: 'job-id')
 
       expect(sender).to have_received(:send_text) do |_chat_id, _text, params|
-        markup = params[:reply_markup]
-        expect(markup).to be_a(TD::Types::ReplyMarkup::InlineKeyboard)
-        expect(markup.rows.first.first.type.data).to eq('job:cancel:job-id')
+        expect(params[:reply_markup]).to be_nil
       end
     end
 

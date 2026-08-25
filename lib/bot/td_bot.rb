@@ -286,15 +286,8 @@ module Bot
       end
     end
 
-    def job_reply_markup(job_id)
-      return nil unless job_id
-
-      TD::Types::ReplyMarkup::InlineKeyboard.new(rows: [[
-        TD::Types::InlineKeyboardButton.new(
-          text: 'Cancel',
-          type: TD::Types::InlineKeyboardButtonType::Callback.new(data: Bot::Jobs.cancel_data(job_id)),
-        ),
-      ]])
+    def job_reply_markup(_job_id)
+      nil
     end
 
     def wait_for_media_send(result, timeout:)

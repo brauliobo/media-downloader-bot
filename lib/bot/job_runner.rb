@@ -11,7 +11,37 @@ module Bot
       @finished    = finished
     end
 
-    def run(job_id, &work)
+    def run(job_id, fork: false, &work)
+      fork ? spawn_fork(job_id, &work) : spawn_thread(job_id, &work)
+    ensure
+      @finished.call(job_id) if job_id
+    end
+
+    private
+
+    def spawn_thread(job_id, &work)
+      thread = Thread.new do
+        work.call
+      rescue JobCancelled, JobRestarted
+        nil
+      rescue => e
+        STDERR.puts "Error processing job: #{e.class}: #{e.message}"
+        STDERR.puts e.backtrace.join("\n")
+      end
+      monitor_thread(thread, job_id)
+    end
+
+    def monitor_thread(thread, job_id)
+      until thread.join(CANCEL_POLL_INTERVAL)
+        case interruption_signal(job_id)
+        when :restart then thread.raise(JobRestarted)
+        when :cancel  then thread.raise(JobCancelled)
+        else thread.raise(JobCancelled) if cancelled?(job_id)
+        end
+      end
+    end
+
+    def spawn_fork(job_id, &work)
       pid = Kernel.fork do
         Process.setpgrp
         thread = Thread.current
@@ -27,11 +57,7 @@ module Bot
       end
       establish_process_group(pid)
       monitor(pid, job_id)
-    ensure
-      @finished.call(job_id) if job_id
     end
-
-    private
 
     def monitor(pid, job_id)
       cancel_started_at = nil

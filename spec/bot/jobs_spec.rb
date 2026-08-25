@@ -97,7 +97,8 @@ RSpec.describe Manager, '#enqueue_message' do
 
     allow(bot).to receive(:fork_workers?).and_return(true)
     allow(Bot::JobRunner).to receive(:new) do |cancelled:, interrupted:, finished:|
-      allow(runner).to receive(:run) do |id, &_work|
+      allow(runner).to receive(:run) do |id, fork: false, &_|
+        expect(fork).to eq(true)
         expect(manager.jobs.cancel(id, user_id: 123, chat_id: 456)).to eq(:cancelled)
         expect(cancelled.call(id)).to be(true)
         expect(interrupted.call(id)).to be_nil
@@ -109,23 +110,31 @@ RSpec.describe Manager, '#enqueue_message' do
     manager.enqueue_message(msg)
 
     expect(manager.queue_size).to eq(0)
-    expect(runner).to have_received(:run).with(kind_of(String))
+    expect(runner).to have_received(:run).with(kind_of(String), fork: true)
   end
 
-  it 'runs non-fork bots in-process and still registers them for /stop' do
+  it 'runs non-fork bots on a thread against the live bot so /stop can cancel them' do
     manager = described_class.new
     bot     = double(fork_workers?: false)
     msg     = SymMash.new(from: {id: 123}, chat: {id: 456}, text: 'url')
     worker  = double(process: true)
+    runner  = double
     manager.instance_variable_set(:@bot, bot)
 
-    expect(Bot::JobRunner).not_to receive(:new)
+    allow(Bot::JobRunner).to receive(:new) do |finished:, **|
+      allow(runner).to receive(:run) do |id, fork: false, &work|
+        expect(fork).to eq(false)
+        work.call
+        finished.call(id)
+      end
+      runner
+    end
     expect(Worker).to receive(:new).with(msg, service: bot, job_id: kind_of(String)).and_return(worker)
 
     manager.enqueue_message(msg)
 
     expect(worker).to have_received(:process)
-    expect(manager.queue_size).to eq(0)
+    expect(runner).to have_received(:run).with(kind_of(String), fork: false)
   end
 end
 

@@ -126,12 +126,15 @@ EOS
   end
 
   def enqueue_message(msg)
-    if ENV['WITH_WORKER'] && bot.fork_workers?
-      run_inline_job(msg)
-    elsif ENV['WITH_WORKER']
-      run_in_process_job(msg)
-    else
-      jobs.submit(msg)
+    return jobs.submit(msg) unless ENV['WITH_WORKER']
+
+    job    = jobs.register(msg)
+    forked = bot.fork_workers?
+    Bot::JobRunner.new(cancelled: jobs.method(:cancelled?), interrupted: ->(_) {}, finished: jobs.method(:finish)).run(job[:id], fork: forked) do
+      DB.disconnect if defined?(DB) && forked
+      Process.setproctitle 'media-downloader-tgbot worker' if forked
+      service = forked && bot_service_uri.present? ? Bot::Worker::Client.new(bot_service_uri) : bot
+      Worker.new(msg, service: service, job_id: job[:id]).process
     end
   end
 
@@ -275,24 +278,6 @@ EOS
   end
 
   private
-
-  def run_inline_job(msg)
-    job    = jobs.register(msg)
-    runner = Bot::JobRunner.new(cancelled: jobs.method(:cancelled?), interrupted: ->(_) {}, finished: jobs.method(:finish))
-    runner.run(job[:id]) do
-      DB.disconnect if defined? DB
-      Process.setproctitle 'media-downloader-tgbot worker'
-      uri = bot_service_uri
-      Worker.new(msg, service: uri.present? ? Bot::Worker::Client.new(uri) : bot, job_id: job[:id]).process
-    end
-  end
-
-  def run_in_process_job(msg)
-    job = jobs.register(msg)
-    Worker.new(msg, service: bot, job_id: job[:id]).process
-  ensure
-    jobs.finish(job[:id]) if job
-  end
 
   def cancel_job_message(result)
     {
