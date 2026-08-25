@@ -88,7 +88,7 @@ module Bot
         else
           payload = kwargs.dup
           payload[:msg] = payload[:msg].to_h if payload[:msg] && payload[:msg].respond_to?(:to_h)
-          payload[:file_id_or_info] = payload[:file_id_or_info].is_a?(Hash) ? payload[:file_id_or_info] : payload[:file_id_or_info].to_s if payload[:file_id_or_info]
+          payload[:file_id_or_info] = self.class.td_file_id(payload[:file_id_or_info]) if payload[:file_id_or_info]
           response = @http_client.post("/#{method}", payload)
           raise "bot HTTP service returned #{response.status}" unless response.success?
           block_given? ? yield(response.body) : response.body
@@ -147,6 +147,28 @@ module Bot
 
       def album_proxy_root
         File.expand_path(File.join(Dir.pwd, 'tmp', 'album-proxy'))
+      end
+
+      def self.td_file_id(info)
+        return if info.nil?
+        return info if info.is_a?(Integer)
+        return info.to_i if info.is_a?(String) && info.match?(/\A\d+\z/)
+
+        if info.is_a?(Hash)
+          nested = info[:document] || info['document']
+          return td_file_id(nested) if nested
+          return td_file_id(info[:file_id] || info['file_id'] || info[:id] || info['id'])
+        end
+
+        if info.respond_to?(:document)
+          doc = info.document
+          return doc.file_id if doc.respond_to?(:file_id)
+          return doc.id if doc.respond_to?(:id)
+        end
+        return info.file_id if info.respond_to?(:file_id)
+        return info.id if info.respond_to?(:id)
+
+        info
       end
     end
   end

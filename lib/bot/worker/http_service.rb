@@ -185,7 +185,7 @@ module Bot
 
         r.post 'download_file' do
           params = request_params(r)
-          file_id_or_info = params.delete(:file_id_or_info)
+          file_id_or_info = Bot::Worker::Client.td_file_id(params.delete(:file_id_or_info))
           require_allowed_directory!(params[:dir]) if params[:dir]
           result = service.bot.download_file(file_id_or_info, **params)
           {path: result}
