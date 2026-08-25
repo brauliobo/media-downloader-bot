@@ -232,7 +232,7 @@ module Audiobook
         Dir.mktmpdir('pdf-xml-') do |dir|
           output = File.join(dir, 'doc')
           _out, stderr, status = Sh.run [
-            pdftohtml_bin, '-xml', '-i', '-q',
+            pdftohtml_bin, '-xml', '-i', '-q', '-nodrm',
             '-f', first_page.to_s, '-l', last_page.to_s,
             pdf_path, output
           ]

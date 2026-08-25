@@ -1,4 +1,5 @@
 require 'spec_helper'
+require 'open3'
 
 RSpec.describe Audiobook::Parsers::Pdf do
   def fixture_path(name)
@@ -79,6 +80,21 @@ RSpec.describe Audiobook::Parsers::Pdf do
     pages = described_class.extract_document_range('book.pdf', first_page: 1, last_page: 1)
 
     expect(pages.first.lines.first.text).to eq("condiç normal")
+  end
+
+  it 'extracts style from a copy-restricted PDF' do
+    Dir.mktmpdir do |dir|
+      restricted = File.join(dir, 'restricted.pdf')
+      _out, stderr, status = Open3.capture3(
+        'qpdf', '--encrypt', '', '', '256', '--extract=n', '--print=full', '--modify=none', '--',
+        fixture_path('page-paragraphs-merge.pdf'), restricted
+      )
+      raise "qpdf encrypt failed: #{stderr}" unless status.success?
+
+      data = described_class.extract_data(restricted)
+      expect(data.content.lines).not_to be_empty
+      expect(data.content.lines.first.text).to be_present
+    end
   end
 
   it 'limits the real Poppler extraction to the requested page range' do
