@@ -10,7 +10,7 @@ class Diarizer
     BACKEND.diarize(path, speakers: speakers)
   end
 
-  def self.assign_speakers!(subtitle, speaker_segments)
+  def self.assign_speakers!(subtitle, speaker_segments, sentence_level: false)
     raise TypeError, 'subtitle must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitler::Subtitle)
 
     segments = Array(speaker_segments)
@@ -19,15 +19,21 @@ class Diarizer
       raise TypeError, 'speaker_segments must contain only Diarizer::Segment objects'
     end
 
-    entries = subtitle.entries.flat_map do |entry|
-      if entry.words.empty?
-        entry.deep_copy.assign_speaker!(best_segment(entry.start, entry.finish, segments).speaker_id)
-      else
-        entry.words.chunk_while do |left, right|
-          best_segment(left.start, left.finish, segments).speaker_id ==
-            best_segment(right.start, right.finish, segments).speaker_id
-        end.map do |words|
-          build_speaker_entry(entry, words, segments)
+    entries = if sentence_level
+      subtitle.sentence_entries.map do |entry|
+        entry.assign_speaker!(best_segment(entry.start, entry.finish, segments).speaker_id)
+      end
+    else
+      subtitle.entries.flat_map do |entry|
+        if entry.words.empty?
+          entry.deep_copy.assign_speaker!(best_segment(entry.start, entry.finish, segments).speaker_id)
+        else
+          entry.words.chunk_while do |left, right|
+            best_segment(left.start, left.finish, segments).speaker_id ==
+              best_segment(right.start, right.finish, segments).speaker_id
+          end.map do |words|
+            build_speaker_entry(entry, words, segments)
+          end
         end
       end
     end

@@ -42,7 +42,7 @@ module Dubbing
 
         @stl&.update 'dubbing: diarizing'
         diarization = Diarizer.diarize(stems.vocals, speakers: @opts.speakers&.to_i)
-        Diarizer.assign_speakers!(transcript, diarization.segments)
+        Diarizer.assign_speakers!(transcript, diarization.segments, sentence_level: true)
 
         @stl&.update 'dubbing: translating'
         replace_sentences!(translated_sentences(transcript))

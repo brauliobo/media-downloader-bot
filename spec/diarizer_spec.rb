@@ -99,6 +99,26 @@ RSpec.describe Diarizer do
     expect(document.entries).to contain_exactly(have_attributes(text: 'Still speaking', speaker_id: 'A'))
   end
 
+  it 'assigns complete sentences by their dominant speaker without creating micro-turn fragments' do
+    document = subtitle(entry(
+      text: 'I am doing well.', start: 0.0, finish: 2.0,
+      words: [
+        word('I', 0.0, 0.5), word('am', 0.5, 0.7),
+        word('doing', 0.7, 1.2), word('well.', 1.2, 2.0),
+      ]
+    ), metadata: {'timing_source' => 'whisper'})
+    speakers = [
+      segment(0.0, 0.55, 'A'), segment(0.55, 0.65, 'B'),
+      segment(0.65, 2.0, 'A'),
+    ]
+
+    described_class.assign_speakers!(document, speakers, sentence_level: true)
+
+    expect(document.entries).to contain_exactly(
+      have_attributes(text: 'I am doing well.', start: 0.0, finish: 2.0, speaker_id: 'A')
+    )
+  end
+
   it 'prefers the segment starting at an exact boundary when overlap and distance tie' do
     document = subtitle(entry(
       text: 'Boundary', start: 1.0, finish: 1.0,
