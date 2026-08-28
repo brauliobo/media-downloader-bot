@@ -74,12 +74,14 @@ module Dubbing
       end
 
       def schedule_clip(idx)
-        clip          = @clips[idx]
-        clip_duration = @clip_durations[idx]
-        start         = clip.start.to_f - @before[idx]
-        available     = @speech_limits[idx] + @before[idx] + @after[idx]
-        speed         = fit_speed(clip_duration, available)
-        finish        = start + clip_duration / speed
+        clip              = @clips[idx]
+        clip_duration     = @clip_durations[idx]
+        slot_start        = clip.start.to_f - @before[idx]
+        available         = @speech_limits[idx] + @before[idx] + @after[idx]
+        speed             = fit_speed(clip_duration, available)
+        rendered_duration = clip_duration / speed
+        start             = slot_start + (available - rendered_duration) / 2.0
+        finish            = start + rendered_duration
 
         ScheduledClip.new(path: clip.path, start: start, end: finish, speed: speed)
       end

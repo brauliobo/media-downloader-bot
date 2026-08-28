@@ -36,7 +36,7 @@ RSpec.describe Dubbing::Audio do
     expect(scheduled.last.speed).to eq(1.0)
   end
 
-  it 'keeps shorter speech at its natural speed' do
+  it 'centers shorter speech in its source interval at natural speed' do
     first = described_class::Clip.new(path: File.join(dir, 'first.wav'), start: 0.0, end: 2.0)
     second = described_class::Clip.new(path: File.join(dir, 'second.wav'), start: 3.0, end: 4.0)
     probe_duration first.path, 1.0
@@ -45,7 +45,19 @@ RSpec.describe Dubbing::Audio do
     scheduled = described_class.schedule([first, second], duration: 5.0)
 
     expect(scheduled.first.speed).to eq(1.0)
-    expect(scheduled.first.end).to eq(1.0)
+    expect([scheduled.first.start, scheduled.first.end]).to eq([0.5, 1.5])
+    expect([scheduled.last.start, scheduled.last.end]).to eq([2.0, 4.0])
+  end
+
+  it 'centers shorter speech inside the source interval available before the video ends' do
+    clip = described_class::Clip.new(path: File.join(dir, 'speech.wav'), start: 4.0, end: 6.0)
+    probe_duration clip.path, 0.4
+
+    scheduled = described_class.schedule([clip], duration: 5.0)
+
+    expect(scheduled.first.speed).to eq(1.0)
+    expect(scheduled.first.start).to be_within(0.001).of(4.3)
+    expect(scheduled.first.end).to be_within(0.001).of(4.7)
   end
 
   it 'keeps every sentence from a multi-sentence subtitle at or above natural speed' do
