@@ -75,7 +75,7 @@ RSpec.describe Translator::HyMT2 do
     backend.translate_for_dubbing('Keep moving.', from: 'en', to: 'pt')
   end
 
-  it 'provides adjacent dialogue to disambiguate dubbing translations' do
+  it 'isolates each dubbing translation from adjacent dialogue' do
     prompts = []
     allow(Utils::HTTP).to receive(:post) do |_url, body, _headers|
       prompts << JSON.parse(body).dig('messages', 0, 'content')
@@ -93,10 +93,9 @@ RSpec.describe Translator::HyMT2 do
     )
 
     prompt = prompts.find { |value| value.include?("Main dialogue:\nI think those goals were very smart.") }
-    expect(prompt).to include(
-      'Previous: My main objective is to gain more experience.',
-      'Next: I hope to earn between 35,000 and 38,000 a year.',
-      'Translate only the main dialogue, not the context.'
+    expect(prompt).not_to include(
+      'My main objective is to gain more experience.',
+      'I hope to earn between 35,000 and 38,000 a year.'
     )
   end
 

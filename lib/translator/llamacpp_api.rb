@@ -18,7 +18,6 @@ class Translator
       translations = translate_concurrently(
         texts,
         to:      to,
-        context: texts,
         dubbing: true
       )
       _text.is_a?(String) ? translations.first : translations
@@ -26,14 +25,13 @@ class Translator
 
     private
 
-    def translate_concurrently(texts, to:, context: nil, dubbing: false)
+    def translate_concurrently(texts, to:, dubbing: false)
       return [] if texts.empty?
 
       translations = Array.new(texts.size)
       texts.each_with_index.peach(reraise: true) do |text, idx|
-        nearby   = context && context_for(context, idx)
-        prompt   = if dubbing
-          dubbing_translation_prompt(text, to: to, context: nearby)
+        prompt = if dubbing
+          dubbing_translation_prompt(text, to: to)
         else
           translation_prompt(text, to: to)
         end
@@ -41,13 +39,6 @@ class Translator
       end
 
       translations
-    end
-
-    def context_for(texts, index)
-      nearby = []
-      nearby << "Previous: #{texts[index - 1]}" if index.positive?
-      nearby << "Next: #{texts[index + 1]}" if index < texts.length - 1
-      nearby.join("\n").presence
     end
 
     def chat_completion(prompt)
@@ -69,14 +60,13 @@ class Translator
       PROMPT
     end
 
-    def dubbing_translation_prompt(text, to:, context: nil)
+    def dubbing_translation_prompt(text, to:)
       <<~PROMPT.strip
         Translate all of the following dialogue faithfully and completely into natural spoken #{target_language_name(to)} for dubbing by meaning and context, not word-for-word. Avoid false cognates or unrelated meanings.
-        Resolve ambiguous words using the main dialogue and nearby dialogue when provided. Translate only the main dialogue, not the context.
         Do not summarize, condense, shorten, or omit any information. Preserve every distinct statement, qualifier, repetition, name, and number.
         Output only the translated dialogue itself; do not add a label, acknowledgement, quotation, or explanation:
 
-        #{context ? "Nearby dialogue for context:\n#{context}\n\n" : ''}Main dialogue:
+        Main dialogue:
         #{text}
       PROMPT
     end
