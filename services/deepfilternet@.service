@@ -1,0 +1,36 @@
+[Unit]
+Description=DeepFilterNet voice separation backend on GPU %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+SyslogIdentifier=deepfilternet-gpu%i
+User=braulio
+Nice=19
+UMask=0077
+
+WorkingDirectory=/srv/DeepFilterNet
+Environment=CUDA_VISIBLE_DEVICES=%i
+Environment=DEEPFILTER_DEVICE=cuda
+Environment=DEEPFILTER_MODEL=DeepFilterNet3
+Environment=XDG_CACHE_HOME=/var/cache/deepfilternet-%i
+Environment=PYTHONDONTWRITEBYTECODE=1
+CacheDirectory=deepfilternet-%i
+RuntimeDirectory=deepfilternet-%i
+ExecCondition=/usr/bin/test %i -eq 0
+ExecStart=/srv/DeepFilterNet/runtime/bin/python -m uvicorn deepfilternet_service:app --app-dir /home/braulio/Projects/media-downloader-bot/services/voice_separation --host 127.0.0.1 --port 8088 --workers 1
+ExecStartPost=/usr/bin/curl --fail --silent --show-error --retry 300 --retry-delay 2 --retry-connrefused --retry-all-errors --retry-max-time 600 --max-time 2 http://127.0.0.1:8088/health/ready
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+Restart=always
+RestartSec=30
+TimeoutStartSec=12min
+TimeoutStopSec=2min
+
+[Install]
+WantedBy=multi-user.target

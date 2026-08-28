@@ -98,3 +98,27 @@ sudo systemctl enable --now mdx-net@0.service
 Select it per process with `VOICE_SEPARATOR=MDXNet`; this leaves the
 default Demucs backend unchanged. Use `MDX_SERVER` to change its
 endpoint.
+
+## DeepFilterNet (opt-in)
+
+DeepFilterNet3 is available as an opt-in speech enhancer. It treats the
+enhanced signal as `vocals.wav` and the residual as `no_vocals.wav`. It
+listens on `http://127.0.0.1:8088` and is reserved for physical GPU 0. Do
+not enable it together with `bs-roformer@0`, `spleeter@0`, or `mdx-net@0`.
+
+Install the cloned runtime under `/srv`:
+
+```sh
+git clone https://github.com/Rikorose/DeepFilterNet.git /srv/DeepFilterNet
+cd /srv/DeepFilterNet
+uv venv --python 3.11 runtime
+UV_PYTHON=runtime/bin/python uv pip install torch==2.5.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+UV_PYTHON=runtime/bin/python uv pip install deepfilternet fastapi uvicorn python-multipart setproctitle soundfile
+sudo cp ~/Projects/media-downloader-bot/services/deepfilternet@.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now deepfilternet@0.service
+```
+
+Select it per process with `VOICE_SEPARATOR=DeepFilterNet`; this leaves the
+default Demucs backend unchanged. Use `DEEPFILTER_SERVER` to change its
+endpoint.

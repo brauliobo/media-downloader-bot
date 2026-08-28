@@ -5,6 +5,7 @@ require_relative 'voice_separator/demucs'
 require_relative 'voice_separator/bs_roformer'
 require_relative 'voice_separator/spleeter'
 require_relative 'voice_separator/mdx_net'
+require_relative 'voice_separator/deep_filter_net'
 
 class VoiceSeparator
   Stems = Data.define(:vocals, :non_vocals)
