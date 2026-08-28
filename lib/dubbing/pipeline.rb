@@ -75,9 +75,8 @@ module Dubbing
     def translated_sentences(subtitle)
       sentences = subtitle.sentence_entries
       texts     = sentences.map(&:text)
-      durations = sentences.map { |sentence| sentence.finish - sentence.start }
       translations = if ::Translator.respond_to?(:translate_for_dubbing)
-        Array(::Translator.translate_for_dubbing(texts, from: source_lang, to: target_lang, durations: durations))
+        Array(::Translator.translate_for_dubbing(texts, from: source_lang, to: target_lang))
       else
         Array(::Translator.translate(texts, from: source_lang, to: target_lang))
       end

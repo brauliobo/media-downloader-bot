@@ -59,14 +59,20 @@ RSpec.describe Translator::HyMT2 do
     expect(result).to eq(['translated: first', 'translated: second'])
   end
 
-  it 'requests concise spoken translations for each dubbing interval' do
+  it 'requests complete spoken translations without shortening them to fit a duration' do
     expect(Utils::HTTP).to receive(:post) do |_url, body, _headers|
       prompt = JSON.parse(body).dig('messages', 0, 'content')
-      expect(prompt).to include('concise, natural spoken Brazilian Portuguese', 'about 2.5 seconds', 'Keep moving.')
+      expect(prompt).to include(
+        'faithfully and completely into natural spoken Brazilian Portuguese',
+        'Do not summarize, condense, shorten, or omit any information.',
+        'Preserve every distinct statement, qualifier, repetition, name, and number.',
+        'Keep moving.'
+      )
+      expect(prompt).not_to include('concise', 'brief wording', 'seconds')
       response
     end
 
-    backend.translate_for_dubbing('Keep moving.', from: 'en', to: 'pt', durations: 2.5)
+    backend.translate_for_dubbing('Keep moving.', from: 'en', to: 'pt')
   end
 
   it 'provides adjacent dialogue to disambiguate dubbing translations' do
@@ -82,9 +88,8 @@ RSpec.describe Translator::HyMT2 do
         'I think those goals were very smart.',
         'I hope to earn between 35,000 and 38,000 a year.',
       ],
-      from:      'en',
-      to:        'pt',
-      durations: [2.0, 2.5, 2.0]
+      from: 'en',
+      to:   'pt'
     )
 
     prompt = prompts.find { |value| value.include?("Main dialogue:\nI think those goals were very smart.") }

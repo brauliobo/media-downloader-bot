@@ -13,28 +13,27 @@ class Translator
       _text.is_a?(String) ? translations.first : translations
     end
 
-    def translate_for_dubbing(_text, to:, from: nil, durations:)
+    def translate_for_dubbing(_text, to:, from: nil)
       texts        = Array.wrap(_text)
       translations = translate_concurrently(
         texts,
-        to:        to,
-        durations: Array.wrap(durations),
-        context:   texts
+        to:      to,
+        context: texts,
+        dubbing: true
       )
       _text.is_a?(String) ? translations.first : translations
     end
 
     private
 
-    def translate_concurrently(texts, to:, durations: nil, context: nil)
+    def translate_concurrently(texts, to:, context: nil, dubbing: false)
       return [] if texts.empty?
 
       translations = Array.new(texts.size)
       texts.each_with_index.peach(reraise: true) do |text, idx|
-        duration = durations&.fetch(idx)
         nearby   = context && context_for(context, idx)
-        prompt   = if duration
-          dubbing_translation_prompt(text, to: to, duration: duration, context: nearby)
+        prompt   = if dubbing
+          dubbing_translation_prompt(text, to: to, context: nearby)
         else
           translation_prompt(text, to: to)
         end
@@ -70,11 +69,11 @@ class Translator
       PROMPT
     end
 
-    def dubbing_translation_prompt(text, to:, duration:, context: nil)
+    def dubbing_translation_prompt(text, to:, context: nil)
       <<~PROMPT.strip
-        Translate the following dialogue into concise, natural spoken #{target_language_name(to)} for dubbing by meaning and context, not word-for-word. Avoid false cognates or unrelated meanings.
+        Translate all of the following dialogue faithfully and completely into natural spoken #{target_language_name(to)} for dubbing by meaning and context, not word-for-word. Avoid false cognates or unrelated meanings.
         Resolve ambiguous words using the main dialogue and nearby dialogue when provided. Translate only the main dialogue, not the context.
-        Preserve the complete meaning, names, and numbers, but choose brief wording that can be spoken clearly in about #{format('%.1f', duration)} seconds.
+        Do not summarize, condense, shorten, or omit any information. Preserve every distinct statement, qualifier, repetition, name, and number.
         Output only the translated dialogue itself; do not add a label, acknowledgement, quotation, or explanation:
 
         #{context ? "Nearby dialogue for context:\n#{context}\n\n" : ''}Main dialogue:

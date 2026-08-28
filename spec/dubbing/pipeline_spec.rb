@@ -302,7 +302,7 @@ RSpec.describe Dubbing::Pipeline do
     pipeline.apply
 
     expect(::Translator).to have_received(:translate_for_dubbing)
-      .with(['Hello.', 'Bye.'], from: 'en', to: 'pt', durations: [1.0, 1.0])
+      .with(['Hello.', 'Bye.'], from: 'en', to: 'pt')
     expect(Dubbing::VoiceReference).to have_received(:extract_by_speaker)
       .with(
         vocals,
