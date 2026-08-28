@@ -21,12 +21,13 @@ class Subtitler
 
     def self.from_whisper_verbose_json(input)
       data = parse_json_object(input)
+      metadata = metadata_from(data, %w[language text segments]).merge('timing_source' => 'whisper')
 
       new(
         language: data['language'],
         text:     data['text'],
         entries:  fetch_array(data, 'segments').map { |entry| Entry.from_whisper(entry) },
-        metadata: metadata_from(data, %w[language text segments])
+        metadata: metadata
       )
     end
 
@@ -159,7 +160,7 @@ class Subtitler
     end
 
     def sentence_entries
-      @entries.chunk_while do |left, right|
+      sentences = @entries.chunk_while do |left, right|
         representation_and_boundary(left) == representation_and_boundary(right)
       end.flat_map do |run|
         if run.first.words.any?
@@ -172,6 +173,9 @@ class Subtitler
           run.flat_map { |entry| text_sentence_entries(entry) }
         end
       end.select { |entry| entry.finish > entry.start }
+
+      normalize_whisper_sentence_timings!(sentences) if @metadata['timing_source'] == 'whisper'
+      sentences
     end
 
     def split_long_entries!(max_chars: MAX_ENTRY_CHARS)
@@ -323,6 +327,121 @@ class Subtitler
     end
 
     private
+
+    WHISPER_COLLAPSED_TICK = 0.011
+    WHISPER_EXTREME_RATE   = 2.0
+    WHISPER_MIN_RATE_PARTS = 2
+    private_constant :WHISPER_COLLAPSED_TICK, :WHISPER_EXTREME_RATE, :WHISPER_MIN_RATE_PARTS
+
+    def normalize_whisper_sentence_timings!(sentences)
+      reliable      = sentences.reject { |sentence| collapsed_whisper_timing?(sentence) }
+      document_rate = speech_rate(reliable)
+      return unless document_rate
+
+      speaker_rates = reliable.group_by(&:speaker_id).filter_map do |speaker_id, parts|
+        next if speaker_id.nil? || parts.size < WHISPER_MIN_RATE_PARTS
+
+        rate = speech_rate(parts)
+        [speaker_id, rate] if rate
+      end.to_h
+      rates      = sentences.map { |sentence| speaker_rates.fetch(sentence.speaker_id, document_rate) }
+      candidates = sentences.zip(rates).map do |sentence, rate|
+        pathological_whisper_timing?(sentence, rate)
+      end
+      return unless candidates.any?
+
+      repair_pathological_runs!(sentences, candidates, rates)
+    end
+
+    def speech_rate(sentences)
+      words    = sentences.sum { |sentence| spoken_word_count(sentence) }
+      duration = sentences.sum { |sentence| sentence.finish - sentence.start }
+      return unless words.positive? && duration.positive?
+
+      words.to_f / duration
+    end
+
+    def pathological_whisper_timing?(sentence, average)
+      count    = spoken_word_count(sentence)
+      duration = sentence.finish - sentence.start
+      return false unless count.positive? && duration.positive?
+
+      collapsed_whisper_timing?(sentence) && count / duration > average * WHISPER_EXTREME_RATE
+    end
+
+    def collapsed_whisper_timing?(sentence)
+      words = spoken_words(sentence)
+      return false if words.empty?
+
+      collapsed = words.count { |word| word.finish - word.start <= WHISPER_COLLAPSED_TICK }
+      collapsed * 2 >= words.size
+    end
+
+    def spoken_word_count(sentence)
+      spoken_words(sentence).size
+    end
+
+    def spoken_words(sentence)
+      sentence.words.select { |word| word.text.match?(/[\p{L}\d]/) }
+    end
+
+    def repair_pathological_runs!(sentences, candidates, rates)
+      index = 0
+      while index < sentences.size
+        unless candidates.fetch(index)
+          index += 1
+          next
+        end
+
+        run_start  = index
+        speaker_id = sentences.fetch(index).speaker_id
+        index += 1 while index < sentences.size && candidates.fetch(index) &&
+          sentences.fetch(index).speaker_id == speaker_id
+        repair_pathological_run!(sentences, run_start...index, rates.fetch(run_start))
+      end
+    end
+
+    def repair_pathological_run!(sentences, range, average)
+      left       = range.begin.zero? ? 0.0 : sentences.fetch(range.begin - 1).finish
+      right      = range.end == sentences.size ? whisper_document_finish(sentences) : sentences.fetch(range.end).start
+      available  = right - left
+      run         = sentences[range]
+      word_counts = run.map { |sentence| spoken_word_count(sentence) }
+      desired     = word_counts.sum / average
+      return unless available.positive? && desired.positive?
+
+      duration    = [desired, available].min
+      midpoint    = (run.first.start + run.last.finish) / 2.0
+      start_time  = [[midpoint - duration / 2.0, left].max, right - duration].min
+      finish_time = start_time + duration
+      cursor       = start_time
+      total_words  = word_counts.sum.to_f
+
+      run.zip(word_counts).each_with_index do |(sentence, word_count), run_index|
+        finish = run_index == run.size - 1 ? finish_time : cursor + duration * word_count / total_words
+        redistribute_sentence_timing!(sentence, cursor, finish)
+        cursor = finish
+      end
+    end
+
+    def whisper_document_finish(sentences)
+      [@metadata['duration'].to_f, sentences.last.finish].max
+    end
+
+    def redistribute_sentence_timing!(sentence, start_time, finish_time)
+      words   = sentence.words
+      weights = words.map { |word| [word.text.strip.length, 1].max }
+      total   = weights.sum.to_f
+      cursor  = start_time
+
+      words.zip(weights).each_with_index do |(word, weight), index|
+        finish = index == words.size - 1 ? finish_time : cursor + (finish_time - start_time) * weight / total
+        word.replace_timing!(start: cursor, finish: finish)
+        sentence.source_words.fetch(index).replace_timing!(start: cursor, finish: finish)
+        cursor = finish
+      end
+      sentence.replace_timing!(start: start_time, finish: finish_time)
+    end
 
     def protect_srt_timestamps(lines)
       prefix = nil

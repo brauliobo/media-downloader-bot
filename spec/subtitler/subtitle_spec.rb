@@ -39,7 +39,9 @@ RSpec.describe Subtitler::Subtitle do
       subtitle = described_class.from_whisper_verbose_json(JSON.generate(input))
       entry    = subtitle.entries.first
 
-      expect(subtitle).to have_attributes(language: 'en', text: ' Hello world', metadata: {'task' => 'transcribe'})
+      expect(subtitle).to have_attributes(
+        language: 'en', text: ' Hello world', metadata: {'task' => 'transcribe', 'timing_source' => 'whisper'}
+      )
       expect(entry).to have_attributes(
         start: 0.0, finish: 1.25, text: ' Hello world', speaker_id: 2, cue_id: 'cue-7', metadata: {'id' => 7}
       )
