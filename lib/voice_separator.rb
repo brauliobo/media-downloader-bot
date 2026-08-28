@@ -3,6 +3,7 @@ require 'tmpdir'
 
 require_relative 'voice_separator/demucs'
 require_relative 'voice_separator/bs_roformer'
+require_relative 'voice_separator/spleeter'
 
 class VoiceSeparator
   Stems = Data.define(:vocals, :non_vocals)

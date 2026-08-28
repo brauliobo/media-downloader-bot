@@ -1,0 +1,36 @@
+[Unit]
+Description=Spleeter voice separation backend on GPU %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+SyslogIdentifier=spleeter-gpu%i
+User=braulio
+Nice=19
+UMask=0077
+
+WorkingDirectory=/srv/spleeter
+Environment=CUDA_VISIBLE_DEVICES=%i
+Environment=SPLEETER_DEVICE=cuda
+Environment=SPLEETER_MODEL=spleeter:2stems
+Environment=MODEL_PATH=/var/cache/spleeter-%i/pretrained_models
+Environment=PYTHONDONTWRITEBYTECODE=1
+CacheDirectory=spleeter-%i
+RuntimeDirectory=spleeter-%i
+ExecCondition=/usr/bin/test %i -eq 0
+ExecStart=/srv/spleeter/runtime/bin/python -m uvicorn spleeter_service:app --app-dir /home/braulio/Projects/media-downloader-bot/services/voice_separation --host 127.0.0.1 --port 8086 --workers 1
+ExecStartPost=/usr/bin/curl --fail --silent --show-error --retry 300 --retry-delay 2 --retry-connrefused --retry-all-errors --retry-max-time 600 --max-time 2 http://127.0.0.1:8086/health/ready
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+Restart=always
+RestartSec=30
+TimeoutStartSec=12min
+TimeoutStopSec=2min
+
+[Install]
+WantedBy=multi-user.target
