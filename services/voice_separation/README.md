@@ -75,3 +75,26 @@ sudo systemctl enable --now spleeter@0.service
 Select it per process with `VOICE_SEPARATOR=Spleeter`; this leaves the
 default Demucs backend unchanged. Use `SPLEETER_SERVER` to change its
 endpoint.
+
+## MDX-Net (opt-in)
+
+MDX-Net is available as an opt-in vocal separator using the UVR
+`Kim_Vocal_2` ONNX checkpoint via `audio-separator`. It listens on
+`http://127.0.0.1:8087` and is reserved for physical GPU 0. Do not enable
+it together with `bs-roformer@0` or `spleeter@0`.
+
+Install the cloned runtime under `/srv`:
+
+```sh
+git clone https://github.com/nomadkaraoke/python-audio-separator.git /srv/audio-separator
+cd /srv/audio-separator
+uv venv --python 3.11 runtime
+uv pip install --python runtime/bin/python -e '.[gpu]' fastapi uvicorn python-multipart setproctitle
+sudo cp ~/Projects/media-downloader-bot/services/mdx-net@.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now mdx-net@0.service
+```
+
+Select it per process with `VOICE_SEPARATOR=MDXNet`; this leaves the
+default Demucs backend unchanged. Use `MDX_SERVER` to change its
+endpoint.

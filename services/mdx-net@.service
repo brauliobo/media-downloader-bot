@@ -1,0 +1,36 @@
+[Unit]
+Description=MDX-Net voice separation backend on GPU %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+SyslogIdentifier=mdx-net-gpu%i
+User=braulio
+Nice=19
+UMask=0077
+
+WorkingDirectory=/srv/audio-separator
+Environment=CUDA_VISIBLE_DEVICES=%i
+Environment=MDX_DEVICE=cuda
+Environment=MDX_MODEL=Kim_Vocal_2.onnx
+Environment=AUDIO_SEPARATOR_MODEL_DIR=/var/cache/mdx-net-%i/models
+Environment=PYTHONDONTWRITEBYTECODE=1
+CacheDirectory=mdx-net-%i
+RuntimeDirectory=mdx-net-%i
+ExecCondition=/usr/bin/test %i -eq 0
+ExecStart=/srv/audio-separator/runtime/bin/python -m uvicorn mdx_net_service:app --app-dir /home/braulio/Projects/media-downloader-bot/services/voice_separation --host 127.0.0.1 --port 8087 --workers 1
+ExecStartPost=/usr/bin/curl --fail --silent --show-error --retry 300 --retry-delay 2 --retry-connrefused --retry-all-errors --retry-max-time 600 --max-time 2 http://127.0.0.1:8087/health/ready
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+Restart=always
+RestartSec=30
+TimeoutStartSec=12min
+TimeoutStopSec=2min
+
+[Install]
+WantedBy=multi-user.target
