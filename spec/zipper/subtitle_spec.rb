@@ -81,7 +81,7 @@ RSpec.describe Zipper::Subtitle do
     expect(described_class.prepare(zipper)).to be_nil
   end
 
-  it 'transcribes lang=/slang= from Demucs vocals without changing the source file' do
+  it 'transcribes lang=/slang= from Silero speech ranges without changing the source file' do
     opts = SymMash.new(lang: 'pt')
     Processors::Base.normalize_options(opts)
     subtitle = Subtitler::Subtitle.new(

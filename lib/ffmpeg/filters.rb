@@ -31,11 +31,11 @@ class FFmpeg
     end
 
     def cut_filters ranges, video:, audio:
-      expression = "not(#{time_ranges_expression ranges})"
-      {
-        video: video ? ["select='#{expression}'", 'setpts=N/FRAME_RATE/TB'] : [],
-        audio: audio ? ["aselect='#{expression}'", 'asetpts=N/SR/TB'] : [],
-      }
+      select_filters ranges, video: video, audio: audio, negate: true
+    end
+
+    def keep_filters ranges, video:, audio:
+      select_filters ranges, video: video, audio: audio, negate: false
     end
 
     def silence_filter ranges
@@ -125,6 +125,15 @@ class FFmpeg
     end
 
     private
+
+    def select_filters ranges, video:, audio:, negate:
+      expression = time_ranges_expression ranges
+      expression = "not(#{expression})" if negate
+      {
+        video: video ? ["select='#{expression}'", 'setpts=N/FRAME_RATE/TB'] : [],
+        audio: audio ? ["aselect='#{expression}'", 'asetpts=N/SR/TB'] : [],
+      }
+    end
 
     def edge_filter silence_threshold_db
       [

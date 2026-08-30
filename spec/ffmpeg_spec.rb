@@ -181,6 +181,10 @@ RSpec.describe FFmpeg do
         video: ["select='not(#{expression})'", 'setpts=N/FRAME_RATE/TB'],
         audio: ["aselect='not(#{expression})'", 'asetpts=N/SR/TB']
       )
+      expect(described_class.keep_filters(ranges, video: true, audio: true)).to eq(
+        video: ["select='#{expression}'", 'setpts=N/FRAME_RATE/TB'],
+        audio: ["aselect='#{expression}'", 'asetpts=N/SR/TB']
+      )
       expect(described_class.silence_filter(ranges)).to eq "volume=0:enable='#{expression}'"
     end
 
@@ -844,6 +848,29 @@ RSpec.describe FFmpeg do
         expect(commands).to eq [[
           'ffmpeg', '-loglevel', 'error', '-y', '-i', '/media/source.mp4', '-vn',
           '-ac', '1', '-ar', '24000', '-c:a', 'pcm_s16le', output
+        ]]
+      end
+    end
+
+    it 'keeps Silero speech ranges as concatenated PCM' do
+      Dir.mktmpdir do |dir|
+        output = File.join dir, 'speech.wav'
+        ranges = Utils::TimeRanges.new(
+          [
+            Utils::TimeRanges::Interval.new(start: 1.0, finish: 3.0),
+            Utils::TimeRanges::Interval.new(start: 5.0, finish: 7.5),
+          ],
+          option: :vad
+        )
+
+        expect(ffmpeg.extract_speech_ranges(
+          input: '/media/source.wav', output: output, ranges: ranges,
+          sample_rate: 16_000, channels: 1, label: 'voice range extraction failed'
+        )).to eq output
+        expect(commands).to eq [[
+          'ffmpeg', '-loglevel', 'error', '-y', '-i', '/media/source.wav', '-vn', '-af',
+          "aselect='between(t\\,1\\,3)+between(t\\,5\\,7.5)',asetpts=N/SR/TB",
+          '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', output
         ]]
       end
     end

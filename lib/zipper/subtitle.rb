@@ -48,7 +48,7 @@ class Zipper
       unless subtitle
         return unless transcription_requested?(zipper.opts)
 
-        # Demucs vocals are only for Whisper. The zipper still encodes zipper.infile.
+        # Silero VAD ranges are only for Whisper. The zipper still encodes zipper.infile.
         subtitle = Subtitler.transcribe(zipper.infile, stl: zipper.stl)
         normalize_language!(subtitle)
         subtitle.normalize_entries!
@@ -95,7 +95,7 @@ class Zipper
       transcription_requested?(opts) || opts.slang.present? || opts.subtitle || opts.sub_vtt
     end
 
-    # Whisper on the Demucs vocal stem. lang=/slang= request generation; the
+    # Whisper on Silero speech ranges. lang=/slang= request generation; the
     # original soundtrack is kept unless dubbing remuxes separated audio.
     def transcription_requested?(opts)
       return false if subtitle_mode(opts) == 'none'

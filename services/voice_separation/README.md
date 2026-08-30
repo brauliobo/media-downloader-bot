@@ -1,7 +1,8 @@
 # Voice separation service
 
-The application uses `VoiceSeparator::Demucs` by default and sends media to
-`http://127.0.0.1:8084/v1/separate`. Both backends return a ZIP containing
+Dubbing uses `VoiceSeparator::Demucs` by default and sends media to
+`http://127.0.0.1:8084/v1/separate`. Subtitling uses Silero VAD instead
+(see `services/vad/README.md`). Both Demucs backends return a ZIP containing
 `vocals.wav` and `no_vocals.wav`. Set `DEMUCS_SERVER` to change the Demucs
 endpoint.
 

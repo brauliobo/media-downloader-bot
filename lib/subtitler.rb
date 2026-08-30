@@ -1,6 +1,6 @@
 require 'iso-639'
 
-require_relative 'voice_separator'
+require_relative 'voice_activity'
 
 require_relative 'subtitler/timestamps'
 require_relative 'subtitler/subtitle'
@@ -12,7 +12,7 @@ require_relative 'subtitler/vtt'
 require_relative 'subtitler/ass'
 
 class Subtitler
-  STATUS_SEPARATING   = 'separating voice'
+  STATUS_DETECTING    = 'detecting voice'
   STATUS_TRANSCRIBING = 'transcribing'
 
   BACKEND_CLASS = const_get ENV['SUBTITLER'].to_sym if ENV['SUBTITLER']
@@ -22,10 +22,12 @@ class Subtitler
   def self.transcribe(path, separate_voice: true, stl: nil, **options)
     return transcribe_with_backend(path, **options) unless separate_voice
 
-    stl&.update STATUS_SEPARATING
-    VoiceSeparator.with_stems(path) do |stems|
+    stl&.update STATUS_DETECTING
+    VoiceActivity.with_speech(path) do |speech, ranges|
+      next Subtitle.new if speech.nil?
+
       stl&.update STATUS_TRANSCRIBING
-      transcribe_with_backend(stems.vocals, **options)
+      VoiceActivity.restore_timing!(transcribe_with_backend(speech, **options), ranges)
     end
   end
 

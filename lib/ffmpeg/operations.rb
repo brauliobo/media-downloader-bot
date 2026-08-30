@@ -17,6 +17,18 @@ class FFmpeg
     end
   end
 
+  def extract_speech_ranges input:, output:, ranges:, sample_rate:, channels:, label:
+    run_one_shot profile: :extract, label: label do |builder|
+      builder.input input
+      builder.disable :video
+      builder.select_intervals FFmpeg.time_ranges_expression(ranges), stream: :audio
+      builder.channels channels
+      builder.sample_rate sample_rate
+      builder.codec 'pcm_s16le', stream: :audio
+      builder.output output
+    end
+  end
+
   def transcribe_wav input:, output:, label:
     run_one_shot profile: :overwrite, label: label do |builder|
       builder.input input
@@ -197,7 +209,7 @@ class FFmpeg
     end
   end
 
-  public :extract_audio, :transcribe_wav, :convert_subtitle, :remux_audio,
+  public :extract_audio, :extract_speech_ranges, :transcribe_wav, :convert_subtitle, :remux_audio,
          :extract_copy_audio, :normalize_dub_audio, :render_dub_timeline, :create_dub_silence,
          :mux_dubbed_audio, :concat_audio, :create_silence, :add_audio_floor,
          :speed_audio, :audio_to_wav

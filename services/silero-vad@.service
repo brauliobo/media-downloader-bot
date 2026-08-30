@@ -1,0 +1,35 @@
+[Unit]
+Description=Silero VAD backend on GPU %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+SyslogIdentifier=silero-vad-gpu%i
+User=braulio
+Nice=19
+UMask=0077
+
+WorkingDirectory=/home/braulio/Projects/silero-vad
+Environment=CUDA_VISIBLE_DEVICES=%i
+Environment=SILERO_VAD_DEVICE=cuda
+Environment=TORCH_HOME=/var/cache/silero-vad-%i/torch
+Environment=PYTHONDONTWRITEBYTECODE=1
+CacheDirectory=silero-vad-%i
+RuntimeDirectory=silero-vad-%i
+ExecCondition=/usr/bin/test %i -eq 1
+ExecStart=/home/braulio/Projects/silero-vad/runtime/bin/python -m uvicorn silero_service:app --app-dir /home/braulio/Projects/media-downloader-bot/services/vad --host 127.0.0.1 --port 8089 --workers 1
+ExecStartPost=/usr/bin/curl --fail --silent --show-error --retry 300 --retry-delay 2 --retry-connrefused --retry-all-errors --retry-max-time 600 --max-time 2 http://127.0.0.1:8089/health/ready
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+Restart=always
+RestartSec=30
+TimeoutStartSec=12min
+TimeoutStopSec=2min
+
+[Install]
+WantedBy=multi-user.target
