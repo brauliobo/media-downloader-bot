@@ -1,3 +1,5 @@
+require_relative '../utils/stats'
+
 module Dubbing
   module TimingScore
     VERSION = 1
@@ -24,32 +26,18 @@ module Dubbing
       {
         version:                    VERSION,
         sentence_count:             pairs.size,
-        deviation_index:            rms(tempo_deviations) * 100,
-        slot_deviation_ms:           rms(slot_errors) * 1000,
-        tempo_deviation_mean:        mean(tempo_deviations) * 100,
-        tempo_deviation_p90:         percentile(tempo_deviations, 0.9) * 100,
+        deviation_index:            Utils::Stats.rms(tempo_deviations) * 100,
+        slot_deviation_ms:           Utils::Stats.rms(slot_errors) * 1000,
+        tempo_deviation_mean:        Utils::Stats.mean(tempo_deviations) * 100,
+        tempo_deviation_p90:         Utils::Stats.percentile(tempo_deviations, 0.9) * 100,
         speed_min:                   speeds.min,
-        speed_p10:                   percentile(speeds, 0.1),
-        speed_median:                percentile(speeds, 0.5),
-        speed_p90:                   percentile(speeds, 0.9),
+        speed_p10:                   Utils::Stats.percentile(speeds, 0.1),
+        speed_median:                Utils::Stats.percentile(speeds, 0.5),
+        speed_p90:                   Utils::Stats.percentile(speeds, 0.9),
         speed_max:                   speeds.max,
         worst_sentences:             sentences.max_by(10) { |sentence| sentence.fetch(:deviation) },
       }
     end
 
-    def mean(values)
-      values.empty? ? 0.0 : values.sum.fdiv(values.size)
-    end
-
-    def rms(values)
-      Math.sqrt(mean(values.map { |value| value**2 }))
-    end
-
-    def percentile(values, ratio)
-      return 0.0 if values.empty?
-
-      sorted = values.sort
-      sorted[[(sorted.size * ratio).ceil - 1, 0].max]
-    end
   end
 end

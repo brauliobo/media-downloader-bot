@@ -1,4 +1,5 @@
 require_relative '../ffmpeg'
+require_relative '../utils/stats'
 
 module Audio
 end
@@ -105,8 +106,8 @@ class Audio::Quality
     stdout, stderr = ffmpeg.analyze_audio path, kind: :frame_signal
     levels   = frame_levels("#{stdout}\n#{stderr}")
     interior = levels.size > 2 ? levels[1...-1] : levels
-    quiet    = percentile(interior, 0.1)
-    speech   = percentile(interior, 0.9)
+    quiet    = Utils::Stats.percentile(interior, 0.1)
+    speech   = Utils::Stats.percentile(interior, 0.9)
     {
       estimated_noise_floor_db: quiet,
       estimated_snr_db:         (speech - quiet).round(6),
@@ -162,11 +163,6 @@ class Audio::Quality
     raise 'audio frame signal analysis returned no RMS levels' if levels.empty?
 
     levels
-  end
-
-  def percentile(values, ratio)
-    sorted = values.sort
-    sorted[[(sorted.size * ratio).ceil - 1, 0].max]
   end
 
   def issue(code, metric_name, observed, threshold, severity: 'error')
