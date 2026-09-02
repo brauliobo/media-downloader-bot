@@ -139,6 +139,44 @@ RSpec.describe Dubbing::Audio do
     expect(scheduled.last.start).to eq(2.0)
   end
 
+  it 'caps a sentence at its speaker pace and overruns into the slack ahead of it' do
+    clips = [[0.0, 4.0, 4.0], [4.0, 8.0, 4.0], [8.0, 9.0, 1.5], [9.0, 13.0, 2.0]].map.with_index do |(start, finish, length), idx|
+      path = File.join(dir, "sentence-#{idx}.wav")
+      probe_duration path, length
+      described_class::Clip.new(path: path, start: start, end: finish)
+    end
+
+    scheduled = described_class.schedule(clips, duration: 13.0)
+
+    expect(scheduled[2].speed).to be_within(0.001).of(1.15)
+    expect(scheduled[2].end).to be_within(0.001).of(9.304)
+    expect(scheduled[3].start).to be >= scheduled[2].end
+  end
+
+  it 'allows a faster speaker the pace it already sustains' do
+    slow = [['a', 0.0, 4.0, 4.0], ['a', 4.0, 8.0, 4.0], ['a', 8.0, 9.0, 1.5]]
+    fast = [['b', 9.0, 13.0, 5.6], ['b', 13.0, 17.0, 5.6], ['b', 17.0, 18.0, 1.5]]
+    clips = (slow + fast).map.with_index do |(speaker, start, finish, length), idx|
+      path = File.join(dir, "sentence-#{idx}.wav")
+      probe_duration path, length
+      described_class::Clip.new(path: path, start: start, end: finish, speaker_id: speaker)
+    end
+
+    scheduled = described_class.schedule(clips, duration: 18.0)
+
+    expect(scheduled[2].speed).to be_within(0.001).of(1.15)
+    expect(scheduled[5].speed).to be_within(0.001).of(1.5)
+  end
+
+  it 'never compresses a sentence past the intelligible maximum' do
+    clip = described_class::Clip.new(path: File.join(dir, 'speech.wav'), start: 0.0, end: 1.0)
+    probe_duration clip.path, 8.0
+
+    scheduled = described_class.schedule([clip], duration: 1.0)
+
+    expect(scheduled.first.speed).to eq(2.0)
+  end
+
   it 'normalizes the rendered dialogue mix to broadcast speech loudness' do
     input  = File.join(dir, 'input.wav')
     output = File.join(dir, 'output.wav')

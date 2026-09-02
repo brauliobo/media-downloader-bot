@@ -96,7 +96,9 @@ module Dubbing
         fit = File.join(@workdir, format('sentence-%04d.fit.wav', idx + 1))
         Audio.normalize(job.fetch(:out_path), fit)
         sentence = @sentences.fetch(idx)
-        clips[idx] = Audio::Clip.new(path: fit, start: sentence.start.to_f, end: sentence.finish.to_f)
+        clips[idx] = Audio::Clip.new(
+          path: fit, start: sentence.start.to_f, end: sentence.finish.to_f, speaker_id: sentence.speaker_id
+        )
         progress.advance
       end
     end
