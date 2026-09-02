@@ -159,6 +159,32 @@ RSpec.describe 'Audiobook OCR language detection' do
     end
   end
 
+  it 'names translated uploads after the title and the author' do
+    Dir.mktmpdir do |dir|
+      yaml  = File.join(dir, 'Reasons.yml')
+      pdf   = File.join(dir, 'Reasons.pt.pdf')
+      audio = File.join(dir, 'Reasons.m4a')
+      [yaml, pdf, audio].each { |path| File.write(path, 'x') }
+      book = Audiobook::Book.allocate
+      book.instance_variable_set(:@translated, true)
+      book.instance_variable_set(:@metadata, SymMash.new(title: '32 motivos', author: 'Mark Grenon', language: 'pt'))
+      allow(book).to receive(:thumb).and_return(nil)
+      allow(Audiobook).to receive(:base_from_source).and_return('Reasons')
+      allow(Audiobook).to receive(:generate).and_return(
+        SymMash.new(yaml: yaml, audio: audio, translation_pdf: pdf, book: book)
+      )
+      allow(Prober).to receive(:for)
+
+      uploads = Audiobook.generate_uploads('Reasons.pdf', dir: dir, stl: nil)
+
+      expect(uploads.map { |upload| File.basename(upload.fn_out) }).to eq([
+        '32 motivos - Mark Grenon.yml',
+        '32 motivos - Mark Grenon.pt.pdf',
+        '32 motivos - Mark Grenon.m4a',
+      ])
+    end
+  end
+
   it 'writes a translation PDF next to the yaml for a translated PDF' do
     Dir.mktmpdir do |dir|
       path  = File.join(dir, 'book.pdf')

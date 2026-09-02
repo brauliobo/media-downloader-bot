@@ -128,12 +128,13 @@ module Bot
         FileUtils.mkdir_p(album_proxy_root)
         safe_dir      = Dir.mktmpdir('mdb-album-proxy-', album_proxy_root)
         cleanup_paths = [safe_dir]
-        safe_uploads  = Array(uploads).map do |upload|
+        safe_uploads  = Array(uploads).each_with_index.map do |upload, index|
           payload = upload_payload(upload)
           source  = payload[:fn_out]
           next payload unless source && File.exist?(source)
 
-          safe_path = safe_album_path(source, safe_dir)
+          safe_path = safe_album_path(source, safe_dir, index)
+          FileUtils.mkdir_p(File.dirname(safe_path))
           FileUtils.cp(source, safe_path)
           payload.merge(fn_out: safe_path)
         end
@@ -141,8 +142,9 @@ module Bot
         [safe_uploads, cleanup_paths]
       end
 
-      def safe_album_path(source, dir)
-        File.join(dir, "#{Process.pid}-#{Time.now.to_f.to_s.tr('.', '')}-#{File.basename(source)}")
+      # Telegram names the upload after the file, so only the directory carries the unique part.
+      def safe_album_path(source, dir, index)
+        File.join(dir, index.to_s, File.basename(source))
       end
 
       def album_proxy_root

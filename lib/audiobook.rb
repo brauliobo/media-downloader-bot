@@ -120,7 +120,7 @@ module Audiobook
   end
 
   def self.relocate_translated_outputs(result, title)
-    base = safe_filename(title)
+    base = safe_filename([title, upload_author(result.book).presence].compact.join(' - '))
     return result unless base.present?
 
     lang = book_language(result.book)
