@@ -236,7 +236,7 @@ RSpec.describe Dubbing::Pipeline do
     output = described_class.apply(input, dir: dir, opts: SymMash.new(dub: 1), stl: status, probe: probe)
 
     expect(output).to eq(input)
-    expect(Subtitler).to have_received(:transcribe).with(vocals, separate_voice: false)
+    expect(Subtitler).to have_received(:transcribe).with(vocals)
   end
 
   it 'skips diarization when the source transcript has no usable entries' do

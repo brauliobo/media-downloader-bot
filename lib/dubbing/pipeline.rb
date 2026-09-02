@@ -34,7 +34,7 @@ module Dubbing
       @stl&.update 'dubbing: separating voice'
       VoiceSeparator.with_stems(@input_path, dir: @dir) do |stems|
         @stl&.update 'dubbing: transcribing'
-        transcript = Subtitler.transcribe(stems.vocals, separate_voice: false)
+        transcript = Subtitler.transcribe(stems.vocals)
         @transcript_output = transcript
         @source_lang = transcript.language
         next @input_path if @source_lang.present? && @source_lang == target_lang
