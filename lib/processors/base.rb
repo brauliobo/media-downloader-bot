@@ -22,7 +22,7 @@ module Processors
 
     def initialize(ctx)
       @ctx = ctx
-      @ctx.tmp ||= Dir.mktmpdir('input-', ctx.dir)
+      @ctx.tmp ||= Utils::Tmp.dir('input-', ctx.dir)
       @stl = ctx.stl
       
       parse_input if ctx.msg || ctx.line

@@ -1,5 +1,5 @@
 require 'addressable/uri'
-require 'tmpdir'
+require_relative 'utils/tmp'
 require 'fileutils'
 require 'set'
 require 'yaml'
@@ -146,7 +146,7 @@ module Audiobook
     return unless pdf_path && File.file?(pdf_path)
 
     capture_dir = File.realpath(File.dirname(pdf_path))
-    tmp_root    = File.realpath(Dir.tmpdir)
+    tmp_root    = File.realpath(Utils::Tmp.root)
     return unless File.basename(capture_dir).start_with?('kindle_shots_')
     return unless capture_dir.start_with?("#{tmp_root}#{File::SEPARATOR}")
 

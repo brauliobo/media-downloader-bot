@@ -41,7 +41,7 @@ class Worker
   attr_reader :job_id
 
   class_attribute :tmpdir
-  self.tmpdir = ENV['TMPDIR'] || Dir.tmpdir
+  self.tmpdir = Utils::Tmp.root
 
   class_attribute :workdir_path
   class_attribute :skip_cleanup
@@ -73,7 +73,7 @@ class Worker
 
   def workdir &block
     cancelled = false
-    @dir = workdir_path || Dir.mktmpdir("mdb-", tmpdir)
+    @dir = workdir_path || Utils::Tmp.dir('mdb-', tmpdir)
     yield @dir
   rescue Bot::JobCancelled
     cancelled = true

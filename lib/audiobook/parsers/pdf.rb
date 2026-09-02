@@ -1,5 +1,5 @@
 require 'nokogiri'
-require 'tmpdir'
+require_relative '../../utils/tmp'
 require_relative 'base'
 require_relative '../cover'
 require_relative '../page_selection'
@@ -246,7 +246,7 @@ module Audiobook
       end
 
       def self.pdftohtml_xml(pdf_path, first_page:, last_page:)
-        Dir.mktmpdir('pdf-xml-') do |dir|
+        Utils::Tmp.dir('pdf-xml-') do |dir|
           output = File.join(dir, 'doc')
           _out, stderr, status = Sh.run [
             pdftohtml_bin, '-xml', '-i', '-q', '-nodrm',

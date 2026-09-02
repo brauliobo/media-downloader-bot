@@ -2,7 +2,7 @@ require 'drb/drb'
 require 'faraday'
 require 'fileutils'
 require 'json'
-require 'tmpdir'
+require_relative '../../utils/tmp'
 require_relative '../msg_helpers'
 
 module Bot
@@ -126,7 +126,7 @@ module Bot
 
       def safe_album_uploads(uploads)
         FileUtils.mkdir_p(album_proxy_root)
-        safe_dir      = Dir.mktmpdir('mdb-album-proxy-', album_proxy_root)
+        safe_dir      = Utils::Tmp.dir('mdb-album-proxy-', album_proxy_root)
         cleanup_paths = [safe_dir]
         safe_uploads  = Array(uploads).each_with_index.map do |upload, index|
           payload = upload_payload(upload)

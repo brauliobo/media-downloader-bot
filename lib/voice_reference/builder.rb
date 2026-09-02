@@ -1,7 +1,7 @@
 require 'json'
 require 'digest'
 require 'fileutils'
-require 'tmpdir'
+require_relative '../utils/tmp'
 
 require_relative '../ffmpeg'
 require_relative 'transcript_quality'
@@ -64,7 +64,7 @@ class VoiceReference
     end
 
     def validated_candidate(candidates, output, sources:, prepared:)
-      Dir.mktmpdir('voice-reference-validation-') do |dir|
+      Utils::Tmp.dir('voice-reference-validation-') do |dir|
         selected = Array(candidates).first(MAX_VALIDATION_CANDIDATES)
         selected.each_with_index do |candidate, index|
           on_status&.call("Validating voice reference #{index + 1}/#{selected.size}")

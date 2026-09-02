@@ -1,6 +1,6 @@
 require 'json'
 require 'fileutils'
-require 'tmpdir'
+require_relative '../../utils/tmp'
 require 'digest'
 require 'puppeteer'
 require_relative 'base'
@@ -12,7 +12,7 @@ module Audiobook
       # Extracts data by driving Chromium via puppeteer-ruby.
       # Subclasses can override capture_screenshots if needed.
       def self.extract_data(target_url, stl: nil, opts: nil, **_kwargs)
-        out_dir = Dir.mktmpdir('kindle_shots_')
+        out_dir = Utils::Tmp.dir('kindle_shots_')
         begin
           stl&.update "Launching capture and navigating..."
           screenshots = capture_screenshots(

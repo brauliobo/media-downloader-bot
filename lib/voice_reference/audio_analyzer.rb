@@ -1,4 +1,4 @@
-require 'tmpdir'
+require_relative '../utils/tmp'
 
 require_relative '../audio'
 require_relative '../ffmpeg'
@@ -23,7 +23,7 @@ class VoiceReference
     end
 
     def measure(candidate)
-      Dir.mktmpdir('voice-reference-') do |dir|
+      Utils::Tmp.dir('voice-reference-') do |dir|
         clip = File.join(dir, 'candidate.wav')
         extract_raw(candidate, clip)
         metrics = quality.signal(clip)

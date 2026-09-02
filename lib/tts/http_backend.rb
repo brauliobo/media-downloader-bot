@@ -77,7 +77,7 @@ class TTS
       clean_text = text.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
       segments = self.segment ? segment_text(clean_text, self.segment_chars) : [clean_text]
 
-      Dir.mktmpdir do |dir|
+      Utils::Tmp.dir('tts-') do |dir|
         wavs = []
         segments.each_with_index do |payload, idx|
           wavs << synth_segment(agent, url, payload, lang, speaker_wav, kwargs, dir, idx + 1)

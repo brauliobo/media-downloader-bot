@@ -2,7 +2,6 @@ require 'drb/drb'
 require 'faraday'
 require 'fileutils'
 require 'json'
-require 'tmpdir'
 
 require_relative '../worker'
 require_relative 'concerns/edit_posts/capture_service'

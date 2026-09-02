@@ -52,7 +52,7 @@ class Zipper
 
     builder = ffmpeg || ffmpeg_factory&.call || FFmpeg.new
     signatures = inputs.map { |input| Prober.audio_signature input, ffmpeg: builder }
-    Dir.mktmpdir do |dir|
+    Utils::Tmp.dir('concat-') do |dir|
       listfile = File.join dir, 'concat.txt'
       File.write listfile, inputs.map { |path| Utils::Safety.concat_manifest_path path }.join("\n")
 

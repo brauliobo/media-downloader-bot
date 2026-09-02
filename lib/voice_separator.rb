@@ -1,5 +1,5 @@
 require 'fileutils'
-require 'tmpdir'
+require_relative 'utils/tmp'
 
 require_relative 'voice_separator/demucs'
 require_relative 'voice_separator/bs_roformer'
@@ -16,7 +16,7 @@ class VoiceSeparator
   end
 
   def self.with_stems(path, dir: nil)
-    workdir = Dir.mktmpdir('voice-separation-', dir)
+    workdir = Utils::Tmp.dir('voice-separation-', dir)
     yield separate(path, dir: workdir)
   ensure
     FileUtils.remove_entry(workdir) if workdir && Dir.exist?(workdir)

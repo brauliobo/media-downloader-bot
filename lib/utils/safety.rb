@@ -1,6 +1,6 @@
 require 'ipaddr'
 require 'resolv'
-require 'tmpdir'
+require_relative 'tmp'
 require 'uri'
 
 module Utils
@@ -25,7 +25,7 @@ module Utils
     end
 
     def contained_path(dir, name, fallback: 'file')
-      root = File.expand_path(dir || Dir.tmpdir)
+      root = File.expand_path(dir || Tmp.root)
       file = File.expand_path(basename(name, fallback: fallback), root)
       raise ArgumentError, "path escapes #{root}" unless inside?(file, root)
       file

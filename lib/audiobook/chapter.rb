@@ -1,4 +1,4 @@
-require 'tmpdir'
+require_relative '../utils/tmp'
 
 require_relative 'audio_files'
 require_relative 'pauses'
@@ -30,7 +30,7 @@ module Audiobook
         raise "chapter audio not found: #{chapter.audio}" unless File.size?(chapter.audio)
       end
 
-      Dir.mktmpdir('audiobook-chapters-') do |dir|
+      Utils::Tmp.dir('audiobook-chapters-') do |dir|
         pause = pause_file(chapters.first.audio, dir, amplitude: pause_amplitude) if chapters.size > 1
         inputs = chapters.each_with_index.flat_map do |chapter, index|
           [index.positive? ? pause : nil, chapter.audio].compact

@@ -1,7 +1,6 @@
 #!/usr/bin/env ruby
 
 require 'json'
-require 'tmpdir'
 require 'uri'
 
 source_url = ARGV.first if ARGV.first&.match?(%r{\Ahttps?://}i)
@@ -79,7 +78,6 @@ reference_text = opts[:ref_text] || read_value(opts[:ref_text_file]) ||
   opts[:reference_text] || read_value(opts[:reference_text_file])
 raise ArgumentError, 'output= is not supported; results are written to stdout' if opts[:output] || opts[:output_dir]
 
-output_dir = Dir.mktmpdir('voice-clone-eval-')
 repeats = opts.fetch(:repeats, 1).to_i
 reference_filter = (opts[:reference_filter] || (source_url ? 'quality' : 'raw')).to_sym
 
@@ -87,6 +85,8 @@ require_relative '../lib/boot'
 require_relative '../lib/tts'
 require_relative '../lib/voice_reference'
 require_relative '../lib/voice_clone'
+
+output_dir = Utils::Tmp.dir('voice-clone-eval-')
 
 Subtitler::WhisperCpp.api = URI.parse(opts[:whisper_url]) if opts[:whisper_url]
 transcriber = VoiceReference::Transcriber.new(cache_dir: File.join(output_dir, 'transcripts'))

@@ -24,6 +24,7 @@ require_relative 'exts/sym_mash'
 require_relative 'exts/peach'
 
 require 'ffmpeg'
+require_relative 'utils/tmp'
 require_relative 'utils/http'
 require_relative 'utils/retry'
 

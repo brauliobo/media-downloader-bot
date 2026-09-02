@@ -1,6 +1,6 @@
 require 'fileutils'
 require 'json'
-require 'tmpdir'
+require_relative '../utils/tmp'
 
 require_relative '../diarizer'
 require_relative '../prober'
@@ -48,7 +48,7 @@ module Dubbing
         replace_sentences!(translated_sentences(transcript))
         next @input_path if @sentences.empty?
 
-        Dir.mktmpdir('dub-', @dir) do |workdir|
+        Utils::Tmp.dir('dub-', @dir) do |workdir|
           @speaker_references = VoiceReference.extract_by_speaker(
             stems.vocals,
             diarization.segments,

@@ -1,5 +1,5 @@
 require 'fileutils'
-require 'tmpdir'
+require_relative 'utils/tmp'
 
 require_relative 'ffmpeg'
 require_relative 'voice_activity/silero'
@@ -16,7 +16,7 @@ class VoiceActivity
     ranges = detect(path)
     return yield(nil, ranges) if ranges.empty?
 
-    workdir = Dir.mktmpdir('voice-activity-', dir)
+    workdir = Utils::Tmp.dir('voice-activity-', dir)
     speech = File.join(workdir, 'speech.wav')
     FFmpeg.new.extract_speech_ranges(
       input: path, output: speech, ranges: ranges,

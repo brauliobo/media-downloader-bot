@@ -2,7 +2,7 @@ require 'roda'
 require 'puma'
 require 'json'
 require 'rack/utils'
-require 'tmpdir'
+require_relative '../../utils/tmp'
 require_relative '../../utils/safety'
 require_relative '../message_result'
 
@@ -78,7 +78,7 @@ module Bot
       end
 
       def allowed_roots
-        roots = ENV.fetch('BOT_ALLOWED_PATH_ROOTS', Dir.tmpdir).split(':')
+        roots = ENV.fetch('BOT_ALLOWED_PATH_ROOTS', Utils::Tmp.root).split(':')
         roots << File.join(Dir.pwd, 'tmp')
         roots.map { |root| File.expand_path(root) }.uniq
       end

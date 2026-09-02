@@ -40,7 +40,7 @@ module Audiobook
 
     def generate(pdf_path)
       @stl&.update 'Generating translated PDF'
-      Dir.mktmpdir('text-pdf-') do |dir|
+      Utils::Tmp.dir('text-pdf-') do |dir|
         @assets   = dir
         html_path = File.join(dir, 'book.html')
         File.write(html_path, build_html)
@@ -291,7 +291,7 @@ module Audiobook
     end
 
     def chromium_convert(chrome, html_path, pdf_path)
-      Dir.mktmpdir('chrome-pdf-') do |dir|
+      Utils::Tmp.dir('chrome-pdf-') do |dir|
         run_pdf!(
           [
             chrome, '--headless', '--disable-gpu', '--no-pdf-header-footer',

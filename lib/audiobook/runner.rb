@@ -1,4 +1,4 @@
-require 'tmpdir'
+require_relative '../utils/tmp'
 require_relative 'audio_files'
 require_relative 'pauses'
 require_relative '../zipper'
@@ -27,7 +27,7 @@ module Audiobook
 
       @stl&.update "Generating audio"
       final_audio = nil
-      Dir.mktmpdir do |dir|
+      Utils::Tmp.dir('audiobook-') do |dir|
         para_offsets = paragraph_offsets(pages)
         total_paras  = para_offsets.last.to_i + pages.last.items.count { |item| item.is_a?(Audiobook::Paragraph) }
         wavs = Array.new(pages.size)
@@ -85,7 +85,7 @@ module Audiobook
       @stl&.update 'No text found anywhere - creating silent audio file'
 
       final_audio = nil
-      Dir.mktmpdir do |dir|
+      Utils::Tmp.dir('audiobook-silent-') do |dir|
         silent_wav = create_silent_wav(dir)
         final_audio = encode_audio_file(silent_wav, out_audio) if File.exist?(silent_wav)
       end

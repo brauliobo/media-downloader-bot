@@ -5,7 +5,7 @@ require 'fileutils'
 require 'json'
 require 'telegram/bot'
 require 'timeout'
-require 'tmpdir'
+require_relative '../utils/tmp'
 
 module Services
   class EditPostThumbnails
@@ -33,7 +33,7 @@ module Services
     end
 
     def run
-      Dir.mktmpdir('edit-post-thumbnails-', @tmpdir) do |dir|
+      Utils::Tmp.dir('edit-post-thumbnails-', @tmpdir) do |dir|
         FileUtils.chmod(0o755, dir)
         @runtime_thumbnail = File.join(dir, File.basename(@thumbnail))
         FileUtils.cp(@thumbnail, @runtime_thumbnail)

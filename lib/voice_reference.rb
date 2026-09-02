@@ -1,5 +1,5 @@
 require 'fileutils'
-require 'tmpdir'
+require_relative 'utils/tmp'
 
 class VoiceReference
   def self.from_files(
@@ -11,7 +11,7 @@ class VoiceReference
     vocals         = {}
 
     on_status&.call('Transcribing voice reference')
-    Dir.mktmpdir('voice-reference-sources-') do |dir|
+    Utils::Tmp.dir('voice-reference-sources-') do |dir|
       unique_sources.each_with_index do |source, index|
         source_dir = File.join(dir, index.to_s)
         FileUtils.mkdir_p(source_dir)

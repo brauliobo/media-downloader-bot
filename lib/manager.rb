@@ -1,6 +1,5 @@
 require_relative 'boot'
 
-require 'tmpdir'
 require 'mechanize'
 require 'roda'
 require 'ostruct'
