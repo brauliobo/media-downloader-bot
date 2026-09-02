@@ -66,7 +66,9 @@ RSpec.describe 'DeepSec regressions' do
   it 'does not treat thumbnail metadata as an arbitrary local path' do
     info = SymMash.new(thumbnail: __FILE__, width: 100, height: 100)
 
-    expect(Utils::Thumb.process(info, base_filename: File.join(Dir.tmpdir, 'thumb-test'))).to be_nil
+    Utils::Tmp.dir('thumb-spec-') do |dir|
+      expect(Utils::Thumb.process(info, base_filename: File.join(dir, 'thumb-test'))).to be_nil
+    end
   end
 
   it 'uses remote thumbnail entries when the primary thumbnail is absent' do
@@ -75,7 +77,9 @@ RSpec.describe 'DeepSec regressions' do
     allow(Utils::HTTP).to receive(:get_public).with('https://img.example/large.jpg').and_return("\xFF\xD8\xFFjpeg".b)
     allow(Sh).to receive(:run)
 
-    expect(Utils::Thumb.process(info, base_filename: File.join(Dir.tmpdir, 'thumb-test'))).to end_with('-othumb.jpg')
+    Utils::Tmp.dir('thumb-spec-') do |dir|
+      expect(Utils::Thumb.process(info, base_filename: File.join(dir, 'thumb-test'))).to end_with('-othumb.jpg')
+    end
   end
 
   it 'accepts common thumbnail formats' do

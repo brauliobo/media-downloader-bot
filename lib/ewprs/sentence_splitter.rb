@@ -8,7 +8,8 @@ module Ewprs
     OPENING_QUOTE = /(?:&(?:ldquo|lsquo|quot);|["“‘])/
     HONORIFIC_ABBREVIATION = /\b(?:Dr|Mr|Mrs|Ms|Prof|Sr|Sra|St)\z/i
     NO_BOUNDARY_TOKENS = /(?!)\z/
-    SENTENCE_END = '(?:[.!?…](?!\d)|[。！？])'
+    # A digit right after the period is a footnote marker when a word precedes it, a decimal otherwise.
+    SENTENCE_END = '(?:[.!?…](?!\d)|(?<=\p{L})[.!?…](?=\d{1,3}(?:\s|\z))|[。！？])'
     CLOSING_QUOTES = '["”’」』】）]*'
     CJK_CHARACTER = '[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]'
 
