@@ -70,10 +70,12 @@ RSpec.describe Audiobook::TextPdf do
     end
   end
 
-  it 'rasterizes the first source page as the cover even without an image' do
-    sentence = Audiobook::Sentence.new('Title page text.')
+  it 'rasterizes an image-only first page as the cover' do
+    image = Audiobook::Image.allocate
+    image.instance_variable_set(:@path, '/tmp/book.pdf#page=1')
+    image.instance_variable_set(:@sentences, [Audiobook::Sentence.new('OCR cover text.')])
     book = Audiobook::Book.allocate
-    book.instance_variable_set(:@pages, [Audiobook::Page.new(1, [Audiobook::Paragraph.new([sentence])])])
+    book.instance_variable_set(:@pages, [Audiobook::Page.new(1, [image])])
     book.instance_variable_set(:@metadata, SymMash.new(language: 'pt', title: 'Book', source_path: '/tmp/book.pdf'))
     pdf = described_class.new(book, source_pdf: '/tmp/book.pdf')
     allow(pdf).to receive(:rasterize_page).with(1, 'cover').and_return('cover.png')
@@ -81,7 +83,35 @@ RSpec.describe Audiobook::TextPdf do
     html = pdf.build_html
 
     expect(html).to include('<img class="cover" src="cover.png"')
-    expect(html).to include('Title page text.')
+    expect(html).not_to include('OCR cover text.')
+  end
+
+  it 'keeps a text first page instead of rasterizing the untranslated source page' do
+    sentence = Audiobook::Sentence.new('Texto da primeira pagina.')
+    book = Audiobook::Book.allocate
+    book.instance_variable_set(:@pages, [Audiobook::Page.new(1, [Audiobook::Paragraph.new([sentence])])])
+    book.instance_variable_set(:@metadata, SymMash.new(language: 'pt', title: 'Book', source_path: '/tmp/book.pdf'))
+    pdf = described_class.new(book, source_pdf: '/tmp/book.pdf')
+    allow(pdf).to receive(:rasterize_page).and_return('cover.png')
+
+    html = pdf.build_html
+
+    expect(html).to include('Texto da primeira pagina.')
+    expect(html).not_to include('<img class="cover"')
+  end
+
+  it 'renders the OCR text of a full-page image kept beside a header line' do
+    image = Audiobook::Image.allocate
+    image.instance_variable_set(:@path, '/tmp/book.pdf#page=13')
+    image.instance_variable_set(:@sentences, [Audiobook::Sentence.new('Tabela de doses traduzida.')])
+    footer = Audiobook::Paragraph.new([Audiobook::Sentence.new('Page 13 of 13')])
+    book = Audiobook::Book.allocate
+    book.instance_variable_set(:@pages, [Audiobook::Page.new(13, [footer, image])])
+    book.instance_variable_set(:@metadata, SymMash.new(language: 'pt', title: 'Book'))
+
+    html = described_class.new(book).build_html
+
+    expect(html).to include('<p>Tabela de doses traduzida.</p>')
   end
 
   it 'embeds the cover and keeps original page text without dumping cover OCR' do
@@ -103,6 +133,22 @@ RSpec.describe Audiobook::TextPdf do
       list, = Sh.run ['pdfimages', '-list', path]
       expect(list.lines.count { |line| line.split[2] == 'image' }).to be >= 1
     end
+  end
+
+  it 'renders scanned page text instead of the untranslated source page image' do
+    image = Audiobook::Image.allocate
+    image.instance_variable_set(:@path, '/tmp/book.pdf#page=2')
+    image.instance_variable_set(:@sentences, [Audiobook::Sentence.new('Texto traduzido da pagina.')])
+    book = Audiobook::Book.allocate
+    book.instance_variable_set(:@pages, [Audiobook::Page.new(2, [image])])
+    book.instance_variable_set(:@metadata, SymMash.new(language: 'pt', title: 'Book', source_path: '/tmp/book.pdf'))
+    pdf = described_class.new(book, source_pdf: '/tmp/book.pdf')
+    allow(pdf).to receive(:rasterize_page).and_return('page-2.png')
+
+    html = pdf.build_html
+
+    expect(html).to include('<p>Texto traduzido da pagina.</p>')
+    expect(html).not_to include('class="page-image"')
   end
 
   it 'keeps long body paragraphs justified instead of inheriting center' do

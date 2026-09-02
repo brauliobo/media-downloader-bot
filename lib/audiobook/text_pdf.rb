@@ -97,31 +97,31 @@ module Audiobook
     end
 
     def cover_html
+      return '' unless cover_page
+
       src = rasterize_page(cover_page, 'cover')
       src ? %(<div class="page"><img class="cover" src="#{src}" alt=""></div>\n) : ''
     end
 
     def render_page(page)
       return '' if page.empty?
-      return '' if cover_page && page.number == cover_page && image_only?(page)
+      return '' if page.number == cover_page
 
-      inner = image_only?(page) ? render_image_page(page) : render_text_page(page)
+      inner = render_text_page(page).presence || rasterized_page_html(page.number)
       return '' if inner.empty?
 
       %(<div class="page">\n#{inner}</div>\n)
     end
 
-    def render_image_page(page)
-      src = rasterize_page(page.number, "page-#{page.number}")
-      return %(<img class="page-image" src="#{src}" alt="">\n) if src
-
-      page.items.grep(Image).map { |item| render_paragraph(item) }.join
+    def rasterized_page_html(page_num)
+      src = rasterize_page(page_num, "page-#{page_num}")
+      src ? %(<img class="page-image" src="#{src}" alt="">\n) : ''
     end
 
     def render_text_page(page)
       html = page.items.map { |item| render_item(item) }.join
       html << references_html(page)
-      html << figures_html(page.number) unless cover_page && page.number == cover_page
+      html << figures_html(page.number)
       html
     end
 
@@ -129,7 +129,7 @@ module Audiobook
       case item
       when Section   then heading_html(item)
       when Heading   then heading_html(item)
-      when Image     then ''
+      when Image     then render_paragraph(item)
       when Reference then render_reference(item)
       when Paragraph then render_paragraph(item)
       else ''
@@ -198,8 +198,13 @@ module Audiobook
       @cover ||= @book.metadata.cover || @book.metadata[:cover]
     end
 
+    # Only a page without its own text is worth showing as the untranslated source cover.
     def cover_page
-      cover&.page_number || (1 if source_pdf)
+      return @cover_page if defined?(@cover_page)
+
+      number = cover&.page_number || (1 if source_pdf)
+      page   = @book.pages.find { |candidate| candidate.number == number } if number
+      @cover_page = number if page && image_only?(page)
     end
 
     def source_pdf

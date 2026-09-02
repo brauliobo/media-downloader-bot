@@ -75,11 +75,28 @@ module Audiobook
 
         result = SymMash.new
         result.lines = page_lines if page_lines.any?
-        if page_lines.empty?
+        if page_lines.empty? || scanned_page?(pdf_path, page, page_lines)
           result.image = SymMash.new(image: true, page: page_num, path: "#{pdf_path}#page=#{page_num}")
         end
 
         result
+      end
+
+      # A page whose text layer only holds a header/footer keeps its content inside a dominant image.
+      TEXT_LAYER_CHARS  = 120
+      MIN_SCANNED_AREA  = 0.25
+
+      def self.scanned_page?(pdf_path, page, page_lines)
+        page_lines.sum { |line| line.text.length } <= TEXT_LAYER_CHARS && dominant_image?(pdf_path, page)
+      end
+
+      def self.dominant_image?(pdf_path, page)
+        output, stderr, status = Sh.run [
+          'pdfimages', '-f', page.number.to_s, '-l', page.number.to_s, '-list', pdf_path
+        ]
+        Sh.assert_success!('PDF image list failed', stderr, status: status)
+        output.lines.filter_map { |line| Cover.image_metrics(line, page) }
+          .any? { |metrics| metrics.area_coverage >= MIN_SCANNED_AREA }
       end
 
       def self.extract_document(pdf_path, page_limit:, page_numbers: nil)
