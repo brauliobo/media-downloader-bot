@@ -6,6 +6,7 @@ Thread.abort_on_exception  = true
 module Enumerable
   PEACH_THREADS = :peach_threads
   DEFAULT_THREADS = 10
+  ADMIN_THREADS   = 2
 
   def self.default_threads
     ENV['THREADS'] || DEFAULT_THREADS
@@ -20,7 +21,7 @@ module Enumerable
   end
 
   def self.admin_threads(admin, threads = nil)
-    admin ? thread_count(threads) : 1
+    admin ? thread_count(threads, default: ADMIN_THREADS) : 1
   end
 
   def self.with_peach_threads(threads)

@@ -33,11 +33,7 @@ RSpec.describe Enumerable, 'peach thread context' do
 
     it 'uses the explicit or default thread count for admins' do
       expect(described_class.admin_threads(true, 4)).to eq(4)
-      previous = ENV['THREADS']
-      ENV['THREADS'] = '6'
-      expect(described_class.admin_threads(true)).to eq(6)
-    ensure
-      previous ? ENV['THREADS'] = previous : ENV.delete('THREADS')
+      expect(described_class.admin_threads(true)).to eq(2)
     end
   end
 

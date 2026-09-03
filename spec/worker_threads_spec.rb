@@ -24,15 +24,7 @@ RSpec.describe Worker, 'input concurrency' do
     context 'without a thread option' do
       let(:opts) { SymMash.new }
 
-      around do |example|
-        previous = ENV['THREADS']
-        ENV['THREADS'] = '6'
-        example.run
-      ensure
-        ENV['THREADS'] = previous
-      end
-
-      it { is_expected.to eq(6) }
+      it { is_expected.to eq(2) }
     end
 
     context 'with a thread option' do
