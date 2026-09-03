@@ -1,3 +1,6 @@
+require_relative '../utils/tmp'
+require_relative '../utils/time_ranges'
+
 class FFmpeg
   def extract_audio input:, output:, sample_rate:, channels:, label:, start: nil, duration: nil,
                     filter: nil, filter_profile: nil, silence_threshold_db: nil,
@@ -18,6 +21,26 @@ class FFmpeg
   end
 
   def extract_speech_ranges input:, output:, ranges:, sample_rate:, channels:, label:
+    chunks = ranges.intervals.each_slice(Filters::MAX_SELECT_TERMS).to_a
+    return extract_speech_range_chunk(input:, output:, ranges:, sample_rate:, channels:, label:) if chunks.size <= 1
+
+    Utils::Tmp.dir('speech-ranges-') do |dir|
+      parts = chunks.map.with_index do |intervals, index|
+        part = File.join dir, "#{index}.wav"
+        extract_speech_range_chunk(
+          input:, output: part, sample_rate:, channels:, label:,
+          ranges: Utils::TimeRanges.new(intervals, option: :vad)
+        )
+        part
+      end
+      list = File.join dir, 'concat.txt'
+      File.write list, parts.map { |path| Utils::Safety.concat_manifest_path path }.join("\n")
+      concat_audio inputs: list, output:, copy: true, label:
+    end
+    output
+  end
+
+  def extract_speech_range_chunk input:, output:, ranges:, sample_rate:, channels:, label:
     run_one_shot profile: :extract, label: label do |builder|
       builder.input input
       builder.disable :video
@@ -28,6 +51,7 @@ class FFmpeg
       builder.output output
     end
   end
+  private :extract_speech_range_chunk
 
   def transcribe_wav input:, output:, label:
     run_one_shot profile: :overwrite, label: label do |builder|

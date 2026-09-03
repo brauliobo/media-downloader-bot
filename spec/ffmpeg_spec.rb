@@ -875,6 +875,46 @@ RSpec.describe FFmpeg do
       end
     end
 
+    def vad_ranges *pairs
+      Utils::TimeRanges.new(
+        pairs.map { |start, finish| Utils::TimeRanges::Interval.new(start: start, finish: finish) },
+        option: :vad
+      )
+    end
+
+    it 'keeps 100 speech ranges in a single aselect expression' do
+      Dir.mktmpdir do |dir|
+        output = File.join dir, 'speech.wav'
+        pairs  = Array.new(described_class::Filters::MAX_SELECT_TERMS) { |i| [i * 2, i * 2 + 1] }
+
+        expect(ffmpeg.extract_speech_ranges(
+          input: '/media/source.wav', output: output, ranges: vad_ranges(*pairs),
+          sample_rate: 16_000, channels: 1, label: 'voice range extraction failed'
+        )).to eq output
+        expect(commands.size).to eq 1
+        expect(commands.first[commands.first.index('-af') + 1].scan('between').size)
+          .to eq described_class::Filters::MAX_SELECT_TERMS
+      end
+    end
+
+    it 'concatenates aselect chunks that exceed the FFmpeg eval stack' do
+      Dir.mktmpdir do |dir|
+        output = File.join dir, 'speech.wav'
+        pairs  = Array.new(described_class::Filters::MAX_SELECT_TERMS + 1) { |i| [i * 2, i * 2 + 1] }
+
+        expect(ffmpeg.extract_speech_ranges(
+          input: '/media/source.wav', output: output, ranges: vad_ranges(*pairs),
+          sample_rate: 16_000, channels: 1, label: 'voice range extraction failed'
+        )).to eq output
+        expect(commands.size).to eq 3
+        expect(commands[0][commands[0].index('-af') + 1].scan('between').size)
+          .to eq described_class::Filters::MAX_SELECT_TERMS
+        expect(commands[1][commands[1].index('-af') + 1].scan('between').size).to eq 1
+        expect(commands[2]).to include('-f', 'concat', '-c', 'copy')
+        expect(commands[2].last).to eq output
+      end
+    end
+
     it 'normalizes input to the transcribe.cpp WAV profile' do
       Dir.mktmpdir do |dir|
         output = File.join dir, 'transcribe.wav'

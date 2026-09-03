@@ -2,6 +2,8 @@ require_relative '../utils/safety'
 
 class FFmpeg
   module Filters
+    MAX_SELECT_TERMS = 100
+
     extend self
 
     def scale_filter width:, modulus: 2
