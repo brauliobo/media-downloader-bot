@@ -11,7 +11,7 @@ class Zipper
     AUDIO_ENC = SymMash.new(
       opus: {
         percent: AUDIO_PROFILES.fetch(:opus).fetch(:percent),
-        encode:  '-ac 1 -ar 48000 -c:a libopus -b:a %{abrate}k'.freeze
+        encode:  '-ac 2 -ar 48000 -c:a libopus -vbr constrained -b:a %{abrate}k'.freeze
       },
       aac:  {
         percent: AUDIO_PROFILES.fetch(:aac).fetch(:percent),

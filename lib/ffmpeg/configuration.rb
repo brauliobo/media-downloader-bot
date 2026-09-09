@@ -93,7 +93,8 @@ class FFmpeg
       codec:       'libopus',
       bitrate:     96,
       percent:     0.95,
-      channels:    1,
+      channels:    2,
+      vbr:         :constrained,
       sample_rate: 48_000
     }.freeze,
     aac: {

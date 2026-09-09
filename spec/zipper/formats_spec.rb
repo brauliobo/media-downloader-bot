@@ -14,7 +14,7 @@ RSpec.describe Zipper::Formats do
         '-spatial-aq 1', '-temporal-aq 1', '-b:v 0'
       )
       expect(Zipper::Types.audio.opus.encode).to eq(
-        '-ac 1 -ar 48000 -c:a libopus -b:a %{abrate}k'
+        '-ac 2 -ar 48000 -c:a libopus -vbr constrained -b:a %{abrate}k'
       )
       expect(described_class::AUDIO_ENC.opus.encode).to eq Zipper::Types.audio.opus.encode
       expect(Zipper::AUDIO_ENC).to equal described_class::AUDIO_ENC
@@ -33,7 +33,9 @@ RSpec.describe Zipper::Formats do
       )
       expect(FFmpeg::VIDEO_ENCODERS[:av1]).to include(codec_cpu: 'libaom-av1')
       expect(FFmpeg::VIDEO_ENCODERS[:vp9]).to include(codec_cpu: 'libvpx-vp9')
-      expect(FFmpeg::AUDIO_ENCODERS[:opus]).to include(codec: 'libopus', bitrate: 96)
+      expect(FFmpeg::AUDIO_ENCODERS[:opus]).to include(
+        codec: 'libopus', bitrate: 96, channels: 2, vbr: :constrained
+      )
     end
   end
 

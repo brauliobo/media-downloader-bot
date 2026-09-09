@@ -22,6 +22,16 @@ RSpec.describe Zipper::Limits do
     expect(Zipper.aud_duration_thld).to eq(described_class.aud_duration_thld(50))
   end
 
+  it 'reduces long audio bitrate to fit the Telegram limit' do
+    Zipper.size_mb_limit = 50
+    opts   = SymMash.new(onlysrt: false, bitrate: 96, percent: 0.95)
+    zipper = Struct.new(:opts, :duration).new(opts, 4_506)
+
+    described_class.apply_audio_size_limit! zipper
+
+    expect(opts.bitrate).to be_within(0.001).of(84.332)
+  end
+
   it 'returns semantic video size data with the existing calculations' do
     Zipper.size_mb_limit = 2_000
     opts = SymMash.new(

@@ -191,6 +191,10 @@ class FFmpeg
     set_operation [:average_bitrate], '-abr', boolean_value(enabled)
   end
 
+  def variable_bitrate value
+    set_operation [:variable_bitrate], '-vbr', value
+  end
+
   def encode_video format, cuda:, quality:, preset: nil
     encoder = VIDEO_ENCODERS.fetch format.to_sym
     mode    = cuda ? :cuda : :cpu
@@ -221,6 +225,7 @@ class FFmpeg
     codec(use_fdk ? encoder.fetch(:codec_fdk) : encoder.fetch(:codec), stream: :audio)
     codec_profile encoder.fetch(:profile_fdk), stream: :audio if use_fdk
     average_bitrate if encoder[:abr]
+    variable_bitrate encoder[:vbr] if encoder[:vbr]
     self.bitrate bitrate, stream: :audio
   end
 

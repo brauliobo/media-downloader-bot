@@ -396,7 +396,7 @@ RSpec.describe FFmpeg do
       ffmpeg.input('voice.wav').encode_audio(:mp3, bitrate: 128).output(:stdout).capture
 
       expect(commands).to eq [
-        %w[ffmpeg -i voice.wav -ac 1 -ar 48000 -c:a libopus -b:a 64k -],
+        %w[ffmpeg -i voice.wav -ac 2 -ar 48000 -c:a libopus -vbr constrained -b:a 64k -],
         %w[ffmpeg -i voice.wav -c:a aac -b:a 80k -],
         %w[ffmpeg -i voice.wav -c:a libmp3lame -abr 1 -b:a 128k -]
       ]
