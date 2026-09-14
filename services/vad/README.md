@@ -1,7 +1,7 @@
 # Silero VAD service
 
-Subtitling and transcription send only Silero speech ranges to Whisper.
-Dubbing still uses Demucs for vocal / non-vocal stems.
+Subtitling sends Silero speech ranges to Whisper. Dubbing already has Demucs
+vocals, so it transcribes that stem without VAD.
 
 The application uses `VoiceActivity::Silero` by default and posts 16 kHz mono
 WAV to `http://127.0.0.1:8089/v1/vad`. It receives:
@@ -12,7 +12,7 @@ WAV to `http://127.0.0.1:8089/v1/vad`. It receives:
 
 Select a backend per process with `VOICE_ACTIVITY=Silero`. Use
 `SILERO_VAD_SERVER` to change the Silero endpoint. The systemd unit is
-fixed to physical GPU 1 with `CUDA_VISIBLE_DEVICES=1`.
+fixed to physical GPU 0 with `CUDA_VISIBLE_DEVICES=0`.
 
 Install the upstream clone and its service runtime under `~/Projects`:
 
@@ -24,5 +24,5 @@ UV_PYTHON=runtime/bin/python uv pip install torch==2.9.1 torchaudio==2.9.1 --ind
 uv pip install --python runtime/bin/python -e . fastapi uvicorn python-multipart setproctitle soundfile
 sudo cp ~/Projects/media-downloader-bot/services/silero-vad@.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now silero-vad@1.service
+sudo systemctl enable --now silero-vad@0.service
 ```

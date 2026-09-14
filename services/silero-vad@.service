@@ -16,7 +16,7 @@ Environment=TORCH_HOME=/var/cache/silero-vad-%i/torch
 Environment=PYTHONDONTWRITEBYTECODE=1
 CacheDirectory=silero-vad-%i
 RuntimeDirectory=silero-vad-%i
-ExecCondition=/usr/bin/test %i -eq 1
+ExecCondition=/usr/bin/test %i -eq 0
 ExecStart=/home/braulio/Projects/silero-vad/runtime/bin/python -m uvicorn silero_service:app --app-dir /home/braulio/Projects/media-downloader-bot/services/vad --host 127.0.0.1 --port 8089 --workers 1
 ExecStartPost=/usr/bin/curl --fail --silent --show-error --retry 300 --retry-delay 2 --retry-connrefused --retry-all-errors --retry-max-time 600 --max-time 2 http://127.0.0.1:8089/health/ready
 
