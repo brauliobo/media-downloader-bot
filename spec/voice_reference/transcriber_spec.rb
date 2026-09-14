@@ -48,11 +48,11 @@ RSpec.describe VoiceReference::Transcriber do
         )],
         metadata: {'model' => 'test'}
       )
-      backend     = double(transcribe: subtitle)
+      backend     = double(transcribe_vocals: subtitle)
       transcriber = described_class.new(backend: backend, cache_dir: dir)
 
-      first  = transcriber.call('/tmp/first/vocals.wav', cache_key: source, separate_voice: false)
-      second = transcriber.call('/tmp/second/vocals.wav', cache_key: source, separate_voice: false)
+      first  = transcriber.call_vocals('/tmp/first/vocals.wav', cache_key: source)
+      second = transcriber.call_vocals('/tmp/second/vocals.wav', cache_key: source)
 
       expect(first).to equal(subtitle)
       expect(second).to be_a(Subtitler::Subtitle)
@@ -63,8 +63,8 @@ RSpec.describe VoiceReference::Transcriber do
       expect(second.entries.first.metadata).to eq('avg_logprob' => -0.2)
       expect(second.entries.first.words.first.confidence).to eq(0.91)
       expect(second.entries.first.words.first.metadata).to eq('token' => 7)
-      expect(backend).to have_received(:transcribe).once.with(
-        '/tmp/first/vocals.wav', merge_words: false, separate_voice: false
+      expect(backend).to have_received(:transcribe_vocals).once.with(
+        '/tmp/first/vocals.wav', merge_words: false
       )
       cache = File.join(dir, "#{Digest::SHA256.hexdigest(source)}.json")
       expect(Dir.children(dir)).to eq([File.basename(cache)])

@@ -41,13 +41,13 @@ RSpec.describe Subtitler do
     expect(described_class.transcribe('/tmp/input.mp4')).to have_attributes(language: nil, text: '', entries: [])
   end
 
-  it 'can reuse an already separated vocal stem' do
+  it 'transcribes Demucs vocals without Silero VAD' do
     transcript = Subtitler::Subtitle.new(language: 'en')
     expect(VoiceActivity).not_to receive(:with_speech)
     expect(described_class).to receive(:transcribe_with_backend)
       .with('/tmp/vocals.wav')
       .and_return(transcript)
 
-    expect(described_class.transcribe('/tmp/vocals.wav', separate_voice: false)).to equal(transcript)
+    expect(described_class.transcribe_vocals('/tmp/vocals.wav')).to equal(transcript)
   end
 end

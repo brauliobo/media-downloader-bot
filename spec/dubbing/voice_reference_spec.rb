@@ -100,7 +100,7 @@ RSpec.describe Dubbing::VoiceReference do
   end
 
   it 'uses the extracted audio transcript when one is provided' do
-    transcriber = instance_double('VoiceReference::Transcriber', call: transcript('Observed reference.'))
+    transcriber = instance_double('VoiceReference::Transcriber', call_vocals: transcript('Observed reference.'))
 
     reference = described_class.extract_by_speaker(
       input,
@@ -114,7 +114,7 @@ RSpec.describe Dubbing::VoiceReference do
   end
 
   it 'skips a speaker whose extracted audio has no transcribed speech' do
-    transcriber = instance_double('VoiceReference::Transcriber', call: transcript('  '))
+    transcriber = instance_double('VoiceReference::Transcriber', call_vocals: transcript('  '))
 
     references = described_class.extract_by_speaker(
       input,
@@ -129,7 +129,7 @@ RSpec.describe Dubbing::VoiceReference do
 
   it 'uses bounded diarization turns when assigned transcript sentences are too long' do
     transcriber = instance_double('VoiceReference::Transcriber')
-    allow(transcriber).to receive(:call).and_return(transcript('Observed speaker turn.'))
+    allow(transcriber).to receive(:call_vocals).and_return(transcript('Observed speaker turn.'))
 
     reference = described_class.extract_by_speaker(
       input,
@@ -142,7 +142,7 @@ RSpec.describe Dubbing::VoiceReference do
     clip = File.join(dir, 'speaker-0000', 'speaker-0001.wav')
     expect(File.read(clip)).to eq('10.0:8.0')
     expect(reference.text).to eq('Observed speaker turn.')
-    expect(transcriber).to have_received(:call).with(reference.path)
+    expect(transcriber).to have_received(:call_vocals).with(reference.path)
   end
 
   it 'combines complete reference sentences up to the cap' do

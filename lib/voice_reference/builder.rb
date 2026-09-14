@@ -27,19 +27,17 @@ class VoiceReference
 
     def build(audio_files:, output:, transcripts: {}, source_files: nil)
       audio_files  = Array(audio_files)
-      prepared     = !source_files.nil?
+      vocals       = !source_files.nil?
       source_files = source_files ? Array(source_files) : audio_files
       recordings = audio_files.zip(source_files).map do |audio, source|
-        transcript = transcripts.fetch(source) do
-          prepared ? transcriber.call(audio, cache_key: source, separate_voice: false) : transcriber.call(audio)
-        end
+        transcript = transcripts.fetch(source) { transcribe(audio, cache_key: source, vocals: vocals) }
         raise TypeError, 'transcript must be a Subtitler::Subtitle' unless transcript.is_a?(Subtitler::Subtitle)
 
         transcript = transcript.deep_copy.replace_language!(language) if transcript.language.blank?
         {audio: audio, transcript: transcript}
       end
       sources   = audio_files.zip(source_files).to_h
-      candidate = validated_candidate(selector.rank(recordings), output, sources: sources, prepared: prepared)
+      candidate = validated_candidate(selector.rank(recordings), output, sources: sources, vocals: vocals)
       raise 'no voice reference candidate passed quality checks' unless candidate
 
       candidate.audio = sources.fetch(candidate.audio)
@@ -63,7 +61,11 @@ class VoiceReference
       output.sub(/\.[^.]+\z/, extension)
     end
 
-    def validated_candidate(candidates, output, sources:, prepared:)
+    def transcribe(path, vocals:, cache_key: nil)
+      vocals ? transcriber.call_vocals(path, cache_key: cache_key) : transcriber.call(path)
+    end
+
+    def validated_candidate(candidates, output, sources:, vocals:)
       Utils::Tmp.dir('voice-reference-validation-') do |dir|
         selected = Array(candidates).first(MAX_VALIDATION_CANDIDATES)
         selected.each_with_index do |candidate, index|
@@ -71,11 +73,7 @@ class VoiceReference
           key  = candidate_key(candidate, sources.fetch(candidate.audio))
           path = File.join(dir, "#{key}.wav")
           analyzer.extract(candidate, path, filter: reference_filter)
-          transcript = if prepared
-            transcriber.call(path, cache_key: "validation:#{reference_filter}:#{key}", separate_voice: false)
-          else
-            transcriber.call(path)
-          end
+          transcript = transcribe(path, cache_key: "validation:#{reference_filter}:#{key}", vocals: vocals)
           validation = validation_report(
             candidate.text, transcript, analyzer.report(path), reference_filter: reference_filter
           )

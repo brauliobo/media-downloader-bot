@@ -21,7 +21,7 @@ class VoiceReference
       end
 
       transcripts = unique_sources.to_h do |source|
-        transcript = transcriber.call(vocals.fetch(source), cache_key: source, separate_voice: false)
+        transcript = transcriber.call_vocals(vocals.fetch(source), cache_key: source)
         raise TypeError, 'transcript must be a Subtitler::Subtitle' unless transcript.is_a?(Subtitler::Subtitle)
 
         [source, transcript]

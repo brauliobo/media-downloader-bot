@@ -8,32 +8,37 @@ class VoiceReference
   class Transcriber
     CACHE_VERSION = 1
 
-    def initialize(backend: Subtitler, cache_dir: nil, separate_voice: true)
-      @backend        = backend
-      @cache_dir      = File.expand_path(cache_dir) if cache_dir
-      @separate_voice = separate_voice
+    def initialize(backend: Subtitler, cache_dir: nil)
+      @backend   = backend
+      @cache_dir = File.expand_path(cache_dir) if cache_dir
       FileUtils.mkdir_p(@cache_dir) if @cache_dir
     end
 
-    def call(audio, cache_key: nil, separate_voice: self.separate_voice)
+    def call(audio, cache_key: nil)
+      cached_or_store(audio, cache_key) { backend.transcribe(audio, merge_words: false) }
+    end
+
+    def call_vocals(audio, cache_key: nil)
+      cached_or_store(audio, cache_key) { backend.transcribe_vocals(audio, merge_words: false) }
+    end
+
+    private
+
+    attr_reader :backend, :cache_dir
+
+    def cached_or_store(audio, cache_key)
       cache = cache_path(audio, cache_key)
       if cache && File.exist?(cache)
         cached = read_cache(cache)
         return cached if cached
       end
 
-      options = {merge_words: false}
-      options[:separate_voice] = false unless separate_voice
-      subtitle = backend.transcribe(audio, **options)
+      subtitle = yield
       raise TypeError, 'transcription must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitler::Subtitle)
 
       File.write(cache, JSON.pretty_generate(cache_payload(subtitle))) if cache
       subtitle
     end
-
-    private
-
-    attr_reader :backend, :cache_dir, :separate_voice
 
     def read_cache(path)
       payload = JSON.parse(File.read(path))

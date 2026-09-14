@@ -19,16 +19,20 @@ class Subtitler
 
   extend BACKEND_CLASS
 
-  def self.transcribe(path, separate_voice: true, stl: nil, **options)
-    return transcribe_with_backend(path, **options) unless separate_voice
-
+  # Mixed soundtrack (subtitling): Silero VAD, then Whisper.
+  def self.transcribe(path, stl: nil, **options)
     stl&.update STATUS_DETECTING
     VoiceActivity.with_speech(path) do |speech, ranges|
       next Subtitle.new if speech.nil?
 
       stl&.update STATUS_TRANSCRIBING
-      VoiceActivity.restore_timing!(transcribe_with_backend(speech, **options), ranges)
+      VoiceActivity.restore_timing!(transcribe_vocals(speech, **options), ranges)
     end
+  end
+
+  # Isolated vocals (after Demucs): Whisper only.
+  def self.transcribe_vocals(path, **options)
+    transcribe_with_backend(path, **options)
   end
 
   def self.normalize_lang(lang)

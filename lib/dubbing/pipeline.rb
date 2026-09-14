@@ -34,7 +34,7 @@ module Dubbing
       @stl&.update 'dubbing: separating voice'
       VoiceSeparator.with_stems(@input_path, dir: @dir) do |stems|
         @stl&.update 'dubbing: transcribing'
-        transcript = Subtitler.transcribe(stems.vocals)
+        transcript = Subtitler.transcribe_vocals(stems.vocals)
         @transcript_output = transcript
         @source_lang = transcript.language
         next @input_path if @source_lang.present? && @source_lang == target_lang
@@ -54,7 +54,7 @@ module Dubbing
             diarization.segments,
             sentences: @sentences,
             dir:       workdir,
-            transcriber: ::VoiceReference::Transcriber.new(separate_voice: false)
+            transcriber: ::VoiceReference::Transcriber.new
           )
           timeline = synthesize_timeline(workdir)
           apply_scheduled_timings!(timeline.clips)

@@ -230,17 +230,17 @@ RSpec.describe Dubbing::Pipeline do
   end
 
   it 'skips dubbing when source language already matches the target language' do
-    allow(Subtitler).to receive(:transcribe).and_return(transcript(lang: 'pt'))
+    allow(Subtitler).to receive(:transcribe_vocals).and_return(transcript(lang: 'pt'))
     expect(TTS).not_to receive(:synthesize)
 
     output = described_class.apply(input, dir: dir, opts: SymMash.new(dub: 1), stl: status, probe: probe)
 
     expect(output).to eq(input)
-    expect(Subtitler).to have_received(:transcribe).with(vocals)
+    expect(Subtitler).to have_received(:transcribe_vocals).with(vocals)
   end
 
   it 'skips diarization when the source transcript has no usable entries' do
-    allow(Subtitler).to receive(:transcribe).and_return(Subtitler::Subtitle.new(language: 'en'))
+    allow(Subtitler).to receive(:transcribe_vocals).and_return(Subtitler::Subtitle.new(language: 'en'))
     allow(Diarizer).to receive(:diarize)
     allow(::Translator).to receive(:translate_for_dubbing)
 
@@ -275,7 +275,7 @@ RSpec.describe Dubbing::Pipeline do
 
     opts = SymMash.new(dub: 1)
     pipeline = described_class.new(input, dir: dir, opts: opts, stl: status, probe: probe)
-    allow(Subtitler).to receive(:transcribe).and_return(source)
+    allow(Subtitler).to receive(:transcribe_vocals).and_return(source)
     allow(::Translator).to receive(:translate_for_dubbing).and_return(['Olá.', 'Tchau.'])
     allow(Diarizer).to receive(:diarize).and_return(diarization)
     allow(Dubbing::VoiceReference).to receive(:extract_by_speaker).and_return(speakers)
@@ -326,7 +326,7 @@ RSpec.describe Dubbing::Pipeline do
       speaker_segment(2.0, 3.0, 1)
     )
     pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), probe: probe)
-    allow(Subtitler).to receive(:transcribe).and_return(transcript)
+    allow(Subtitler).to receive(:transcribe_vocals).and_return(transcript)
     allow(::Translator).to receive(:translate_for_dubbing).and_return(['Olá.', 'Tchau.'])
     allow(Diarizer).to receive(:diarize).and_return(diarization)
     allow(Dubbing::VoiceReference).to receive(:extract_by_speaker).and_return(0 => reference)
@@ -358,7 +358,7 @@ RSpec.describe Dubbing::Pipeline do
   it 'dubs every sentence with the default voice when no speaker has a usable reference' do
     diarization = diarization(speaker_segment(0.0, 3.0, 0))
     pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), probe: probe)
-    allow(Subtitler).to receive(:transcribe).and_return(transcript)
+    allow(Subtitler).to receive(:transcribe_vocals).and_return(transcript)
     allow(::Translator).to receive(:translate_for_dubbing).and_return(['Olá.', 'Tchau.'])
     allow(Diarizer).to receive(:diarize).and_return(diarization)
     allow(Dubbing::VoiceReference).to receive(:extract_by_speaker).and_return({})

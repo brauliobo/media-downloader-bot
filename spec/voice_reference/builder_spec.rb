@@ -81,8 +81,8 @@ RSpec.describe VoiceReference::Builder do
         File.write(non_vocals, 'music')
         VoiceSeparator::Stems.new(vocals: vocals, non_vocals: non_vocals)
       end
-      allow(transcriber).to receive(:call).with(
-        kind_of(String), cache_key: source, separate_voice: false
+      allow(transcriber).to receive(:call_vocals).with(
+        kind_of(String), cache_key: source
       ).and_return(transcript)
       allow(VoiceReference::Selector).to receive(:new).and_return(selector)
       allow(described_class).to receive(:new).with(
@@ -124,8 +124,8 @@ RSpec.describe VoiceReference::Builder do
         expect(filter).to eq(:raw)
         File.write(path, 'vocal clip')
       end
-      allow(transcriber).to receive(:call).with(
-        kind_of(String), cache_key: "validation:raw:#{expected_key}", separate_voice: false
+      allow(transcriber).to receive(:call_vocals).with(
+        kind_of(String), cache_key: "validation:raw:#{expected_key}"
       ).and_return(validation)
 
       result = described_class.new(
@@ -137,7 +137,7 @@ RSpec.describe VoiceReference::Builder do
       expect(selector).to have_received(:rank).with([{audio: vocals, transcript: transcript}])
       expect(result.audio).to eq(source)
       expect(JSON.parse(File.read(File.join(dir, 'reference.json'))).fetch('audio')).to eq(source)
-      expect(transcriber).to have_received(:call).once
+      expect(transcriber).to have_received(:call_vocals).once
     end
   end
 
