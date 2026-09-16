@@ -119,15 +119,16 @@ module Audiobook
         pages = document.xpath('//page').each_with_index.map do |page, index|
           page_height = page['height'].to_f
           lines       = page.xpath('.//line').filter_map do |line|
-            words = line.xpath('./word')
-            text  = line_text(words)
+            words    = line.xpath('./word')
+            baseline = word_baseline(words)
+            text     = line_text(words, baseline)
             next if text.empty?
 
             y_min = line['yMin'].to_f
             y_max = line['yMax'].to_f
             SymMash.new(
               text:       text,
-              font_size:  y_max - y_min,
+              font_size:  line_font_size(words, baseline),
               y:          page_height - y_min,
               x:          line['xMin'].to_f,
               x_max:      line['xMax'].to_f,
@@ -169,12 +170,31 @@ module Audiobook
         page_numbers.slice_when { |left, right| right != left + 1 }.map { |range| [range.first, range.last] }
       end
 
-      def self.line_text(words)
-        baseline = words.map { |word| word['yMax'].to_f }.max
-        words.each_with_index.map do |word, index|
-          separator = index.positive? && !superscript_marker?(word, baseline) ? ' ' : ''
-          "#{separator}#{word.text}"
+      # Words closer than this fraction of their height belong to the same word (small caps runs).
+      WORD_GAP_RATIO = 0.1
+
+      def self.line_text(words, baseline = word_baseline(words))
+        previous = nil
+        words.map do |word|
+          text = superscript_marker?(word, baseline) ? TextHelpers.reference_marker(word.text) : word.text
+          text = "#{word_separator(previous, word)}#{text}" if previous
+          previous = word
+          text
         end.join.strip
+      end
+
+      def self.word_separator(previous, word)
+        height = previous['yMax'].to_f - previous['yMin'].to_f
+        word['xMin'].to_f - previous['xMax'].to_f < height * WORD_GAP_RATIO ? '' : ' '
+      end
+
+      def self.word_baseline(words) = words.map { |word| word['yMax'].to_f }.max
+
+      # Markers and other superscripts distort the line box, so size the line from its body words.
+      def self.line_font_size(words, baseline)
+        heights = words.reject { |word| superscript_marker?(word, baseline) }
+          .map { |word| word['yMax'].to_f - word['yMin'].to_f }.select(&:positive?).sort
+        heights.empty? ? 0.0 : heights[heights.size / 2]
       end
 
       def self.superscript_marker?(word, baseline)
@@ -184,28 +204,72 @@ module Audiobook
       BOLD_FONT   = /bold|black|heavy|semibold|demi|extrabold/i
       ITALIC_FONT = /italic|oblique/i
 
+      # The text box of a line stretches with tall glyphs, so prefer the nominal font size when available.
       def self.apply_xml_styles(pages, pdf_path, first_page:, last_page:)
         xml_pages = xml_style_pages(pdf_path, first_page: first_page, last_page: last_page)
         return if xml_pages.empty?
 
+        ratios   = []
+        unstyled = []
         pages.each do |page|
           fragments = xml_pages[page.number]
-          next if fragments.blank?
+          next unstyled.concat(page.lines) if fragments.blank?
 
-          scale = fragments.first[:page_height].to_f.positive? ? page.height / fragments.first[:page_height].to_f : 1.0
+          scale = page_scale(fragments.first, page)
           page.lines.each do |line|
             matches = fragments.select { |fragment| xml_match?(line, fragment, scale) }
-            next if matches.empty?
-
-            chars = matches.sum { |fragment| fragment[:text].length }
-            next unless chars.positive?
-
-            line.bold = matches.sum { |fragment| fragment[:bold] ? fragment[:text].length : 0 } >= chars / 2.0
-            line.italic = matches.sum { |fragment| fragment[:italic] ? fragment[:text].length : 0 } >= chars / 2.0
-            dominant = matches.max_by { |fragment| fragment[:text].length }
-            line.font_name = dominant[:font_name].presence
-            line.color = dominant[:color] if dominant[:color].present? && dominant[:color] !~ /\A#0+\z/i
+            ratio   = apply_line_style(line, matches, scale) if matches.any?
+            ratio ? ratios << ratio : unstyled << line
           end
+        end
+        normalize_unstyled_sizes(unstyled, ratios)
+      end
+
+      def self.page_scale(fragment, page)
+        SymMash.new(
+          x: fragment[:page_width].to_f.positive?  ? page.width / fragment[:page_width].to_f   : 1.0,
+          y: fragment[:page_height].to_f.positive? ? page.height / fragment[:page_height].to_f : 1.0,
+        )
+      end
+
+      def self.apply_line_style(line, matches, scale)
+        chars = matches.sum { |fragment| fragment[:text].length }
+        return if chars.zero?
+
+        line.bold   = matches.sum { |fragment| fragment[:bold] ? fragment[:text].length : 0 } >= chars / 2.0
+        line.italic = matches.sum { |fragment| fragment[:italic] ? fragment[:text].length : 0 } >= chars / 2.0
+        dominant    = matches.max_by { |fragment| fragment[:text].length }
+        line.text   = tag_superscript_markers(line.text, matches, dominant)
+        line.font_name = dominant[:font_name].presence
+        line.color = dominant[:color] if dominant[:color].present? && dominant[:color] !~ /\A#0+\z/i
+
+        nominal = dominant[:size].to_f * scale.y
+        return unless nominal.positive? && line.font_size.to_f.positive?
+
+        ratio = nominal / line.font_size.to_f
+        line.font_size = nominal.round(2)
+        ratio
+      end
+
+      SUPERSCRIPT_RISE = 0.2
+
+      # Text extraction can glue a raised marker onto the number before it; the style pass still sees them apart.
+      def self.tag_superscript_markers(text, matches, dominant)
+        matches.reduce(text) do |result, fragment|
+          next result unless fragment[:text].match?(/\A\d{1,3}\z/)
+          next result unless dominant[:top] - fragment[:top] >= fragment[:height] * SUPERSCRIPT_RISE
+
+          result.sub(/(?<=[^\d\s])#{fragment[:text]}(?=\s|\z)/, TextHelpers.reference_marker(fragment[:text]))
+        end
+      end
+
+      # Lines without a style fragment keep their box height, rescaled to the nominal range.
+      def self.normalize_unstyled_sizes(lines, ratios)
+        return if lines.empty? || ratios.empty?
+
+        median = ratios.sort[ratios.size / 2]
+        lines.each do |line|
+          line.font_size = (line.font_size.to_f * median).round(2) if line.font_size.to_f.positive?
         end
       end
 
@@ -222,7 +286,8 @@ module Audiobook
           page.xpath('./fontspec').each do |font|
             fonts[font['id']] = {
               family: font['family'].to_s,
-              color:  font['color'].to_s.presence
+              color:  font['color'].to_s.presence,
+              size:   font['size'].to_f
             }
           end
           pages[page['number'].to_i] = page.xpath('./text').filter_map do |node|
@@ -234,12 +299,16 @@ module Audiobook
             {
               top:         node['top'].to_f,
               height:      node['height'].to_f,
+              left:        node['left'].to_f,
+              width:       node['width'].to_f,
               text:        text,
-              bold:        markup.match?(/<b[\s>]/i) || font[:family].match?(BOLD_FONT),
-              italic:      markup.match?(/<i[\s>]/i) || font[:family].match?(ITALIC_FONT),
+              bold:        markup.match?(/<b[\s>]/i) || font[:family].to_s.match?(BOLD_FONT),
+              italic:      markup.match?(/<i[\s>]/i) || font[:family].to_s.match?(ITALIC_FONT),
               font_name:   font[:family].presence,
               color:       font[:color],
-              page_height: page['height'].to_f
+              size:        font[:size],
+              page_height: page['height'].to_f,
+              page_width:  page['width'].to_f
             }
           end
         end
@@ -266,14 +335,16 @@ module Audiobook
       def self.sanitize_xml(text) = text.to_s.gsub(XML_CHAR, '')
 
       def self.xml_match?(line, fragment, scale)
-        top = fragment[:top] * scale
-        bottom = top + fragment[:height] * scale
-        overlap = [line.y_max, bottom].min - [line.y_min, top].max
-        return false if overlap < fragment[:height] * scale * 0.3
+        top     = fragment[:top] * scale.y
+        bottom  = top + fragment[:height] * scale.y
+        height  = [line.y_max - line.y_min, bottom - top].min
+        return false if height <= 0 || [line.y_max, bottom].min - [line.y_min, top].max < height * 0.5
 
-        xml_text = fragment[:text].downcase
-        line_text = line.text.to_s.downcase
-        line_text.include?(xml_text) || xml_text.include?(line_text[0, 24])
+        left  = fragment[:left] * scale.x
+        width = fragment[:width] * scale.x
+        return false unless width.positive?
+
+        [line.x_max, left + width].min - [line.x, left].max >= width * 0.5
       end
     end
   end

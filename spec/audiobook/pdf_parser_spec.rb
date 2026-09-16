@@ -24,6 +24,36 @@ RSpec.describe Audiobook::Parsers::Pdf do
     expect(page.lines.first.y).to be_positive
   end
 
+  def words(*specs)
+    nodes = specs.map do |text, x_min, x_max, y_min, y_max|
+      %(<word xMin="#{x_min}" xMax="#{x_max}" yMin="#{y_min}" yMax="#{y_max}">#{text}</word>)
+    end
+    Nokogiri::XML("<line>#{nodes.join}</line>").xpath('//word')
+  end
+
+  it 'joins small-capital runs and tags raised markers' do
+    small_caps = words(['D', 108, 116, 233.1, 245.7], ['ESENVOLVIMENTO', 116, 192, 235.2, 245.2])
+    marker     = words(['Troyes.', 85, 233, 288.0, 300.4], ['1', 234, 240, 286.7, 294.5], ['Há', 247, 262, 288.0, 300.4])
+
+    expect(described_class.line_text(small_caps)).to eq('DESENVOLVIMENTO')
+    expect(described_class.line_text(marker)).to eq('Troyes.⟦1⟧ Há')
+  end
+
+  it 'sizes a line from its body words, ignoring raised markers' do
+    line = words(['Troyes.', 85, 233, 288.0, 300.4], ['1', 234, 240, 286.7, 294.5], ['Há', 247, 262, 288.0, 300.4])
+
+    expect(described_class.line_font_size(line, described_class.word_baseline(line))).to be_within(0.01).of(12.4)
+  end
+
+  it 'takes the nominal font size so tall glyphs do not split a paragraph' do
+    data      = described_class.extract_data(fixture_path('audiobook/salud-softhyphen-font-metrics.pdf'))
+    body      = data.content.lines.map { |line| line.font_size.round(1) }.tally.max_by { |_, count| count }.first
+    stretched = data.content.lines.select { |line| line.text.match?(/respuesta fue sim|Le hice caso/) }
+
+    expect(stretched.size).to eq(2)
+    expect(stretched.map { |line| line.font_size.round(1) }.uniq).to eq([body])
+  end
+
   it 'routes only a real image-only page to OCR' do
     data = described_class.extract_data(fixture_path('image-text-handler.pdf'))
 
@@ -41,8 +71,8 @@ RSpec.describe Audiobook::Parsers::Pdf do
 
     expect(data.metadata.page_count).to eq(4)
     expect(data.content.images).to be_empty
-    expect(line.text).to include('Chrétien de Troyes.1')
-    expect(line.text).to include('Wolfram von Eschenbach2')
+    expect(line.text).to include('Chrétien de Troyes.⟦1⟧')
+    expect(line.text).to include('Wolfram von Eschenbach⟦2⟧')
     expect(line.bottom_spacing).to be_a(Numeric)
     expect(line.x).to be_positive
   end
