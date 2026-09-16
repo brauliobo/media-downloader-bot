@@ -66,6 +66,27 @@ RSpec.describe Ewprs::SentenceSplitter do
     )
   end
 
+  it 'keeps a single-letter initial attached to the name that follows' do
+    expect(described_class.split('Published by Roger L. Cole in Hollister. Then it moved.', max_chars: 800)).to eq(
+      ['Published by Roger L. Cole in Hollister.', 'Then it moved.']
+    )
+    expect(described_class.split('back under U. S. Treasury control. It worked.', max_chars: 800)).to eq(
+      ['back under U. S. Treasury control.', 'It worked.']
+    )
+  end
+
+  it 'keeps a roman numeral attached to the title it numbers' do
+    expect(described_class.split('Chapter II. The Seven Hermetic Principles.', max_chars: 800)).to eq(
+      ['Chapter II. The Seven Hermetic Principles.']
+    )
+  end
+
+  it 'keeps a leading section number attached to its heading' do
+    expect(described_class.split('1. O Ciclo das Políticas Públicas', max_chars: 800)).to eq(
+      ['1. O Ciclo das Políticas Públicas']
+    )
+  end
+
   it 'splits excerpts after an HTML omission marker' do
     text = 'First excerpt.&#8230; to [[vest]] an incompetent person with power.'
 
@@ -95,16 +116,24 @@ RSpec.describe Ewprs::SentenceSplitter do
     second = "but he is fearsome for #{'all those objects, ' * 10}people, etc."
     text = "#{first} #{second}"
 
-    expect(described_class.split(text, boundary_tokens: /__P\d{4}__/, max_chars: 800)).to eq(
+    expect(described_class.split(text, boundary_tokens: /__P\d{4}__/, max_chars: 800, clauses: true)).to eq(
       [first, second]
     )
+  end
+
+  it 'keeps contrast clauses together when narrating instead of unitizing' do
+    first = "People fear #{'many objects, ' * 20}and many people,"
+    second = "but he is fearsome for #{'all those objects, ' * 10}people, etc."
+
+    expect(described_class.split("#{first} #{second}", boundary_tokens: /__P\d{4}__/, max_chars: 8_000))
+      .to eq(["#{first} #{second}"])
   end
 
   it 'splits compact comma-dense contrast clauses' do
     first = 'People fear many objects, many things, many entities, and many people,'
     second = 'but he is fearsome for all those objects, people, etc.'
 
-    expect(described_class.split("#{first} #{second}", boundary_tokens: /__P\d{4}__/, max_chars: 800)).to eq(
+    expect(described_class.split("#{first} #{second}", boundary_tokens: /__P\d{4}__/, max_chars: 800, clauses: true)).to eq(
       [first, second]
     )
   end
@@ -118,7 +147,7 @@ RSpec.describe Ewprs::SentenceSplitter do
   it 'splits dense paired coordination into comma clauses' do
     text = 'They used both __P0001__, in the manner of __P0002__, and __P0003__, in the manner of __P0004__.'
 
-    expect(described_class.split(text, boundary_tokens: /__P\d{4}__/, max_chars: 800)).to eq(
+    expect(described_class.split(text, boundary_tokens: /__P\d{4}__/, max_chars: 800, clauses: true)).to eq(
       [
         'They used both __P0001__,', 'in the manner of __P0002__,',
         'and __P0003__,', 'in the manner of __P0004__.'

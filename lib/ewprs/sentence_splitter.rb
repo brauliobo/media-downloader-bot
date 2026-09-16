@@ -6,7 +6,13 @@ module Ewprs
     PAIRED_COORDINATION = /\bboth\b[^.!?]*,\s+[^.!?]*,\s+and\b[^.!?]*,/i
     COMMA_BOUNDARY = /(?<=,)\s+/
     OPENING_QUOTE = /(?:&(?:ldquo|lsquo|quot);|["“‘])/
-    HONORIFIC_ABBREVIATION = /\b(?:Dr|Mr|Mrs|Ms|Prof|Sr|Sra|St)\z/i
+    HONORIFIC_ABBREVIATION = /\b(?:Dr|Dra|Mr|Mrs|Ms|Prof|Profa|Sr|Sra|Srta|St|Sto|Sta|Av|art|cap|cf|ed|fig|pp|vol|séc|sec)\z/i
+    # "Roger L. Cole" and "the U. S." keep single-letter initials attached to the name that follows.
+    INITIAL_ABBREVIATION = /(?:\A|[^\p{L}])\p{Lu}\z/u
+    # "Chapter XIV. Title" names a part; the numeral does not close a sentence.
+    NUMERAL_ABBREVIATION = /(?:\A|[^\p{L}])[IVX]{2,4}\z/
+    # "1. Heading" opens a numbered section; the number is a label, not a sentence.
+    ENUMERATOR = /\A\d{1,3}\z/
     NO_BOUNDARY_TOKENS = /(?!)\z/
     # A digit right after the period is a footnote marker when a word precedes it, a decimal otherwise.
     SENTENCE_END = '(?:[.!?…](?!\d)|(?<=\p{L})[.!?…](?=\d{1,3}(?:\s|\z))|[。！？])'
@@ -15,7 +21,7 @@ module Ewprs
 
     module_function
 
-    def split(text, boundary_tokens: NO_BOUNDARY_TOKENS, max_chars: Float::INFINITY)
+    def split(text, boundary_tokens: NO_BOUNDARY_TOKENS, max_chars: Float::INFINITY, clauses: false)
       transparent = "(?:#{boundary_tokens.source})*"
       boundary = %r{
         (#{SENTENCE_END}#{CLOSING_QUOTES})(\s*\d{1,3})?(#{transparent})
@@ -27,7 +33,7 @@ module Ewprs
       sentences = Array(text).join
         .gsub(/(?<=&#8230;)\s+/i, "\n")
         .gsub(boundary) do |match|
-          if Regexp.last_match.pre_match.match?(HONORIFIC_ABBREVIATION)
+          if abbreviation?(Regexp.last_match.pre_match)
             match
           else
             "#{Regexp.last_match(1)}#{Regexp.last_match(2)}#{Regexp.last_match(3)}\n"
@@ -36,17 +42,22 @@ module Ewprs
         .split(/\n+/)
         .map(&:strip)
         .reject(&:empty?)
-        .flat_map do |sentence|
-          if sentence.match?(PAIRED_COORDINATION)
-            sentence.split(COMMA_BOUNDARY)
-          elsif sentence.length >= CONTRAST_MIN_CHARS || sentence.count(',') >= CONTRAST_MIN_COMMAS
-            sentence.split(CONTRAST_BOUNDARY)
-          else
-            sentence
-          end
-        end
+        .flat_map { |sentence| clauses ? split_clauses(sentence) : sentence }
 
       sentences.flat_map { |sentence| split_long(sentence, max_chars) }
+    end
+
+    def abbreviation?(prefix)
+      prefix.match?(HONORIFIC_ABBREVIATION) || prefix.match?(INITIAL_ABBREVIATION) ||
+        prefix.match?(NUMERAL_ABBREVIATION) || prefix.match?(ENUMERATOR)
+    end
+
+    # Clause splitting builds translation units; narration keeps the sentence whole.
+    def split_clauses(sentence)
+      return sentence.split(COMMA_BOUNDARY) if sentence.match?(PAIRED_COORDINATION)
+      return sentence.split(CONTRAST_BOUNDARY) if sentence.length >= CONTRAST_MIN_CHARS || sentence.count(',') >= CONTRAST_MIN_COMMAS
+
+      sentence
     end
 
     def split_long(sentence, max_chars)
