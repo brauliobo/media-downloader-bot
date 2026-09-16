@@ -6,6 +6,30 @@ module TextHelpers
   CLOSERS_ONLY   = /\A["')\]]+\z/
   EOS_WITH_CLOSE = /[.!?…]["')\]]*$/
   TITLE_ABBREVIATION = /\A(?:Mr|Mrs|Ms|Dr|Prof|Sr|Sra|St)\.\z/i
+  # Superscript markers found through glyph geometry are tagged so they survive line joins unambiguously.
+  MARKER_TOKEN   = /⟦\d{1,3}⟧/
+  MARKER_TAG     = /⟦(\d{1,3})⟧/
+  MARKER_LINE    = /\A\d{1,3}[)\].]*(?:\s+\d{1,3}[)\].]*)*\z/
+  # A digit before the anchor means a decimal or a thousands separator, not a footnote call.
+  MARKER_ANCHOR  = /(?:[\p{L}\)\]"”’»]|(?<!\d)[.,;:])/u
+  TRAILING_HYPHEN = /\s*[-­‐‑]\z/
+  TOC_LEADERS     = /(?:\.\s*){4,}|…{2,}|(?:…\s*){2,}/
+
+  def self.reference_marker(id) = "⟦#{id}⟧"
+
+  def self.extract_markers(text)
+    ids = text.to_s.scan(MARKER_TAG).flatten
+    [text.to_s.gsub(MARKER_TAG, ''), ids]
+  end
+
+  def self.marker_line?(text) = text.to_s.strip.match?(MARKER_LINE)
+
+  # Table-of-contents leaders and the page number they point at are noise when spoken.
+  def self.strip_toc_leaders(text)
+    return text unless text.to_s.match?(TOC_LEADERS)
+
+    text.gsub(TOC_LEADERS, ' ').sub(/\s+\d{1,4}\s*\z/, '').gsub(/\s+/, ' ').strip
+  end
 
   def self.normalize_text(str)
     clean = str.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
