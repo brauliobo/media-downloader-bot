@@ -9,15 +9,18 @@ module Audiobook
   class Paragraph
     class Factory
       MAX_SENTENCE_CHARS = 800
+      ISOLATED_MAX_WORDS = 12
+      TERMINAL_PUNCTUATION = /[.!?…]["”’)\]»]*\z/u
 
-      def self.create_items_from_lines(lines, start_page, max_sentence_chars: MAX_SENTENCE_CHARS)
-        new(lines, start_page, max_sentence_chars: max_sentence_chars).create
+      def self.create_items_from_lines(lines, start_page, max_sentence_chars: MAX_SENTENCE_CHARS, isolated: false)
+        new(lines, start_page, max_sentence_chars: max_sentence_chars, isolated: isolated).create
       end
 
-      def initialize(lines, start_page, max_sentence_chars: MAX_SENTENCE_CHARS)
+      def initialize(lines, start_page, max_sentence_chars: MAX_SENTENCE_CHARS, isolated: false)
         @lines = lines
         @start_page = start_page
         @max_sentence_chars = max_sentence_chars
+        @isolated = isolated
       end
 
       def create
@@ -30,7 +33,7 @@ module Audiobook
           next if normalized.empty?
 
           if group.first.section?
-            next item_data(group.first, create_section(group.first, normalized))
+            next item_data(group.first, create_section(group.first, TextHelpers.extract_markers(normalized).first))
           end
 
           sentences = create_sentences(normalized, group.first.language)
@@ -71,13 +74,19 @@ module Audiobook
       end
 
       def normalize_group_text(group)
-        normalized = TextHelpers.join_pdf_lines(group.map(&:text))
+        normalized = TextHelpers.join_pdf_lines(group.map { |line| TextHelpers.strip_toc_leaders(line.text) })
         normalized.gsub(/\bN\s*\.\s*T\./i, 'N.T.')
       end
 
       def create_sentences(normalized, language)
-        Sentence.build_all(TextHelpers.split_sentences(normalized, max_chars: @max_sentence_chars)).each do |sentence|
+        TextHelpers.split_sentences(normalized, max_chars: @max_sentence_chars).filter_map do |text|
+          clean, ids = TextHelpers.extract_markers(text)
+          sentence = Sentence.build(clean)
+          next unless sentence
+
           sentence.language = language
+          sentence.reference_ids = ids
+          sentence
         end
       end
 
@@ -102,13 +111,23 @@ module Audiobook
       def heading_group?(first_line, level, joined, sentence_count)
         words = joined.split.size
         return false if words > FontRoles::MAX_HEADING_WORDS
+        # A label is a complete phrase; text that breaks off mid-sentence is body copy.
+        return false if sentence_count > 1 && !joined.match?(TERMINAL_PUNCTUATION)
+        return true if @isolated && words <= ISOLATED_MAX_WORDS && !joined.match?(TERMINAL_PUNCTUATION)
 
         font_heading = level.to_i.positive? || (FontRoles.current && FontRoles.heading_item?(first_line))
-        if font_heading
-          heading_like?(first_line, joined) || words <= 20
-        else
-          sentence_count == 1 && heading_like?(first_line, joined)
-        end
+        return sentence_count == 1 && heading_like?(first_line, joined) unless font_heading
+        # Emphasis at body size marks a lead-in, not a heading, once it reads as a full sentence.
+        return words <= 4 || !joined.match?(TERMINAL_PUNCTUATION) unless larger_than_body?(first_line)
+
+        heading_like?(first_line, joined) || words <= 20
+      end
+
+      def larger_than_body?(line)
+        body = FontRoles.current&.body_size
+        return true unless body
+
+        FontRoles.size_of(line).to_f >= body + FontRoles::BODY_BAND
       end
 
       def create_heading(first_line, text, language: first_line.language)

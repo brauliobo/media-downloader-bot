@@ -83,8 +83,10 @@ module Audiobook
     end
 
     def ends_with_hyphen?
-      @text.end_with?('-')
+      @text.match?(TextHelpers::TRAILING_HYPHEN)
     end
+
+    def dehyphenate(text) = @text.sub(TextHelpers::TRAILING_HYPHEN, '') + text
 
     def starts_with_lowercase?
       @text.match?(/\A\p{Ll}/u)

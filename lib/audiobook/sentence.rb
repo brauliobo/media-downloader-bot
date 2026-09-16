@@ -12,7 +12,7 @@ module Audiobook
     PUNCTUATION_ONLY = /\A[\p{P}\p{S}\s]+\z/u
 
     attr_accessor :text, :source_sentence, :font_size, :alignment, :language, :bold, :italic, :color, :font_name
-    attr_writer :references
+    attr_writer :references, :reference_ids
 
     def initialize(text, language: nil)
       super()
@@ -34,6 +34,11 @@ module Audiobook
 
     def references
       @references ||= []
+    end
+
+    # Marker ids detected from glyph geometry; empty when the source carries no position data.
+    def reference_ids
+      @reference_ids ||= []
     end
 
     def spoken_text

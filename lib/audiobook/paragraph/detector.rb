@@ -33,10 +33,13 @@ module Audiobook
           if buf.any? && prev_line
             # Dehyphenate across lines
             if prev_line.ends_with_hyphen? && line.starts_with_lowercase?
-              buf[-1] = Line.new(
-                buf.last.text.chomp('-') + line.text,
-                **prev_line.style_attrs
-              )
+              buf[-1] = Line.new(buf.last.dehyphenate(line.text), **prev_line.style_attrs)
+              prev_line = buf.last
+              next
+            end
+
+            if buf.one? && drop_cap?(prev_line, line)
+              buf[-1] = Line.new("#{prev_line.text}#{line.text}", **line.style_attrs)
               prev_line = buf.last
               next
             end
@@ -44,15 +47,16 @@ module Audiobook
             should_break = BreakDetector.should_break?(
               prev_line, line, buf,
               spacing_threshold: @spacing_threshold,
-              indent_threshold: @indent_threshold
+              indent_threshold: @indent_threshold,
+              isolated: isolated?(prev_line),
+              starts_block: isolated?(line)
             )
           else
             should_break = false
           end
 
           if should_break
-            items = Factory.create_items_from_lines(buf, start_page, max_sentence_chars: @max_sentence_chars)
-            items_with_pages.concat(items)
+            items_with_pages.concat(flush(buf, start_page))
             buf = [line]
             start_page = line.page_number
           else
@@ -61,15 +65,39 @@ module Audiobook
           prev_line = line
         end
 
-        if buf.any?
-          items = Factory.create_items_from_lines(buf, start_page, max_sentence_chars: @max_sentence_chars)
-          items_with_pages.concat(items)
-        end
+        items_with_pages.concat(flush(buf, start_page)) if buf.any?
 
         items_with_pages.reject { |data| data[:item].is_a?(Paragraph) && data[:item].empty? }
       end
 
       private
+
+      def flush(buf, start_page)
+        Factory.create_items_from_lines(
+          buf, start_page,
+          max_sentence_chars: @max_sentence_chars,
+          isolated: buf.one? && isolated?(buf.first)
+        )
+      end
+
+      # An oversized single letter opening a paragraph is a drop cap, not a heading.
+      DROP_CAP_RATIO = 1.8
+
+      def drop_cap?(prev_line, line)
+        prev_line.text.match?(/\A\p{Lu}\z/u) && line.starts_with_lowercase? &&
+          prev_line.font_size.to_f >= line.font_size.to_f * DROP_CAP_RATIO
+      end
+
+      # A line fenced by blank space above and below stands on its own, like a heading.
+      ISOLATION_LEADING = 0.4
+
+      def isolated?(line)
+        above, below = line.top_spacing, line.bottom_spacing
+        return false if above.nil? && below.nil?
+
+        gap = [@spacing_threshold, line.font_size.to_f * ISOLATION_LEADING].max
+        (above.nil? || above >= gap) && (below.nil? || below >= gap)
+      end
 
       def calculate_baseline_spacing(lines)
         spacings = lines.compact.map(&:top_spacing).compact.select { |s| s > 0 }
@@ -93,15 +121,15 @@ module Audiobook
     end
 
     class BreakDetector
-      def self.should_break?(prev_line, line, buf, spacing_threshold:, indent_threshold:)
+      def self.should_break?(prev_line, line, buf, spacing_threshold:, indent_threshold:, isolated: false, starts_block: false)
         # Dehyphenate check is handled before calling this
-        
+
         continuation = FontRoles.heading_continuation?(prev_line, line)
         font_changed = line.font_changed?(prev_line) || (
           !continuation && !FontRoles.heading_item?(prev_line) && line.style_changed?(prev_line)
         )
         page_changed = line.page_number != prev_line.page_number
-        is_only_numbers = line.text.match?(/^\d+$/)
+        is_only_numbers = TextHelpers.marker_line?(line.text)
         language_changed = line.language != prev_line.language
         role_changed = !continuation && FontRoles.heading_item?(prev_line) != FontRoles.heading_item?(line)
 
@@ -115,10 +143,11 @@ module Audiobook
           FontRoles.labeled_line?(line) ||
           (sentence_finished && line.starts_with_capital? && !continuation)
         should_break = true if (spacing_break || indent_break) && sentence_finished && !continuation
+        # A block fenced by blank space stands alone even when the text reads as unfinished.
+        should_break = true if starts_block || (isolated && buf.one?)
 
-        if should_break
-          should_break = false if TextHelpers.starts_with_ref_markers?(line.text)
-        end
+        # A footnote marker sits on its own line above the note it introduces.
+        should_break = false if TextHelpers.marker_line?(buffer_text)
 
         if page_changed && !sentence_finished && !font_changed && !role_changed && !is_only_numbers && !spacing_break && !indent_break
           should_break = false
