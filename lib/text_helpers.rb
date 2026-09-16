@@ -42,11 +42,12 @@ module TextHelpers
 
   # Join an array of line strings from a PDF into one paragraph string using sane defaults
   def self.join_pdf_lines(lines)
-    merged = Array(lines).map { |line| normalize_text(line) }.reject(&:empty?).reduce(nil) do |text, line|
+    merged = Array(lines).map { |line| normalize_text(line.to_s.sub(/[­‐‑]\z/, '-')) }.reject(&:empty?).reduce(nil) do |text, line|
       next line unless text
 
       if text.end_with?('-')
-        "#{text.chomp('-')}#{line}"
+        # A hyphen before a lowercase continuation splits a word; before a capital it is a dash.
+        line.match?(/\A\p{Ll}/u) ? "#{text.chomp('-').rstrip}#{line}" : "#{text} #{line}"
       else
         overlap = overlapping_word_count(text, line)
         words = line.split(/\s+/).drop(overlap)
@@ -77,14 +78,15 @@ module TextHelpers
       .reject(&:empty?)
   end
 
-  def self.starts_with_ref_markers?(text)
-    text.to_s.strip.match?(/\A\d+[)\.\]]*(?:\s+\d+[)\.\]]*)*/)
-  end
-
   def self.strip_inline_markers(text)
-    ids = []
-    clean = text.to_s.gsub(/([\p{L}\)\]\.\,;:\"])(\d{1,3})(?=\s*:)/u, '\1')
-    clean = clean.gsub(/([\p{L}\)\]\.\,;:\"])(\d{1,3})(?=(\s|$))/u) do
+    clean, ids = extract_markers(text)
+    clean = clean.gsub(/(#{MARKER_ANCHOR})(\d{1,3})(?=\s*:)/u, '\1')
+    clean = clean.gsub(/(#{MARKER_ANCHOR})(\d{1,3})(?=(\s|$))/u) do
+      ids << $2
+      $1
+    end
+    # A call glued to a number is a marker only where the sentence ends; inside it is a decimal.
+    clean = clean.sub(/(?<=\d)([.,])(\d{1,3})\z/u) do
       ids << $2
       $1
     end
@@ -92,10 +94,10 @@ module TextHelpers
   end
 
   def self.split_sentences(text, max_chars: Float::INFINITY)
-    parts = Ewprs::SentenceSplitter.split(text, max_chars: max_chars)
+    parts = Ewprs::SentenceSplitter.split(text, boundary_tokens: MARKER_TOKEN, max_chars: max_chars)
 
     parts.each_with_object([]) do |part, result|
-      if result.any? && result.last.match?(/\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Sra|St)\.$/i)
+      if result.any? && result.last.end_with?('.') && Ewprs::SentenceSplitter.abbreviation?(result.last[0..-2])
         result[-1] = "#{result[-1]} #{part}"
       else
         result << part
