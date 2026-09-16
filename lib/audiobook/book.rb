@@ -528,14 +528,11 @@ module Audiobook
         next unless item.is_a?(Paragraph)
         page_num = entry.page
         item.sentences.each do |sent|
-          new_text, ids = TextHelpers.strip_inline_markers(sent.text)
-          sent.text = new_text if new_text != sent.text
-          if ids.any?
-            ids.each do |id|
-              ref = ref_map[page_num][id] ||= Reference.new(id)
-              sent.add_reference(ref)
-              last_ref_by_page[page_num] = ref
-            end
+          ids = sentence_marker_ids(sent)
+          ids.each do |id|
+            ref = ref_map[page_num][id] ||= Reference.new(id)
+            sent.add_reference(ref)
+            last_ref_by_page[page_num] = ref
           end
         end
       end
@@ -548,29 +545,25 @@ module Audiobook
         item = entry.item
         page_num = entry.page
 
-        item_font = entry.font_size
-
         if (ref_ids = marker_id_for.call(item)) && !ref_ids.empty?
           # Attach each marker id to the last sentence of the previous paragraph
+          note_marker = footnote_font?(entry, body_font_by_page[page_num])
           ref_ids.each do |ref_id|
-            if ref_map[page_num].key?(ref_id) && body_font_by_page[page_num] && item_font && item_font < body_font_by_page[page_num].to_f - 1.0
-              next
-            end
-            ref = ref_map[page_num][ref_id] ||= Reference.new(ref_id)
+            called = ref_map[page_num].key?(ref_id)
+            ref    = ref_map[page_num][ref_id] ||= Reference.new(ref_id)
 
-            if (prev_para = last_para_by_page[page_num]) && prev_para.sentences.any?
-              last_sentence = prev_para.sentences.last
-              if last_sentence.text.to_s.strip.match?(/[.!?…]"?\)?$/)
+            # Below the body the marker only opens its note; the call was already made inline.
+            unless called && note_marker
+              last_sentence = last_para_by_page[page_num]&.sentences&.last
+              if last_sentence&.text.to_s.strip.match?(/[.!?…]"?\)?$/)
                 ref = last_sentence.add_reference(ref) || ref
                 ref_map[page_num][ref_id] = ref
-                last_ref_by_page[page_num] = ref
               else
                 attach_to_next[page_num] << ref
               end
-            else
-              attach_to_next[page_num] << ref
             end
 
+            last_ref_by_page[page_num] = ref
             pending_refs[page_num] << SymMash.new(ref: ref, min_idx: processed.size)
           end
           next
@@ -609,49 +602,28 @@ module Audiobook
         page_num = entry.page
         queue = pending_refs[page_num]
         if item.is_a?(Paragraph) && item.sentences.any?
-          first_text = item.sentences.first.text
-          # If paragraph starts with multiple markers like "1 2 Texto...", drop the first id and keep text
-          leading_match = first_text.match(/^(\d+)[\)\.]?\s+(.*)$/)
-          if leading_match
-            lead_id = leading_match[1]
-            ref = ref_map[page_num][lead_id]
-            unless ref
-              ref = Reference.new(lead_id)
-              if (prev_para = last_para_by_page[page_num]) && prev_para.sentences.any?
-                last_sentence = prev_para.sentences.last
-                ref = last_sentence.add_reference(ref) || ref
-              end
-              ref_map[page_num][lead_id] = ref
+          footnote = footnote_font?(entry, body_font_by_page[page_num])
+          # A note repeats its marker before the text; body-sized paragraphs that open with a number are not notes.
+          leading_match = item.sentences.first.text.match(/\A(\d{1,3})[)\.]?\s+(.*)\z/m) if footnote
+          ref = ref_map[page_num][leading_match[1]] if leading_match
+          if ref
+            if (entry_info = queue.find { |info| info.ref.equal?(ref) })
+              entry_info.min_idx = idx + 1
             end
-            if ref
-              if (entry_info = queue.find { |info| info.ref.equal?(ref) })
-                entry_info.min_idx = idx + 1
-              end
-              item.sentences.first.text = leading_match[2]
-              ref.add_sentences(item.sentences)
-              pending_refs[page_num].reject! { |info| info.ref.equal?(ref) && info.min_idx <= idx }
-              last_ref_by_page[page_num] = ref
-              next
-            end
-          elsif (info = queue.find { |data| data.min_idx <= idx })
-            body_font = body_font_by_page[page_num]
-            line_font = entry.font_size
-            if body_font && line_font && line_font < body_font.to_f - 1.0
-              ref = info.ref
-              info.min_idx = idx + 1
-              ref.add_sentences(item.sentences)
-              last_ref_by_page[page_num] = ref
-              pending_refs[page_num].delete(info)
-              next
-            end
-          else
-            ref = last_ref_by_page[page_num]
-            body_font = body_font_by_page[page_num]
-            line_font = entry.font_size
-            if ref && (queue.nil? || queue.empty?) && body_font && line_font && line_font < body_font.to_f - 1.0
-              ref.add_sentences(item.sentences)
-              next
-            end
+            item.sentences.first.text = leading_match[2]
+            ref.add_sentences(item.sentences)
+            pending_refs[page_num].reject! { |info| info.ref.equal?(ref) && info.min_idx <= idx }
+            last_ref_by_page[page_num] = ref
+            next
+          elsif footnote && (info = queue.find { |data| data.min_idx <= idx })
+            info.min_idx = idx + 1
+            info.ref.add_sentences(item.sentences)
+            last_ref_by_page[page_num] = info.ref
+            pending_refs[page_num].delete(info)
+            next
+          elsif footnote && queue.blank? && (ref = last_ref_by_page[page_num])
+            ref.add_sentences(item.sentences)
+            next
           end
         end
         items_with_pages << entry
@@ -665,14 +637,14 @@ module Audiobook
           prev_entry = merged_items[-1]
           prev_item = prev_entry.item
           if prev_item.is_a?(Paragraph)
-            page_changed = entry.page > prev_entry.page
-            font_close = entry.font_size && prev_entry.font_size ? (entry.font_size - prev_entry.font_size).abs < 0.6 : true
+            font_close = entry.font_size && prev_entry.font_size ? FontRoles.same_size?(entry, prev_entry) : true
             same_language = prev_item.sentences.last&.language == item.sentences.first&.language
-            if font_close && same_language
-              last_text = prev_item.sentences.last&.text.to_s.strip
-              first_text = item.sentences.first&.text.to_s.strip
-              looks_unfinished = last_text !~ /[.!?…]"?\)?$/
-              looks_continuation = first_text.match?(/\A[[:lower:]]/)
+            last_text = prev_item.sentences.last&.text.to_s.strip
+            first_text = item.sentences.first&.text.to_s.strip
+            looks_unfinished = last_text !~ /[.!?…]"?\)?$/
+            looks_continuation = first_text.match?(/\A[[:lower:]]/)
+            # A lowercase start after an unfinished sentence resumes it even when the font jitters.
+            if same_language && (font_close || (looks_unfinished && looks_continuation))
               if (!last_text.empty? && looks_unfinished) || (!first_text.empty? && looks_continuation)
                 if looks_unfinished && !first_text.empty?
                   # Join first sentence text and references into the previous last sentence
@@ -698,7 +670,7 @@ module Audiobook
         merged_items << entry
       end
       items_with_pages = merged_items
- 
+
       # Group items by their page number
       pages_hash = group_items_by_page(items_with_pages)
       
@@ -725,6 +697,21 @@ module Audiobook
       
       # Create Page objects
       pages_hash.sort.map { |page_num, items| Page.new(page_num, items) }
+    end
+
+    FOOTNOTE_FONT_MARGIN = 1.0
+
+    def footnote_font?(entry, body_font)
+      body_font && entry.font_size && entry.font_size.to_f < body_font.to_f - FOOTNOTE_FONT_MARGIN
+    end
+
+    # Geometry-detected markers are exact; text heuristics only run for sources without glyph positions.
+    def sentence_marker_ids(sentence)
+      return sentence.reference_ids if sentence.reference_ids.any?
+
+      text, ids = TextHelpers.strip_inline_markers(sentence.text)
+      sentence.text = text if text != sentence.text
+      ids
     end
 
     def compute_body_font_by_page(items_with_pages)
@@ -943,37 +930,71 @@ module Audiobook
       result
     end
 
-    # Detect and filter headers/footers by finding lines that appear on >30% of pages
+    FOLIO          = /\A[ivxlcdm\d]{1,7}[.\]]?\z/i
+    FURNITURE_WORDS = 8
+    OUTLIER_MARGIN  = 0.1
+
+    # Page furniture is a folio, a running head repeated across pages, or a short line parked
+    # away from the text block. None of it belongs in the narration.
     def filter_headers_footers(lines_data)
       return lines_data if lines_data.empty?
-      
-      # Normalize text for comparison (replace numbers with placeholder)
-      norm = ->(s) { s.downcase.gsub(/\d+/, '<d>').gsub(/\s+/, ' ').strip }
-      
-      # Group lines by page
-      pages_hash = lines_data.group_by { |l| l['page'] || l[:page] || (l.is_a?(SymMash) ? l.page : nil) }
-      return lines_data if @metadata.selected_pages && pages_hash.size < 3
 
-      hdrf_counts = Hash.new(0)
-      
-      # Count how often first/last lines appear across pages
-      pages_hash.each do |_, page_lines|
-        first_line = page_lines.first
-        last_line = page_lines.last
-        first_text = first_line&.dig('text') || first_line&.dig(:text) || (first_line.is_a?(SymMash) ? first_line.text : nil)
-        last_text = last_line&.dig('text') || last_line&.dig(:text) || (last_line.is_a?(SymMash) ? last_line.text : nil)
-        [first_text, last_text].compact.map(&norm).each { |l| hdrf_counts[l] ||= 0; hdrf_counts[l] += 1 }
-      end
-      
-      threshold = [(pages_hash.size * 0.3).ceil, 3].max
-      hdrf_set = hdrf_counts.select { |_, count| count >= threshold }.keys
-      
-      # Filter out detected headers/footers
-      lines_data.reject do |l|
-        text = l['text'] || l[:text] || (l.is_a?(SymMash) ? l.text : nil)
-        hdrf_set.include?(norm.call(text))
+      lines = lines_data.map { |line| normalize_symmash(line) }
+      pages = lines.group_by(&:page)
+      return lines_data if @metadata.selected_pages && pages.size < 3
+
+      furniture = furniture_lines(pages, lines).map(&:object_id).to_set
+      return lines_data if furniture.empty?
+
+      lines_data.select.with_index { |_, idx| !furniture.include?(lines[idx].object_id) }
+    end
+
+    def furniture_lines(pages, lines)
+      boundaries = pages.values.flat_map { |page_lines| page_lines.values_at(0, 1, -2, -1).compact.uniq }
+      folios     = boundaries.select { |line| folio?(line, pages[line.page]) }
+      repeated   = repeated_boundaries(pages, folios)
+      outliers   = boundary_outliers(pages, lines, folios)
+      (folios + repeated + outliers).to_set
+    end
+
+    # A page carries one folio; a column of bare numbers in the same size is a note marker list.
+    def folio?(line, page_lines)
+      return false if page_lines.size < 3 || !line.text.to_s.strip.match?(FOLIO)
+
+      size = FontRoles.quantize(line.font_size)
+      page_lines.count { |other| FontRoles.quantize(other.font_size) == size && TextHelpers.marker_line?(other.text) } < 2
+    end
+
+    def repeated_boundaries(pages, folios)
+      edges  = pages.values.map { |page_lines| (page_lines - folios).values_at(0, -1).compact.uniq }
+      counts = edges.flat_map { |page_edges| page_edges.map { |line| normalize_boundary_text(line.text).gsub(/\d+/, '<d>') }.uniq }
+        .tally
+      limit  = [[(pages.size * 0.3).ceil, 3].min, 2].max
+      edges.flatten.select { |line| counts[normalize_boundary_text(line.text).gsub(/\d+/, '<d>')] >= limit }
+    end
+
+    # A running head or watermark sits outside the column the body text keeps to.
+    def boundary_outliers(pages, lines, folios)
+      width = lines.map { |line| line.page_width.to_f }.max.to_f
+      return [] unless width.positive?
+
+      body_x    = mode_of(lines.map { |line| (line.x.to_f / 10).round * 10 })
+      body_size = mode_of(lines.filter_map { |line| FontRoles.quantize(line.font_size) })
+      return [] unless body_x && body_size
+
+      pages.values.flat_map do |page_lines|
+        content = page_lines - folios
+        next [] if content.size < 3
+
+        content.values_at(0, -1).compact.uniq.select do |line|
+          line.text.to_s.split.size <= FURNITURE_WORDS &&
+            FontRoles.quantize(line.font_size).to_f <= body_size + FontRoles::BODY_BAND &&
+            (line.x.to_f - body_x).abs > width * OUTLIER_MARGIN
+        end
       end
     end
+
+    def mode_of(values) = values.compact.tally.max_by { |_, count| count }&.first
 
 
     public
