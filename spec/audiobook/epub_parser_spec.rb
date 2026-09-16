@@ -58,6 +58,55 @@ RSpec.describe Audiobook::Parsers::Epub do
     epub
   end
 
+  def build_markup_epub(dir, body)
+    oebps = File.join(dir, 'OEBPS')
+    meta  = File.join(dir, 'META-INF')
+    FileUtils.mkdir_p([oebps, meta])
+    File.write(File.join(dir, 'mimetype'), 'application/epub+zip')
+    File.write(File.join(meta, 'container.xml'), <<~XML)
+      <?xml version="1.0"?>
+      <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+        <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>
+      </container>
+    XML
+    File.write(File.join(oebps, 'chapter.xhtml'), <<~XHTML)
+      <?xml version="1.0" encoding="UTF-8"?>
+      <html xmlns="http://www.w3.org/1999/xhtml"><head><title>t</title></head><body>#{body}</body></html>
+    XHTML
+    File.write(File.join(oebps, 'content.opf'), <<~XML)
+      <?xml version="1.0"?>
+      <package xmlns="http://www.idpf.org/2007/opf" unique-identifier="BookId" version="2.0">
+        <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+          <dc:identifier id="BookId">id1</dc:identifier><dc:title>Test</dc:title><dc:language>en</dc:language>
+        </metadata>
+        <manifest><item id="ch1" href="chapter.xhtml" media-type="application/xhtml+xml"/></manifest>
+        <spine><itemref idref="ch1"/></spine>
+      </package>
+    XML
+    epub = File.join(dir, 'book.epub')
+    system('zip', '-q', '-X', '-r', epub, 'mimetype', 'META-INF', 'OEBPS', chdir: dir)
+    epub
+  end
+
+  it 'extracts a quoted paragraph once instead of through every ancestor block' do
+    Dir.mktmpdir do |dir|
+      path = build_markup_epub(dir, '<blockquote><p>Quoted sentence here.</p></blockquote><ul><li><p>Item text.</p></li></ul>')
+      texts = described_class.extract_data(path).content.lines.map(&:text)
+
+      expect(texts.count('Quoted sentence here.')).to eq(1)
+      expect(texts.count('Item text.')).to eq(1)
+    end
+  end
+
+  it 'keeps hard breaks as separate lines' do
+    Dir.mktmpdir do |dir|
+      path = build_markup_epub(dir, '<p>First bullet<br/>Second bullet<br/>Third bullet</p>')
+      texts = described_class.extract_data(path).content.lines.map(&:text)
+
+      expect(texts).to include('First bullet', 'Second bullet', 'Third bullet')
+    end
+  end
+
   it 'maps EPUB CSS classes onto the generic line style' do
     Dir.mktmpdir do |dir|
       path = build_epub(dir)

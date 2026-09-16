@@ -55,13 +55,13 @@ module Audiobook
 
             next unless block_of_interest?(node)
 
-            text = TextHelpers.normalize_text(extract_inline_text(node))
-            next if text.empty?
+            raw = extract_inline_text(node)
+            next if TextHelpers.normalize_text(raw).empty?
 
             style = CssStyle.for_node(node, sheets)
-            # Split hard breaks into separate lines to help paragraph discovery
-            text.split(/\n{2,}/).each do |part|
-              part = part.strip
+            # Hard breaks separate list items and verses; normalizing first would fuse them.
+            raw.split(/\n+/).each do |part|
+              part = TextHelpers.normalize_text(part)
               next if part.empty?
               lines << SymMash.new(
                 text: part, font_size: style[:font_size] || effective_font_size_for(node),
@@ -133,11 +133,12 @@ module Audiobook
         align&.downcase&.to_sym
       end
 
-      # Decide if a node is a block we should extract text from
+      # Only leaf blocks carry text; an ancestor would repeat everything its children already hold.
       def self.block_of_interest?(node)
         return false unless node.element?
-        return true if BLOCK_TAGS.include?(node.name)
-        node.name == 'div' && node.css(BLOCK_TAGS.join(',')).empty?
+        return false unless BLOCK_TAGS.include?(node.name) || node.name == 'div'
+
+        node.css(BLOCK_TAGS.join(',')).empty?
       end
 
       # Detect EPUB page break markers and return an integer page number if present
