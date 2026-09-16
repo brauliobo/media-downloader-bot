@@ -63,9 +63,13 @@ module Audiobook
       end
     end
 
+    # Glyph coverage shifts reported sizes slightly within the same run, so compare with a tolerance.
+    SIZE_TOLERANCE = 0.5
+    SIZE_RATIO     = 0.06
+
     def self.same_size?(a, b)
       sa, sb = size_of(a), size_of(b)
-      sa && sb && sa == sb
+      sa && sb && (sa - sb).abs <= [SIZE_TOLERANCE, [sa, sb].max * SIZE_RATIO].max
     end
 
     def self.heading_item?(line)

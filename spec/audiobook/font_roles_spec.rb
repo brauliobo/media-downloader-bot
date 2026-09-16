@@ -59,8 +59,9 @@ RSpec.describe Audiobook::FontRoles do
     expect(described_class.alignment_for(x: 200, x_max: 400, page_width: 600)).to eq(:center)
     expect(described_class.alignment_for(x: 80, x_max: 520, page_width: 600)).to eq(:left)
     expect(described_class.alignment_for(x: 120, x_max: 480, page_width: 600)).to eq(:left)
-    expect(described_class.same_size?(line('A', 12.2), line('B', 12.4))).to be(false)
+    expect(described_class.same_size?(line('A', 12.2), line('B', 12.4))).to be(true)
     expect(described_class.same_size?(line('A', 12.1), line('B', 12.2))).to be(true)
+    expect(described_class.same_size?(line('A', 12.0), line('B', 18.0))).to be(false)
     expect(described_class.alignment_for(x: 400, x_max: 560, page_width: 600)).to eq(:right)
   end
 end
