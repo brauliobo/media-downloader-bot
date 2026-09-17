@@ -65,6 +65,22 @@ RSpec.describe Audiobook::FontRoles do
     expect(described_class.alignment_for(x: 400, x_max: 560, page_width: 600)).to eq(:right)
   end
 
+  it 'ranks heading levels by size, not by style, and caps the depth' do
+    lines = [
+      line('BOOK TITLE', 30, bold: true, alignment: :center),
+      line('Chapter One', 20, bold: true, alignment: :center),
+      line('Chapter Two', 20, alignment: :center),
+      line('A section', 16, bold: true),
+      line('A subsection', 14, italic: true),
+      line('Another rank', 12.5, bold: true),
+      *Array.new(8) { |idx| line("Body line number #{idx} of the running text here", 11) }
+    ]
+    roles = described_class.from_lines(lines)
+
+    expect(roles.level_for(lines[1])).to eq(roles.level_for(lines[2]))
+    expect(roles.map.values.filter_map { |entry| entry[:level] }.max).to be <= described_class::MAX_LEVELS
+  end
+
   it 'treats a definition as a label that starts a block' do
     expect(described_class.labeled_line?(line('Nota: veja adiante', 12))).to be(true)
     expect(described_class.labeled_line?(line('CD = Clorito sódico', 12))).to be(true)

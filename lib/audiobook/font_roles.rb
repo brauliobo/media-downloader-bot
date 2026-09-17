@@ -12,6 +12,7 @@ module Audiobook
     CENTER_SIDE_MIN = 0.18
     SHORT_CENTER_WORDS = 12
     MAX_HEADING_WORDS  = 24
+    MAX_LEVELS         = 4
 
     attr_reader :body_size, :map
 
@@ -235,16 +236,25 @@ module Audiobook
         heading_keys.shift
       end
 
-      heading_keys.each_with_index do |key, index|
-        role  = HEADING_ROLES[index] || :subheading
-        level = index + 1
-        entry = { role: role, level: level }
+      levels = heading_levels(heading_keys, groups)
+      heading_keys.each do |key|
+        level = levels[key]
+        entry = { role: HEADING_ROLES[level - 1] || :subheading, level: level }
         @map[key] = entry
         next if groups[key].first[:size] <= @body_size + BODY_BAND
 
         clustered = size_key(groups[key].first[:size])
         @map[clustered] = entry if @map[clustered].nil? || @map[clustered][:level].nil?
       end
+    end
+
+    # Signatures that share a size hold the same rank: a bold chapter title and an italic one are
+    # both chapter titles. Ranking every signature on its own invents a level per style.
+    def heading_levels(keys, groups)
+      sizes = keys.map { |key| groups[key].first[:size] }.uniq.sort
+      ranks = cluster(sizes).reverse.each_with_index
+        .flat_map { |group, index| group.map { |size| [size, [index + 1, MAX_LEVELS].min] } }.to_h
+      keys.to_h { |key| [key, ranks[groups[key].first[:size]]] }
     end
 
     def clustered_sizes(clusters)
