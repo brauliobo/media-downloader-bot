@@ -1,6 +1,7 @@
 require_relative 'paragraph'
 require_relative 'reference'
 require_relative 'heading'
+require_relative 'endnotes'
 require_relative '../text_helpers'
 
 module Audiobook
@@ -11,10 +12,11 @@ module Audiobook
     FOOTNOTE_FONT_MARGIN = 1.0
     NOTE_OPENING = /\A(\d{1,3})[)\.]?\s+(.*)\z/m
 
-    def self.attach(items) = new(items).attach
+    def self.attach(items, endnotes: Endnotes.none) = new(items, endnotes: endnotes).attach
 
-    def initialize(items)
+    def initialize(items, endnotes: Endnotes.none)
       @items = items
+      @endnotes = endnotes
       @body_font = body_font_by_page(items)
       @refs = SymMash.new { |hash, page| hash[page] = SymMash.new }   # { page => { '5' => Reference } }
       @pending = SymMash.new { |hash, page| hash[page] = [] }
@@ -27,10 +29,39 @@ module Audiobook
 
     def attach
       call_inline_markers
-      collect_notes(mark_calls)
+      collect_notes(mark_calls).tap { |items| bind_endnotes(items) }
     end
 
     private
+
+    # A note gathered at the back of the book fills the call that pointed at it, looked up under
+    # the chapter in force where the call was made because the numbering restarts with each.
+    def bind_endnotes(items)
+      return if @endnotes.empty?
+
+      chapter = nil
+      items.each do |entry|
+        chapter = chapter_number(entry.item) || chapter
+        references_of(entry.item).each { |reference| bind(reference, chapter) }
+      end
+    end
+
+    def chapter_number(item)
+      item.text[Endnotes::GROUP_NUMBER, 1] if item.is_a?(Heading)
+    end
+
+    def references_of(item)
+      return [] unless item.is_a?(Paragraph)
+
+      item.sentences.flat_map(&:references)
+    end
+
+    def bind(reference, chapter)
+      return unless reference.sentences.empty?
+
+      text = @endnotes.entry(chapter, reference.id)
+      reference.add_sentences(Sentence.build_all(TextHelpers.split_sentences(text))) if text.present?
+    end
 
     # A call glued to a word or its punctuation, "Troyes.1" or "Eschenbach2".
     def call_inline_markers

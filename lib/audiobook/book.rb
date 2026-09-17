@@ -27,6 +27,7 @@ require_relative 'page_selection'
 require_relative 'page_filter'
 require_relative 'lines'
 require_relative 'notes'
+require_relative 'endnotes'
 require_relative 'blocks'
 require_relative '../translator'
 
@@ -469,20 +470,21 @@ module Audiobook
 
     # Build pages from Line objects (new format with font metadata)
     def pages_from_lines(lines_data, images_data = [])
-      lines = Lines.build(narrated(lines_data))
+      endnotes = include_all? ? Endnotes.none : Endnotes.from_lines(lines_data)
+      lines    = Lines.build(narrated(lines_data, endnotes))
 
       @font_roles = FontRoles.from_lines(lines)
       items = FontRoles.use(@font_roles) do
         Paragraph.discover_from_lines(lines, max_sentence_chars: max_sentence_chars)
       end.map { |entry| SymMash.new(entry) }
 
-      build_pages(Blocks.merge(Notes.attach(items)), images_data)
+      build_pages(Blocks.merge(Notes.attach(items, endnotes: endnotes)), images_data)
     end
 
-    def narrated(lines_data)
+    def narrated(lines_data, endnotes)
       return lines_data if include_all?
 
-      PageFilter.narrated(lines_data, selected_pages: @metadata.selected_pages)
+      PageFilter.narrated(lines_data, selected_pages: @metadata.selected_pages, skip_pages: endnotes.pages)
     end
 
     def max_sentence_chars

@@ -7,15 +7,16 @@ module Audiobook
   # record and the contents pages are all printed for a reader who can see the page, and say
   # nothing to a listener.
   class PageFilter
-    FILTERS = %i[furniture rights_record contents].freeze
+    FILTERS = %i[furniture rights_record contents skipped_pages].freeze
 
-    def self.narrated(lines_data, selected_pages: nil)
-      new(lines_data, selected_pages: selected_pages).narrated
+    def self.narrated(lines_data, selected_pages: nil, skip_pages: nil)
+      new(lines_data, selected_pages: selected_pages, skip_pages: skip_pages).narrated
     end
 
-    def initialize(lines_data, selected_pages: nil)
+    def initialize(lines_data, selected_pages: nil, skip_pages: nil)
       @lines_data = lines_data
       @selected_pages = selected_pages
+      @skip_pages = skip_pages
     end
 
     def narrated
@@ -213,6 +214,13 @@ module Audiobook
     end
 
     def contents_entry?(text) = TextHelpers.toc_entry?(text) || text.match?(CHAPTER_LABEL)
+
+    # Endnotes are read where they are called, so the list they came from is not read again.
+    def without_skipped_pages(lines_data)
+      return lines_data if @skip_pages.blank?
+
+      reject_lines(lines_data, wrap(lines_data)) { |line| @skip_pages.include?(line.page) }
+    end
 
     # ---------- shared left edges ----------
 

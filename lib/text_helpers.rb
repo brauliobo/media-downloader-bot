@@ -13,8 +13,10 @@ module TextHelpers
   MARKER_IDS      = /\d{1,3}(?:,\d{1,3})*/
   MARKER_IDS_ONLY = /\A#{MARKER_IDS}\z/
   # A digit before the anchor means a decimal or a thousands separator, not a footnote call; a capital
-  # means an acronym or a product name ("MMS1", "CO2").
-  MARKER_ANCHOR  = /(?:[\p{Ll}\)\]"”’»]|(?<!\d)[.,;:])/u
+  # means an acronym or a product name ("MMS1", "CO2"). A closing quote or bracket only counts where
+  # it closes something, and a letter only where it ends a word: a lone letter is a glyph the text
+  # layer mapped wrong ("décadas de f950" for 1950).
+  MARKER_ANCHOR  = /(?:(?<=\p{L})\p{Ll}|(?<=[\p{L}\p{N}.,;:!?…])[\)\]"”’»]|(?<!\d)[.,;:])/u
   TRAILING_HYPHEN = /\s*[-­‐‑]\z/
   # An ellipsis is a pause; whether it closes the sentence depends on what follows.
   TRAILING_ELLIPSIS = /(?:\.{3}|…)["”’)\]»]*\s*\z/u
@@ -107,8 +109,9 @@ module TextHelpers
       ids.concat($2.split(','))
       $1
     end
-    # A call glued to a number is a marker only where the sentence ends; inside it is a decimal.
-    clean = clean.sub(/(?<=\d)([.,])(\d{1,3})\z/u) do
+    # A call glued to a number is a marker only where the sentence ends; inside it is a decimal,
+    # and a group of exactly three digits is a thousands separator wherever it sits.
+    clean = clean.sub(/(?<=\d)([.,])(\d{1,2})\z/u) do
       ids << $2
       $1
     end
