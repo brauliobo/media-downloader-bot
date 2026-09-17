@@ -486,4 +486,55 @@ RSpec.describe 'Audiobook assembly regressions' do
       expect(spoken(book)).to include('MMS1 is activated MMS.')
     end
   end
+  describe 'savin-mid-paragraph-sentences.pdf' do
+    let(:book) { book_for('savin-mid-paragraph-sentences.pdf', 'en') }
+
+    it 'keeps a paragraph together when a sentence ends at a line end' do
+      para = paragraphs(book).find { |item| item.sentences.first.text.start_with?('As a country, one thing') }
+      expect(para.sentences.size).to be >= 4
+      expect(para.sentences.map(&:text).join(' ')).to include('And that is about who is actually behind the scene')
+    end
+
+    it 'still starts a paragraph where the page leaves a gap' do
+      expect(paragraph_texts(book)).to include(a_string_starting_with('Is it always unique players'))
+    end
+  end
+
+  describe 'reasons-numbered-labels.pdf' do
+    let(:book) { book_for('reasons-numbered-labels.pdf', 'en') }
+
+    it 'keeps a numbered label out of the block it names' do
+      expect(item_texts(book)).to include('5. Time (how long to take the Protocols)', 'a. Herpes')
+      expect(paragraph_texts(book)).to include(a_string_starting_with('The standard Protocol dosing time frame'))
+    end
+
+    it 'keeps a label at a page end out of the text that follows overleaf' do
+      expect(item_texts(book)).to include('e. Compromised immune system')
+      expect(paragraph_texts(book)).to include(a_string_starting_with('Every body has different issues'))
+    end
+  end
+
+  describe 'nao-comecou-indent-paragraphs.pdf' do
+    let(:book) { book_for('nao-comecou-indent-paragraphs.pdf', 'pt') }
+
+    it 'opens a paragraph at an indented first line, not at every sentence' do
+      para = paragraphs(book).find { |item| item.sentences.first.text.start_with?('Por um lado') }
+      expect(para.sentences.size).to be >= 3
+      expect(paragraphs(book).count { |item| item.sentences.size > 2 }).to be >= 2
+    end
+  end
+
+  describe 'adios-one-line-paragraphs.pdf' do
+    let(:book) { book_for('adios-one-line-paragraphs.pdf', 'es') }
+
+    it 'still separates paragraphs a page sets one sentence at a time' do
+      expect(paragraph_texts(book)).to include(
+        'No sucede de un día para otro.', 'No aparece de repente.', 'Tu rostro amanece hinchado.'
+      )
+    end
+
+    it 'carries a sentence past an ellipsis that a lowercase line continues' do
+      expect(paragraph_texts(book)).to include(a_string_matching(/Y un cuerpo que vive en alerta\.\.\. no libera\./))
+    end
+  end
 end
