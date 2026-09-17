@@ -465,7 +465,7 @@ module Audiobook
 
     # Build pages from Line objects (new format with font metadata)
     def pages_from_lines(lines_data, images_data = [])
-      filtered_lines = (include_all? ? lines_data : filter_headers_footers(lines_data))
+      filtered_lines = (include_all? ? lines_data : filter_rights_record(filter_headers_footers(lines_data)))
         .map { |line| normalize_symmash(line) }
       shared_edges = shared_left_edges(filtered_lines)
 
@@ -944,6 +944,45 @@ module Audiobook
       result = footer_text unless prev_footers.include?(footer_text)
       prev_footers << footer_text
       result
+    end
+
+    RIGHTS_PAGES = 8
+    CATALOG_MARK = /\bis[bs]n\b|\bcd[du]\b|\bp\. cm\.|\bdc\d\d\b|catalogaç|cataloging/i
+    # On such a page these lines are the record librarians need, not text to read out.
+    RECORD_START = /\A(?:©|\(c\)|copyright|is[bs]n|cdd|cdu|p\.\s*cm\.|www\.|https?:|
+                        dep[oó]sito\s+legal|printed\s+(?:in|on)|impreso\s+en|
+                        all\s+rights\s+reserved|todos\s+os\s+direitos|todos\s+los\s+derechos|
+                        [\p{L}'-]+,\s+[\p{L}'-]+,\s+\d{4})/xi
+    RECORD_INSIDE = /\bis[bs]n[:\s]|\bcd[du][-:\s]|\b[ivx]+\.\s*(?:t[íi]tul|title)|\bdc\d\d\b|
+                     cat[a]?log|\A\p{Lu}{2}\d|\A[\w.+-]+@[\w.-]+\z/xi
+    # The subject headings of a record run several numbered entries to the line.
+    SUBJECT_ENTRY = /(?:\A|\s)\d{1,2}\.\s+\p{Lu}/
+    RECORD_WORDS  = 5
+
+    # The opening pages carry a cataloguing record: the notice, the identifiers and the shelf
+    # codes. The same page may still hold a dedication or an acknowledgement, so only the
+    # record goes.
+    def filter_rights_record(lines_data)
+      lines  = lines_data.map { |line| normalize_symmash(line) }
+      pages  = lines.group_by(&:page)
+      rights = pages.keys.sort.first(RIGHTS_PAGES).select { |page| catalog_page?(pages[page]) }.to_set
+      return lines_data if rights.empty?
+
+      lines_data.select.with_index do |_, idx|
+        !(rights.include?(lines[idx].page) && record_line?(lines[idx].text))
+      end
+    end
+
+    def catalog_page?(page_lines) = page_lines.map { |line| line.text.to_s }.join(' ').match?(CATALOG_MARK)
+
+    def record_line?(text)
+      value = text.to_s
+      return true if value.match?(RECORD_START) || value.match?(RECORD_INSIDE)
+
+      return true if value.scan(SUBJECT_ENTRY).size > 1
+
+      # The subject headings of a record are a numbered list of two or three words each.
+      TextHelpers.enumerated?(value) && value.split.size <= RECORD_WORDS
     end
 
     FOLIO           = /\A[ivxlcdm\d]{1,7}[.\]]?\z/i

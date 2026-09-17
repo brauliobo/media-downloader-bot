@@ -179,8 +179,8 @@ RSpec.describe 'Audiobook assembly regressions' do
   describe 'matriz-decimal-marker.pdf' do
     let(:book) { book_for('matriz-decimal-marker.pdf', 'pt') }
 
-    it 'leaves a catalogue decimal alone' do
-      expect(spoken(book)).to include('CDD-299.93')
+    it 'keeps a catalogue record out of the narration and raises no reference from it' do
+      expect(spoken(book)).not_to include('CDD', 'ISBN', 'Título.')
       expect(references(book)).to be_empty
     end
   end
@@ -535,6 +535,31 @@ RSpec.describe 'Audiobook assembly regressions' do
 
     it 'carries a sentence past an ellipsis that a lowercase line continues' do
       expect(paragraph_texts(book)).to include(a_string_matching(/Y un cuerpo que vive en alerta\.\.\. no libera\./))
+    end
+  end
+  describe 'path-cataloguing-record.pdf' do
+    let(:book) { book_for('path-cataloguing-record.pdf', 'en') }
+
+    it 'drops the rights notice and the cataloguing record' do
+      expect(spoken(book)).not_to include('ISBN', 'p. cm.', 'dc22', 'Spirit writing', 'I. Title')
+      expect(spoken(book)).not_to match(/©|All rights reserved/)
+    end
+
+    it 'keeps the dedication that shares the front matter' do
+      expect(spoken(book)).to include('To my dear mother, with loving thanks')
+    end
+  end
+
+  describe 'kybalion-rights-page.pdf' do
+    let(:book) { book_for('kybalion-rights-page.pdf', 'en') }
+
+    it 'raises no heading from an isbn or a publisher url' do
+      expect(headings(book)).to all(satisfy { |text| !text.match?(/isbn|www\./i) })
+      expect(spoken(book)).not_to match(/isbn|yogebooks\.com/i)
+    end
+
+    it 'keeps the dedication' do
+      expect(spoken(book)).to include('To Hermes Trismegistus')
     end
   end
 end
