@@ -126,5 +126,10 @@ RSpec.describe TextHelpers do
     it 'keeps a dash before a capitalised continuation' do
       expect(described_class.join_pdf_lines(['a solução -', 'Uma nova era'])).to eq('a solução - Uma nova era')
     end
+
+    it 'keeps a page range whose hyphen ends the line' do
+      expect(described_class.join_pdf_lines(['Appl Environ Microbiol 60 (7): 2650-', '2656. PMC 201698.']))
+        .to eq('Appl Environ Microbiol 60 (7): 2650-2656. PMC 201698.')
+    end
   end
 end

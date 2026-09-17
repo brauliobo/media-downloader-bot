@@ -73,6 +73,48 @@ RSpec.describe Audiobook::Parsers::Pdf do
     expect(pages.first.lines.first.x_max).to eq(298.0)
   end
 
+  it 'reads a tight justified gap as a space and a small-caps gap as none' do
+    justified = words(['So,', 66.1, 79.5, 245.0, 258.9], ['the', 80.6, 95.9, 245.0, 258.9])
+    small_cap = words(['J', 108, 116, 233.1, 245.7], ['HONATAN', 116.3, 192, 235.2, 245.2])
+
+    expect(described_class.line_text(justified)).to eq('So, the')
+    expect(described_class.line_text(small_cap)).to eq('JHONATAN')
+  end
+
+  it 'rejoins one baseline whose words each landed in their own block' do
+    xml = <<~XML
+      <doc>
+        <page width="595" height="842">
+          <flow><block xMin="129" yMin="435.4" xMax="159" yMax="450.8">
+            <line xMin="129.9" yMin="435.4" xMax="159.5" yMax="450.8"><word xMin="129.9" yMin="435.4" xMax="159.5" yMax="450.8">dias,</word></line>
+          </block></flow>
+          <flow><block xMin="173" yMin="435.4" xMax="208" yMax="450.8">
+            <line xMin="173.6" yMin="435.4" xMax="208.7" yMax="450.8"><word xMin="173.6" yMin="435.4" xMax="208.7" yMax="450.8">estou</word></line>
+          </block></flow>
+          <flow><block xMin="129" yMin="455.0" xMax="200" yMax="470.4">
+            <line xMin="129.9" yMin="455.0" xMax="200.0" yMax="470.4"><word xMin="129.9" yMin="455.0" xMax="200.0" yMax="470.4">certo</word></line>
+          </block></flow>
+        </page>
+      </doc>
+    XML
+    status = instance_double(Process::Status, success?: true)
+    allow(Sh).to receive(:run).and_return([xml, '', status])
+    allow(described_class).to receive(:pdftohtml_bin).and_return(nil)
+
+    pages = described_class.extract_document_range('book.pdf', first_page: 1, last_page: 1)
+
+    expect(pages.first.lines.map(&:text)).to eq(['dias, estou', 'certo'])
+  end
+
+  it 'leaves a contents entry apart from the folio it points at' do
+    far = [
+      Nokogiri::XML('<line><word xMin="94" xMax="240" yMin="48" yMax="62">PREFÁCIO</word></line>').xpath('//word'),
+      Nokogiri::XML('<line><word xMin="508" xMax="516" yMin="48" yMax="62">10</word></line>').xpath('//word'),
+    ]
+
+    expect(described_class.side_by_side?(far.first.to_a, far.last.to_a)).to be(false)
+  end
+
   it 'sizes a line from its body words, ignoring raised markers' do
     line = words(['Troyes.', 85, 233, 288.0, 300.4], ['1', 234, 240, 286.7, 294.5], ['Há', 247, 262, 288.0, 300.4])
 

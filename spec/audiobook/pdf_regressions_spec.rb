@@ -15,7 +15,8 @@ RSpec.describe 'Audiobook assembly regressions' do
   def sentences(book) = paragraphs(book).flat_map(&:sentences)
   def headings(book)  = items(book).grep(Audiobook::Heading).map(&:text)
   def references(book) = sentences(book).flat_map(&:references)
-  def spoken(book)    = (paragraph_texts(book) + headings(book)).join("\n")
+  def spoken(book)    = item_texts(book).join("\n")
+  def item_texts(book) = paragraph_texts(book) + headings(book)
 
   describe 'kybalion-dropcap-roman-pages.pdf' do
     let(:book) { book_for('kybalion-dropcap-roman-pages.pdf', 'en') }
@@ -352,6 +353,66 @@ RSpec.describe 'Audiobook assembly regressions' do
     it 'still recognises a short emphasised label as a heading' do
       expect(headings(book)).to include('La gran revelación')
       expect(items(book).grep(Audiobook::Section).size).to be <= 2
+    end
+  end
+  describe 'kybalion-justified-word-gaps.pdf' do
+    let(:book) { book_for('kybalion-justified-word-gaps.pdf', 'en') }
+
+    it 'keeps the spaces of a tightly justified line' do
+      expect(spoken(book)).to include('So, the Hermetic Teachings do not preach the unsubstantiality')
+      expect(spoken(book)).not_to match(/\p{L}{30,}/)
+    end
+  end
+
+  describe 'mms-per-word-blocks.pdf' do
+    let(:book) { book_for('mms-per-word-blocks.pdf', 'pt') }
+
+    it 'rejoins a justified line whose words each landed in their own block' do
+      expect(spoken(book)).to include('dias, estou certo de que a minha hepatite C desapareceu')
+      expect(headings(book)).to all(satisfy { |text| !text.include?('estou certo de que') })
+    end
+  end
+
+  describe 'kybalion-sparse-folio-page.pdf' do
+    let(:book) { book_for('kybalion-sparse-folio-page.pdf', 'en') }
+
+    it 'drops the folio and running head of a page that holds nothing else' do
+      expect(item_texts(book)).not_to include('viii', 'The Kybalion')
+    end
+  end
+
+  describe 'guia-reflowed-folios.pdf' do
+    let(:book) { book_for('guia-reflowed-folios.pdf', 'pt') }
+
+    it 'drops roman folios reflowed into the middle of the page' do
+      expect(item_texts(book)).not_to include('VI', 'VII', 'VIII', 'IX')
+    end
+
+    it 'drops a running head that alternates between pages' do
+      expect(spoken(book)).not_to include('MMS Health Recovery Guldebook')
+      expect(spoken(book)).to include('Agradecimentos')
+    end
+  end
+
+  describe 'salud-margin-noise.pdf' do
+    let(:book) { book_for('salud-margin-noise.pdf', 'es') }
+
+    it 'drops print marks set far below body size outside the column' do
+      expect(item_texts(book)).to all(satisfy { |text| !text.match?(/\A[^\p{L}]*S\u00cd/) })
+      expect(spoken(book)).to include('Abreviaturas')
+    end
+  end
+
+  describe 'tragedia-indented-verse.pdf' do
+    let(:book) { book_for('tragedia-indented-verse.pdf', 'pt') }
+
+    it 'reads a stanza as one block instead of a heading per line' do
+      expect(headings(book)).to contain_exactly('O BATISMO DE SANGUE')
+      expect(spoken(book)).to include('Vai-se sumindo o trem, quando na plataforma Se levanta, orgulhoso')
+    end
+
+    it 'keeps an indented verse line that sits at the page edge' do
+      expect(spoken(book)).to include('à luz que se bifurca Em réstias infinitas Das barracas')
     end
   end
 end
