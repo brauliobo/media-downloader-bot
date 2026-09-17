@@ -213,6 +213,134 @@ RSpec.describe 'Audiobook assembly regressions' do
     end
   end
 
+  describe 'guia-split-baseline.pdf' do
+    let(:book) { book_for('guia-split-baseline.pdf', 'pt') }
+
+    it 'joins a justified line that the text layer split into baseline fragments' do
+      expect(spoken(book)).to include('possivelmente começar a ver resultados positivoslogo amanhã.')
+      expect(headings(book)).not_to include('começar a ver')
+    end
+  end
+
+  describe 'guia-copyright-year.pdf' do
+    let(:book) { book_for('guia-copyright-year.pdf', 'pt') }
+
+    it 'does not turn a bare year into a reference' do
+      expect(references(book)).to be_empty
+    end
+  end
+
+  describe 'salud-contents-and-index.pdf' do
+    let(:book) { book_for('salud-contents-and-index.pdf', 'es') }
+
+    it 'reads each contents entry on its own without its page number' do
+      expect(paragraph_texts(book)).to include(
+        'Protocolo B: como Básico, el equivalente al antiguo protocolo 1000',
+        'Protocolo C: como CDS, el antiguo protocolo 101',
+        'Cáncer colorrectal',
+        'Cáncer gástrico o cáncer de estómago.'
+      )
+      expect(spoken(book)).not_to match(/\b19\d\b/)
+    end
+
+    it 'keeps contents entries out of the outline and the reference machinery' do
+      expect(headings(book)).to be_empty
+      expect(references(book)).to be_empty
+    end
+  end
+
+  describe 'salud-numbered-and-long-lists.pdf' do
+    let(:book) { book_for('salud-numbered-and-long-lists.pdf', 'es') }
+
+    it 'reads each numbered item as its own paragraph' do
+      expect(paragraph_texts(book)).to include(
+        '1. Introducción y explicación simple y fácil para que todo el mundo, aunque no sea profesional de la salud, lo entienda.',
+        '2. Testimonios de casos y de recuperación de las enfermedades, por orden de la A hasta la Z, con el protocolo que usaron.'
+      )
+      expect(sentences(book).map(&:text)).not_to include(a_string_matching(/\s\d\.\z/))
+    end
+
+    it 'reads a long comma list in a few long chunks instead of one item per pause' do
+      list = paragraphs(book).find { |para| para.sentences.first.text.start_with?('Abscesos dentales') }
+
+      expect(list.sentences.size).to be_between(2, 4)
+      expect(list.sentences.map { |sentence| sentence.text.length }).to all(be <= Audiobook::Paragraph::Factory::MAX_SENTENCE_CHARS)
+    end
+  end
+
+  describe 'reasons-product-names-lettered-list.pdf' do
+    let(:book) { book_for('reasons-product-names-lettered-list.pdf', 'en') }
+
+    it 'keeps a digit that names a product out of the references' do
+      expect(spoken(book)).to include('The basic MMS1 protocol is 3 drops an hour')
+      expect(references(book)).to be_empty
+    end
+
+    it 'reads lettered list items separately after their lead-in' do
+      expect(paragraph_texts(book)).to include('a. Raw milk', 'b. Raw butter', 'c. Raw cheese')
+      expect(headings(book)).not_to include(a_string_starting_with('We recommend'))
+    end
+  end
+
+  describe 'janval-bold-emphasis-run.pdf' do
+    let(:book) { book_for('janval-bold-emphasis-run.pdf', 'pt') }
+
+    it 'keeps a bold run inside the sentence it emphasises' do
+      expect(paragraph_texts(book)).to include(
+        a_string_including('era o mesmo que Javé havia sonhado para a humanidade, antes do despertar de Pandora e de Eva')
+      )
+      expect(headings(book)).not_to include(a_string_matching(/\A\p{Ll}/))
+    end
+  end
+
+  describe 'path-bold-italic-lead.pdf' do
+    let(:book) { book_for('path-bold-italic-lead.pdf', 'en') }
+
+    it 'keeps a bold-italic opening line with the paragraph it starts' do
+      expect(paragraph_texts(book)).to include(
+        'The period from 1987 to 2012 has been foreseen by great sages in many ages as the turning point in a very powerful cycle of human development.'
+      )
+      expect(headings(book)).to be_empty
+    end
+  end
+
+  describe 'tragedia-verse-stanza.pdf' do
+    let(:book) { book_for('tragedia-verse-stanza.pdf', 'pt') }
+
+    it 'does not read a stanza as a heading because its first line is short' do
+      expect(headings(book)).not_to include(a_string_starting_with('Doce terra'))
+      expect(paragraph_texts(book)).to include(a_string_including('Doce terra bendita, Coberta de planícies assombrosas'))
+    end
+  end
+
+  describe 'adios-ellipsis-lead.pdf' do
+    let(:book) { book_for('adios-ellipsis-lead.pdf', 'es') }
+
+    it 'keeps an ellipsis lead-in with the sentence it opens' do
+      expect(paragraph_texts(book)).to include('De hecho… es una señal de que las bacterias intestinales están trabajando.')
+      expect(headings(book)).not_to include('De hecho…')
+    end
+  end
+
+  describe 'nao-comecou-glued-markers.pdf' do
+    let(:book) { book_for('nao-comecou-glued-markers.pdf', 'pt') }
+
+    it 'takes a marker off a closing quote the text layer glued it to' do
+      expect(spoken(book)).to include('ou mesmo com úlceras.”')
+      expect(spoken(book)).not_to include('úlceras.”10')
+      expect(references(book).map(&:id)).to include('10', '11', '13')
+    end
+  end
+
+  describe 'mms-bullet-baseline.pdf' do
+    let(:book) { book_for('mms-bullet-baseline.pdf', 'pt') }
+
+    it 'does not mistake body digits for markers when a bullet lowers the line box' do
+      expect(spoken(book)).to include('com 8 gotas por copo', 'utilize 10 gotas por 30 ml')
+      expect(references(book)).to be_empty
+    end
+  end
+
   describe 'adios-emphasis-lines.pdf' do
     let(:book) { book_for('adios-emphasis-lines.pdf', 'es') }
 
