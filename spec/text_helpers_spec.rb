@@ -114,6 +114,14 @@ RSpec.describe TextHelpers do
     end
   end
 
+  describe '.strip_bullet' do
+    it 'drops a bullet glyph but keeps the label it follows' do
+      expect(described_class.strip_bullet('► MMS1 is activated MMS.')).to eq('MMS1 is activated MMS.')
+      expect(described_class.strip_bullet('13.) ► MMS is a 22.4% solution')).to eq('13.) MMS is a 22.4% solution')
+      expect(described_class.strip_bullet('No se debe mezclar')).to eq('No se debe mezclar')
+    end
+  end
+
   describe '.ends_with_punctuation?' do
     it 'does not close a sentence on an honorific, an initial or a list label' do
       expect(described_class.ends_with_punctuation?('O relato é de Dra. Antje Oswald, Dr.')).to be(false)

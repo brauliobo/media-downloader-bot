@@ -464,4 +464,26 @@ RSpec.describe 'Audiobook assembly regressions' do
       expect(entries.size).to be >= 3
     end
   end
+  describe 'salud-unmapped-bullets.pdf' do
+    let(:book) { book_for('salud-unmapped-bullets.pdf', 'es') }
+
+    it 'starts a block at each bullet the text layer turned into a zero' do
+      items = paragraph_texts(book).select { |text| text.start_with?('No se debe', 'No se recomienda') }
+      expect(items.size).to eq(3)
+    end
+
+    it 'does not speak the bullet' do
+      expect(spoken(book)).not_to match(/(?:\A|\n)[0oO°]\s/)
+      expect(spoken(book)).to include('No se debe mezclar y aplicar el DMSO')
+    end
+  end
+
+  describe 'reasons-bullet-glyphs.pdf' do
+    let(:book) { book_for('reasons-bullet-glyphs.pdf', 'en') }
+
+    it 'keeps a bullet glyph out of the narration' do
+      expect(spoken(book)).not_to include('►')
+      expect(spoken(book)).to include('MMS1 is activated MMS.')
+    end
+  end
 end
