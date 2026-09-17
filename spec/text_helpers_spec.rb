@@ -114,6 +114,19 @@ RSpec.describe TextHelpers do
     end
   end
 
+  describe '.ends_with_punctuation?' do
+    it 'does not close a sentence on an honorific, an initial or a list label' do
+      expect(described_class.ends_with_punctuation?('O relato é de Dra. Antje Oswald, Dr.')).to be(false)
+      expect(described_class.ends_with_punctuation?('drugs are able to make it into the U.')).to be(false)
+      expect(described_class.ends_with_punctuation?('a.')).to be(false)
+    end
+
+    it 'still closes a sentence on an ordinary stop' do
+      expect(described_class.ends_with_punctuation?('Ele saiu de casa.')).to be(true)
+      expect(described_class.ends_with_punctuation?('Quem chegou?')).to be(true)
+    end
+  end
+
   describe '.join_pdf_lines' do
     it 'rejoins a word split by a soft hyphen' do
       expect(described_class.join_pdf_lines(["Su respuesta fue sim­", 'ple, me dijo'])).to eq('Su respuesta fue simple, me dijo')

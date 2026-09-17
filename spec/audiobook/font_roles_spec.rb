@@ -65,6 +65,13 @@ RSpec.describe Audiobook::FontRoles do
     expect(described_class.alignment_for(x: 400, x_max: 560, page_width: 600)).to eq(:right)
   end
 
+  it 'treats a definition as a label that starts a block' do
+    expect(described_class.labeled_line?(line('Nota: veja adiante', 12))).to be(true)
+    expect(described_class.labeled_line?(line('CD = Clorito sódico', 12))).to be(true)
+    expect(described_class.labeled_line?(line('CDS - Disolución de dióxido', 12))).to be(true)
+    expect(described_class.labeled_line?(line('Capítulo 15 - Sinais de que o MMS atua', 12))).to be(false)
+  end
+
   it 'reads a ragged block as left aligned once its lines share a margin' do
     expect(described_class.alignment_for(x: 200, x_max: 400, page_width: 600)).to eq(:center)
     expect(described_class.alignment_for(x: 200, x_max: 400, page_width: 600, shared_edge: true)).to eq(:left)

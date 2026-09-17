@@ -415,4 +415,53 @@ RSpec.describe 'Audiobook assembly regressions' do
       expect(spoken(book)).to include('à luz que se bifurca Em réstias infinitas Das barracas')
     end
   end
+  describe 'salud-abbreviation-line-end.pdf' do
+    let(:book) { book_for('salud-abbreviation-line-end.pdf', 'es') }
+
+    it 'carries a sentence past an honorific that ends the line' do
+      expect(spoken(book)).to include('Dra. Antje Oswald, Dr. Angel Escudero')
+      expect(paragraph_texts(book)).to all(satisfy { |text| !text.match?(/\bDr\.\z/) })
+    end
+  end
+
+  describe 'savin-initials-line-end.pdf' do
+    let(:book) { book_for('savin-initials-line-end.pdf', 'en') }
+
+    it 'keeps an initial attached to the name it abbreviates' do
+      expect(spoken(book)).to include('into the U. S. We are systematically')
+      expect(sentences(book).map(&:text)).not_to include('S.')
+    end
+  end
+
+  describe 'nao-comecou-orphan-dropcap.pdf' do
+    let(:book) { book_for('nao-comecou-orphan-dropcap.pdf', 'pt') }
+
+    it 'drops a drop cap whose word was replaced in translation' do
+      expect(item_texts(book)).not_to include('T')
+      expect(paragraph_texts(book).join(' ')).to include('A história que você compartilha com sua família')
+    end
+
+    it 'reads an attribution as prose, not as a heading' do
+      expect(headings(book)).to all(satisfy { |text| !text.start_with?('—') })
+      expect(spoken(book)).to include('—Carl Jung, Memórias, Sonhos, Reflexões')
+    end
+  end
+
+  describe 'apometria-centered-attribution.pdf' do
+    let(:book) { book_for('apometria-centered-attribution.pdf', 'pt') }
+
+    it 'does not raise a heading from a lowercase line at body size' do
+      expect(headings(book)).not_to include('no IV Encontro Regional de Apometria - Lages - SC')
+      expect(spoken(book)).to include('no IV Encontro Regional de Apometria - Lages - SC')
+    end
+  end
+
+  describe 'salud-margin-noise.pdf definition list' do
+    let(:book) { book_for('salud-margin-noise.pdf', 'es') }
+
+    it 'starts a block at each definition instead of running them together' do
+      entries = paragraph_texts(book).select { |text| text.match?(/\A(?:CD|CDS|CDH|DMSO|MMS2|NaCI)\b/) }
+      expect(entries.size).to be >= 3
+    end
+  end
 end
