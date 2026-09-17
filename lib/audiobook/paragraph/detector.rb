@@ -38,8 +38,11 @@ module Audiobook
               next
             end
 
-            if buf.one? && drop_cap?(prev_line, line)
-              buf[-1] = Line.new("#{prev_line.text}#{line.text}", **line.style_attrs)
+            if buf.one? && oversized_initial?(prev_line, line)
+              # Machine translation replaces the word a drop cap opened, leaving the letter orphaned.
+              opens = line.starts_with_lowercase?
+              buf = [opens ? Line.new("#{prev_line.text}#{line.text}", **line.style_attrs) : line]
+              start_page = line.page_number unless opens
               prev_line = buf.last
               next
             end
@@ -83,9 +86,8 @@ module Audiobook
       # An oversized single letter opening a paragraph is a drop cap, not a heading.
       DROP_CAP_RATIO = 1.8
 
-      def drop_cap?(prev_line, line)
-        prev_line.text.match?(/\A\p{Lu}\z/u) && line.starts_with_lowercase? &&
-          prev_line.font_size.to_f >= line.font_size.to_f * DROP_CAP_RATIO
+      def oversized_initial?(prev_line, line)
+        prev_line.text.match?(/\A\p{Lu}\z/u) && prev_line.font_size.to_f >= line.font_size.to_f * DROP_CAP_RATIO
       end
 
       # A line fenced by blank space above and below stands on its own, like a heading.

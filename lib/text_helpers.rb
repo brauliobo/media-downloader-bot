@@ -2,7 +2,7 @@ require_relative 'ewprs/sentence_splitter'
 
 module TextHelpers
   EOS_PUNCT      = /[.!?…]$/
-  EOS_PUNCT_FULL = /[\.!?¡¿；。？！]"?$/
+  EOS_PUNCT_FULL = /[\.!?¡¿；。？！]"?\s*\z/
   CLOSERS_ONLY   = /\A["')\]]+\z/
   EOS_WITH_CLOSE = /[.!?…]["')\]]*$/
   TITLE_ABBREVIATION = /\A(?:Mr|Mrs|Ms|Dr|Prof|Sr|Sra|St)\.\z/i
@@ -202,8 +202,12 @@ module TextHelpers
     raw.strip.match?(TITLE_ABBREVIATION)
   end
 
+  # "…, Dr." and "the U." have not closed the sentence; the name they introduce is on the next line.
   def self.ends_with_punctuation?(text)
-    text.to_s.strip.match?(EOS_PUNCT_FULL)
+    stripped = text.to_s.strip
+    return false unless stripped.match?(EOS_PUNCT_FULL)
+
+    !Ewprs::SentenceSplitter.abbreviation?(stripped.sub(EOS_PUNCT_FULL, ''))
   end
 
   def self.closer_only?(raw)

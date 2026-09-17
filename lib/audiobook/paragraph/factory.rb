@@ -12,6 +12,8 @@ module Audiobook
       ISOLATED_MAX_WORDS = 12
       TERMINAL_PUNCTUATION = /[.!?…]["”’)\]»]*\z/u
       CLAUSE_PUNCTUATION   = /[.!?…,;:]["”’)\]»]*\z/u
+      # An attribution, a rights line and a leftover drop cap are never headings, however short.
+      NEVER_HEADING        = /\A(?:[—–]|©|\(c\)\s|\p{L}\z)/u
 
       def self.create_items_from_lines(lines, start_page, max_sentence_chars: MAX_SENTENCE_CHARS, isolated: false)
         new(lines, start_page, max_sentence_chars: max_sentence_chars, isolated: isolated).create
@@ -113,11 +115,13 @@ module Audiobook
       def heading_group?(group, level, joined, sentence_count)
         first_line = group.first
         words = joined.split.size
-        return false if words > FontRoles::MAX_HEADING_WORDS
+        return false if words > FontRoles::MAX_HEADING_WORDS || joined.match?(NEVER_HEADING)
         # A contents entry points at a heading elsewhere; it is never one itself.
         return false if contents?(group)
-        # A sentence that opens lowercase and closes with a stop is prose whatever its size.
-        return false if first_line.starts_with_lowercase? && joined.match?(TERMINAL_PUNCTUATION)
+        # A lowercase opening is prose, an attribution or a caption unless the type outsizes the body.
+        if first_line.starts_with_lowercase?
+          return false if !larger_than_body?(first_line) || joined.match?(TERMINAL_PUNCTUATION)
+        end
         # A label is a complete phrase; text that breaks off mid-sentence is body copy.
         return false if sentence_count > 1 && !joined.match?(TERMINAL_PUNCTUATION)
         return true if @isolated && words <= ISOLATED_MAX_WORDS && !joined.match?(CLAUSE_PUNCTUATION)
@@ -189,7 +193,7 @@ module Audiobook
 
       def self.heading_like?(text)
         return false unless text
-        return false if text.strip.match?(/\A[^\p{L}]*\z/u)
+        return false if text.strip.match?(/\A[^\p{L}]*\z/u) || text.strip.match?(NEVER_HEADING)
 
         words = text.split(/\s+/)
         return false if words.empty? || words.size > 10

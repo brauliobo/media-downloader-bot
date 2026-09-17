@@ -92,9 +92,10 @@ module Audiobook
       heading_item?(line) || same_emphasis?(prev, line)
     end
 
-    def self.labeled_line?(line)
-      line.text.to_s.match?(/\A[\p{L}.]+\s*:/u)
-    end
+    # "Nota:", "CD = clorito sódico" and "CDS - disolución" all label the text that follows.
+    LABEL = /\A[\p{L}\p{N}.]+\s*(?:[:=]|[-–—]\s)/u
+
+    def self.labeled_line?(line) = line.text.to_s.match?(LABEL)
 
     def self.long_body_line?(line)
       words = line.respond_to?(:word_count) ? line.word_count : line.text.to_s.split.size

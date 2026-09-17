@@ -126,7 +126,7 @@ module Audiobook
     end
 
     def self.from_text(text)
-      build_all(TextHelpers.normalize_text(text).gsub(/([.!?…]\"?)\s+(?=\p{Lu})/u, "\\1\n").split(/\n+/))
+      build_all(TextHelpers.split_sentences(TextHelpers.normalize_text(text)))
     end
 
     def self.wrap(value)

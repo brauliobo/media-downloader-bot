@@ -560,7 +560,7 @@ module Audiobook
             # Below the body the marker only opens its note; the call was already made inline.
             unless called && note_marker
               last_sentence = last_para_by_page[page_num]&.sentences&.last
-              if last_sentence&.text.to_s.strip.match?(/[.!?…]"?\)?$/)
+              if TextHelpers.ends_with_punctuation?(last_sentence&.text)
                 ref = last_sentence.add_reference(ref) || ref
                 ref_map[page_num][ref_id] = ref
               else
@@ -646,7 +646,7 @@ module Audiobook
             same_language = prev_item.sentences.last&.language == item.sentences.first&.language
             last_text = prev_item.sentences.last&.text.to_s.strip
             first_text = item.sentences.first&.text.to_s.strip
-            looks_unfinished = last_text !~ /[.!?…]"?\)?$/
+            looks_unfinished = !TextHelpers.ends_with_punctuation?(last_text)
             looks_continuation = first_text.match?(/\A[[:lower:]]/) && !TextHelpers.enumerated?(first_text)
             # Inside a page the detector already drew the blocks; only a lowercase resumption overrides it.
             resumes = looks_continuation || (looks_unfinished && entry.page != (prev_entry.last_page || prev_entry.page))
