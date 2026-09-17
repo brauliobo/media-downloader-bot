@@ -42,9 +42,13 @@ module Audiobook
       quantize(value)
     end
 
-    def self.alignment_for(x:, x_max:, page_width:)
+    def self.alignment_for(x:, x_max:, page_width:, shared_edge: false)
       width = page_width.to_f
       return unless width.positive?
+
+      # A ragged block reads as centred line by line; its lines give each other away by
+      # starting at one margin, which a centred line never shares.
+      return :left if shared_edge
 
       left       = x.to_f
       right_edge = x_max.to_f

@@ -10,7 +10,7 @@ module Audiobook
 
     def initialize(text, font_size: nil, y_position: nil, page_number: nil, x_position: nil, x_max: nil,
                    page_width: nil, top_spacing: nil, bottom_spacing: nil, section_level: nil, language: nil,
-                   alignment: nil, bold: nil, italic: nil, color: nil, font_name: nil)
+                   alignment: nil, bold: nil, italic: nil, color: nil, font_name: nil, shared_edge: false)
       @text = text.to_s.strip
       @font_size = font_size
       @y_position = y_position
@@ -22,7 +22,8 @@ module Audiobook
       @bottom_spacing = bottom_spacing
       @section_level = section_level&.to_i
       @language = language.to_s.strip.presence
-      @alignment = alignment || FontRoles.alignment_for(x: x_position, x_max: x_max, page_width: page_width)
+      @alignment = alignment ||
+        FontRoles.alignment_for(x: x_position, x_max: x_max, page_width: page_width, shared_edge: shared_edge)
       @bold = bold
       @italic = italic
       @color = color

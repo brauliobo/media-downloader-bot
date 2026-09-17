@@ -465,13 +465,15 @@ module Audiobook
 
     # Build pages from Line objects (new format with font metadata)
     def pages_from_lines(lines_data, images_data = [])
-      filtered_lines = include_all? ? lines_data : filter_headers_footers(lines_data)
-      
+      filtered_lines = (include_all? ? lines_data : filter_headers_footers(lines_data))
+        .map { |line| normalize_symmash(line) }
+      shared_edges = shared_left_edges(filtered_lines)
+
       # Create Line objects
       lines = filtered_lines.map do |l|
-        l = SymMash.new(l) unless l.is_a?(SymMash)
         Line.new(
           l.text,
+          shared_edge: shared_edges.include?(left_edge(l)),
           font_size: l.font_size,
           y_position: l.y,
           page_number: l.page,
@@ -960,34 +962,35 @@ module Audiobook
 
     def furniture_lines(pages, lines)
       metrics = body_metrics(lines)
-      margins = pages.values.map { |page_lines| margin_lines(page_lines) }
-      # A re-rendered PDF reflows folios and running heads into the text, so short lines parked
-      # outside the column count as candidates too; only self-naming patterns are taken from there.
-      parked  = margins.zip(pages.values).map { |band, page_lines| band | short_off_column(page_lines, metrics) }
-      folios  = parked.flatten.select { |line| folio?(line, pages[line.page]) }
+      edges   = pages.values.map { |page_lines| edge_lines(page_lines) }
+      # A re-rendered PDF reflows folios and running heads into the text, so the two patterns
+      # that name themselves are also looked for in the page bands and outside the column.
+      parked  = edges.zip(pages.values).map do |edge, page_lines|
+        edge | margin_band(page_lines) | off_column_lines(page_lines, metrics)
+      end
+      folios = parked.flatten.select { |line| folio?(line, pages[line.page]) }
       (folios + repeated_margins(parked, folios, pages.size, metrics) +
-        column_outliers(margins, folios, metrics) + marginalia(lines, metrics)).to_set
+        column_outliers(edges, folios, metrics, lines) + marginalia(lines, metrics)).to_set
     end
 
-    # Furniture is short and sits at the page edge: inside the top or bottom band, or simply
-    # the outermost lines of a page too sparse to have a band.
-    def margin_lines(page_lines)
-      band = page_lines.select { |line| in_margin_band?(line) }
-      (band | page_lines.values_at(0, 1, -2, -1).compact)
-        .select { |line| line.text.to_s.split.size <= FURNITURE_WORDS }
+    def short_line?(line) = line.text.to_s.split.size <= FURNITURE_WORDS
+
+    # The outermost lines of a page are where a header or footer lands when nothing else moved it.
+    def edge_lines(page_lines) = page_lines.values_at(0, 1, -2, -1).compact.uniq.select { |line| short_line?(line) }
+
+    def margin_band(page_lines)
+      page_lines.select do |line|
+        height = line.page_height.to_f
+        next false unless height.positive? && short_line?(line)
+
+        line.y_min.to_f <= height * MARGIN_BAND || line.y_max.to_f >= height * (1 - MARGIN_BAND)
+      end
     end
 
-    def in_margin_band?(line)
-      height = line.page_height.to_f
-      return false unless height.positive?
-
-      line.y_min.to_f <= height * MARGIN_BAND || line.y_max.to_f >= height * (1 - MARGIN_BAND)
-    end
-
-    def short_off_column(page_lines, metrics)
+    def off_column_lines(page_lines, metrics)
       return [] unless metrics
 
-      page_lines.select { |line| line.text.to_s.split.size <= FURNITURE_WORDS && off_column?(line, metrics) }
+      page_lines.select { |line| short_line?(line) && off_column?(line, metrics) }
     end
 
     # A page carries one folio; a column of bare numbers in the same size is a note marker list.
@@ -1008,12 +1011,15 @@ module Audiobook
       end
     end
 
-    # A running head or watermark sits in the margin outside the column the body text keeps to.
-    def column_outliers(margins, folios, metrics)
+    # A running head or watermark sits at the page edge outside the column the body keeps to,
+    # and stands alone there: an indented line of verse shares its margin with its block.
+    def column_outliers(edges, folios, metrics, lines)
       return [] unless metrics
 
-      (margins.flatten - folios).select do |line|
-        FontRoles.quantize(line.font_size).to_f <= metrics.font + FontRoles::BODY_BAND && off_column?(line, metrics)
+      shared = shared_left_edges(lines)
+      (edges.flatten - folios).select do |line|
+        FontRoles.quantize(line.font_size).to_f <= metrics.font + FontRoles::BODY_BAND &&
+          off_column?(line, metrics) && !shared.include?(left_edge(line))
       end
     end
 
@@ -1033,11 +1039,26 @@ module Audiobook
 
     def off_column?(line, metrics) = (line.x.to_f - metrics.x).abs > metrics.width * OUTLIER_MARGIN
 
+    EDGE_TOLERANCE = 2
+
+    # A left edge that repeats on a page is a block margin; a centred line has the page to itself.
+    def shared_left_edges(lines)
+      lines.group_by(&:page).each_with_object(Set.new) do |(page, page_lines), shared|
+        counts = page_lines.map { |line| left_edge(line).last }.tally
+        counts.each_key do |edge|
+          near = counts.sum { |other, count| (other - edge).abs <= EDGE_TOLERANCE ? count : 0 }
+          shared << [page, edge] if near > 1
+        end
+      end
+    end
+
+    def left_edge(line) = [line.page, line.x.to_f.round]
+
     def body_metrics(lines)
-      width = lines.map { |line| line.page_width.to_f }.max.to_f
-      x     = mode_of(lines.map { |line| (line.x.to_f / 10).round * 10 })
+      width   = lines.map { |line| line.page_width.to_f }.max.to_f
+      x       = mode_of(lines.map { |line| (line.x.to_f / 10).round * 10 })
       # `size` would collide with Hash#size on the SymMash.
-      font  = mode_of(lines.filter_map { |line| FontRoles.quantize(line.font_size) })
+      font    = mode_of(lines.filter_map { |line| FontRoles.quantize(line.font_size) })
       SymMash.new(width: width, x: x, font: font) if width.positive? && x && font
     end
 
