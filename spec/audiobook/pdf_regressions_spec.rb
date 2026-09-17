@@ -5,8 +5,8 @@ require 'spec_helper'
 RSpec.describe 'Audiobook assembly regressions' do
   def fixture(name) = File.expand_path("../fixtures/audiobook/#{name}", __dir__)
 
-  def book_for(name, lang)
-    Audiobook::Book.from_input(fixture(name), opts: SymMash.new(alang: lang), translate: false)
+  def book_for(name, lang, **opts)
+    Audiobook::Book.from_input(fixture(name), opts: SymMash.new(alang: lang, **opts), translate: false)
   end
 
   def items(book)     = book.pages.flat_map(&:items)
@@ -44,12 +44,17 @@ RSpec.describe 'Audiobook assembly regressions' do
 
   describe 'kybalion-toc-leaders.pdf' do
     let(:book) { book_for('kybalion-toc-leaders.pdf', 'en') }
+    let(:everything) { book_for('kybalion-toc-leaders.pdf', 'en', includeall: true) }
 
-    it 'reads table-of-contents entries without their leader dots' do
-      expect(paragraph_texts(book)).to include(
+    it 'leaves a table of contents out of the narration' do
+      expect(spoken(book)).not_to include('The Hermetic Philosophy.')
+    end
+
+    it 'reads its entries without leader dots when asked for everything' do
+      expect(paragraph_texts(everything)).to include(
         'Chapter I. The Hermetic Philosophy.', 'Chapter II. The Seven Hermetic Principles.'
       )
-      expect(spoken(book)).not_to match(/\.{4}|…{2}/)
+      expect(spoken(everything)).not_to match(/\.{4}|…{2}/)
     end
   end
 
@@ -83,14 +88,16 @@ RSpec.describe 'Audiobook assembly regressions' do
 
   describe 'mms-smallcaps-toc.pdf' do
     let(:book) { book_for('mms-smallcaps-toc.pdf', 'pt') }
+    let(:everything) { book_for('mms-smallcaps-toc.pdf', 'pt', includeall: true) }
 
-    it 'joins small-capital runs back into their word' do
-      expect(spoken(book)).to include('DESENVOLVIMENTO DE NOVOS PROTOCOLOS')
-      expect(spoken(book)).not_to include('D ESENVOLVIMENTO')
+    it 'leaves the contents pages out of the narration' do
+      expect(spoken(book)).not_to include('DESENVOLVIMENTO DE NOVOS PROTOCOLOS')
     end
 
-    it 'strips contents leaders and the page number they point at' do
-      expect(spoken(book)).not_to match(/\.{4}/)
+    it 'joins small-capital runs back into their word when asked for everything' do
+      expect(spoken(everything)).to include('DESENVOLVIMENTO DE NOVOS PROTOCOLOS')
+      expect(spoken(everything)).not_to include('D ESENVOLVIMENTO')
+      expect(spoken(everything)).not_to match(/\.{4}/)
     end
   end
 
@@ -233,15 +240,20 @@ RSpec.describe 'Audiobook assembly regressions' do
 
   describe 'salud-contents-and-index.pdf' do
     let(:book) { book_for('salud-contents-and-index.pdf', 'es') }
+    let(:everything) { book_for('salud-contents-and-index.pdf', 'es', includeall: true) }
 
-    it 'reads each contents entry on its own without its page number' do
-      expect(paragraph_texts(book)).to include(
+    it 'leaves a contents page and an index out of the narration' do
+      expect(spoken(book)).not_to include('Protocolo C: como CDS', 'Cáncer colorrectal')
+    end
+
+    it 'reads each entry on its own without its page number when asked for everything' do
+      expect(paragraph_texts(everything)).to include(
         'Protocolo B: como Básico, el equivalente al antiguo protocolo 1000',
         'Protocolo C: como CDS, el antiguo protocolo 101',
         'Cáncer colorrectal',
         'Cáncer gástrico o cáncer de estómago.'
       )
-      expect(spoken(book)).not_to match(/\b19\d\b/)
+      expect(spoken(everything)).not_to match(/\b19\d\b/)
     end
 
     it 'keeps contents entries out of the outline and the reference machinery' do
@@ -560,6 +572,15 @@ RSpec.describe 'Audiobook assembly regressions' do
 
     it 'keeps the dedication' do
       expect(spoken(book)).to include('To Hermes Trismegistus')
+    end
+  end
+  describe 'mms-quick-guide-not-contents.pdf' do
+    let(:book) { book_for('mms-quick-guide-not-contents.pdf', 'pt') }
+
+    it 'reads a bulleted reference guide that names chapters and doses' do
+      expect(spoken(book)).to include('Manutenção – entre 4 e 6 gotas por dia')
+      expect(spoken(book)).to include('Prevenção da malária e do cancro')
+      expect(paragraphs(book).size).to be >= 5
     end
   end
 end

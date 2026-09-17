@@ -465,8 +465,7 @@ module Audiobook
 
     # Build pages from Line objects (new format with font metadata)
     def pages_from_lines(lines_data, images_data = [])
-      filtered_lines = (include_all? ? lines_data : filter_rights_record(filter_headers_footers(lines_data)))
-        .map { |line| normalize_symmash(line) }
+      filtered_lines = (include_all? ? lines_data : narrated_lines(lines_data)).map { |line| normalize_symmash(line) }
       shared_edges = shared_left_edges(filtered_lines)
 
       # Create Line objects
@@ -945,6 +944,45 @@ module Audiobook
       prev_footers << footer_text
       result
     end
+
+    NARRATION_FILTERS = %i[filter_headers_footers filter_rights_record filter_contents].freeze
+
+    # Page furniture, the cataloguing record and the contents pages carry nothing to narrate.
+    def narrated_lines(lines_data)
+      NARRATION_FILTERS.reduce(lines_data) { |lines, filter| send(filter, lines) }
+    end
+
+    CONTENTS_TITLE = /\A(?:contents|table\s+of\s+contents|conte[úu]dos?|sum[áa]rio|[íi]ndice|contenido|
+                          tabela?\s+de\s+conte[úu]dos?|inhalt)\b/xi
+    CHAPTER_LABEL  = /\A(?:cap[íi]tulo|chapter|parte|part|se[cç][çc]?[ãa]o|anexo|ap[êe]ndice|appendix)
+                       \s*(?:\d|[ivxlc]+\b)/xi
+    CONTENTS_ENTRIES = 5
+    LISTED_ENTRIES   = 3
+
+    # A contents page lists what is elsewhere: leader lines, chapter labels and the pages they
+    # point at. Reading it aloud tells the listener nothing, and the pages that carry the list
+    # on look the same once its heading is behind them.
+    def filter_contents(lines_data)
+      lines    = lines_data.map { |line| normalize_symmash(line) }
+      contents = contents_pages(lines.group_by(&:page))
+      return lines_data if contents.empty?
+
+      lines_data.reject.with_index { |_, idx| contents.include?(lines[idx].page) }
+    end
+
+    def contents_pages(pages)
+      pages.keys.sort.each_with_object(Set.new) do |page, found|
+        texts = pages[page].map { |line| line.text.to_s.strip }.reject(&:empty?)
+        next if texts.size < LISTED_ENTRIES
+
+        entries = texts.count { |text| contents_entry?(text) }
+        listed  = entries + texts.count { |text| text.match?(/\S\s\d{1,4}\z/) }
+        opened  = found.include?(page - 1) || texts.first(3).any? { |text| text.match?(CONTENTS_TITLE) }
+        found << page if entries >= CONTENTS_ENTRIES || (opened && listed >= LISTED_ENTRIES)
+      end
+    end
+
+    def contents_entry?(text) = TextHelpers.toc_entry?(text) || text.match?(CHAPTER_LABEL)
 
     RIGHTS_PAGES = 8
     CATALOG_MARK = /\bis[bs]n\b|\bcd[du]\b|\bp\. cm\.|\bdc\d\d\b|catalogaç|cataloging/i
