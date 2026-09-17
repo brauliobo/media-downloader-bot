@@ -54,7 +54,9 @@ module TextHelpers
       next line unless text
 
       if text.end_with?('-')
-        # A hyphen before a lowercase continuation splits a word; before a capital it is a dash.
+        # A hyphen between digits is a range; before a lowercase continuation it splits a word; else a dash.
+        next "#{text}#{line}" if text.match?(/\d-\z/) && line.match?(/\A\d/)
+
         line.match?(/\A\p{Ll}/u) ? "#{text.chomp('-').rstrip}#{line}" : "#{text} #{line}"
       else
         overlap = overlapping_word_count(text, line)

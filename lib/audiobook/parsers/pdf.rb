@@ -170,15 +170,35 @@ module Audiobook
       end
 
       # Words closer than this fraction of their height belong to the same word (small caps runs).
-      WORD_GAP_RATIO = 0.1
+      WORD_GAP_RATIO     = 0.05
       BASELINE_TOLERANCE = 0.5
+      # Fragments of one justified line sit within a couple of spaces; a contents entry is further from its folio.
+      ADJACENT_GAP_RATIO = 1.75
 
-      # Justified text and page-number columns come out as several lines on one baseline inside a block.
+      # Justified text and page-number columns come out as several lines on one baseline, and a
+      # re-rendered PDF puts each fragment in its own block, so rejoin what sits side by side.
       def self.baseline_runs(lines)
-        lines.group_by(&:parent).values.flat_map do |block|
-          block.slice_when { |prev, line| (line['yMin'].to_f - prev['yMin'].to_f).abs > [height_of(prev), height_of(line)].min * BASELINE_TOLERANCE }
-            .map { |run| run.flat_map { |line| line.xpath('./word').to_a }.sort_by { |word| word['xMin'].to_f } }
-        end
+        lines.group_by(&:parent).values.flat_map { |block| baseline_slices(block) }
+          .each_with_object([]) do |words, runs|
+            side_by_side?(runs.last, words) ? runs.last.concat(words) : runs << words
+          end.map { |words| words.sort_by { |word| word['xMin'].to_f } }
+      end
+
+      def self.baseline_slices(block)
+        block.slice_when { |prev, line| !same_baseline?(prev, line) }
+          .map { |slice| slice.flat_map { |line| line.xpath('./word').to_a } }
+      end
+
+      def self.side_by_side?(run, words)
+        return false if run.blank? || words.blank?
+
+        left, right = run.max_by { |word| word['xMax'].to_f }, words.min_by { |word| word['xMin'].to_f }
+        gap = right['xMin'].to_f - left['xMax'].to_f
+        same_baseline?(left, right) && gap >= 0 && gap < [height_of(left), height_of(right)].max * ADJACENT_GAP_RATIO
+      end
+
+      def self.same_baseline?(above, below)
+        (below['yMin'].to_f - above['yMin'].to_f).abs <= [height_of(above), height_of(below)].min * BASELINE_TOLERANCE
       end
 
       def self.height_of(node) = node['yMax'].to_f - node['yMin'].to_f
@@ -186,8 +206,10 @@ module Audiobook
       def self.line_text(words, baseline = word_baseline(words))
         previous = nil
         words.map do |word|
-          text = superscript_marker?(word, baseline) ? TextHelpers.reference_marker(word.text) : word.text
-          text = "#{word_separator(previous, word)}#{text}" if previous
+          marker = superscript_marker?(word, baseline)
+          text   = marker ? TextHelpers.reference_marker(word.text) : word.text
+          # A footnote call belongs to the word it follows, however wide a gap the raised glyph leaves.
+          text = "#{word_separator(previous, word)}#{text}" if previous && !marker
           previous = word
           text
         end.join.strip
