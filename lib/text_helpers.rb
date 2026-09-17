@@ -38,6 +38,10 @@ module TextHelpers
   def self.toc_entry?(text) = text.to_s.match?(TOC_LEADERS)
   def self.bulleted?(text) = text.to_s.match?(BULLET_GLYPH)
   def self.ends_with_ellipsis?(text) = text.to_s.match?(TRAILING_ELLIPSIS)
+
+  # Two lines say the same thing when they read the same; a folio differs only in its digits.
+  def self.comparable(text) = text.to_s.downcase.gsub(/\s+/, ' ').strip
+  def self.comparable_key(text) = comparable(text).gsub(/\d+/, '<d>')
   def self.strip_bullet(text) = text.to_s.sub(BULLET_GLYPH) { $1.to_s }
 
   # Table-of-contents leaders and the page number they point at are noise when spoken.

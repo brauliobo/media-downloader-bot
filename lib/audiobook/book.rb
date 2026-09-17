@@ -24,6 +24,10 @@ require_relative 'image'
 require_relative 'ocr_text'
 require_relative 'page'
 require_relative 'page_selection'
+require_relative 'page_filter'
+require_relative 'lines'
+require_relative 'notes'
+require_relative 'blocks'
 require_relative '../translator'
 
 module Audiobook
@@ -465,282 +469,54 @@ module Audiobook
 
     # Build pages from Line objects (new format with font metadata)
     def pages_from_lines(lines_data, images_data = [])
-      filtered_lines = (include_all? ? lines_data : narrated_lines(lines_data)).map { |line| normalize_symmash(line) }
-      shared_edges = shared_left_edges(filtered_lines)
-
-      # Create Line objects
-      lines = filtered_lines.map do |l|
-        Line.new(
-          l.text,
-          shared_edge: shared_edges.include?(left_edge(l)),
-          font_size: l.font_size,
-          y_position: l.y,
-          page_number: l.page,
-          x_position: l.x,
-          x_max: l.x_max,
-          page_width: l.page_width,
-          top_spacing: l.top_spacing,
-          bottom_spacing: l.bottom_spacing,
-          section_level: l.section_level || l.section_level,
-          language: l.language,
-          alignment: l.alignment,
-          bold: l.bold,
-          italic: l.italic,
-          color: l.color,
-          font_name: l.font_name
-        )
-      end.reject(&:empty?)
+      lines = Lines.build(narrated(lines_data))
 
       @font_roles = FontRoles.from_lines(lines)
-      items_with_pages = FontRoles.use(@font_roles) do
-        Paragraph.discover_from_lines(
-          lines,
-          max_sentence_chars: @lang == 'zh' ? CHINESE_MAX_SENTENCE_CHARS : Paragraph::Factory::MAX_SENTENCE_CHARS
-        )
-      end.map { |e| SymMash.new(e) }
+      items = FontRoles.use(@font_roles) do
+        Paragraph.discover_from_lines(lines, max_sentence_chars: max_sentence_chars)
+      end.map { |entry| SymMash.new(entry) }
 
-      # Pre-compute body font per page as the most frequent paragraph font size
-      body_font_by_page = compute_body_font_by_page(items_with_pages)
+      build_pages(Blocks.merge(Notes.attach(items)), images_data)
+    end
 
-      # Track which pages already have images to avoid duplicates
-      images_added = Set.new
+    def narrated(lines_data)
+      return lines_data if include_all?
 
-      # Attach inline reference markers and collect footnote paragraphs
-      # Strategy:
-        # - Detect numeric-only paragraphs as reference markers (e.g., "5") on a page
-        # - Attach a Reference(id: "5") to the last sentence of the previous paragraph on same page
-        # - Move any paragraphs whose first sentence starts with that number (e.g., "5 Lorem ...")
-        #   into the Reference object and remove them from the items list
-        # - If subsequent paragraphs (same font size as footnotes) appear before the next marker,
-        #   attach them to the last reference on that page (supports multi-paragraph notes)
-      ref_map = SymMash.new { |h, k| h[k] = SymMash.new } # { page => { '5' => Reference } }
-      pending_refs = SymMash.new { |h, k| h[k] = [] }
-      # For markers that appear between lines inside a paragraph (e.g., after a word),
-      # when the previous paragraph's last sentence doesn't end with punctuation yet,
-      # defer attaching and bind to the first sentence of the next paragraph on the same page.
-      attach_to_next = SymMash.new { |h, k| h[k] = [] }
-      last_ref_by_page = {}
-      last_para_by_page = {}
+      PageFilter.narrated(lines_data, selected_pages: @metadata.selected_pages)
+    end
 
-      # Pre-pass: detect inline markers appended to words/punctuation, e.g., "Troyes.1" or "Eschenbach2"
-      # Remove the numeric token from the sentence and attach the reference to this sentence
-      items_with_pages.each do |entry|
-        item = entry.item
-        next unless item.is_a?(Paragraph)
-        page_num = entry.page
-        item.sentences.each do |sent|
-          ids = sentence_marker_ids(sent)
-          ids.each do |id|
-            ref = ref_map[page_num][id] ||= Reference.new(id)
-            sent.add_reference(ref)
-            last_ref_by_page[page_num] = ref
-          end
-        end
-      end
+    def max_sentence_chars
+      @lang == 'zh' ? CHINESE_MAX_SENTENCE_CHARS : Paragraph::Factory::MAX_SENTENCE_CHARS
+    end
 
-      marker_id_for = method(:marker_ids_for)
-
-      # First pass: identify markers and attach to previous paragraph's last sentence
-      processed = []
-      items_with_pages.each do |entry|
-        item = entry.item
-        page_num = entry.page
-
-        ref_ids = marker_id_for.call(item)
-        note_marker = ref_ids && footnote_font?(entry, body_font_by_page[page_num])
-        # A bare number at body size that nothing called is a stray figure, not a note label.
-        ref_ids = ref_ids.select { |id| ref_map[page_num].key?(id) } if ref_ids && !note_marker
-        if ref_ids.present?
-          # Attach each marker id to the last sentence of the previous paragraph
-          ref_ids.each do |ref_id|
-            called = ref_map[page_num].key?(ref_id)
-            ref    = ref_map[page_num][ref_id] ||= Reference.new(ref_id)
-
-            # Below the body the marker only opens its note; the call was already made inline.
-            unless called && note_marker
-              last_sentence = last_para_by_page[page_num]&.sentences&.last
-              if TextHelpers.ends_with_punctuation?(last_sentence&.text)
-                ref = last_sentence.add_reference(ref) || ref
-                ref_map[page_num][ref_id] = ref
-              else
-                attach_to_next[page_num] << ref
-              end
-            end
-
-            last_ref_by_page[page_num] = ref
-            pending_refs[page_num] << SymMash.new(ref: ref, min_idx: processed.size)
-          end
-          next
-        end
-
-        if item.is_a?(Paragraph)
-          # If there were deferred refs waiting for the next paragraph, attach/distribute now
-          if attach_to_next[page_num].any?
-            refs = attach_to_next[page_num]
-            sentences = item.sentences
-            if sentences.any?
-              # Attach the first id to the first sentence
-              sentences.first.add_reference(refs.shift)
-              # Distribute the rest across subsequent sentences
-              sentences.drop(1).each do |s|
-                break if refs.empty?
-                s.add_reference(refs.shift)
-              end
-              # If still remaining, attach to the last sentence
-              if refs.any?
-                refs.each { |r| sentences.last.add_reference(r) }
-              end
-              last_ref_by_page[page_num] = sentences.last.references&.last || last_ref_by_page[page_num]
-            end
-            attach_to_next[page_num].clear
-          end
-          last_para_by_page[page_num] = item
-        end
-        processed << entry
-      end
-
-      # Second pass: move footnote paragraphs into existing references on same page
-      items_with_pages = []
-      processed.each_with_index do |entry, idx|
-        item = entry.item
-        page_num = entry.page
-        queue = pending_refs[page_num]
-        if item.is_a?(Paragraph) && item.sentences.any?
-          footnote = footnote_font?(entry, body_font_by_page[page_num])
-          # A note repeats its marker before the text; body-sized paragraphs that open with a number are not notes.
-          leading_match = item.sentences.first.text.match(/\A(\d{1,3})[)\.]?\s+(.*)\z/m) if footnote
-          ref = ref_map[page_num][leading_match[1]] if leading_match
-          if ref
-            if (entry_info = queue.find { |info| info.ref.equal?(ref) })
-              entry_info.min_idx = idx + 1
-            end
-            item.sentences.first.text = leading_match[2]
-            ref.add_sentences(item.sentences)
-            pending_refs[page_num].reject! { |info| info.ref.equal?(ref) && info.min_idx <= idx }
-            last_ref_by_page[page_num] = ref
-            next
-          elsif footnote && (info = queue.find { |data| data.min_idx <= idx })
-            info.min_idx = idx + 1
-            info.ref.add_sentences(item.sentences)
-            last_ref_by_page[page_num] = info.ref
-            pending_refs[page_num].delete(info)
-            next
-          elsif footnote && queue.blank? && (ref = last_ref_by_page[page_num])
-            ref.add_sentences(item.sentences)
-            next
-          end
-        end
-        items_with_pages << entry
-      end
-
-      # Merge paragraphs split across pages or within a page when it looks like a continuation
-      merged_items = []
-      items_with_pages.each do |entry|
-        item = entry.item
-        if item.is_a?(Paragraph) && item.sentences.any? && merged_items.any?
-          prev_entry = merged_items[-1]
-          prev_item = prev_entry.item
-          if prev_item.is_a?(Paragraph)
-            font_close = entry.font_size && prev_entry.font_size ? FontRoles.same_size?(entry, prev_entry) : true
-            same_language = prev_item.sentences.last&.language == item.sentences.first&.language
-            last_text = prev_item.sentences.last&.text.to_s.strip
-            first_text = item.sentences.first&.text.to_s.strip
-            looks_unfinished = !TextHelpers.ends_with_punctuation?(last_text)
-            looks_continuation = first_text.match?(/\A[[:lower:]]/) && !TextHelpers.enumerated?(first_text)
-            # A list entry opens its own block, and a lead-in or a numbered label names the block
-            # that follows rather than running into it. A page break undoes none of that.
-            separate = TextHelpers.enumerated?(first_text) || TextHelpers.bulleted?(first_text) ||
-              last_text.end_with?(':') || label_only?(last_text)
-            # Inside a page the detector already drew the blocks; only a lowercase resumption overrides it.
-            resumes = looks_continuation ||
-              (!separate && looks_unfinished && entry.page != (prev_entry.last_page || prev_entry.page))
-            # A lowercase start after an unfinished sentence resumes it even when the font jitters.
-            if same_language && resumes && !entry.toc && !prev_entry.toc && (font_close || (looks_unfinished && looks_continuation))
-              if (!last_text.empty? && looks_unfinished) || (!first_text.empty? && looks_continuation)
-                if looks_unfinished && !first_text.empty?
-                  # Join first sentence text and references into the previous last sentence
-                  prev_last = prev_item.sentences.last
-                  next_first = item.sentences.first
-                  if prev_last && next_first
-                    merged_text = [prev_last.text, next_first.text].join(' ').gsub(/\s+/, ' ').strip
-                    prev_last.text = merged_text
-                    Array(next_first.references).each { |r| prev_last.add_reference(r) }
-                    # append remaining sentences from the next paragraph
-                    prev_item.sentences.concat(item.sentences.drop(1))
-                  else
-                    prev_item.sentences.concat(item.sentences)
-                  end
-                else
-                  prev_item.sentences.concat(item.sentences)
-                end
-                prev_entry.last_page = entry.page
-                next
-              end
-            end
-          end
-        end
-        merged_items << entry
-      end
-      items_with_pages = merged_items
-
-      # Group items by their page number
+    def build_pages(items_with_pages, images_data)
       pages_hash = group_items_by_page(items_with_pages)
-      
-      # Add Image objects for pages with images (can coexist with text on same page)
-      total_pages = @metadata.page_count
-      images_data.each do |img_data|
-        img_data = SymMash.new(img_data) unless img_data.is_a?(SymMash)
-        page_num = img_data.page
-        path = img_data.path
-        next unless path && page_num
-        next if images_added.include?([page_num, path])
+      add_images(pages_hash, images_data)
+      # An empty page still takes its turn, so the narration keeps the book's numbering.
+      page_numbers&.each { |page_num| pages_hash[page_num] ||= [] }
 
-        page_context = total_pages ? SymMash.new(current: page_num, total: total_pages) : nil
-        # Image will handle rasterization and OCR in its initializer
-        pages_hash[page_num] ||= []
-        pages_hash[page_num] << Image.new(path, stl: @stl, page_context: page_context, text: img_data.text, opts: ocr_opts)
-        images_added << [page_num, path]
-      end
-
-      if total_pages
-        page_numbers = @metadata.selected_pages || 1.upto(total_pages)
-        page_numbers.each { |page_num| pages_hash[page_num] ||= [] }
-      end
-      
-      # Create Page objects
       pages_hash.sort.map { |page_num, items| Page.new(page_num, items) }
     end
 
-    # "e. Compromised immune system" names the block that follows; it does not run into it.
-    def label_only?(text) = TextHelpers.enumerated?(text) && !TextHelpers.ends_with_punctuation?(text)
-
-    FOOTNOTE_FONT_MARGIN = 1.0
-
-    def footnote_font?(entry, body_font)
-      body_font && entry.font_size && entry.font_size.to_f < body_font.to_f - FOOTNOTE_FONT_MARGIN
+    def page_numbers
+      total = @metadata.page_count
+      @metadata.selected_pages || (1.upto(total) if total)
     end
 
-    # Geometry-detected markers are exact; text heuristics only run for sources without glyph positions.
-    def sentence_marker_ids(sentence)
-      return sentence.reference_ids if sentence.reference_ids.any?
+    # An image can share a page with text, and OCR happens as the Image is built.
+    def add_images(pages_hash, images_data)
+      total = @metadata.page_count
+      added = Set.new
+      images_data.each do |img_data|
+        img_data = SymMash.new(img_data) unless img_data.is_a?(SymMash)
+        next unless img_data.path && img_data.page
+        next unless added.add?([img_data.page, img_data.path])
 
-      text, ids = TextHelpers.strip_inline_markers(sentence.text)
-      sentence.text = text if text != sentence.text
-      ids
-    end
-
-    def compute_body_font_by_page(items_with_pages)
-      font_counts_by_page = SymMash.new { |h, k| h[k] = SymMash.new }
-      items_with_pages.each do |entry|
-        item = entry.item
-        next unless item.is_a?(Paragraph)
-        fs = entry.font_size
-        next unless fs
-        font_counts_by_page[entry.page][(fs.to_f * 10).round / 10.0] ||= 0
-        font_counts_by_page[entry.page][(fs.to_f * 10).round / 10.0] += 1
-      end
-      font_counts_by_page.each_with_object(SymMash.new) do |(page, counts), acc|
-        acc[page] = counts.to_a.max_by { |_, c| c }&.first
+        context = SymMash.new(current: img_data.page, total: total) if total
+        pages_hash[img_data.page] ||= []
+        pages_hash[img_data.page] << Image.new(
+          img_data.path, stl: @stl, page_context: context, text: img_data.text, opts: ocr_opts
+        )
       end
     end
 
@@ -748,18 +524,6 @@ module Audiobook
       opts = SymMash.new(@opts || {})
       opts.lang ||= @metadata.language if @metadata.language
       opts
-    end
-
-    def marker_ids_for(item)
-      raw = case item
-      when Paragraph
-        return nil unless item.sentences.size == 1
-        item.sentences.first.text
-      when Heading
-        item.text
-      end
-      value = raw.to_s.strip
-      value.scan(/\d+/) if TextHelpers.marker_line?(value)
     end
 
     def group_items_by_page(items_with_pages)
@@ -800,8 +564,8 @@ module Audiobook
       pages.each do |page|
         candidates = [page.items.first, page.items.last].compact.uniq.flat_map { |item| direct_sentences(item) }
         page_candidates[page] = candidates
-        candidates.map { |sentence| normalize_boundary_text(sentence.text) }.uniq.each { |text| normalized_counts[text] += 1 }
-        candidates.map { |sentence| exact_boundary_text(sentence.text) }.uniq.each { |text| exact_counts[text] += 1 }
+        candidates.map { |sentence| TextHelpers.comparable_key(sentence.text) }.uniq.each { |text| normalized_counts[text] += 1 }
+        candidates.map { |sentence| TextHelpers.comparable(sentence.text) }.uniq.each { |text| exact_counts[text] += 1 }
       end
 
       threshold = [(pages.size * 0.3).ceil, 3].max
@@ -847,20 +611,12 @@ module Audiobook
 
     def repeated_sentence?(sentence, boundary_sentences, repeated_normalized, repeated_exact)
       repeated_exact_sentence?(sentence, repeated_exact) ||
-        (boundary_sentences.include?(sentence) && repeated_normalized.include?(normalize_boundary_text(sentence.text)))
+        (boundary_sentences.include?(sentence) && repeated_normalized.include?(TextHelpers.comparable_key(sentence.text)))
     end
 
     def repeated_exact_sentence?(sentence, repeated_exact)
-      text = exact_boundary_text(sentence.text)
+      text = TextHelpers.comparable(sentence.text)
       repeated_exact.any? { |candidate| text == candidate || (candidate.length >= 40 && text.include?(candidate)) }
-    end
-
-    def normalize_boundary_text(text)
-      exact_boundary_text(text).gsub(/\d+/, '<d>')
-    end
-
-    def exact_boundary_text(text)
-      text.to_s.downcase.gsub(/\s+/, ' ').strip
     end
 
     # Build pages from legacy paragraph format
@@ -945,209 +701,6 @@ module Audiobook
       result
     end
 
-    NARRATION_FILTERS = %i[filter_headers_footers filter_rights_record filter_contents].freeze
-
-    # Page furniture, the cataloguing record and the contents pages carry nothing to narrate.
-    def narrated_lines(lines_data)
-      NARRATION_FILTERS.reduce(lines_data) { |lines, filter| send(filter, lines) }
-    end
-
-    CONTENTS_TITLE = /\A(?:contents|table\s+of\s+contents|conte[úu]dos?|sum[áa]rio|[íi]ndice|contenido|
-                          tabela?\s+de\s+conte[úu]dos?|inhalt)\b/xi
-    CHAPTER_LABEL  = /\A(?:cap[íi]tulo|chapter|parte|part|se[cç][çc]?[ãa]o|anexo|ap[êe]ndice|appendix)
-                       \s*(?:\d|[ivxlc]+\b)/xi
-    CONTENTS_ENTRIES = 5
-    LISTED_ENTRIES   = 3
-
-    # A contents page lists what is elsewhere: leader lines, chapter labels and the pages they
-    # point at. Reading it aloud tells the listener nothing, and the pages that carry the list
-    # on look the same once its heading is behind them.
-    def filter_contents(lines_data)
-      lines    = lines_data.map { |line| normalize_symmash(line) }
-      contents = contents_pages(lines.group_by(&:page))
-      return lines_data if contents.empty?
-
-      lines_data.reject.with_index { |_, idx| contents.include?(lines[idx].page) }
-    end
-
-    def contents_pages(pages)
-      pages.keys.sort.each_with_object(Set.new) do |page, found|
-        texts = pages[page].map { |line| line.text.to_s.strip }.reject(&:empty?)
-        next if texts.size < LISTED_ENTRIES
-
-        entries = texts.count { |text| contents_entry?(text) }
-        listed  = entries + texts.count { |text| text.match?(/\S\s\d{1,4}\z/) }
-        opened  = found.include?(page - 1) || texts.first(3).any? { |text| text.match?(CONTENTS_TITLE) }
-        found << page if entries >= CONTENTS_ENTRIES || (opened && listed >= LISTED_ENTRIES)
-      end
-    end
-
-    def contents_entry?(text) = TextHelpers.toc_entry?(text) || text.match?(CHAPTER_LABEL)
-
-    RIGHTS_PAGES = 8
-    CATALOG_MARK = /\bis[bs]n\b|\bcd[du]\b|\bp\. cm\.|\bdc\d\d\b|catalogaç|cataloging/i
-    # On such a page these lines are the record librarians need, not text to read out.
-    RECORD_START = /\A(?:©|\(c\)|copyright|is[bs]n|cdd|cdu|p\.\s*cm\.|www\.|https?:|
-                        dep[oó]sito\s+legal|printed\s+(?:in|on)|impreso\s+en|
-                        all\s+rights\s+reserved|todos\s+os\s+direitos|todos\s+los\s+derechos|
-                        [\p{L}'-]+,\s+[\p{L}'-]+,\s+\d{4})/xi
-    RECORD_INSIDE = /\bis[bs]n[:\s]|\bcd[du][-:\s]|\b[ivx]+\.\s*(?:t[íi]tul|title)|\bdc\d\d\b|
-                     cat[a]?log|\A\p{Lu}{2}\d|\A[\w.+-]+@[\w.-]+\z/xi
-    # The subject headings of a record run several numbered entries to the line.
-    SUBJECT_ENTRY = /(?:\A|\s)\d{1,2}\.\s+\p{Lu}/
-    RECORD_WORDS  = 5
-
-    # The opening pages carry a cataloguing record: the notice, the identifiers and the shelf
-    # codes. The same page may still hold a dedication or an acknowledgement, so only the
-    # record goes.
-    def filter_rights_record(lines_data)
-      lines  = lines_data.map { |line| normalize_symmash(line) }
-      pages  = lines.group_by(&:page)
-      rights = pages.keys.sort.first(RIGHTS_PAGES).select { |page| catalog_page?(pages[page]) }.to_set
-      return lines_data if rights.empty?
-
-      lines_data.select.with_index do |_, idx|
-        !(rights.include?(lines[idx].page) && record_line?(lines[idx].text))
-      end
-    end
-
-    def catalog_page?(page_lines) = page_lines.map { |line| line.text.to_s }.join(' ').match?(CATALOG_MARK)
-
-    def record_line?(text)
-      value = text.to_s
-      return true if value.match?(RECORD_START) || value.match?(RECORD_INSIDE)
-
-      return true if value.scan(SUBJECT_ENTRY).size > 1
-
-      # The subject headings of a record are a numbered list of two or three words each.
-      TextHelpers.enumerated?(value) && value.split.size <= RECORD_WORDS
-    end
-
-    FOLIO           = /\A[ivxlcdm\d]{1,7}[.\]]?\z/i
-    FURNITURE_WORDS = 8
-    OUTLIER_MARGIN  = 0.1
-    MARGIN_BAND     = 0.15
-    MARGINALIA_SIZE = 0.55
-    TITLE_SIZE      = 1.25
-
-    # Page furniture is a folio, a running head repeated across pages, or a short line parked
-    # away from the text block. None of it belongs in the narration.
-    def filter_headers_footers(lines_data)
-      return lines_data if lines_data.empty?
-
-      lines = lines_data.map { |line| normalize_symmash(line) }
-      pages = lines.group_by(&:page)
-      return lines_data if @metadata.selected_pages && pages.size < 3
-
-      furniture = furniture_lines(pages, lines).map(&:object_id).to_set
-      return lines_data if furniture.empty?
-
-      lines_data.select.with_index { |_, idx| !furniture.include?(lines[idx].object_id) }
-    end
-
-    def furniture_lines(pages, lines)
-      metrics = body_metrics(lines)
-      edges   = pages.values.map { |page_lines| edge_lines(page_lines) }
-      # A re-rendered PDF reflows folios and running heads into the text, so the two patterns
-      # that name themselves are also looked for in the page bands and outside the column.
-      parked  = edges.zip(pages.values).map do |edge, page_lines|
-        edge | margin_band(page_lines) | off_column_lines(page_lines, metrics)
-      end
-      folios = parked.flatten.select { |line| folio?(line, pages[line.page]) }
-      (folios + repeated_margins(parked, folios, pages.size, metrics) +
-        column_outliers(edges, folios, metrics, lines) + marginalia(lines, metrics)).to_set
-    end
-
-    def short_line?(line) = line.text.to_s.split.size <= FURNITURE_WORDS
-
-    # The outermost lines of a page are where a header or footer lands when nothing else moved it.
-    def edge_lines(page_lines) = page_lines.values_at(0, 1, -2, -1).compact.uniq.select { |line| short_line?(line) }
-
-    def margin_band(page_lines)
-      page_lines.select do |line|
-        height = line.page_height.to_f
-        next false unless height.positive? && short_line?(line)
-
-        line.y_min.to_f <= height * MARGIN_BAND || line.y_max.to_f >= height * (1 - MARGIN_BAND)
-      end
-    end
-
-    def off_column_lines(page_lines, metrics)
-      return [] unless metrics
-
-      page_lines.select { |line| short_line?(line) && off_column?(line, metrics) }
-    end
-
-    # A page carries one folio; a column of bare numbers in the same size is a note marker list.
-    def folio?(line, page_lines)
-      return false unless line.text.to_s.strip.match?(FOLIO)
-
-      size = FontRoles.quantize(line.font_size)
-      page_lines.count { |other| FontRoles.quantize(other.font_size) == size && TextHelpers.marker_line?(other.text) } < 2
-    end
-
-    # A running head repeats across pages; a chapter title that quotes it is set larger.
-    def repeated_margins(margins, folios, page_count, metrics)
-      edges  = margins.map { |page_edges| page_edges - folios }
-      counts = edges.flat_map { |page_edges| page_edges.map { |line| normalize_boundary_text(line.text) }.uniq }.tally
-      limit  = [[(page_count * 0.3).ceil, 3].min, 2].max
-      edges.flatten.select do |line|
-        counts[normalize_boundary_text(line.text)] >= limit && !title_size?(line, metrics)
-      end
-    end
-
-    # A running head or watermark sits at the page edge outside the column the body keeps to,
-    # and stands alone there: an indented line of verse shares its margin with its block.
-    def column_outliers(edges, folios, metrics, lines)
-      return [] unless metrics
-
-      shared = shared_left_edges(lines)
-      (edges.flatten - folios).select do |line|
-        FontRoles.quantize(line.font_size).to_f <= metrics.font + FontRoles::BODY_BAND &&
-          off_column?(line, metrics) && !shared.include?(left_edge(line))
-      end
-    end
-
-    # A chapter title quotes its own running head, so only size tells them apart.
-    def title_size?(line, metrics)
-      metrics && FontRoles.quantize(line.font_size).to_f > metrics.font * TITLE_SIZE
-    end
-
-    # Marginalia set far below body size outside the text column is print noise, not narration.
-    def marginalia(lines, metrics)
-      return [] unless metrics
-
-      lines.select do |line|
-        FontRoles.quantize(line.font_size).to_f < metrics.font * MARGINALIA_SIZE && off_column?(line, metrics)
-      end
-    end
-
-    def off_column?(line, metrics) = (line.x.to_f - metrics.x).abs > metrics.width * OUTLIER_MARGIN
-
-    EDGE_TOLERANCE = 2
-
-    # A left edge that repeats on a page is a block margin; a centred line has the page to itself.
-    def shared_left_edges(lines)
-      lines.group_by(&:page).each_with_object(Set.new) do |(page, page_lines), shared|
-        counts = page_lines.map { |line| left_edge(line).last }.tally
-        counts.each_key do |edge|
-          near = counts.sum { |other, count| (other - edge).abs <= EDGE_TOLERANCE ? count : 0 }
-          shared << [page, edge] if near > 1
-        end
-      end
-    end
-
-    def left_edge(line) = [line.page, line.x.to_f.round]
-
-    def body_metrics(lines)
-      width   = lines.map { |line| line.page_width.to_f }.max.to_f
-      x       = mode_of(lines.map { |line| (line.x.to_f / 10).round * 10 })
-      # `size` would collide with Hash#size on the SymMash.
-      font    = mode_of(lines.filter_map { |line| FontRoles.quantize(line.font_size) })
-      SymMash.new(width: width, x: x, font: font) if width.positive? && x && font
-    end
-
-    def mode_of(values) = values.compact.tally.max_by { |_, count| count }&.first
 
 
     public
