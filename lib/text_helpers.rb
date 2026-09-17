@@ -10,12 +10,18 @@ module TextHelpers
   MARKER_TOKEN   = /⟦\d{1,3}⟧/
   MARKER_TAG     = /⟦(\d{1,3})⟧/
   MARKER_LINE    = /\A\d{1,3}[)\].]*(?:\s+\d{1,3}[)\].]*)*\z/
-  # A digit before the anchor means a decimal or a thousands separator, not a footnote call.
-  MARKER_ANCHOR  = /(?:[\p{L}\)\]"”’»]|(?<!\d)[.,;:])/u
+  MARKER_IDS      = /\d{1,3}(?:,\d{1,3})*/
+  MARKER_IDS_ONLY = /\A#{MARKER_IDS}\z/
+  # A digit before the anchor means a decimal or a thousands separator, not a footnote call; a capital
+  # means an acronym or a product name ("MMS1", "CO2").
+  MARKER_ANCHOR  = /(?:[\p{Ll}\)\]"”’»]|(?<!\d)[.,;:])/u
   TRAILING_HYPHEN = /\s*[-­‐‑]\z/
-  TOC_LEADERS     = /(?:\.\s*){4,}|…{2,}|(?:…\s*){2,}/
+  # Leaders run long; a spaced ellipsis in prose stays under six dots.
+  TOC_LEADERS     = /(?:\.\s*){6,}|(?:…\s*){3,}/
+  # "1. ", "a) " and bullet glyphs open a list entry or a contents line.
+  ENUMERATED      = /\A(?:(?:\d{1,3}|\p{Ll})[.)]|[•●○◦▪♦►▶■□➢✔✓✗➤★])\s/u
 
-  def self.reference_marker(id) = "⟦#{id}⟧"
+  def self.reference_marker(ids) = ids.to_s.split(',').map { |id| "⟦#{id}⟧" }.join
 
   def self.extract_markers(text)
     ids = text.to_s.scan(MARKER_TAG).flatten
@@ -23,12 +29,14 @@ module TextHelpers
   end
 
   def self.marker_line?(text) = text.to_s.strip.match?(MARKER_LINE)
+  def self.enumerated?(text) = text.to_s.match?(ENUMERATED)
+  def self.toc_entry?(text) = text.to_s.match?(TOC_LEADERS)
 
   # Table-of-contents leaders and the page number they point at are noise when spoken.
   def self.strip_toc_leaders(text)
     return text unless text.to_s.match?(TOC_LEADERS)
 
-    text.gsub(TOC_LEADERS, ' ').sub(/\s+\d{1,4}\s*\z/, '').gsub(/\s+/, ' ').strip
+    text.gsub(TOC_LEADERS, ' ').gsub(MARKER_TAG, '').sub(/\s+\d{1,4}\s*\z/, '').gsub(/\s+/, ' ').strip
   end
 
   def self.normalize_text(str)
@@ -81,8 +89,8 @@ module TextHelpers
   def self.strip_inline_markers(text)
     clean, ids = extract_markers(text)
     clean = clean.gsub(/(#{MARKER_ANCHOR})(\d{1,3})(?=\s*:)/u, '\1')
-    clean = clean.gsub(/(#{MARKER_ANCHOR})(\d{1,3})(?=(\s|$))/u) do
-      ids << $2
+    clean = clean.gsub(/(#{MARKER_ANCHOR})(#{MARKER_IDS})(?=(\s|$))/u) do
+      ids.concat($2.split(','))
       $1
     end
     # A call glued to a number is a marker only where the sentence ends; inside it is a decimal.

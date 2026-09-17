@@ -56,10 +56,36 @@ RSpec.describe TextHelpers do
       )
     end
 
+    it 'leaves a digit that names a product or a gene alone' do
+      expect(described_class.strip_inline_markers('used with MMS1, CDS or CDH')).to eq(['used with MMS1, CDS or CDH', []])
+      expect(described_class.strip_inline_markers('the gene CRF2 regulates anxiety')).to eq(['the gene CRF2 regulates anxiety', []])
+    end
+
+    it 'takes a run of markers off the sentence they close' do
+      expect(described_class.strip_inline_markers('por emoções stressantes.17,18')).to eq(['por emoções stressantes.', %w[17 18]])
+    end
+
     it 'reads markers tagged from glyph geometry without guessing' do
       expect(described_class.strip_inline_markers("no ano de 2010#{described_class.reference_marker(1)},")).to eq(
         ['no ano de 2010,', ['1']]
       )
+    end
+  end
+
+  describe '.reference_marker' do
+    it 'tags each id of a marker run' do
+      expect(described_class.reference_marker('17,18')).to eq('⟦17⟧⟦18⟧')
+      expect(described_class.extract_markers('stressantes.⟦17⟧⟦18⟧')).to eq(['stressantes.', %w[17 18]])
+    end
+  end
+
+  describe '.enumerated?' do
+    it 'recognises numbered, lettered and bulleted entries' do
+      expect(described_class.enumerated?('1. Introducción y explicación')).to be(true)
+      expect(described_class.enumerated?('b. Raw butter')).to be(true)
+      expect(described_class.enumerated?('♦ Duche vaginal: use dois copos')).to be(true)
+      expect(described_class.enumerated?('E. coli grows fast')).to be(false)
+      expect(described_class.enumerated?('1990 was the year')).to be(false)
     end
   end
 
@@ -81,6 +107,10 @@ RSpec.describe TextHelpers do
 
     it 'leaves ordinary prose untouched' do
       expect(described_class.strip_toc_leaders('Wait... the answer is 42')).to eq('Wait... the answer is 42')
+    end
+
+    it 'drops a marker tag a scanned page number left on the entry' do
+      expect(described_class.strip_toc_leaders('Calvicie ........... 19⟦2⟧')).to eq('Calvicie')
     end
   end
 
