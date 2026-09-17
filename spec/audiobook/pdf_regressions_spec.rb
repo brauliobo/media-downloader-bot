@@ -583,4 +583,32 @@ RSpec.describe 'Audiobook assembly regressions' do
       expect(paragraphs(book).size).to be >= 5
     end
   end
+  describe 'nao-comecou-endnotes.pdf' do
+    let(:book) { book_for('nao-comecou-endnotes.pdf', 'pt') }
+
+    def reference_for(id) = references(book).find { |reference| reference.id == id }
+
+    it 'reads a note from the back of the book where it is called' do
+      expect(reference_for('2').sentences.map(&:text).join(' ')).to include('Com o que estamos aprendendo agora')
+      expect(reference_for('33').sentences.map(&:text).join(' ')).to include('Max-Planck-Gesellschaft')
+    end
+
+    it 'numbers notes from one again under each chapter' do
+      expect(reference_for('1').sentences.map(&:text).join(' ')).to include('CE Finch e JC Loehlin')
+    end
+
+    it 'does not read the list of notes a second time' do
+      expect(spoken(book)).not_to include('Mary Sykes Wylie', 'Max-Planck-Gesellschaft')
+      expect(headings(book)).not_to include('Notas')
+    end
+  end
+
+  describe 'guia-page-notes-box.pdf' do
+    let(:book) { book_for('guia-page-notes-box.pdf', 'pt') }
+
+    it 'keeps a per-page notes box, which is not a list of endnotes' do
+      expect(spoken(book)).to include('Notas')
+      expect(spoken(book)).to include('Ao usar o suco de um limão fresco')
+    end
+  end
 end
