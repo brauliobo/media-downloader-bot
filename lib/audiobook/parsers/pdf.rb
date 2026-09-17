@@ -131,9 +131,10 @@ module Audiobook
               y:          page_height - y_min,
               x:          words.map { |word| word['xMin'].to_f }.min,
               x_max:      words.map { |word| word['xMax'].to_f }.max,
-              page_width: page['width'].to_f,
-              y_min:      y_min,
-              y_max:      y_max
+              page_width:  page['width'].to_f,
+              page_height: page_height,
+              y_min:       y_min,
+              y_max:       y_max
             )
           end
           SymMash.new(

@@ -936,9 +936,12 @@ module Audiobook
       result
     end
 
-    FOLIO          = /\A[ivxlcdm\d]{1,7}[.\]]?\z/i
+    FOLIO           = /\A[ivxlcdm\d]{1,7}[.\]]?\z/i
     FURNITURE_WORDS = 8
     OUTLIER_MARGIN  = 0.1
+    MARGIN_BAND     = 0.15
+    MARGINALIA_SIZE = 0.55
+    TITLE_SIZE      = 1.25
 
     # Page furniture is a folio, a running head repeated across pages, or a short line parked
     # away from the text block. None of it belongs in the narration.
@@ -956,48 +959,86 @@ module Audiobook
     end
 
     def furniture_lines(pages, lines)
-      boundaries = pages.values.flat_map { |page_lines| page_lines.values_at(0, 1, -2, -1).compact.uniq }
-      folios     = boundaries.select { |line| folio?(line, pages[line.page]) }
-      repeated   = repeated_boundaries(pages, folios)
-      outliers   = boundary_outliers(pages, lines, folios)
-      (folios + repeated + outliers).to_set
+      metrics = body_metrics(lines)
+      margins = pages.values.map { |page_lines| margin_lines(page_lines) }
+      # A re-rendered PDF reflows folios and running heads into the text, so short lines parked
+      # outside the column count as candidates too; only self-naming patterns are taken from there.
+      parked  = margins.zip(pages.values).map { |band, page_lines| band | short_off_column(page_lines, metrics) }
+      folios  = parked.flatten.select { |line| folio?(line, pages[line.page]) }
+      (folios + repeated_margins(parked, folios, pages.size, metrics) +
+        column_outliers(margins, folios, metrics) + marginalia(lines, metrics)).to_set
+    end
+
+    # Furniture is short and sits at the page edge: inside the top or bottom band, or simply
+    # the outermost lines of a page too sparse to have a band.
+    def margin_lines(page_lines)
+      band = page_lines.select { |line| in_margin_band?(line) }
+      (band | page_lines.values_at(0, 1, -2, -1).compact)
+        .select { |line| line.text.to_s.split.size <= FURNITURE_WORDS }
+    end
+
+    def in_margin_band?(line)
+      height = line.page_height.to_f
+      return false unless height.positive?
+
+      line.y_min.to_f <= height * MARGIN_BAND || line.y_max.to_f >= height * (1 - MARGIN_BAND)
+    end
+
+    def short_off_column(page_lines, metrics)
+      return [] unless metrics
+
+      page_lines.select { |line| line.text.to_s.split.size <= FURNITURE_WORDS && off_column?(line, metrics) }
     end
 
     # A page carries one folio; a column of bare numbers in the same size is a note marker list.
     def folio?(line, page_lines)
-      return false if page_lines.size < 3 || !line.text.to_s.strip.match?(FOLIO)
+      return false unless line.text.to_s.strip.match?(FOLIO)
 
       size = FontRoles.quantize(line.font_size)
       page_lines.count { |other| FontRoles.quantize(other.font_size) == size && TextHelpers.marker_line?(other.text) } < 2
     end
 
-    def repeated_boundaries(pages, folios)
-      edges  = pages.values.map { |page_lines| (page_lines - folios).values_at(0, -1).compact.uniq }
-      counts = edges.flat_map { |page_edges| page_edges.map { |line| normalize_boundary_text(line.text).gsub(/\d+/, '<d>') }.uniq }
-        .tally
-      limit  = [[(pages.size * 0.3).ceil, 3].min, 2].max
-      edges.flatten.select { |line| counts[normalize_boundary_text(line.text).gsub(/\d+/, '<d>')] >= limit }
+    # A running head repeats across pages; a chapter title that quotes it is set larger.
+    def repeated_margins(margins, folios, page_count, metrics)
+      edges  = margins.map { |page_edges| page_edges - folios }
+      counts = edges.flat_map { |page_edges| page_edges.map { |line| normalize_boundary_text(line.text) }.uniq }.tally
+      limit  = [[(page_count * 0.3).ceil, 3].min, 2].max
+      edges.flatten.select do |line|
+        counts[normalize_boundary_text(line.text)] >= limit && !title_size?(line, metrics)
+      end
     end
 
-    # A running head or watermark sits outside the column the body text keeps to.
-    def boundary_outliers(pages, lines, folios)
-      width = lines.map { |line| line.page_width.to_f }.max.to_f
-      return [] unless width.positive?
+    # A running head or watermark sits in the margin outside the column the body text keeps to.
+    def column_outliers(margins, folios, metrics)
+      return [] unless metrics
 
-      body_x    = mode_of(lines.map { |line| (line.x.to_f / 10).round * 10 })
-      body_size = mode_of(lines.filter_map { |line| FontRoles.quantize(line.font_size) })
-      return [] unless body_x && body_size
-
-      pages.values.flat_map do |page_lines|
-        content = page_lines - folios
-        next [] if content.size < 3
-
-        content.values_at(0, -1).compact.uniq.select do |line|
-          line.text.to_s.split.size <= FURNITURE_WORDS &&
-            FontRoles.quantize(line.font_size).to_f <= body_size + FontRoles::BODY_BAND &&
-            (line.x.to_f - body_x).abs > width * OUTLIER_MARGIN
-        end
+      (margins.flatten - folios).select do |line|
+        FontRoles.quantize(line.font_size).to_f <= metrics.font + FontRoles::BODY_BAND && off_column?(line, metrics)
       end
+    end
+
+    # A chapter title quotes its own running head, so only size tells them apart.
+    def title_size?(line, metrics)
+      metrics && FontRoles.quantize(line.font_size).to_f > metrics.font * TITLE_SIZE
+    end
+
+    # Marginalia set far below body size outside the text column is print noise, not narration.
+    def marginalia(lines, metrics)
+      return [] unless metrics
+
+      lines.select do |line|
+        FontRoles.quantize(line.font_size).to_f < metrics.font * MARGINALIA_SIZE && off_column?(line, metrics)
+      end
+    end
+
+    def off_column?(line, metrics) = (line.x.to_f - metrics.x).abs > metrics.width * OUTLIER_MARGIN
+
+    def body_metrics(lines)
+      width = lines.map { |line| line.page_width.to_f }.max.to_f
+      x     = mode_of(lines.map { |line| (line.x.to_f / 10).round * 10 })
+      # `size` would collide with Hash#size on the SymMash.
+      font  = mode_of(lines.filter_map { |line| FontRoles.quantize(line.font_size) })
+      SymMash.new(width: width, x: x, font: font) if width.positive? && x && font
     end
 
     def mode_of(values) = values.compact.tally.max_by { |_, count| count }&.first
