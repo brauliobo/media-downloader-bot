@@ -144,7 +144,8 @@ module Audiobook
             SymMash.new(
               text:       text,
               font_size:  line_font_size(words, baseline),
-              y:          page_height - y_min,
+              # The baseline is where the line really sits; box tops move with the tallest glyph.
+              y:          page_height - baseline,
               x:          words.map { |word| word['xMin'].to_f }.min,
               x_max:      words.map { |word| word['xMax'].to_f }.max,
               page_width:  page['width'].to_f,

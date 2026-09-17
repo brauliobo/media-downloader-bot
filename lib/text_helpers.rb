@@ -16,6 +16,8 @@ module TextHelpers
   # means an acronym or a product name ("MMS1", "CO2").
   MARKER_ANCHOR  = /(?:[\p{Ll}\)\]"”’»]|(?<!\d)[.,;:])/u
   TRAILING_HYPHEN = /\s*[-­‐‑]\z/
+  # An ellipsis is a pause; whether it closes the sentence depends on what follows.
+  TRAILING_ELLIPSIS = /(?:\.{3}|…)["”’)\]»]*\s*\z/u
   # Leaders run long; a spaced ellipsis in prose stays under six dots.
   TOC_LEADERS     = /(?:\.\s*){6,}|(?:…\s*){3,}/
   BULLETS         = '•●○◦▪♦►▶■□➢✔✓✗➤★'
@@ -35,6 +37,7 @@ module TextHelpers
   def self.enumerated?(text) = text.to_s.match?(ENUMERATED)
   def self.toc_entry?(text) = text.to_s.match?(TOC_LEADERS)
   def self.bulleted?(text) = text.to_s.match?(BULLET_GLYPH)
+  def self.ends_with_ellipsis?(text) = text.to_s.match?(TRAILING_ELLIPSIS)
   def self.strip_bullet(text) = text.to_s.sub(BULLET_GLYPH) { $1.to_s }
 
   # Table-of-contents leaders and the page number they point at are noise when spoken.

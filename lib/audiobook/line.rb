@@ -94,8 +94,11 @@ module Audiobook
     end
 
     # A lowercase start after text that has not closed its sentence carries that sentence on.
+    # An ellipsis is a pause rather than a close when what follows it is lowercase.
     def continues?(text)
-      starts_with_lowercase? && !TextHelpers.enumerated?(@text) && !TextHelpers.ends_with_punctuation?(text)
+      return false unless starts_with_lowercase? && !TextHelpers.enumerated?(@text)
+
+      !TextHelpers.ends_with_punctuation?(text) || TextHelpers.ends_with_ellipsis?(text)
     end
 
     def word_count

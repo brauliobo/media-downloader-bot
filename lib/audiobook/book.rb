@@ -648,8 +648,13 @@ module Audiobook
             first_text = item.sentences.first&.text.to_s.strip
             looks_unfinished = !TextHelpers.ends_with_punctuation?(last_text)
             looks_continuation = first_text.match?(/\A[[:lower:]]/) && !TextHelpers.enumerated?(first_text)
+            # A list entry opens its own block, and a lead-in or a numbered label names the block
+            # that follows rather than running into it. A page break undoes none of that.
+            separate = TextHelpers.enumerated?(first_text) || TextHelpers.bulleted?(first_text) ||
+              last_text.end_with?(':') || label_only?(last_text)
             # Inside a page the detector already drew the blocks; only a lowercase resumption overrides it.
-            resumes = looks_continuation || (looks_unfinished && entry.page != (prev_entry.last_page || prev_entry.page))
+            resumes = looks_continuation ||
+              (!separate && looks_unfinished && entry.page != (prev_entry.last_page || prev_entry.page))
             # A lowercase start after an unfinished sentence resumes it even when the font jitters.
             if same_language && resumes && !entry.toc && !prev_entry.toc && (font_close || (looks_unfinished && looks_continuation))
               if (!last_text.empty? && looks_unfinished) || (!first_text.empty? && looks_continuation)
@@ -706,6 +711,9 @@ module Audiobook
       # Create Page objects
       pages_hash.sort.map { |page_num, items| Page.new(page_num, items) }
     end
+
+    # "e. Compromised immune system" names the block that follows; it does not run into it.
+    def label_only?(text) = TextHelpers.enumerated?(text) && !TextHelpers.ends_with_punctuation?(text)
 
     FOOTNOTE_FONT_MARGIN = 1.0
 
