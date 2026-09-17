@@ -62,7 +62,7 @@ module Audiobook
 
       words = @text.split(/\s+/)
       return false if words.empty? || words.size > 10
-      return true if words.size <= 3 && starts_with_capital? && @text !~ /[.!?]$/
+      return true if words.size <= 3 && starts_with_capital? && @text !~ /[.!?…,;:]\z/
 
       upper_ratio = words.count { |w| w == w.upcase && w.length > 1 }.fdiv(words.size)
       return true if upper_ratio > 0.6
@@ -90,6 +90,11 @@ module Audiobook
 
     def starts_with_lowercase?
       @text.match?(/\A\p{Ll}/u)
+    end
+
+    # A lowercase start after text that has not closed its sentence carries that sentence on.
+    def continues?(text)
+      starts_with_lowercase? && !TextHelpers.enumerated?(@text) && !TextHelpers.ends_with_punctuation?(text)
     end
 
     def word_count

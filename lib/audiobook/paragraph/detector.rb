@@ -12,7 +12,7 @@ module Audiobook
       end
 
       def initialize(lines, max_sentence_chars: Factory::MAX_SENTENCE_CHARS)
-        @lines = lines
+        @lines = strip_contents_numbers(lines)
         @max_sentence_chars = max_sentence_chars
         @baseline_spacing = calculate_baseline_spacing(lines)
         @spacing_threshold = @baseline_spacing * 1.5
@@ -99,6 +99,18 @@ module Audiobook
         (above.nil? || above >= gap) && (below.nil? || below >= gap)
       end
 
+      # An entry beside leader lines that ends in a number is a contents line whose leaders were lost.
+      def strip_contents_numbers(lines)
+        lines.each_with_index.map do |line, idx|
+          next line if TextHelpers.toc_entry?(line.text) || !line.text.match?(/\S\s\d{1,4}\z/)
+
+          beside = [idx.positive? ? lines[idx - 1] : nil, lines[idx + 1]].compact.select { |other| other.page_number == line.page_number }
+          next line unless beside.any? { |other| TextHelpers.toc_entry?(other.text) }
+
+          Line.new(line.text.sub(/\s+\d{1,4}\z/, ''), **line.style_attrs)
+        end
+      end
+
       def calculate_baseline_spacing(lines)
         spacings = lines.compact.map(&:top_spacing).compact.select { |s| s > 0 }
         return 0 if spacings.empty?
@@ -123,24 +135,25 @@ module Audiobook
     class BreakDetector
       def self.should_break?(prev_line, line, buf, spacing_threshold:, indent_threshold:, isolated: false, starts_block: false)
         # Dehyphenate check is handled before calling this
+        buffer_text = buf.map(&:text).join(' ').strip
+        sentence_finished = Sentence.ends_with_punctuation?(buffer_text)
+        # Emphasis that carries a sentence on in mid-flow is a run inside the paragraph, not a new block.
+        emphasis_run = line.continues?(buffer_text) && !line.font_changed?(prev_line)
 
         continuation = FontRoles.heading_continuation?(prev_line, line)
         font_changed = line.font_changed?(prev_line) || (
-          !continuation && !FontRoles.heading_item?(prev_line) && line.style_changed?(prev_line)
+          !emphasis_run && !continuation && !FontRoles.heading_item?(prev_line) && line.style_changed?(prev_line)
         )
         page_changed = line.page_number != prev_line.page_number
         is_only_numbers = TextHelpers.marker_line?(line.text)
         language_changed = line.language != prev_line.language
-        role_changed = !continuation && FontRoles.heading_item?(prev_line) != FontRoles.heading_item?(line)
+        role_changed = !continuation && !emphasis_run && FontRoles.heading_item?(prev_line) != FontRoles.heading_item?(line)
 
         spacing_break = detect_spacing_break(prev_line, line, spacing_threshold)
         indent_break = detect_indent_break(prev_line, line, indent_threshold)
 
-        buffer_text = buf.map(&:text).join(' ').strip
-        sentence_finished = Sentence.ends_with_punctuation?(buffer_text)
-
         should_break = language_changed || is_only_numbers || font_changed || role_changed ||
-          FontRoles.labeled_line?(line) ||
+          FontRoles.labeled_line?(line) || TextHelpers.enumerated?(line.text) || TextHelpers.toc_entry?(prev_line.text) ||
           (sentence_finished && line.starts_with_capital? && !continuation)
         should_break = true if (spacing_break || indent_break) && sentence_finished && !continuation
         # A block fenced by blank space stands alone even when the text reads as unfinished.

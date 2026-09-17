@@ -11,6 +11,7 @@ module Audiobook
       MAX_SENTENCE_CHARS = 800
       ISOLATED_MAX_WORDS = 12
       TERMINAL_PUNCTUATION = /[.!?…]["”’)\]»]*\z/u
+      CLAUSE_PUNCTUATION   = /[.!?…,;:]["”’)\]»]*\z/u
 
       def self.create_items_from_lines(lines, start_page, max_sentence_chars: MAX_SENTENCE_CHARS, isolated: false)
         new(lines, start_page, max_sentence_chars: max_sentence_chars, isolated: isolated).create
@@ -33,13 +34,13 @@ module Audiobook
           next if normalized.empty?
 
           if group.first.section?
-            next item_data(group.first, create_section(group.first, TextHelpers.extract_markers(normalized).first))
+            next item_data(group, create_section(group.first, TextHelpers.extract_markers(normalized).first))
           end
 
           sentences = create_sentences(normalized, group.first.language)
           next if sentences.empty?
 
-          create_item(group.first, sentences)
+          create_item(group, sentences)
         end.compact
       end
 
@@ -66,7 +67,7 @@ module Audiobook
       def split_group?(group, line, prev_font)
         return true if line.text.match?(/^\d+$/) || FontRoles.labeled_line?(line)
         return true if prev_font && line.font_size && !FontRoles.same_size?(line, group.last)
-        return false if FontRoles.heading_continuation?(group.last, line)
+        return false if FontRoles.heading_continuation?(group.last, line) || line.continues?(group.map(&:text).join(' '))
         return true if FontRoles.heading_item?(group.first) != FontRoles.heading_item?(line)
         return true if !FontRoles.heading_item?(group.first) && line.style_changed?(group.first)
 
@@ -90,12 +91,13 @@ module Audiobook
         end
       end
 
-      def create_item(first_line, sentences)
+      def create_item(group, sentences)
+        first_line = group.first
         numeric_only = sentences.size == 1 && sentences.first.text.strip.match?(/\A[^\p{L}]*\z/u)
         level = FontRoles.current&.level_for(first_line)
         joined = sentences.map(&:text).join(' ')
 
-        item = if !numeric_only && heading_group?(first_line, level, joined, sentences.size)
+        item = if !numeric_only && heading_group?(group, level, joined, sentences.size)
           if level.to_i.positive?
             create_section(first_line, joined, level: level)
           else
@@ -105,22 +107,27 @@ module Audiobook
           create_paragraph(first_line, sentences)
         end
 
-        item_data(first_line, item)
+        item_data(group, item)
       end
 
-      def heading_group?(first_line, level, joined, sentence_count)
+      def heading_group?(group, level, joined, sentence_count)
+        first_line = group.first
         words = joined.split.size
         return false if words > FontRoles::MAX_HEADING_WORDS
+        # A contents entry points at a heading elsewhere; it is never one itself.
+        return false if contents?(group)
+        # A sentence that opens lowercase and closes with a stop is prose whatever its size.
+        return false if first_line.starts_with_lowercase? && joined.match?(TERMINAL_PUNCTUATION)
         # A label is a complete phrase; text that breaks off mid-sentence is body copy.
         return false if sentence_count > 1 && !joined.match?(TERMINAL_PUNCTUATION)
-        return true if @isolated && words <= ISOLATED_MAX_WORDS && !joined.match?(TERMINAL_PUNCTUATION)
+        return true if @isolated && words <= ISOLATED_MAX_WORDS && !joined.match?(CLAUSE_PUNCTUATION)
 
         font_heading = level.to_i.positive? || (FontRoles.current && FontRoles.heading_item?(first_line))
-        return sentence_count == 1 && heading_like?(first_line, joined) unless font_heading
+        return sentence_count == 1 && heading_like?(group, joined) unless font_heading
         # Emphasis at body size marks a lead-in, not a heading, once it reads as a full sentence.
         return words <= 4 || !joined.match?(TERMINAL_PUNCTUATION) unless larger_than_body?(first_line)
 
-        heading_like?(first_line, joined) || words <= 20
+        heading_like?(group, joined) || words <= 20
       end
 
       def larger_than_body?(line)
@@ -174,9 +181,11 @@ module Audiobook
         FontRoles.copy_style(item, line)
       end
 
-      def item_data(first_line, item)
-        {item: item, page: @start_page, font_size: first_line.font_size}
+      def item_data(group, item)
+        {item: item, page: @start_page, font_size: group.first.font_size, toc: contents?(group)}
       end
+
+      def contents?(group) = group.any? { |line| TextHelpers.toc_entry?(line.text) }
 
       def self.heading_like?(text)
         return false unless text
@@ -185,7 +194,7 @@ module Audiobook
         words = text.split(/\s+/)
         return false if words.empty? || words.size > 10
 
-        return true if words.size <= 3 && text !~ /[.!?]$/
+        return true if words.size <= 3 && text !~ /[.!?…,;:]\z/
 
         upper_ratio = words.count { |w| w == w.upcase && w.length > 1 }.fdiv(words.size)
         return true if upper_ratio > 0.6
@@ -193,8 +202,11 @@ module Audiobook
         words.all? { |w| w.match?(/\A[A-Z]/) } && text !~ /[.!?]$/
       end
 
-      def heading_like?(first_line, text)
-        self.class.heading_like?(text) || first_line.heading_like?
+      # A list entry is not a heading, and a short opening line says nothing about the block it starts.
+      def heading_like?(group, text)
+        return false if TextHelpers.enumerated?(text)
+
+        self.class.heading_like?(text) || (group.one? && group.first.heading_like?)
       end
     end
   end

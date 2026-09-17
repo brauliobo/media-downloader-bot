@@ -49,6 +49,60 @@ RSpec.describe Audiobook::Paragraph::Detector do
     expect(items.grep(Audiobook::Heading)).to be_empty
   end
 
+  it 'keeps a bold run that carries the sentence on inside its paragraph' do
+    items = items_from(
+      line('Com o tempo, fui sendo esclarecido de que aquele modelo era o mesmo', bold: false),
+      line('que Javé havia sonhado para a humanidade, antes do despertar de Pandora e', bold: true),
+      line('de Eva, sendo a primeira, protagonista das páginas da mitologia grega.', bold: false),
+      line('O deslacre mental que Pandora promoveu em si mesma rompeu as travas antigas.', bold: false),
+      line('Sim, era esse o planejamento do Criador para a mais recente espécie biológica.', bold: false)
+    )
+
+    expect(items.grep(Audiobook::Heading)).to be_empty
+    expect(items.first.sentences.first.text).to include('era o mesmo que Javé havia sonhado para a humanidade, antes do despertar de Pandora e de Eva')
+  end
+
+  it 'starts a new block at every enumerated line' do
+    items = items_from(
+      line('We recommend to build the immune system with foods such as:'),
+      line('a. Raw milk', top: 0, bottom: 0),
+      line('b. Raw butter', top: 0, bottom: 0),
+      line('c. Raw cheese', top: 0, bottom: 0)
+    )
+
+    expect(items.grep(Audiobook::Heading)).to be_empty
+    expect(items.map { |item| item.sentences.map(&:text).join(' ') }).to eq(
+      ['We recommend to build the immune system with foods such as:', 'a. Raw milk', 'b. Raw butter', 'c. Raw cheese']
+    )
+  end
+
+  it 'reads contents entries one per line and drops a page number beside leader lines' do
+    items = items_from(
+      line('Cáncer colorrectal ....................... 193', top: 2, bottom: 2),
+      line('Cáncer gástrico o cáncer de estómago. 196', top: 2, bottom: 2),
+      line('Cáncer de hígado ......................... 198', top: 2, bottom: 2)
+    )
+
+    expect(items.grep(Audiobook::Heading)).to be_empty
+    expect(items.map { |item| item.sentences.map(&:text).join(' ') }).to eq(
+      ['Cáncer colorrectal', 'Cáncer gástrico o cáncer de estómago.', 'Cáncer de hígado']
+    )
+  end
+
+  it 'does not read a stanza as a heading because its first line is short' do
+    items = items_from(
+      line('Em montanhas de pó no azul disperso...', top: 4, bottom: 4),
+      line('Doce terra bendita,', top: 4, bottom: 4, x: 90),
+      line('Coberta de planícies assombrosas,', top: 4, bottom: 4),
+      line('Que são atravessadas', top: 4, bottom: 4, x: 90),
+      line('Pelos fortes gaúchos em cavalos', top: 4, bottom: 4),
+      line('De patas vigorosas.', top: 4, bottom: 4, x: 90),
+      line('Oh regiões amadas onde passei tranquilo e sem abalos a infância.', top: 4, bottom: 4)
+    )
+
+    expect(items.grep(Audiobook::Heading)).to be_empty
+  end
+
   it 'rejoins a word split by a soft hyphen at the line break' do
     items = items_from(
       line("Su respuesta fue sim­"),
