@@ -72,6 +72,7 @@ module Audiobook
           line.top_spacing    = line.y_min - page_lines[idx - 1].y_max if idx.positive?
           line.bottom_spacing = page_lines[idx + 1].y_min - line.y_max if idx < page_lines.size - 1
         end
+        normalize_bullets(page_lines)
 
         result = SymMash.new
         result.lines = page_lines if page_lines.any?
@@ -80,6 +81,21 @@ module Audiobook
         end
 
         result
+      end
+
+      # A bullet the text layer could not map comes out as a lone "0" or "o" opening each item;
+      # the items give it away by repeating down one margin.
+      BULLET_LOOKALIKE = /\A[0oO°](?=\s+\p{Lu})/u
+      BULLET_MARGIN    = 2.0
+
+      def self.normalize_bullets(page_lines)
+        candidates = page_lines.select { |line| line.text.match?(BULLET_LOOKALIKE) }
+        return if candidates.size < 2
+
+        margin = candidates.map { |line| line.x.to_f }.tally.max_by { |_, count| count }.first
+        candidates.each do |line|
+          line.text = line.text.sub(BULLET_LOOKALIKE, '•') if (line.x.to_f - margin).abs <= BULLET_MARGIN
+        end
       end
 
       # A page whose text layer only holds a header/footer keeps its content inside a dominant image.

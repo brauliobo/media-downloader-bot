@@ -18,8 +18,11 @@ module TextHelpers
   TRAILING_HYPHEN = /\s*[-­‐‑]\z/
   # Leaders run long; a spaced ellipsis in prose stays under six dots.
   TOC_LEADERS     = /(?:\.\s*){6,}|(?:…\s*){3,}/
+  BULLETS         = '•●○◦▪♦►▶■□➢✔✓✗➤★'
   # "1. ", "a) " and bullet glyphs open a list entry or a contents line.
-  ENUMERATED      = /\A(?:(?:\d{1,3}|\p{Ll})[.)]|[•●○◦▪♦►▶■□➢✔✓✗➤★])\s/u
+  ENUMERATED      = /\A(?:(?:\d{1,3}|\p{Ll})[.)]|[#{BULLETS}])\s/u
+  # The glyph marks the entry for the detector; it says nothing once the text is spoken.
+  BULLET_GLYPH    = /\A((?:\d{1,3}|\p{Ll})[.)]+\s*)?[#{BULLETS}]\s*/u
 
   def self.reference_marker(ids) = ids.to_s.split(',').map { |id| "⟦#{id}⟧" }.join
 
@@ -31,6 +34,8 @@ module TextHelpers
   def self.marker_line?(text) = text.to_s.strip.match?(MARKER_LINE)
   def self.enumerated?(text) = text.to_s.match?(ENUMERATED)
   def self.toc_entry?(text) = text.to_s.match?(TOC_LEADERS)
+  def self.bulleted?(text) = text.to_s.match?(BULLET_GLYPH)
+  def self.strip_bullet(text) = text.to_s.sub(BULLET_GLYPH) { $1.to_s }
 
   # Table-of-contents leaders and the page number they point at are noise when spoken.
   def self.strip_toc_leaders(text)

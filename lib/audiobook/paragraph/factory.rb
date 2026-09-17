@@ -78,7 +78,7 @@ module Audiobook
 
       def normalize_group_text(group)
         normalized = TextHelpers.join_pdf_lines(group.map { |line| TextHelpers.strip_toc_leaders(line.text) })
-        normalized.gsub(/\bN\s*\.\s*T\./i, 'N.T.')
+        TextHelpers.strip_bullet(normalized).gsub(/\bN\s*\.\s*T\./i, 'N.T.')
       end
 
       def create_sentences(normalized, language)
@@ -116,8 +116,9 @@ module Audiobook
         first_line = group.first
         words = joined.split.size
         return false if words > FontRoles::MAX_HEADING_WORDS || joined.match?(NEVER_HEADING)
-        # A contents entry points at a heading elsewhere; it is never one itself.
-        return false if contents?(group)
+        # A contents entry points at a heading elsewhere and a bulleted line is an item in a
+        # list; neither is a heading itself, however isolated it looks.
+        return false if contents?(group) || TextHelpers.bulleted?(group.first.text)
         # A lowercase opening is prose, an attribution or a caption unless the type outsizes the body.
         if first_line.starts_with_lowercase?
           return false if !larger_than_body?(first_line) || joined.match?(TERMINAL_PUNCTUATION)
