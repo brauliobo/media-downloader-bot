@@ -4,7 +4,6 @@ module TextHelpers
   EOS_PUNCT      = /[.!?…]$/
   EOS_PUNCT_FULL = /[\.!?¡¿；。？！]"?\s*\z/
   CLOSERS_ONLY   = /\A["')\]]+\z/
-  EOS_WITH_CLOSE = /[.!?…]["')\]]*$/
   TITLE_ABBREVIATION = /\A(?:Mr|Mrs|Ms|Dr|Prof|Sr|Sra|St)\.\z/i
   # Superscript markers found through glyph geometry are tagged so they survive line joins unambiguously.
   MARKER_TOKEN   = /⟦\d{1,3}⟧/

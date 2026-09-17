@@ -110,7 +110,7 @@ module Audiobook
     def column_outliers(edges, folios, metrics, lines)
       return [] unless metrics
 
-      shared = shared_left_edges(lines)
+      shared = self.class.shared_left_edges(lines)
       (edges.flatten - folios).select do |line|
         FontRoles.quantize(line.font_size).to_f <= metrics.font + FontRoles::BODY_BAND &&
           off_column?(line, metrics) && !shared.include?(self.class.left_edge(line))
@@ -238,7 +238,5 @@ module Audiobook
     end
 
     def self.left_edge(line) = [line.page, line.x.to_f.round]
-
-    def shared_left_edges(lines) = self.class.shared_left_edges(lines)
   end
 end
