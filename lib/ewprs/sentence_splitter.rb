@@ -11,11 +11,13 @@ module Ewprs
     INITIAL_ABBREVIATION = /(?:\A|[^\p{L}])\p{Lu}\z/u
     # "Chapter XIV. Title" names a part; the numeral does not close a sentence.
     NUMERAL_ABBREVIATION = /(?:\A|[^\p{L}])[IVX]{2,4}\z/
-    # "1. Heading" opens a numbered section; the number is a label, not a sentence.
-    ENUMERATOR = /\A\d{1,3}\z/
+    # "1. Heading" and "a. item" open an enumerated entry; the label closes nothing.
+    ENUMERATOR = /(?:\A|[.!?…]["”’)\]»]*\s+)(?:\d{1,3}|\p{Ll})\z/u
+    ENUMERATED_START = '(?:\d{1,3}|\p{Ll})[.)]\s'
     NO_BOUNDARY_TOKENS = /(?!)\z/
-    # A digit right after the period is a footnote marker when a word precedes it, a decimal otherwise.
-    SENTENCE_END = '(?:[.!?…](?!\d)|(?<=\p{L})[.!?…](?=\d{1,3}(?:\s|\z))|[。！？])'
+    MARKER_RUN = '\d{1,3}(?:,\d{1,3})*'
+    # Digits right after the period are footnote markers when a word precedes them, a decimal otherwise.
+    SENTENCE_END = "(?:[.!?…](?!\\d)|(?<=\\p{L})[.!?…](?=#{MARKER_RUN}(?:\\s|\\z))|[。！？])"
     CLOSING_QUOTES = '["”’」』】）]*'
     CJK_CHARACTER = '[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]'
 
@@ -24,9 +26,9 @@ module Ewprs
     def split(text, boundary_tokens: NO_BOUNDARY_TOKENS, max_chars: Float::INFINITY, clauses: false)
       transparent = "(?:#{boundary_tokens.source})*"
       boundary = %r{
-        (#{SENTENCE_END}#{CLOSING_QUOTES})(\s*\d{1,3})?(#{transparent})
+        (#{SENTENCE_END}#{CLOSING_QUOTES})(\s*#{MARKER_RUN})?(#{transparent})
         (?:
-          \s+(?=#{transparent}(?:(?:\[\[?|#{OPENING_QUOTE})?\p{Lu}|\())
+          \s+(?=#{transparent}(?:(?:\[\[?|#{OPENING_QUOTE})?\p{Lu}|\(|#{ENUMERATED_START}))
           |\s*(?=#{transparent}(?:#{OPENING_QUOTE})?#{CJK_CHARACTER})
         )
       }ux
@@ -65,11 +67,20 @@ module Ewprs
 
       chunks = [sentence]
       [/(?<=[;:])\s+/, /(?<=,)\s+/].each do |boundary|
-        chunks = chunks.flat_map do |chunk|
-          chunk.length > max_chars ? chunk.split(boundary) : chunk
-        end
+        chunks = chunks.flat_map { |chunk| chunk.length > max_chars ? pack(chunk.split(boundary), max_chars) : chunk }
       end
       chunks.flat_map { |chunk| split_words(chunk, max_chars) }
+    end
+
+    # Clause pieces are glued back up to the limit so a long list is not read one item at a time.
+    def pack(pieces, max_chars)
+      pieces.each_with_object([]) do |piece, packed|
+        if packed.any? && packed.last.length + piece.length < max_chars
+          packed[-1] = "#{packed.last} #{piece}"
+        else
+          packed << piece
+        end
+      end
     end
 
     def split_words(text, max_chars)

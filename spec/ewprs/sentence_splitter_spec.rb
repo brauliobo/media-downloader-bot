@@ -81,6 +81,29 @@ RSpec.describe Ewprs::SentenceSplitter do
     )
   end
 
+  it 'starts a new sentence at an enumerator that follows a full stop' do
+    expect(described_class.split('Espécie de magia baseada nos espíritos celestes. 2. Arte de fazer milagres.', max_chars: 800)).to eq(
+      ['Espécie de magia baseada nos espíritos celestes.', '2. Arte de fazer milagres.']
+    )
+    expect(described_class.split('Fresh organic beef liver and red meat. e. Raw honey', max_chars: 800)).to eq(
+      ['Fresh organic beef liver and red meat.', 'e. Raw honey']
+    )
+  end
+
+  it 'keeps a run of footnote markers with the sentence they close' do
+    expect(described_class.split('bem como por emoções stressantes.17,18 O CRF regula a ansiedade.', max_chars: 800)).to eq(
+      ['bem como por emoções stressantes.17,18', 'O CRF regula a ansiedade.']
+    )
+  end
+
+  it 'packs clause pieces of an oversized sentence back up to the limit' do
+    text = 'Abscesos dentales, acidez estomacal, acné, algunas diabetes, algunos casos de enfermedad celíaca, artritis.'
+
+    expect(described_class.split(text, max_chars: 40)).to eq(
+      ['Abscesos dentales, acidez estomacal,', 'acné, algunas diabetes,', 'algunos casos de enfermedad celíaca,', 'artritis.']
+    )
+  end
+
   it 'keeps a leading section number attached to its heading' do
     expect(described_class.split('1. O Ciclo das Políticas Públicas', max_chars: 800)).to eq(
       ['1. O Ciclo das Políticas Públicas']
