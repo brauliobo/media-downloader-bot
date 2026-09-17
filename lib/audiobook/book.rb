@@ -545,9 +545,12 @@ module Audiobook
         item = entry.item
         page_num = entry.page
 
-        if (ref_ids = marker_id_for.call(item)) && !ref_ids.empty?
+        ref_ids = marker_id_for.call(item)
+        note_marker = ref_ids && footnote_font?(entry, body_font_by_page[page_num])
+        # A bare number at body size that nothing called is a stray figure, not a note label.
+        ref_ids = ref_ids.select { |id| ref_map[page_num].key?(id) } if ref_ids && !note_marker
+        if ref_ids.present?
           # Attach each marker id to the last sentence of the previous paragraph
-          note_marker = footnote_font?(entry, body_font_by_page[page_num])
           ref_ids.each do |ref_id|
             called = ref_map[page_num].key?(ref_id)
             ref    = ref_map[page_num][ref_id] ||= Reference.new(ref_id)
@@ -642,9 +645,11 @@ module Audiobook
             last_text = prev_item.sentences.last&.text.to_s.strip
             first_text = item.sentences.first&.text.to_s.strip
             looks_unfinished = last_text !~ /[.!?…]"?\)?$/
-            looks_continuation = first_text.match?(/\A[[:lower:]]/)
+            looks_continuation = first_text.match?(/\A[[:lower:]]/) && !TextHelpers.enumerated?(first_text)
+            # Inside a page the detector already drew the blocks; only a lowercase resumption overrides it.
+            resumes = looks_continuation || (looks_unfinished && entry.page != (prev_entry.last_page || prev_entry.page))
             # A lowercase start after an unfinished sentence resumes it even when the font jitters.
-            if same_language && (font_close || (looks_unfinished && looks_continuation))
+            if same_language && resumes && !entry.toc && !prev_entry.toc && (font_close || (looks_unfinished && looks_continuation))
               if (!last_text.empty? && looks_unfinished) || (!first_text.empty? && looks_continuation)
                 if looks_unfinished && !first_text.empty?
                   # Join first sentence text and references into the previous last sentence
@@ -662,6 +667,7 @@ module Audiobook
                 else
                   prev_item.sentences.concat(item.sentences)
                 end
+                prev_entry.last_page = entry.page
                 next
               end
             end
@@ -744,7 +750,7 @@ module Audiobook
         item.text
       end
       value = raw.to_s.strip
-      value.scan(/\d+/) if value.match?(/\A\d+[\)\.\]]*(?:\s+\d+[\)\.\]]*)*\z/)
+      value.scan(/\d+/) if TextHelpers.marker_line?(value)
     end
 
     def group_items_by_page(items_with_pages)
