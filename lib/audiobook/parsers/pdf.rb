@@ -118,20 +118,19 @@ module Audiobook
         document.remove_namespaces!
         pages = document.xpath('//page').each_with_index.map do |page, index|
           page_height = page['height'].to_f
-          lines       = page.xpath('.//line').filter_map do |line|
-            words    = line.xpath('./word')
+          lines       = baseline_runs(page.xpath('.//line')).filter_map do |words|
             baseline = word_baseline(words)
             text     = line_text(words, baseline)
             next if text.empty?
 
-            y_min = line['yMin'].to_f
-            y_max = line['yMax'].to_f
+            y_min = words.map { |word| word['yMin'].to_f }.min
+            y_max = words.map { |word| word['yMax'].to_f }.max
             SymMash.new(
               text:       text,
               font_size:  line_font_size(words, baseline),
               y:          page_height - y_min,
-              x:          line['xMin'].to_f,
-              x_max:      line['xMax'].to_f,
+              x:          words.map { |word| word['xMin'].to_f }.min,
+              x_max:      words.map { |word| word['xMax'].to_f }.max,
               page_width: page['width'].to_f,
               y_min:      y_min,
               y_max:      y_max
@@ -172,6 +171,17 @@ module Audiobook
 
       # Words closer than this fraction of their height belong to the same word (small caps runs).
       WORD_GAP_RATIO = 0.1
+      BASELINE_TOLERANCE = 0.5
+
+      # Justified text and page-number columns come out as several lines on one baseline inside a block.
+      def self.baseline_runs(lines)
+        lines.group_by(&:parent).values.flat_map do |block|
+          block.slice_when { |prev, line| (line['yMin'].to_f - prev['yMin'].to_f).abs > [height_of(prev), height_of(line)].min * BASELINE_TOLERANCE }
+            .map { |run| run.flat_map { |line| line.xpath('./word').to_a }.sort_by { |word| word['xMin'].to_f } }
+        end
+      end
+
+      def self.height_of(node) = node['yMax'].to_f - node['yMin'].to_f
 
       def self.line_text(words, baseline = word_baseline(words))
         previous = nil
@@ -188,17 +198,22 @@ module Audiobook
         word['xMin'].to_f - previous['xMax'].to_f < height * WORD_GAP_RATIO ? '' : ' '
       end
 
-      def self.word_baseline(words) = words.map { |word| word['yMax'].to_f }.max
+      # A bullet or a deep descender drags the line box down, so the baseline is the one most words share.
+      def self.word_baseline(words)
+        bottoms = words.map { |word| word['yMax'].to_f }.sort
+        bottoms[bottoms.size / 2]
+      end
 
       # Markers and other superscripts distort the line box, so size the line from its body words.
       def self.line_font_size(words, baseline)
-        heights = words.reject { |word| superscript_marker?(word, baseline) }
-          .map { |word| word['yMax'].to_f - word['yMin'].to_f }.select(&:positive?).sort
+        heights = words.reject { |word| superscript_marker?(word, baseline) }.map { |word| height_of(word) }.select(&:positive?).sort
         heights.empty? ? 0.0 : heights[heights.size / 2]
       end
 
+      SUPERSCRIPT_RISE = 0.2
+
       def self.superscript_marker?(word, baseline)
-        word.text.match?(/\A\d{1,3}\z/) && word['yMax'].to_f < baseline - 1.0
+        word.text.match?(TextHelpers::MARKER_IDS_ONLY) && baseline - word['yMax'].to_f >= height_of(word) * SUPERSCRIPT_RISE
       end
 
       BOLD_FONT   = /bold|black|heavy|semibold|demi|extrabold/i
@@ -251,12 +266,10 @@ module Audiobook
         ratio
       end
 
-      SUPERSCRIPT_RISE = 0.2
-
       # Text extraction can glue a raised marker onto the number before it; the style pass still sees them apart.
       def self.tag_superscript_markers(text, matches, dominant)
         matches.reduce(text) do |result, fragment|
-          next result unless fragment[:text].match?(/\A\d{1,3}\z/)
+          next result unless fragment[:text].match?(TextHelpers::MARKER_IDS_ONLY)
           next result unless dominant[:top] - fragment[:top] >= fragment[:height] * SUPERSCRIPT_RISE
 
           result.sub(/(?<=[^\d\s])#{fragment[:text]}(?=\s|\z)/, TextHelpers.reference_marker(fragment[:text]))

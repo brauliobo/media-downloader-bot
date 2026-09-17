@@ -39,6 +39,40 @@ RSpec.describe Audiobook::Parsers::Pdf do
     expect(described_class.line_text(marker)).to eq('Troyes.⟦1⟧ Há')
   end
 
+  it 'takes the baseline most words share so a bullet does not raise the rest of the line' do
+    bullet = words(['♦', 176, 192, 230.0, 257.0], ['use', 209, 230, 242.0, 254.4], ['8', 235, 242, 242.0, 254.4], ['gotas', 247, 280, 242.0, 254.4])
+
+    expect(described_class.line_text(bullet)).to eq('♦ use 8 gotas')
+  end
+
+  it 'tags a run of raised markers one id at a time' do
+    run = words(['stressantes.', 85, 233, 288.0, 300.4], ['17,18', 234, 250, 286.7, 294.5], ['O', 254, 262, 288.0, 300.4])
+
+    expect(described_class.line_text(run)).to eq('stressantes.⟦17⟧⟦18⟧ O')
+  end
+
+  it 'joins lines of one block that share a baseline' do
+    xml = <<~XML
+      <doc>
+        <page width="612" height="792">
+          <block xMin="94" yMin="724" xMax="500" yMax="762">
+            <line xMin="94" yMin="724.8" xMax="203" yMax="743.7"><word xMin="94" yMin="724.8" xMax="203" yMax="743.7">possivelmente</word></line>
+            <line xMin="233" yMin="724.8" xMax="298" yMax="743.7"><word xMin="233" yMin="724.8" xMax="298" yMax="743.7">começar</word></line>
+            <line xMin="94" yMin="742.7" xMax="266" yMax="762.2"><word xMin="94" yMin="742.7" xMax="193" yMax="762.2">positivos</word></line>
+          </block>
+        </page>
+      </doc>
+    XML
+    status = instance_double(Process::Status, success?: true)
+    allow(Sh).to receive(:run).and_return([xml, '', status])
+    allow(described_class).to receive(:pdftohtml_bin).and_return(nil)
+
+    pages = described_class.extract_document_range('book.pdf', first_page: 1, last_page: 1)
+
+    expect(pages.first.lines.map(&:text)).to eq(['possivelmente começar', 'positivos'])
+    expect(pages.first.lines.first.x_max).to eq(298.0)
+  end
+
   it 'sizes a line from its body words, ignoring raised markers' do
     line = words(['Troyes.', 85, 233, 288.0, 300.4], ['1', 234, 240, 286.7, 294.5], ['Há', 247, 262, 288.0, 300.4])
 
