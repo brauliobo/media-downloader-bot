@@ -1,0 +1,87 @@
+#!/usr/bin/env ruby
+
+# Measures how a book assembles, over one book or over a whole corpus.
+#
+#   bin/audiobook_analyze lint   [pages=1-80] [out=tmp/analysis/out-x] [book.pdf ...]
+#   bin/audiobook_analyze breaks [pages=1-80] [book.pdf ...]
+#   bin/audiobook_analyze show   book.pdf [lang=pt] [pages=1-80] [only=3,5-7]
+#   bin/audiobook_analyze lines  book.pdf [pages=3-5]
+#   bin/audiobook_analyze diff   before.tsv after.tsv [books=1]
+#
+# `lint` writes the assembled YAML and an issues report per book and prints the summary table;
+# `diff` reads two of those tables and says what a change did.
+
+require_relative '../lib/boot'
+require_relative '../lib/audiobook/analysis'
+
+$stdout.sync = true
+$stderr.sync = true
+
+include Audiobook
+include Audiobook::Analysis
+
+Analysis.offline!
+
+command = ARGV.shift || 'lint'
+opts    = ARGV.select { |arg| arg.include?('=') }.to_h { |arg| arg.split('=', 2) }
+paths   = ARGV.reject { |arg| arg.include?('=') }
+pages   = opts['pages']
+
+def die(message)
+  warn message
+  exit 1
+end
+
+case command
+when 'lint'
+  rows = Analysis.run(paths, pages: pages, out: opts['out']) { |path| warn "== #{File.basename(path)}" }
+  puts Summary.tsv(rows)
+
+when 'breaks'
+  puts %w[book breaks geometry unexplained].join("\t")
+  Corpus.books(paths).each do |path|
+    tally = Breaks.tally(path, pages: pages)
+    puts [tally.book, tally.breaks, tally.geometry, tally.unexplained].join("\t")
+  rescue StandardError => e
+    warn "#{File.basename(path)}: #{e.class}: #{e.message[0, 80]}"
+  end
+
+when 'show'
+  die 'show needs a book' if paths.empty?
+  only = PageSelection.parse(opts['only'])
+  book = Corpus.open(paths.first, pages: pages, lang: opts['lang'])
+  book.pages.each do |page|
+    next if only && !only.include?(page.number)
+
+    page.items.each do |item|
+      case item
+      when Heading then puts "[#{item.class.name.demodulize} p#{page.number} #{item.role} #{item.font_size}] #{item.text}"
+      when Paragraph
+        item.sentences.each do |sentence|
+          notes = sentence.references.map { |ref| "⟦#{ref.id}:#{ref.sentences.map(&:text).join(' ')[0, 60]}⟧" }.join
+          puts "  p#{page.number}| #{sentence.text}#{notes}"
+        end
+        puts '  --'
+      end
+    end
+  end
+
+when 'lines'
+  die 'lines needs a book' if paths.empty?
+  data = Parsers::Pdf.parse(paths.first, opts: SymMash.new(pages: Corpus.pages_for(paths.first, pages)))
+  data.content.lines.each do |line|
+    printf(
+      "p%-3s fs=%-5.1f x=%-6.1f xm=%-6.1f ts=%-6s bs=%-6s b=%-5s i=%-5s %s\n",
+      line.page, line.font_size, line.x, line.x_max, line.top_spacing&.round(1),
+      line.bottom_spacing&.round(1), line.bold, line.italic, line.text
+    )
+  end
+
+when 'diff'
+  die 'diff needs two summary tables' if paths.size < 2
+  puts Summary.diff(*paths.first(2))
+  puts Summary.per_book(*paths.first(2)) if opts['books']
+
+else
+  die "unknown command: #{command}"
+end
