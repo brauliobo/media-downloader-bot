@@ -18,6 +18,9 @@ module TextHelpers
   # it closes something, and a letter only where it ends a word: a lone letter is a glyph the text
   # layer mapped wrong ("décadas de f950" for 1950).
   MARKER_ANCHOR  = /(?:(?<=\p{L})\p{Ll}|(?<=[\p{L}\p{N}.,;:!?…])[\)\]"”’»]|(?<!\d)[.,;:]|[?!…])/u
+  # A text layer that lost a space glues a cross-reference to the word introducing it,
+  # "página278". That number points at a page, so it is never a call.
+  PAGE_REFERENCE  = /\b(p[áa]g(?:ina)?s?\.?|pages?)(\d{1,4})\b/iu
   TRAILING_HYPHEN = /\s*[-­‐‑]\z/
   # An ellipsis is a pause; whether it closes the sentence depends on what follows.
   TRAILING_ELLIPSIS = /(?:\.{3}|…)["”’)\]»]*\s*\z/u
@@ -105,6 +108,7 @@ module TextHelpers
 
   def self.strip_inline_markers(text)
     clean, ids = extract_markers(text)
+    clean = clean.gsub(PAGE_REFERENCE) { "#{$1} #{$2}" }
     clean = clean.gsub(/(#{MARKER_ANCHOR})(\d{1,3})(?=\s*:)/u, '\1')
     clean = clean.gsub(/(#{MARKER_ANCHOR})(#{MARKER_IDS})(?=(\s|$))/u) do
       ids.concat($2.split(','))
