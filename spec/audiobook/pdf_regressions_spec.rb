@@ -630,4 +630,62 @@ RSpec.describe 'Audiobook assembly regressions' do
       expect(spoken(book)).to include('capacidades e potenciais. ”7 Vistos desta forma')
     end
   end
+
+  describe 'guia-percent-as-marker.pdf' do
+    let(:book) { book_for('guia-percent-as-marker.pdf', 'pt') }
+
+    # The text layer extracts "22,4%" as "22,4" plus a raised "0", which looks like a call.
+    it 'does not read a raised zero as a footnote call, since notes number from one' do
+      expect(references(book).map(&:id)).not_to include('0')
+      expect(spoken(book)).to include('clorito de sódio (a 22,40')
+    end
+
+    it 'reads a number glued to "página" as a page cross-reference, not as a call' do
+      expect(references(book).map(&:id)).not_to include('278')
+      expect(spoken(book)).to match(/na página ?278 para ter certeza/)
+    end
+  end
+
+  describe 'janval-spaced-notes-title.pdf' do
+    let(:book) { book_for('janval-spaced-notes-title.pdf', 'pt') }
+
+    def reference_for(id) = references(book).find { |reference| reference.id == id }
+
+    # The notes title is letter-spaced and its entries are numbered without a period, under a
+    # per-chapter label set in a larger font.
+    it 'recognises the notes section at the back instead of reading it as body text' do
+      expect(spoken(book)).not_to include('Notas Explicativa')
+    end
+
+    it 'gives a call the note listed under its chapter label' do
+      expect(reference_for('2').sentences.map(&:text).join(' ')).to include('Cultura Demodhármica')
+      expect(references(book).select { |reference| reference.sentences.any? }).not_to be_empty
+    end
+  end
+
+  describe 'hooks-chapter-end-notes.pdf' do
+    let(:book) { book_for('hooks-chapter-end-notes.pdf', 'pt') }
+
+    # This book gathers its notes at the end of a chapter, so a note never shares a page with its call.
+    it 'binds a note printed pages after the call it answers' do
+      reference = references(book).find { |item| item.id == '2' }
+      expect(reference.sentences.map(&:text).join(' ')).to match(/Como te amo/)
+    end
+  end
+
+  describe 'apometria-bullet-column.pdf' do
+    let(:everything) { book_for('apometria-bullet-column.pdf', 'pt', includeall: true) }
+
+    # Every bullet of this contents list landed in one block at the left margin, never next to its entry.
+    it 'never speaks a bullet glyph' do
+      expect(item_texts(everything)).not_to include('•')
+      expect(spoken(everything)).not_to include('•')
+    end
+
+    it 'reads each contents entry as its own item' do
+      expect(item_texts(everything)).to include(
+        'Bibliografia', 'Cadastre a Sua Casa Apométrica', 'Casas Apométricas'
+      )
+    end
+  end
 end
