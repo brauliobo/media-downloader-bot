@@ -1,0 +1,98 @@
+require_relative '../../audiobook'
+
+module Audiobook
+  module Analysis
+    # Each detector names one way an assembled book reads wrong: a sentence that starts in the
+    # middle, a heading that is really a paragraph, a page number left in the prose. They are
+    # heuristics over the spoken text, so some of them also fire on writing that is merely
+    # unusual; those are NOISY and are read as trends rather than as counts.
+    module Detectors
+      ROMAN    = /(?:ix|iv|v?i{1,3}|xi{0,3}|xiv|xv)/
+      TERMINAL = /[.!?…:;]["”’)\]»]*\z/
+      BULLETS  = /\A[•●○◦▪♦►▶■□➢✔✓✗➤★]|\A[o0°]\s\p{Lu}|\s[o0]\z/
+      CATALOG  = /\A(?:p\. cm\.|I+\. T[ií]tul|ISBN|isbn|CDD|CDU|\d+\.\d+\/\d+—dc)|\A\w+\d+\.\w\d+ \w\d+ \d{4}\z/
+
+      # Read as: this sentence is wrong because…
+      SENTENCE = {
+        lower_start:    ->(text, _at) { text =~ /\A\p{Ll}/ },
+        glued_words:    ->(text, _at) { text =~ /\p{L}{30,}/ },
+        unfinished_mid: ->(text, at)  { !at.closes && text !~ TERMINAL },
+        initial_split:  ->(text, _at) { text =~ /\s\p{Lu}\.\z/ },
+        tiny:           ->(text, _at) { text.split.size <= 2 && text =~ /[.!?]\z/ && text !~ /\A\d/ },
+        page_num_tail:  ->(text, _at) { text =~ /\p{L}[.,;]?\s\d{1,3}\z/ || text =~ /\p{Ll}[.,;]?\s#{ROMAN}\z/ },
+        roman_inline:   ->(text, _at) { text =~ /\p{Ll}\s(?:ix|xi{1,3}|vi{1,3}|iv|i{2,3}|xiv|xv)\s\p{Ll}/ },
+        marker_tail:    ->(text, _at) { text =~ /\p{L}[.,;:]?\d{1,2}(?=[\s.,;:]|\z)/ },
+        footnote_lead:  ->(text, at)  { at.opens && text =~ /\A\d{1,3}[.)]?\s+\p{L}/ },
+        list_num_tail:  ->(text, _at) { text =~ /\s\d{1,2}[.)]\z/ || text =~ /\s\p{Lu}[.)]\z/ },
+        toc_leader:     ->(text, _at) { text =~ /(?:\.\s*){4,}|…{2,}/ },
+        dropcap:        ->(text, at)  { at.opens && at.prev_letter && text =~ /\A\p{Ll}/ },
+        colon_end:      ->(text, at)  { at.closes && text =~ /:\z/ },
+        hyphen_end:     ->(text, _at) { text =~ /-\z/ },
+        quote_start:    ->(text, _at) { text =~ /\A["”’)\]»]/ },
+        long_sentence:  ->(text, _at) { text.length > 600 },
+        broken_para:    ->(text, at)  { at.closes && text !~ TERMINAL && at.next_lower },
+        caps_para:      ->(text, at)  { at.opens && at.closes && text.split.size <= 10 && text.scan(/\p{L}/).size > 3 && text == text.upcase },
+        abbrev_end:     ->(text, at)  { at.closes && text =~ /(?:\A|[^\p{L}])(?:\p{Lu}|Dr|Dra|Sr|Sra|Prof|Mr|Mrs|St)\.\z/ },
+        bullet_glyph:   ->(text, _at) { text =~ BULLETS },
+        cip_line:       ->(text, _at) { text =~ CATALOG },
+      }.freeze
+
+      # Read as: this heading is not one.
+      HEADING = {
+        numeric_heading:  ->(text) { text =~ /\A[\d\s.,ivxlcIVXLC-]+\z/ },
+        long_heading:     ->(text) { text.split.size > 12 },
+        sentence_heading: ->(text) { text =~ /[.!?]\z/ && text.split.size > 5 && text != text.upcase },
+        lower_heading:    ->(text) { text =~ /\A\p{Ll}/ },
+        letter_heading:   ->(text) { text =~ /\A\p{Lu}\z/ },
+      }.freeze
+
+      # A bulleted list item reads as its own short paragraph and a lead-in keeps its colon, so
+      # these count correct assembly as often as they count a defect.
+      NOISY = %i[lower_start colon_end footnote_lead caps_para marker_tail tiny].freeze
+
+      def self.names = SENTENCE.keys + HEADING.keys
+
+      # Every spoken sentence with what a detector needs to know about its neighbours.
+      def self.spoken(book)
+        items = book.pages.flat_map { |page| page.items.map { |item| [page.number, item] } }
+        items.each_with_index.flat_map do |(page, item), idx|
+          next [] unless narrated?(item)
+
+          context = neighbours(items, idx)
+          item.sentences.each_with_index.map do |sentence, at|
+            # `first`/`last` would resolve to Hash methods on the SymMash rather than to these.
+            [sentence, context.merge(page: page, opens: at.zero?, closes: at == item.sentences.size - 1)]
+          end
+        end
+      end
+
+      def self.hits(book, spoken = spoken(book))
+        found = Hash.new { |hash, name| hash[name] = [] }
+        spoken.each do |sentence, at|
+          SENTENCE.each { |name, test| found[name] << [at.page, sentence.text] if test.call(sentence.text, at) }
+        end
+        headings(book, found)
+      end
+
+      def self.headings(book, found)
+        book.pages.each do |page|
+          page.items.grep(Heading).each do |heading|
+            HEADING.each { |name, test| found[name] << [page.number, heading.text] if test.call(heading.text) }
+          end
+        end
+        found
+      end
+
+      def self.narrated?(item) = item.is_a?(Paragraph) && !item.is_a?(Reference)
+
+      def self.neighbours(items, idx)
+        following = items[idx + 1]&.last
+        preceding = idx.positive? ? items[idx - 1].last : nil
+        SymMash.new(
+          next_lower:  following.is_a?(Paragraph) && following.sentences.first&.text.to_s.match?(/\A\p{Ll}/),
+          prev_letter: preceding.is_a?(Heading) && preceding.text.match?(/\A\p{Lu}\z/)
+        )
+      end
+    end
+  end
+end
