@@ -34,7 +34,7 @@ module Language
     lang = 'en' if lang.empty?
     text = ask(REF_PROMPT, REF_SCHEMA, "Language code: #{lang}")['text'].to_s.strip
     stable_reference_text(text, lang)
-  rescue Timeout::Error, StandardError
+  rescue StandardError
     reference_fallback(lang)
   end
 
@@ -48,7 +48,7 @@ module Language
       'author' => info['author'].to_s.strip,
       'gender' => %w[male female].include?(gender) ? gender : 'male',
     }
-  rescue Timeout::Error, StandardError
+  rescue StandardError
     BOOK_DEFAULTS.dup
   end
 
