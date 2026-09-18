@@ -59,13 +59,6 @@ module Enumerable
     end
   end
 
-  def cpu_peach method = :each, threads: nil, priority: nil, &block
-    context = Enumerable.thread_count(Thread.current[PEACH_THREADS], threads, default: ENV['CPU_THREADS'])
-    Enumerable.with_peach_threads(context) do
-      peach(method, threads: context, priority: ENV['CPU_PRIORITY']&.to_i, &block)
-    end
-  end
-
 end
 
 require_relative '../pipeline'
