@@ -74,4 +74,24 @@ RSpec.describe Utils::InputParser do
     expect(described_class.message_text(msg)).to eq("audio\nspeed=1.2")
     expect(described_class.message_lines(msg)).to eq(['audio', 'speed=1.2'])
   end
+
+  it 'ignores a caption that is only the attached document filename' do
+    filename = 'Como se tornar sobrenatural Joe Dispenza 1.pdf'
+    msg = SymMash.new(text: filename, document: SymMash.new(file_name: filename))
+
+    expect(described_class.message_text(msg)).to eq('')
+    expect(described_class.message_lines(msg)).to eq([])
+    expect(described_class.url_inputs(described_class.message_lines(msg))).to eq([])
+  end
+
+  it 'keeps only options from an attached file caption' do
+    filename = 'book.pdf'
+    msg = SymMash.new(
+      text: "#{filename} https://example.com/v audio speed=1.2",
+      document: SymMash.new(file_name: filename, mime_type: 'application/pdf'),
+    )
+
+    expect(described_class.message_text(msg)).to eq('audio speed=1.2')
+    expect(described_class.url_inputs(described_class.message_lines(msg))).to eq([])
+  end
 end

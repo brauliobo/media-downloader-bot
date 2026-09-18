@@ -32,10 +32,21 @@ module Utils
       ctx.line || message_text(ctx.msg)
     end
 
+    def self.attached_file?(msg)
+      return false unless msg
+
+      %i[video audio document].any? { |attr| msg.respond_to?(attr) && msg.public_send(attr).present? }
+    end
+
     def self.message_text(msg)
-      text = msg.text if msg.respond_to?(:text)
-      text = msg.caption if text.to_s.strip.empty? && msg.respond_to?(:caption)
-      text.to_s
+      text = raw_message_text(msg)
+      return option_line(strip_filename(msg, text)) if attached_file?(msg)
+
+      text
+    end
+
+    def self.option_line(lines)
+      Array(lines).flat_map { |line| tokens(line) }.select { |token| option_token?(token) }.join(' ')
     end
 
     def self.message_lines(msg)
@@ -92,5 +103,30 @@ module Utils
     def self.option_token?(token)
       token.to_s.match?(OPT_TOKEN_REGEXP)
     end
+
+    def self.raw_message_text(msg)
+      text = msg.text if msg.respond_to?(:text)
+      text = msg.caption if text.to_s.strip.empty? && msg.respond_to?(:caption)
+      text.to_s
+    end
+
+    def self.attached_media(msg)
+      %i[document video audio].lazy.map { |attr| msg.public_send(attr) if msg.respond_to?(attr) }.find(&:present?)
+    end
+
+    def self.media_file_name(msg)
+      media = attached_media(msg)
+      media.file_name if media.respond_to?(:file_name)
+    end
+
+    def self.strip_filename(msg, text)
+      name = media_file_name(msg).to_s
+      return '' if name.present? && text == name
+      return text.sub(name, ' ') if name.present? && text.include?(name)
+
+      text
+    end
+
+    private_class_method :raw_message_text, :attached_media, :media_file_name, :strip_filename
   end
 end
