@@ -148,7 +148,8 @@ module Audiobook
           end
 
           if previous && buf.any? &&
-              @breaks.break?(previous, line, buf, isolated: isolated?(idx - 1), starts_block: isolated?(idx))
+              @breaks.break?(previous, line, buf, isolated: isolated?(idx - 1), fenced: isolated?(idx),
+                             block_break: previous.new_block?(line))
             self.class.observer&.call(previous, line, buf, @grid)
             items.concat(flush(buf, start_page, start_idx))
             buf = [line]
@@ -216,7 +217,7 @@ module Audiobook
         @grid = grid
       end
 
-      def break?(prev_line, line, buf, isolated: false, starts_block: false)
+      def break?(prev_line, line, buf, isolated: false, fenced: false, block_break: false)
         buffer_text = buf.map(&:text).join(' ').strip
         # A footnote marker sits on its own line above the note it introduces.
         return false if TextHelpers.marker_line?(buffer_text)
@@ -227,14 +228,19 @@ module Audiobook
         emphasis_run = line.continues?(buffer_text) && !line.font_changed?(prev_line)
 
         return true  if structural?(prev_line, line, continuation, emphasis_run)
-        return false if continuation || emphasis_run
+        # A heading wrapping over two lines is one heading however the source divided it.
+        return false if continuation
+        # The source drew this boundary itself. A hard break in markup is deliberate: it sets a
+        # line of verse or an item of a list, neither of which the prose reading below would part.
+        return true  if block_break
+        return false if emphasis_run
         # A block opens with a capital or after the sentence before it closed, and never with the
         # quote that closes the one before; anything else is the same sentence carrying on,
         # whatever the page geometry measures.
         return false if line.closes_quote?
         return false unless finished || line.starts_with_capital?
 
-        return true if starts_block || (isolated && buf.one?)
+        return true if fenced || (isolated && buf.one?)
         return true if buf.one? && label?(prev_line, line)
 
         layout?(prev_line, line, finished)

@@ -110,6 +110,10 @@ module Audiobook
       !TextHelpers.ends_with_punctuation?(text) || TextHelpers.ends_with_ellipsis?(text)
     end
 
+    # The source numbered the two lines as separate blocks, so it drew the boundary itself. A
+    # source that numbers no blocks says nothing, and the reading falls back to the page.
+    def new_block?(other) = !!(block && other.block && block != other.block)
+
     def word_count
       @text.split(/\s+/).size
     end
