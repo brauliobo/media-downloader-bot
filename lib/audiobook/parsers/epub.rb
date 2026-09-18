@@ -17,6 +17,9 @@ module Audiobook
         'small' => 10, 'sup' => 10, 'sub' => 10
       }.freeze
       BLOCK_TAGS = %w[h1 h2 h3 h4 h5 h6 p li blockquote pre dt dd figcaption caption th td].freeze
+      # A div carries no meaning of its own but does hold text, so it counts as a block and,
+      # more to the point, as something a block must not contain to be the one that speaks.
+      CONTAINERS = (BLOCK_TAGS + %w[div]).freeze
 
       def self.extract_data(epub_path, stl: nil, opts: nil, **_kwargs)
         Utils::Archive.validate_zip!(epub_path, **ARCHIVE_LIMITS)
@@ -134,11 +137,12 @@ module Audiobook
       end
 
       # Only leaf blocks carry text; an ancestor would repeat everything its children already hold.
+      # Only the innermost block speaks: an exporter that wraps every paragraph in two or three
+      # divs would otherwise read the same text once for each wrapper.
       def self.block_of_interest?(node)
-        return false unless node.element?
-        return false unless BLOCK_TAGS.include?(node.name) || node.name == 'div'
+        return false unless node.element? && CONTAINERS.include?(node.name)
 
-        node.css(BLOCK_TAGS.join(',')).empty?
+        node.css(*CONTAINERS).empty?
       end
 
       # Detect EPUB page break markers and return an integer page number if present

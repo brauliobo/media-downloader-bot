@@ -88,6 +88,18 @@ RSpec.describe Audiobook::Parsers::Epub do
     epub
   end
 
+  it 'reads a paragraph once when an exporter wraps it in nested divs' do
+    Dir.mktmpdir do |dir|
+      markup = '<div class="fmtx1"><div class="calibre8"><div class="tx">Then we broke for lunch.</div></div></div>' \
+               '<div class="fmtx1"><div class="tx">After the break the session began.</div></div>'
+      data = Audiobook::Parsers::Epub.parse(build_markup_epub(dir, markup))
+      texts = data.content.lines.map(&:text)
+
+      expect(texts.count { |text| text.include?('broke for lunch') }).to eq(1)
+      expect(texts).to contain_exactly('Then we broke for lunch.', 'After the break the session began.')
+    end
+  end
+
   it 'extracts a quoted paragraph once instead of through every ancestor block' do
     Dir.mktmpdir do |dir|
       path = build_markup_epub(dir, '<blockquote><p>Quoted sentence here.</p></blockquote><ul><li><p>Item text.</p></li></ul>')
