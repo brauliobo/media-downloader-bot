@@ -24,13 +24,6 @@ module Audiobook
       self
     end
 
-    def add_sentence(sentence)
-      return unless sentence
-      add_sentences([sentence])
-      @source_sentence ||= sentence.respond_to?(:source_sentence) ? sentence.source_sentence : nil
-      self
-    end
-
     def to_h
       { 'reference' => { 'id' => id, 'sentences' => sentences.map(&:to_h) } }
     end
