@@ -51,9 +51,11 @@ module Audiobook
         letter_heading:   ->(text) { text =~ /\A\p{Lu}\z/ },
       }.freeze
 
-      # A bulleted list item reads as its own short paragraph and a lead-in keeps its colon, so
-      # these count correct assembly as often as they count a defect.
-      NOISY = %i[lower_start colon_end footnote_lead caps_para marker_tail tiny].freeze
+      # A bulleted list item reads as its own short paragraph, a lead-in keeps its colon, and a
+      # citation or a street address ends in a number, so these count correct assembly as often
+      # as they count a defect. Read them as trends, not as totals.
+      NOISY = %i[lower_start colon_end footnote_lead caps_para marker_tail tiny
+                 list_num_tail page_num_tail].freeze
 
       def self.names = SENTENCE.keys + HEADING.keys
 
