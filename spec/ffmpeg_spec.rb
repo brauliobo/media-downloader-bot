@@ -449,7 +449,6 @@ RSpec.describe FFmpeg do
             .codec_profile('aac_he', stream: :audio)
             .bitrate(96, stream: :audio)
             .metadata_from(0)
-            .id3
             .metadata(:artist, 'Artist')
             .metadata(:album, 'Album')
             .format(:mp4)
@@ -462,7 +461,7 @@ RSpec.describe FFmpeg do
         '-i', 'input.wav', '-af', 'highpass=f=80,loudnorm=I=-16',
         '-ac', '1', '-channel_layout', 'mono', '-ar', '48000', '-sample_fmt', 's16',
         '-c:a', 'libfdk_aac', '-profile:a', 'aac_he', '-b:a', '96k',
-        '-map_metadata', '0', '-id3v2_version', '3', '-write_id3v1', '1',
+        '-map_metadata', '0',
         '-metadata', 'artist=Artist', '-metadata', 'album=Album', '-f', 'mp4', '-'
       ]
     end

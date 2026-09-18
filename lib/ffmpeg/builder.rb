@@ -247,10 +247,6 @@ class FFmpeg
     add_operation '-map_metadata', input
   end
 
-  def metadata_map input
-    metadata_from input
-  end
-
   def metadata_mark value = METADATA_MARK
     metadata :downloaded_with, value
   end
@@ -267,12 +263,6 @@ class FFmpeg
     set_operation [:id3v1], '-write_id3v1', 1
     metadata_mark if mark
     metadata_tags tags
-  end
-
-  def id3 version: 3, write_v1: true
-    set_operation [:id3v2], '-id3v2_version', version
-    set_operation [:id3v1], '-write_id3v1', 1 if write_v1
-    self
   end
 
   def format name
