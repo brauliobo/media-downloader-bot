@@ -101,6 +101,9 @@ class Worker
     cancelled = true
     @st&.error('Restarting...', cancel_job: false)
     raise
+  rescue StandardError => e
+    @st&.error('Processing error', exception: e)
+    report_error(msg, e)
   ensure
     clear_cancel_button unless cancelled
   end
