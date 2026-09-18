@@ -20,11 +20,13 @@ module Audiobook
         initial_split:  ->(text, _at) { text =~ /\s\p{Lu}\.\z/ },
         tiny:           ->(text, _at) { text.split.size <= 2 && text =~ /[.!?]\z/ && text !~ /\A\d/ },
         page_num_tail:  ->(text, _at) { text =~ /\p{L}[.,;]?\s\d{1,3}\z/ || text =~ /\p{Ll}[.,;]?\s#{ROMAN}\z/ },
-        roman_inline:   ->(text, _at) { text =~ /\p{Ll}\s(?:ix|xi{1,3}|vi{1,3}|iv|i{2,3}|xiv|xv)\s\p{Ll}/ },
+        # "vi" is a roman numeral and also how Portuguese says "I saw", so it is left out.
+        roman_inline:   ->(text, _at) { text =~ /\p{Ll}\s(?:ix|xi{1,3}|vi{2,3}|iv|i{2,3}|xiv|xv)\s\p{Ll}/ },
         marker_tail:    ->(text, _at) { text =~ /\p{L}[.,;:]?\d{1,2}(?=[\s.,;:]|\z)/ },
         footnote_lead:  ->(text, at)  { at.opens && text =~ /\A\d{1,3}[.)]?\s+\p{L}/ },
         list_num_tail:  ->(text, _at) { text =~ /\s\d{1,2}[.)]\z/ || text =~ /\s\p{Lu}[.)]\z/ },
-        toc_leader:     ->(text, _at) { text =~ /(?:\.\s*){4,}|…{2,}/ },
+        # Leaders that survived; a spaced ellipsis in prose stays under the same bar as production.
+        toc_leader:     ->(text, _at) { text =~ TextHelpers::TOC_LEADERS },
         dropcap:        ->(text, at)  { at.opens && at.prev_letter && text =~ /\A\p{Ll}/ },
         colon_end:      ->(text, at)  { at.closes && text =~ /:\z/ },
         hyphen_end:     ->(text, _at) { text =~ /-\z/ },
