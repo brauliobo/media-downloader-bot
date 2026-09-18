@@ -17,9 +17,6 @@ module Processors
     delegate :msg, :st, :dir, :tmp, :url, :opts, :session, :service, to: :ctx
     attr_reader :stl
 
-    # Maintain backward compatibility for readers if needed, but prefer delegating to ctx
-    def args; @args; end
-
     def initialize(ctx)
       @ctx = ctx
       @ctx.tmp ||= Utils::Tmp.dir('input-', ctx.dir)
@@ -48,7 +45,6 @@ module Processors
       @ctx.opts = SymMash.new(parsed.opts.merge(session: @ctx.session))
       self.class.normalize_options @ctx.opts
       self.class.apply_process_opts @ctx.opts
-      @args = [] # Deprecated but kept for safety if child classes use it
     end
 
     def process(*args, **kwargs)
@@ -61,16 +57,6 @@ module Processors
     def cleanup
       return if ENV['TMPDIR']
       FileUtils.remove_entry tmp if ::File.exist?(tmp)
-    end
-
-    def input_from_file f, opts
-      SymMash.new(
-        fn_in: f,
-        opts:  opts,
-        info:  {
-          title: ::File.basename(f, ::File.extname(f)),
-        },
-      )
     end
 
     # Backwards-compatible option parser used by CLI wrappers (e.g. bin/zip, mediazip).
@@ -166,12 +152,6 @@ module Processors
 
     def self.apply_nice(value)
       Process.setpriority(Process::PRIO_PROCESS, 0, [[value.to_i, 19].min, -20].max)
-    end
-
-    protected
-
-    def init_params
-      { dir: dir, msg: msg, st: st, stline: stl }
     end
 
   end
