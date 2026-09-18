@@ -9,7 +9,9 @@ module TextHelpers
   MARKER_TOKEN   = /⟦\d{1,3}⟧/
   MARKER_TAG     = /⟦(\d{1,3})⟧/
   MARKER_LINE    = /\A\d{1,3}[)\].]*(?:\s+\d{1,3}[)\].]*)*\z/
-  MARKER_IDS      = /\d{1,3}(?:,\d{1,3})*/
+  # Footnotes number from one, so a raised zero is a percent sign or a degree mark the text
+  # layer failed to map rather than a call.
+  MARKER_IDS      = /[1-9]\d{0,2}(?:,[1-9]\d{0,2})*/
   MARKER_IDS_ONLY = /\A#{MARKER_IDS}\z/
   # A digit before the anchor means a decimal or a thousands separator, not a footnote call; a capital
   # means an acronym or a product name ("MMS1", "CO2"). A closing quote or bracket only counts where
