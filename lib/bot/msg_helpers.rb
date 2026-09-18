@@ -3,7 +3,6 @@ module Bot
     extend ActiveSupport::Concern
 
     ADMIN_CHAT_ID       = ENV['ADMIN_CHAT_ID']&.to_i
-    REPORT_CHAT_ID      = ENV['REPORT_CHAT_ID']&.to_i
     MEDIA_CAPTION_LIMIT = 1024
 
     included do
@@ -22,9 +21,6 @@ module Bot
     def from_admin? msg = self.msg
       msg.from.id == ADMIN_CHAT_ID
     end
-    def report_group? msg = self.msg
-      msg.chat.id == REPORT_CHAT_ID
-    end
     def in_group? msg = self.msg
       msg.from.id != msg.chat.id
     end
@@ -39,10 +35,6 @@ module Bot
     end
     def mnfe t
       MARKDOWN_NON_FORMAT.each{ |c| t = t.gsub(c) { "\\#{c}" } }
-      t
-    end
-    def mfe t
-      MARKDOWN_FORMAT.each{ |c| t = t.gsub(c) { "\\#{c}" } }
       t
     end
 

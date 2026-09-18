@@ -230,13 +230,6 @@ module Bot
       result
     end
 
-    def mark_read(msg)
-      td.view_messages(chat_id: msg.chat_id, message_ids: [msg.id], source: nil, force_read: true)
-      dlog "[READ] chat=#{msg.chat_id} id=#{msg.id}"
-    rescue => e
-      dlog "[READ_ERROR] #{e.class}: #{e.message}"
-    end
-
     def answer_callback(callback, text: nil)
       td.answer_callback_query(
         callback_query_id: callback.id,

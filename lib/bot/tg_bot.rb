@@ -10,12 +10,6 @@ module Bot
   class TgBot < Base
     include RateLimiter
 
-    RETRY_ERRORS = [
-      Faraday::ConnectionFailed,
-      Faraday::TimeoutError,
-      Net::OpenTimeout, Net::WriteTimeout,
-    ]
-
     self.error_delete_time = 3.hours
 
     class_attribute :tg

@@ -75,7 +75,7 @@ These rules guide any AI-assisted edits in this project. They encode the repo’
 - **Keep it simple**: No “smart” letter-by-letter joins; never attempt to relocate words across runs or lines. Only hyphen de-wrap is special.
 
 ### Messaging & captions (Telegram)
-- Use `MsgHelpers.me/mfe/mnfe` to escape appropriately.
+- Use `MsgHelpers.me/mnfe` to escape appropriately.
 - Respect caption limits (`MsgHelpers::MAX_CAPTION` ~ 1024). Trim or reduce content when approaching limits.
 - Prefer minimal, readable captions. For ordered uploads, use `opts.number`/`opts.ordered` logic already in `Worker`.
 
