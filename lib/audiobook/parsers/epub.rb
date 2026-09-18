@@ -56,9 +56,9 @@ module Audiobook
               next
             end
 
-            next unless block_of_interest?(node)
+            next unless container?(node)
 
-            raw = extract_inline_text(node)
+            raw = block_of_interest?(node) ? extract_inline_text(node) : own_text(node)
             next if TextHelpers.normalize_text(raw).empty?
 
             style = CssStyle.for_node(node, sheets)
@@ -137,13 +137,16 @@ module Audiobook
         align&.downcase&.to_sym
       end
 
-      # Only leaf blocks carry text; an ancestor would repeat everything its children already hold.
-      # Only the innermost block speaks: an exporter that wraps every paragraph in two or three
-      # divs would otherwise read the same text once for each wrapper.
-      def self.block_of_interest?(node)
-        return false unless node.element? && CONTAINERS.include?(node.name)
+      def self.container?(node) = node.element? && CONTAINERS.include?(node.name)
 
-        node.css(*CONTAINERS).empty?
+      # Only the innermost block speaks its whole content: an exporter that wraps every paragraph
+      # in two or three divs would otherwise read the same text once for each wrapper.
+      def self.block_of_interest?(node) = container?(node) && node.css(*CONTAINERS).empty?
+
+      # A wrapper still speaks whatever text is its own. An exporter sets a note's label beside
+      # the block carrying the note, so skipping the wrapper altogether loses the label.
+      def self.own_text(node)
+        node.children.reject { |child| container?(child) }.map { |child| extract_inline_text(child) }.join
       end
 
       # Detect EPUB page break markers and return an integer page number if present
