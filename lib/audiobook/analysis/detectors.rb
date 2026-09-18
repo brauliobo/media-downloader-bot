@@ -30,7 +30,9 @@ module Audiobook
         hyphen_end:     ->(text, _at) { text =~ /-\z/ },
         quote_start:    ->(text, _at) { text =~ /\A["”’)\]»]/ },
         long_sentence:  ->(text, _at) { text.length > 600 },
-        broken_para:    ->(text, at)  { at.closes && text !~ TERMINAL && at.next_lower },
+        # A list entry ends without a stop and the next one opens lowercase; that is the list
+        # working, not a paragraph torn in half.
+        broken_para:    ->(text, at)  { at.closes && text !~ TERMINAL && at.next_lower && !TextHelpers.enumerated?(text) },
         caps_para:      ->(text, at)  { at.opens && at.closes && text.split.size <= 10 && text.scan(/\p{L}/).size > 3 && text == text.upcase },
         abbrev_end:     ->(text, at)  { at.closes && text =~ /(?:\A|[^\p{L}])(?:\p{Lu}|Dr|Dra|Sr|Sra|Prof|Mr|Mrs|St)\.\z/ },
         bullet_glyph:   ->(text, _at) { text =~ BULLETS },
