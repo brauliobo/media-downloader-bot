@@ -30,7 +30,8 @@ module Audiobook
         dropcap:        ->(text, at)  { at.opens && at.prev_letter && text =~ /\A\p{Ll}/ },
         colon_end:      ->(text, at)  { at.closes && text =~ /:\z/ },
         hyphen_end:     ->(text, _at) { text =~ /-\z/ },
-        quote_start:    ->(text, _at) { text =~ /\A["”’)\]»]/ },
+        # A straight quote opens as often as it closes; only an unambiguous closer is a split.
+        quote_start:    ->(text, _at) { text =~ /\A[”’)\]»]/ },
         long_sentence:  ->(text, _at) { text.length > 600 },
         # A list entry ends without a stop and the next one opens lowercase; that is the list
         # working, not a paragraph torn in half.
