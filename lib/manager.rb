@@ -47,25 +47,6 @@ https://web.facebook.com/groups/590968084832296/posts/920964005166034 audio
 https://soundcloud.com/br-ulio-bhavamitra/sets/didi-gunamrta caption number
 EOS
 
-  # Simple retry helper with Telegram-aware sleep.
-  # Yields the current attempt index (0 for first call) to the block.
-  def self.retriable(tries: 3, base_interval: 0.3, multiplier: 2.0, on: [StandardError], **opts)
-    user_on_retry = opts.delete(:on_retry)
-    retry_after_extractor = opts.delete(:retry_after_extractor) || ->(ex) {
-      m = ex.message.to_s[/retry after (\d+(?:\.\d+)?)/, 1]
-      m ? m.to_f : 0.0
-    }
-    attempt = -1
-    Utils::Retry.call(tries:, interval: base_interval, multiplier:, on:, on_retry: ->(ex) {
-      ra = (retry_after_extractor.call(ex).to_f rescue 0)
-      Kernel.sleep(ra) if ra.positive?
-      user_on_retry&.call(ex)
-    }, **opts) do
-      attempt += 1
-      yield(attempt)
-    end
-  end
-
   attr_reader :bot
   attr_reader :jobs
 
