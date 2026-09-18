@@ -114,6 +114,18 @@ RSpec.describe TextHelpers do
     end
   end
 
+  describe '.strip_inline_markers' do
+    it 'takes a call off a question or an exclamation that ends the sentence' do
+      expect(described_class.strip_inline_markers('have testified?10')).to eq(['have testified?', ['10']])
+      expect(described_class.strip_inline_markers('gritou!7 e saiu')).to eq(['gritou! e saiu', ['7']])
+    end
+
+    it 'leaves a thousands group and a time of day alone' do
+      expect(described_class.strip_inline_markers('de 1.950')).to eq(['de 1.950', []])
+      expect(described_class.strip_inline_markers('às 3h30 da manhã')).to eq(['às 3h30 da manhã', []])
+    end
+  end
+
   describe '.strip_bullet' do
     it 'drops a bullet glyph but keeps the label it follows' do
       expect(described_class.strip_bullet('► MMS1 is activated MMS.')).to eq('MMS1 is activated MMS.')

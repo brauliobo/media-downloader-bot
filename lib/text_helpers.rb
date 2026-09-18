@@ -15,7 +15,7 @@ module TextHelpers
   # means an acronym or a product name ("MMS1", "CO2"). A closing quote or bracket only counts where
   # it closes something, and a letter only where it ends a word: a lone letter is a glyph the text
   # layer mapped wrong ("décadas de f950" for 1950).
-  MARKER_ANCHOR  = /(?:(?<=\p{L})\p{Ll}|(?<=[\p{L}\p{N}.,;:!?…])[\)\]"”’»]|(?<!\d)[.,;:])/u
+  MARKER_ANCHOR  = /(?:(?<=\p{L})\p{Ll}|(?<=[\p{L}\p{N}.,;:!?…])[\)\]"”’»]|(?<!\d)[.,;:]|[?!…])/u
   TRAILING_HYPHEN = /\s*[-­‐‑]\z/
   # An ellipsis is a pause; whether it closes the sentence depends on what follows.
   TRAILING_ELLIPSIS = /(?:\.{3}|…)["”’)\]»]*\s*\z/u
