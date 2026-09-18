@@ -26,6 +26,8 @@ module Audiobook
 
     def resumes?(previous, entry, texts)
       return false if entry.toc || previous.toc
+      # Where the source drew the blocks there is no page break for a paragraph to straddle.
+      return false if separate_blocks?(previous, entry)
       return false unless same_language?(previous, entry)
       return false unless carries_on?(previous, entry, texts)
       return false unless font_close?(previous, entry) || (texts.unfinished && texts.continuation)
@@ -78,6 +80,8 @@ module Audiobook
     end
 
     def paragraph?(entry) = entry&.item.is_a?(Paragraph) && entry.item.sentences.any?
+
+    def separate_blocks?(previous, entry) = !!(previous.block && entry.block && previous.block != entry.block)
 
     def same_language?(previous, entry)
       previous.item.sentences.last&.language == entry.item.sentences.first&.language

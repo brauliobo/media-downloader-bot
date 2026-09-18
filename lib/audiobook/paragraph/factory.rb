@@ -187,7 +187,8 @@ module Audiobook
       end
 
       def item_data(group, item)
-        {item: item, page: @start_page, font_size: group.first.font_size, toc: contents?(group)}
+        {item: item, page: @start_page, font_size: group.first.font_size, toc: contents?(group),
+         block: group.first.block}
       end
 
       def contents?(group) = group.any? { |line| TextHelpers.toc_entry?(line.text) }
