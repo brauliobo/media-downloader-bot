@@ -28,6 +28,7 @@ module Audiobook
         else
           selected_lines(root, selector, sheets)
         end
+        stamp_blocks(lines)
         page_count = paginate(lines, words_per_page(opts))
 
         SymMash.new(

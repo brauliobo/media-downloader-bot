@@ -81,6 +81,7 @@ module Audiobook
           max_page_seen = [max_page_seen, current_page].max
         end
 
+        stamp_blocks(lines)
         page_count = [max_page_seen, current_page, lines.map { |l| l.page }.max || 1].compact.max
 
         # Word-based pagination estimate (default ~300 words/page). Use the larger estimate.

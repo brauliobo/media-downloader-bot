@@ -26,6 +26,12 @@ module Audiobook
         wpp.positive? ? wpp : DEFAULT_WORDS_PER_PAGE
       end
 
+      # One source element is one paragraph: markup already drew the boundary a page of type
+      # leaves the assembly to guess at. Rows split from one element keep its number.
+      def self.stamp_blocks(lines)
+        lines.each_with_index { |line, idx| line.block = idx + 1 }
+      end
+
       def self.paginate(lines, words_per_page = DEFAULT_WORDS_PER_PAGE)
         words_per_page = DEFAULT_WORDS_PER_PAGE unless words_per_page.to_i.positive?
         words = 0

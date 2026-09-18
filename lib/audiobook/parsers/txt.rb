@@ -9,6 +9,7 @@ module Audiobook
           font = TextHelpers.heading_line?(paragraph) ? HEADING_FONT_SIZE : BODY_FONT_SIZE
           line(paragraph, font)
         end
+        stamp_blocks(lines)
         page_count = paginate(lines, words_per_page(opts))
         parser_opts = SymMash.new(opts || {})
         parser_opts.includeall = true
