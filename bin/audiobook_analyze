@@ -38,10 +38,10 @@ when 'lint'
   puts Summary.tsv(rows)
 
 when 'breaks'
-  puts %w[book breaks geometry unexplained].join("\t")
+  puts %w[book breaks geometry markup unexplained].join("\t")
   Corpus.books(paths).each do |path|
     tally = Breaks.tally(path, pages: pages)
-    puts [tally.book, tally.breaks, tally.geometry, tally.unexplained].join("\t")
+    puts [tally.book, tally.breaks, tally.geometry, tally.markup, tally.unexplained].join("\t")
   rescue StandardError => e
     warn "#{File.basename(path)}: #{e.class}: #{e.message[0, 80]}"
   end

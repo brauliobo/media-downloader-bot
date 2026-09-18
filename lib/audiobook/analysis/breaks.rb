@@ -15,6 +15,7 @@ module Audiobook
           book:        Corpus.name_for(path)[0, NAME_WIDTH],
           breaks:      found.size,
           geometry:    found.count { |reasons| (reasons & GEOMETRY).any? },
+          markup:      found.count { |reasons| reasons.include?(:block) },
           unexplained: found.count { |reasons| unexplained?(reasons) }
         )
       end
@@ -34,7 +35,8 @@ module Audiobook
         finished = Sentence.ends_with_punctuation?(buf.map(&:text).join(' ').strip)
 
         structural(previous, line) + layout(previous, line, grid, finished) +
-          [(:page if line.page_number != previous.page_number), (:lang if line.language != previous.language)].compact
+          [(:block if previous.new_block?(line)), (:page if line.page_number != previous.page_number),
+           (:lang if line.language != previous.language)].compact
       end
 
       def self.structural(previous, line)
