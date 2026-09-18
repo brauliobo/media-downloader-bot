@@ -90,10 +90,13 @@ module Audiobook
     end
 
     def mark_call(entry, id, index)
-      called = @refs[entry.page].key?(id)
-      ref    = @refs[entry.page][id] ||= Reference.new(id)
+      # A section of notes repeats the marker pages after the call was made, so the reference it
+      # opens is the one still waiting behind it rather than a new call made here.
+      waiting = @refs[entry.page].key?(id) ? nil : open_call_before(entry.page, id)
+      called  = waiting || @refs[entry.page].key?(id)
+      ref     = @refs[entry.page][id] ||= waiting || Reference.new(id)
       # Below the body the marker only opens its note; the call was already made inline.
-      ref    = attach_call(entry.page, id, ref) unless called && note_font?(entry)
+      ref     = attach_call(entry.page, id, ref) unless called && (waiting || note_font?(entry))
 
       @last_ref[entry.page] = ref
       @pending[entry.page] << SymMash.new(ref: ref, min_idx: index)
@@ -133,7 +136,10 @@ module Audiobook
     end
 
     def consume_note(entry, idx)
-      return false unless entry.item.is_a?(Paragraph) && entry.item.sentences.any? && note_font?(entry)
+      return false unless entry.item.is_a?(Paragraph) && entry.item.sentences.any?
+      # Small print is what marks a note out on a page of body text. On a page that is nothing
+      # but notes there is no smaller print, and the marker opened just above says it instead.
+      return false unless note_font?(entry) || @pending[entry.page].any?
 
       queue = @pending[entry.page]
       # A note repeats its marker before the text; a body-sized paragraph that opens with a
@@ -202,7 +208,7 @@ module Audiobook
       # A bare number at body size that nothing called is a stray figure, not a note label.
       return ids if ids.nil? || note_font?(entry)
 
-      ids.select { |id| @refs[entry.page].key?(id) }
+      ids.select { |id| @refs[entry.page].key?(id) || open_call_before(entry.page, id) }
     end
 
     def marker_line_ids(item)
