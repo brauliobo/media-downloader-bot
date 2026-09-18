@@ -8,21 +8,7 @@ module Downloaders
   end
 
   def self.for(processor)
-    ctx = if processor.respond_to?(:ctx)
-      processor.ctx
-    else
-      Context.new(
-        url:     processor.url,
-        opts:    processor.opts,
-        dir:     processor.dir,
-        tmp:     processor.tmp,
-        st:      processor.st,
-        session: processor.session,
-        service: (processor.service if processor.respond_to?(:service)),
-        msg:     processor.msg,
-        stl:     processor.stl
-      )
-    end
+    ctx = processor.ctx
 
     REGISTRY.each do |klass|
       next if klass == Downloaders::YtDlp
