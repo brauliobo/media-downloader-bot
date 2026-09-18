@@ -1,9 +1,12 @@
 module Audiobook
   module Parsers
     class CssStyle
+      # Only a tag that really changes the size belongs here. A paragraph, a div or a list item
+      # inherits its size, so giving them a default overwrites whatever an ancestor's rule set and
+      # makes small print read as larger than the body it sits in.
       TAG_SIZES = {
         'h1' => 24, 'h2' => 22, 'h3' => 20, 'h4' => 18, 'h5' => 16, 'h6' => 14,
-        'p' => 12, 'div' => 12, 'li' => 12, 'blockquote' => 12, 'small' => 10, 'sup' => 10, 'sub' => 10
+        'small' => 10, 'sup' => 10, 'sub' => 10
       }.freeze
       NAMED_SIZES = {
         'xx-small' => 8, 'x-small' => 10, 'small' => 11, 'medium' => 12,
