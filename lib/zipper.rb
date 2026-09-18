@@ -187,19 +187,6 @@ class Zipper
     wav_path
   end
 
-  def self.prepend_silence! wav_path, seconds, dir: nil, ffmpeg: nil, ffmpeg_factory: nil
-    return wav_path if seconds.to_f <= 0
-
-    dir ||= File.dirname wav_path
-    pause_file = get_pause_file seconds, dir, ffmpeg: ffmpeg, ffmpeg_factory: ffmpeg_factory
-    return wav_path unless pause_file
-
-    output = File.join dir, "out_#{SecureRandom.hex 4}.wav"
-    concat_audio [pause_file, wav_path], output, ffmpeg: ffmpeg, ffmpeg_factory: ffmpeg_factory
-    FileUtils.mv output, wav_path, force: true
-    wav_path
-  end
-
   def self.speed_audio_file! wav_path, speed, ffmpeg: nil, ffmpeg_factory: nil
     speed = speed.to_f
     return wav_path unless speed.positive? && speed != 1
@@ -304,10 +291,6 @@ class Zipper
     @type == :video
   end
 
-  def audio?
-    @type == :audio
-  end
-
   def zip_video
     @type = :video
     pixel_format = FFmpeg.format_filter :yuv420p
@@ -373,10 +356,6 @@ class Zipper
     apply_output_bounds builder
     builder.output outfile
     builder.capture
-  end
-
-  def subtitle_to_vtt body, ext
-    Subtitler::VTT.to_vtt body, ext, ffmpeg: ffmpeg_builder
   end
 
   def video_input_opts
@@ -689,10 +668,6 @@ class Zipper
     filters = FFmpeg.cut_filters cuts, video: video?, audio: audio_stream?
     fgraph.concat filters.fetch(:video)
     filters.fetch(:audio).each { |filter| append_audio_filter filter }
-  end
-
-  def interval_expression ranges
-    FFmpeg.time_ranges_expression ranges
   end
 
   def audio_stream?
