@@ -10,31 +10,35 @@ module Processors
   class Router < Base
 
     def self.for_message(ctx, lines)
+      c = ctx.dup
+      return file_processors(c, lines) if Utils::InputParser.attached_file?(c.msg)
+
       url_inputs = Utils::InputParser.url_inputs(lines)
-      
       if url_inputs.any?
         return url_inputs.map do |input|
-          c = ctx.dup
-          c.line = input
-          Url.new(c)
+          u = ctx.dup
+          u.line = input
+          Url.new(u)
         end
       end
 
-      line = lines.join(' ')
-      c = ctx.dup
-      c.line = line
+      nil
+    end
 
-      return [Document.new(c)] if Document.can_handle?(c.msg)
-      return [Srt.new(c)] if Srt.can_handle?(c)
+    def self.file_processors(ctx, lines)
+      ctx.line = Utils::InputParser.option_line(lines)
 
-      file = c.msg.video || c.msg.audio || c.msg.document
-      return [LocalFile.new(c)] if file&.respond_to?(:local_path) && ::File.exist?(file.local_path)
+      return [Document.new(ctx)] if Document.can_handle?(ctx.msg)
+      return [Srt.new(ctx)] if Srt.can_handle?(ctx)
 
-      return [Video.new(c)] if c.msg.video.present?
-      return [Audio.new(c)] if c.msg.audio.present?
+      file = ctx.msg.video || ctx.msg.audio || ctx.msg.document
+      return [LocalFile.new(ctx)] if file&.respond_to?(:local_path) && ::File.exist?(file.local_path)
+      return [Video.new(ctx)] if ctx.msg.video.present?
+      return [Audio.new(ctx)] if ctx.msg.audio.present?
 
       nil
     end
+    private_class_method :file_processors
 
   end
 end
