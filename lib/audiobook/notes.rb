@@ -39,7 +39,9 @@ module Audiobook
     def bind_endnotes(items)
       return if @endnotes.empty?
 
-      chapter = nil
+      chapter    = nil
+      @group_idx = 0
+      @last_id   = nil
       items.each do |entry|
         chapter = chapter_number(entry.item) || chapter
         references_of(entry.item).each { |reference| bind(reference, chapter) }
@@ -56,10 +58,15 @@ module Audiobook
       item.sentences.flat_map(&:references)
     end
 
+    # The numbering restarts with each chapter, so a call that does not carry on from the one
+    # before it is the first of the next group the section lists. That ordinal is all there is to
+    # go on in a book whose chapters are titled rather than numbered.
     def bind(reference, chapter)
+      @group_idx += 1 if @last_id && reference.id.to_i <= @last_id.to_i
+      @last_id = reference.id
       return unless reference.sentences.empty?
 
-      text = @endnotes.entry(chapter, reference.id)
+      text = @endnotes.entry(chapter, reference.id, @group_idx)
       reference.add_sentences(Sentence.build_all(TextHelpers.split_sentences(text))) if text.present?
     end
 
@@ -132,7 +139,7 @@ module Audiobook
       # A note repeats its marker before the text; a body-sized paragraph that opens with a
       # number is a list entry instead, which is why the small print is checked first.
       opening = entry.item.sentences.first.text.match(NOTE_OPENING)
-      ref = @refs[entry.page][opening[1]] if opening
+      ref = @refs[entry.page][opening[1]] || open_call_before(entry.page, opening[1]) if opening
 
       return fill(entry, ref, opening, idx, queue) if ref
       return carry(entry, queue.find { |info| info.min_idx <= idx }, idx) if queue.any? { |info| info.min_idx <= idx }
@@ -163,6 +170,15 @@ module Audiobook
       ref.add_sentences(entry.item.sentences)
       true
     end
+
+    # A book that gathers its notes at the end of a chapter prints them pages after the call, so
+    # a note whose own page made no such call answers the nearest call still waiting behind it.
+    def open_call_before(page, id)
+      pages = @refs.keys.select { |other| other.to_i < page.to_i && unbound?(@refs[other][id]) }
+      @refs[pages.max_by(&:to_i)][id] if pages.any?
+    end
+
+    def unbound?(reference) = reference && reference.sentences.empty?
 
     def open(page, id, sentence)
       ref = @refs[page][id] ||= Reference.new(id)
