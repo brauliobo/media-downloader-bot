@@ -10,7 +10,7 @@ module Audiobook
       # Nothing in a file says what language it is in until it has been parsed, which is what we
       # are measuring; the corpus is small enough to name the exceptions to Portuguese.
       LANGUAGES = {
-        /kybalion|path_of_empowerment|savin|32 reasons|fixing_my_gaze/i => 'en',
+        /kybalion|path_of_empowerment|savin|32 reasons|fixing_my_gaze|why_good_people/i => 'en',
         /adi[oó]s|salud prohibida|cura_en_un_minuto/i                   => 'es',
       }.freeze
       DEFAULT_LANGUAGE = 'pt'.freeze
