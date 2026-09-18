@@ -24,4 +24,12 @@ RSpec.describe Utils::Url do
     expect(described_class.token?('caption')).to be(false)
     expect(described_class.token?('example.com/photo.jpg')).to be_truthy
   end
+
+  it 'does not treat filenames as bare urls' do
+    expect(described_class.token?('1.pdf')).to be_falsey
+    expect(described_class.token?('book.epub')).to be_falsey
+    expect(described_class.token?('clip.mp4')).to be_falsey
+    expect(described_class.token?('example.com/photo.jpg')).to be_truthy
+    expect(described_class.token?('x.com/i/status/1')).to be_truthy
+  end
 end
