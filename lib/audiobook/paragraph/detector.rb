@@ -228,8 +228,10 @@ module Audiobook
 
         return true  if structural?(prev_line, line, continuation, emphasis_run)
         return false if continuation || emphasis_run
-        # A block opens with a capital or after the sentence before it closed; anything else is
-        # the same sentence carrying on, whatever the page geometry measures.
+        # A block opens with a capital or after the sentence before it closed, and never with the
+        # quote that closes the one before; anything else is the same sentence carrying on,
+        # whatever the page geometry measures.
+        return false if line.closes_quote?
         return false unless finished || line.starts_with_capital?
 
         return true if starts_block || (isolated && buf.one?)

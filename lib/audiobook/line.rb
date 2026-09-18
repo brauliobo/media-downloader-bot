@@ -93,6 +93,11 @@ module Audiobook
       @text.match?(/\A\p{Ll}/u)
     end
 
+    # A closing quote ends the sentence before it, wherever the text layer put it on the page.
+    CLOSING_QUOTE = /\A[”’»\)\]]/u
+
+    def closes_quote? = @text.match?(CLOSING_QUOTE)
+
     # A lowercase start after text that has not closed its sentence carries that sentence on.
     # An ellipsis is a pause rather than a close when what follows it is lowercase.
     def continues?(text)

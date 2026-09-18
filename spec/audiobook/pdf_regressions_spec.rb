@@ -622,4 +622,12 @@ RSpec.describe 'Audiobook assembly regressions' do
       expect(headings(book)).to all(satisfy { |text| text.split.size <= 12 })
     end
   end
+  describe 'nao-comecou-orphan-quote.pdf' do
+    let(:book) { book_for('nao-comecou-orphan-quote.pdf', 'pt') }
+
+    it 'keeps a closing quote the text layer left on its own line with the sentence it closes' do
+      expect(paragraph_texts(book)).to all(satisfy { |text| !text.start_with?('”') })
+      expect(spoken(book)).to include('capacidades e potenciais. ”7 Vistos desta forma')
+    end
+  end
 end
