@@ -88,6 +88,8 @@ module Audiobook
 
     def self.heading_continuation?(prev, line)
       return false unless prev && line && heading_item?(prev)
+      # A heading wrapped over a page break is a rarity; two headings on facing pages are not.
+      return false if prev.page_number != line.page_number
       return false unless same_size?(prev, line)
       return false if long_body_line?(line) || labeled_line?(line)
       heading_item?(line) || same_emphasis?(prev, line)

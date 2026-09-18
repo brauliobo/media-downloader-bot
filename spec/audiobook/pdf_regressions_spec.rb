@@ -611,4 +611,15 @@ RSpec.describe 'Audiobook assembly regressions' do
       expect(spoken(book)).to include('Ao usar o suco de um limão fresco')
     end
   end
+  describe 'matriz-part-title-page.pdf' do
+    let(:book) { book_for('matriz-part-title-page.pdf', 'pt') }
+
+    it 'does not run a part title into the heading that opens the next page' do
+      expect(headings(book)).to include(
+        'DESCOBRINDO A MATRIZ DIVINA: O MISTÉRIO QUE UNE TODAS AS COISAS',
+        'O QUE EXISTE NO ESPAÇO EM VOLTA?'
+      )
+      expect(headings(book)).to all(satisfy { |text| text.split.size <= 12 })
+    end
+  end
 end
