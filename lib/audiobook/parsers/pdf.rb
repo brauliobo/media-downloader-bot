@@ -196,10 +196,29 @@ module Audiobook
       # Justified text and page-number columns come out as several lines on one baseline, and a
       # re-rendered PDF puts each fragment in its own block, so rejoin what sits side by side.
       def self.baseline_runs(lines)
-        lines.group_by(&:parent).values.flat_map { |block| baseline_slices(block) }
-          .each_with_object([]) do |words, runs|
-            side_by_side?(runs.last, words) ? runs.last.concat(words) : runs << words
-          end.map { |words| words.sort_by { |word| word['xMin'].to_f } }
+        slices = lines.group_by(&:parent).values.flat_map { |block| baseline_slices(block) }
+        adopt_bullet_runs(fold_adjacent_runs(slices)).map { |words| words.sort_by { |word| word['xMin'].to_f } }
+      end
+
+      def self.fold_adjacent_runs(slices)
+        slices.each_with_object([]) do |words, runs|
+          side_by_side?(runs.last, words) ? runs.last.concat(words) : runs << words
+        end
+      end
+
+      # A bullet column is often set as one block of its own, so a bullet never neighbours the entry it opens.
+      def self.adopt_bullet_runs(runs)
+        runs.reject do |words|
+          next false unless bullet_run?(words)
+
+          entry = runs.find { |other| !other.equal?(words) && side_by_side?(words, other) }
+          entry&.concat(words)
+        end
+      end
+
+      def self.bullet_run?(words)
+        text = words.map(&:text).join.strip
+        text.present? && TextHelpers::BULLETS.include?(text)
       end
 
       def self.baseline_slices(block)
