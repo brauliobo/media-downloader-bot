@@ -262,10 +262,6 @@ class Subtitler
       rebuild_text_from_entries!
     end
 
-    def translated_srt(**options)
-      deep_copy.translate_srt!(**options)
-    end
-
     def reject_noise!
       rejected_blocks = Array(@metadata['source_blocks']).each_index.select do |index|
         noise_content_lines(@metadata['source_blocks'].fetch(index)).any? do |line|

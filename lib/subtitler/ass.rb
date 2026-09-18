@@ -195,10 +195,6 @@ class Subtitler
 
     module_function
 
-    def parse_time(timestamp)
-      Subtitler.parse_timestamp(timestamp)
-    end
-
     def ass_time(seconds)
       Subtitler.format_timestamp(seconds, precision: 2, hour_digits: 1)
     end
