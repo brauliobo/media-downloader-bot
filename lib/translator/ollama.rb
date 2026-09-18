@@ -7,21 +7,6 @@ class Translator
     MODEL = ENV['OLLAMA_MODEL']
     MARKER = '|||---SUBTITLEBLOCK---|||'
 
-    JSON_SCHEMA = {
-      type: :object,
-      properties: {
-        translations: {
-          type: :array,
-          description: "An array of translated strings, corresponding to the user's input.",
-          items: {
-            type: :string,
-            description: 'The translated text.'
-          }
-        }
-      },
-      required: ["translations"]
-    }
-
     def translate text, from:, to:
       to_iso      = to.to_s.downcase
       from_iso    = from.to_s.downcase if from
