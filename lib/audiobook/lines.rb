@@ -6,7 +6,7 @@ module Audiobook
   # its neighbours is settled here, because a Line on its own cannot see the page it sits on.
   module Lines
     ATTRIBUTES = %i[font_size page_width top_spacing bottom_spacing section_level language
-                    alignment bold italic color font_name].freeze
+                    alignment bold italic color font_name block].freeze
 
     def self.build(lines_data)
       rows = lines_data.map { |line| line.is_a?(SymMash) ? line : SymMash.new(line) }
