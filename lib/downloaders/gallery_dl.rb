@@ -19,7 +19,8 @@ module Downloaders
     end
 
     def gallery_post?
-      validate_public_url!(normalized_url)
+      return false unless Utils::Safety.public_http_url?(normalized_url)
+
       items = gallery_rows.select { |item| item.is_a?(Array) && item.first == 3 }
       items.present? && !(items.one? && items.first.last['type'].to_s == 'video')
     end

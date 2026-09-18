@@ -38,6 +38,12 @@ RSpec.describe Downloaders::GalleryDl do
       expect(described_class.supports?(ctx)).to eq(false)
     end
 
+    it 'does not raise when probing a non-public url' do
+      ctx.url = 'http://localhost/gallery'
+
+      expect(described_class.supports?(ctx)).to eq(false)
+    end
+
     it 'keeps single-video tweet metadata for yt-dlp captions' do
       rows = [
         [2, {content: "full tweet\n\nwith note text", user: {nick: 'NEXTA'}, tweet_id: 1}],
