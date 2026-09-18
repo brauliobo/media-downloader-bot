@@ -96,6 +96,18 @@ module Audiobook
         new(lines, max_sentence_chars: max_sentence_chars).detect
       end
 
+      # Where a block ends is the hardest call the assembly makes, so a caller can watch it being
+      # made without standing in the middle of it.
+      def self.observe(listener)
+        previous = Thread.current[:audiobook_break_observer]
+        Thread.current[:audiobook_break_observer] = listener
+        yield
+      ensure
+        Thread.current[:audiobook_break_observer] = previous
+      end
+
+      def self.observer = Thread.current[:audiobook_break_observer]
+
       def initialize(lines, max_sentence_chars: Factory::MAX_SENTENCE_CHARS)
         @lines = strip_contents_numbers(lines)
         @max_sentence_chars = max_sentence_chars
@@ -137,6 +149,7 @@ module Audiobook
 
           if previous && buf.any? &&
               @breaks.break?(previous, line, buf, isolated: isolated?(idx - 1), starts_block: isolated?(idx))
+            self.class.observer&.call(previous, line, buf, @grid)
             items.concat(flush(buf, start_page, start_idx))
             buf = [line]
             start_idx = idx
