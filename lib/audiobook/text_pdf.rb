@@ -6,26 +6,8 @@ require_relative '../utils/sh'
 
 module Audiobook
   class TextPdf
-    OCR_THRESHOLD     = 80
     MIN_FIGURE_AREA   = 0.002
     CHROMIUM_BINS     = %w[chromium google-chrome-stable google-chrome chromium-browser].freeze
-
-    def self.ocr_percentage(book)
-      total_pages = book.pages.size
-      return 0.0 if total_pages.zero?
-
-      ocr_pages = if book.metadata['fully_ocr']
-        total_pages
-      else
-        book.pages.count { |p| p.items.any? { |i| i.is_a?(Audiobook::Image) } }
-      end
-
-      (ocr_pages.to_f / total_pages * 100).round(2)
-    end
-
-    def self.should_generate?(book)
-      ocr_percentage(book) > OCR_THRESHOLD
-    end
 
     def self.generate(book, pdf_path, stl: nil, source_pdf: nil)
       new(book, stl: stl, source_pdf: source_pdf).generate(pdf_path)
