@@ -860,4 +860,15 @@ RSpec.describe 'Audiobook assembly regressions' do
       expect(bound).to all(match(/\p{L}/))
     end
   end
+
+  describe 'terceiro-olho-repeated-paragraph.pdf' do
+    let(:book) { book_for('terceiro-olho-repeated-paragraph.pdf', 'pt') }
+
+    # The source reprints the tail of each page at the head of the next, so the narration read
+    # the same passage two and three times over.
+    it 'reads a passage the source repeats at a page join only once' do
+      repeated = sentences(book).map(&:text).reject { |text| text.split.size < 12 }.tally
+      expect(repeated.select { |_, count| count > 1 }).to be_empty
+    end
+  end
 end

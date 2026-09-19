@@ -29,6 +29,7 @@ require_relative 'lines'
 require_relative 'notes'
 require_relative 'endnotes'
 require_relative 'blocks'
+require_relative 'repeats'
 require_relative '../translator'
 
 module Audiobook
@@ -474,7 +475,7 @@ module Audiobook
         Paragraph.discover_from_lines(lines, max_sentence_chars: max_sentence_chars)
       end.map { |entry| SymMash.new(entry) }
 
-      build_pages(Blocks.merge(Notes.attach(items, endnotes: endnotes)), images_data)
+      build_pages(Repeats.strip(Blocks.merge(Notes.attach(items, endnotes: endnotes))), images_data)
     end
 
     def narrated(lines_data, endnotes)
