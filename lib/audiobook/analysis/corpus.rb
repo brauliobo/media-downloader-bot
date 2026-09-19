@@ -10,8 +10,8 @@ module Audiobook
       # Nothing in a file says what language it is in until it has been parsed, which is what we
       # are measuring; the corpus is small enough to name the exceptions to Portuguese.
       LANGUAGES = {
-        /kybalion|path_of_empowerment|savin|32 reasons|fixing_my_gaze|why_good_people/i => 'en',
-        /adi[oó]s|salud prohibida|cura_en_un_minuto/i                   => 'es',
+        /kybalion|path_of_empowerment|savin|32 reasons|fixing_my_gaze|why_good_people|what_doctors|beginners guide|fauci/i => 'en',
+        /adi[oó]s|salud prohibida|cura_en_un_minuto|milagroso/i => 'es',
       }.freeze
       DEFAULT_LANGUAGE = 'pt'.freeze
 
@@ -20,6 +20,13 @@ module Audiobook
       end
 
       def self.name_for(path) = File.basename(path, File.extname(path))
+
+      # A table column has to fit, and two books in the corpus differ only in their last few
+      # characters, so a trimmed name keeps its tail as well as its head.
+      def self.short_name(path)
+        name = name_for(path)
+        name.size <= NAME_WIDTH ? name : "#{name[0, NAME_WIDTH - 9]}…#{name[-8..]}"
+      end
 
       def self.language_for(path)
         LANGUAGES.find { |pattern, _| File.basename(path).match?(pattern) }&.last || DEFAULT_LANGUAGE

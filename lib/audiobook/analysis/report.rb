@@ -29,7 +29,7 @@ module Audiobook
       end
 
       def name = Corpus.name_for(path)
-      def short_name = name[0, NAME_WIDTH]
+      def short_name = Corpus.short_name(path)
 
       def counts
         Detectors.names.to_h { |detector| [detector, @hits[detector].size] }.merge(

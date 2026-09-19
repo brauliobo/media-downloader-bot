@@ -33,7 +33,7 @@ module Audiobook
         report.write(out) if out
         [report.short_name, report.counts]
       rescue StandardError => e
-        [Corpus.name_for(path)[0, NAME_WIDTH], { error: "#{e.class}: #{e.message[0, 80]}" }]
+        [Corpus.short_name(path), { error: "#{e.class}: #{e.message[0, 80]}" }]
       end
     end
   end

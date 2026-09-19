@@ -12,7 +12,7 @@ module Audiobook
       def self.tally(path, pages: nil, lang: nil)
         found = collect(path, pages: pages, lang: lang)
         SymMash.new(
-          book:        Corpus.name_for(path)[0, NAME_WIDTH],
+          book:        Corpus.short_name(path),
           breaks:      found.size,
           geometry:    found.count { |reasons| (reasons & GEOMETRY).any? },
           markup:      found.count { |reasons| reasons.include?(:block) },
