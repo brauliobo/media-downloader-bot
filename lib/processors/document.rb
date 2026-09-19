@@ -7,16 +7,15 @@ module Processors
 
     self.attr = :document
 
-    def self.document_kind(doc_or_msg)
-      doc = doc_or_msg.respond_to?(:document) ? doc_or_msg.document : doc_or_msg
+    def self.document_kind(doc)
       return unless doc
 
       Audiobook::SourceFormats.document_kind(file_name: doc.file_name, mime_type: doc.mime_type)
     end
 
-    def self.can_handle?(msg) = !!document_kind(msg)
+    def self.can_handle?(msg) = !!document_kind(msg&.document)
 
-    def document_kind = self.class.document_kind(msg)
+    def document_kind = self.class.document_kind(msg.document)
 
     def download
       info = msg.document

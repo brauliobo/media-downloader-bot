@@ -5,13 +5,10 @@ module Processors
   class Srt < File
     self.attr = :document
 
-    def self.srt_file?(doc_or_msg)
-      doc = doc_or_msg.respond_to?(:document) ? doc_or_msg.document : doc_or_msg
-      doc&.file_name.to_s.downcase.end_with?('.srt')
-    end
+    def self.srt_file?(doc) = doc&.file_name.to_s.downcase.end_with?('.srt')
 
     def self.can_handle?(ctx)
-      return false unless srt_file?(ctx.msg)
+      return false unless srt_file?(ctx.msg&.document)
       line = Utils::InputParser.input_text(ctx)
       line.to_s.match?(/\blang=\w+/)
     end
