@@ -6,6 +6,8 @@ en:
         one: "Stopping 1 job..."
         other: "Stopping %{count} jobs..."
   audiobook:
+    table:
+      long: "Table of %{rows} rows, not read out."
     ewprs:
       caption:
         type: "Type: %{kind}"

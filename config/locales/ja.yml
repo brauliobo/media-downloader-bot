@@ -1,5 +1,7 @@
 ja:
   audiobook:
+    table:
+      long: "%{rows} 行の表は読み上げません。"
     ewprs:
       caption:
         type: "種類：%{kind}"

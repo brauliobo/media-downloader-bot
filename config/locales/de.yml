@@ -1,5 +1,7 @@
 de:
   audiobook:
+    table:
+      long: "Tabelle mit %{rows} Zeilen, nicht vorgelesen."
     ewprs:
       caption:
         type: "Typ: %{kind}"

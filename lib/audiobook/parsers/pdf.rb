@@ -1,6 +1,7 @@
 require 'nokogiri'
 require_relative '../../utils/tmp'
 require_relative 'base'
+require_relative 'table'
 require_relative '../cover'
 require_relative '../page_selection'
 require_relative '../../utils/sh'
@@ -24,9 +25,9 @@ module Audiobook
           missing = selected_pages.reject { |page| page <= page_count }
           raise ArgumentError, "pages not found: #{missing.join(', ')}" if missing.any?
 
-          document = extract_document(pdf_path, page_limit: MAX_PAGES + 1, page_numbers: selected_pages)
+          document = extract_document(pdf_path, page_limit: MAX_PAGES + 1, page_numbers: selected_pages, lang: opts&.alang)
         else
-          document   = extract_document(pdf_path, page_limit: MAX_PAGES + 1)
+          document   = extract_document(pdf_path, page_limit: MAX_PAGES + 1, lang: opts&.alang)
           page_count = document.pages.size
           raise ArgumentError, "PDF has too many pages (maximum #{MAX_PAGES})" if page_count > MAX_PAGES
         end
@@ -115,15 +116,15 @@ module Audiobook
           .any? { |metrics| metrics.area_coverage >= MIN_SCANNED_AREA }
       end
 
-      def self.extract_document(pdf_path, page_limit:, page_numbers: nil)
+      def self.extract_document(pdf_path, page_limit:, page_numbers: nil, lang: nil)
         ranges = page_numbers ? consecutive_ranges(page_numbers) : [[1, page_limit]]
         pages = ranges.flat_map do |first_page, last_page|
-          extract_document_range(pdf_path, first_page: first_page, last_page: last_page)
+          extract_document_range(pdf_path, first_page: first_page, last_page: last_page, lang: lang)
         end
         SymMash.new(pages: pages)
       end
 
-      def self.extract_document_range(pdf_path, first_page:, last_page:)
+      def self.extract_document_range(pdf_path, first_page:, last_page:, lang: nil)
         output, stderr, status = Sh.run [
           'pdftotext', '-f', first_page.to_s, '-l', last_page.to_s,
           '-bbox-layout', '-enc', 'UTF-8', pdf_path, '-'
@@ -132,61 +133,92 @@ module Audiobook
 
         document = Nokogiri::XML(sanitize_xml(output)) { |config| config.strict.nonet }
         document.remove_namespaces!
-        pages = document.xpath('//page').each_with_index.map do |page, index|
-          page_height = page['height'].to_f
-          lines       = baseline_runs(page.xpath('.//line')).filter_map do |words|
-            baseline = word_baseline(words)
-            text     = line_text(words, baseline)
-            next if text.empty?
-
-            y_min = words.map { |word| word['yMin'].to_f }.min
-            y_max = words.map { |word| word['yMax'].to_f }.max
+        pages = fold_tables(document.xpath('//page').map { |page| tabled_page(page) }, lang)
+          .each_with_index.map do |parsed, index|
             SymMash.new(
-              text:       text,
-              font_size:  line_font_size(words, baseline),
-              # The baseline is where the line really sits; box tops move with the tallest glyph.
-              y:          page_height - baseline,
-              x:          words.map { |word| word['xMin'].to_f }.min,
-              x_max:      words.map { |word| word['xMax'].to_f }.max,
-              page_width:  page['width'].to_f,
-              page_height: page_height,
-              y_min:       y_min,
-              y_max:       y_max
+              number: first_page + index,
+              width:  parsed.page['width'].to_f,
+              height: parsed.page['height'].to_f,
+              lines:  parsed.lines
             )
           end
-          lines.each { |line| line.table = true } if table_page?(page)
-          SymMash.new(
-            number: first_page + index,
-            width:  page['width'].to_f,
-            height: page_height,
-            lines:  lines
-          )
-        end
         apply_xml_styles(pages, pdf_path, first_page: first_page, last_page: last_page)
         pages
       end
 
-      # Files printed from a word processor draw their tables without rulings. What a table row
-      # does have is the blank space between its cells: two or more gaps far wider than a word
-      # space, again and again down the page. A line of prose has none, whatever its words line
-      # up with above it.
-      TABLE_ROWS      = 8
-      TABLE_GAPS      = 2
-      TABLE_GAP_RATIO = 1.5
-      TABLE_SHARE     = 0.4
+      def self.line_of(words, page)
+        baseline    = word_baseline(words)
+        text        = line_text(words, baseline)
+        page_height = page['height'].to_f
+        return if text.empty?
 
-      def self.table_page?(page)
-        words  = page.xpath('.//word')
-        height = median_height(words)
-        return false unless height.to_f.positive?
-
-        rows = words.group_by { |word| word['yMin'].to_f.round }.values
-        rows.size >= TABLE_ROWS && rows.count { |row| celled?(row, height) } >= rows.size * TABLE_SHARE
+        SymMash.new(
+          text:       text,
+          font_size:  line_font_size(words, baseline),
+          # The baseline is where the line really sits; box tops move with the tallest glyph.
+          y:          page_height - baseline,
+          x:          words.map { |word| word['xMin'].to_f }.min,
+          x_max:      words.map { |word| word['xMax'].to_f }.max,
+          page_width:  page['width'].to_f,
+          page_height: page_height,
+          y_min:       words.map { |word| word['yMin'].to_f }.min,
+          y_max:       words.map { |word| word['yMax'].to_f }.max
+        )
       end
 
-      def self.celled?(row, height)
-        row.sort_by { |word| word['xMin'].to_f }.each_cons(2)
-          .count { |left, right| right['xMin'].to_f - left['xMax'].to_f > height * TABLE_GAP_RATIO } >= TABLE_GAPS
+      Parsed = Struct.new(:page, :height, :rows, :bands, :tables, :lines)
+
+      def self.tabled_page(page)
+        height = median_height(page.xpath('.//word')).to_f
+        rows   = height.zero? ? [] : Table.rows_of(page, height)
+        bands  = height.zero? ? [] : Table.bands(rows, height)
+        Parsed.new(
+          page, height, rows, bands, bands.map { |band| Table.rows(rows[band], height) },
+          baseline_runs(page.xpath('.//line')).filter_map { |words| line_of(words, page) }
+        )
+      end
+
+      # A table's own lines are replaced by the rows it was drawn to show, so every stage after
+      # this one reads prose whether the page held a table or not. A table that runs over page
+      # after page is a dataset rather than a passage, and is announced instead of read; the run
+      # is only visible with every page of the range in hand.
+      def self.fold_tables(parsed, lang)
+        long = long_tables(parsed)
+        parsed.each_with_index do |page, index|
+          page.bands.each_with_index.reverse_each do |band, at|
+            page.lines = fold_band(page.lines, page.rows[band], page.tables[at], page.height, lang, long[index])
+          end
+        end
+      end
+
+      # A page given over to a table, and the number of them a table may run to before it is a
+      # dataset rather than a passage.
+      TABLE_PAGE  = 0.6
+      TABLE_PAGES = 2
+
+      # The row count to announce, per page, for a table that runs past more pages than a
+      # listener will sit through: the first page of the run carries it and the rest read empty.
+      def self.long_tables(parsed)
+        tabled = parsed.map { |page| page.tables.sum(&:size) if page.bands.sum(&:size) >= page.rows.size * TABLE_PAGE }
+        tabled.each_index.slice_when { |above, below| tabled[above].nil? || tabled[below].nil? }
+          .each_with_object({}) do |run, long|
+            next if tabled[run.first].nil? || run.size <= TABLE_PAGES
+
+            total = run.sum { |index| tabled[index] }
+            run.each_with_index { |index, at| long[index] = at.zero? ? total : 0 }
+          end
+      end
+
+      def self.fold_band(lines, band, table, height, lang, long)
+        inside = lines.select { |line| line.y_min.to_f.between?(band.first.first - 1, band.last.first + height) }
+        return lines if inside.empty?
+
+        spoken = Table.spoken(table, band.first.first, lang, long).map { |y, text| table_line(inside.first, y, height, text) }
+        lines.flat_map { |line| line.equal?(inside.first) ? spoken : (inside.any? { |row| row.equal?(line) } ? [] : [line]) }
+      end
+
+      def self.table_line(model, y, height, text)
+        model.merge(text: text, y_min: y, y_max: y + height, y: model.page_height.to_f - y - height)
       end
 
       def self.median_height(words)

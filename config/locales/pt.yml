@@ -1,5 +1,7 @@
 pt:
   audiobook:
+    table:
+      long: "Tabela de %{rows} linhas, não lida."
     ewprs:
       caption:
         type: "Tipo: %{kind}"

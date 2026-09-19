@@ -34,8 +34,20 @@ RSpec.describe 'Audiobook assembly regressions' do
   end
 
   describe 'fauci-patent-table.pdf' do
+    let(:book) { book_for('fauci-patent-table.pdf', 'en') }
+
     it 'does not read a table out cell by cell' do
-      expect(item_texts(book_for('fauci-patent-table.pdf', 'en'))).to be_empty
+      expect(spoken(book)).not_to include('Priori')
+    end
+
+    # Judged by the page, the table took the page's prose down with it.
+    it 'keeps the prose printed above the table' do
+      expect(spoken(book)).to include('The following is the list of over 5,100 patents')
+    end
+
+    # 179 consecutive pages of patent rows is not an audiobook.
+    it 'says a long table is there instead of reading it' do
+      expect(spoken(book)).to match(/table of \d+ rows/i)
     end
   end
 
@@ -785,6 +797,35 @@ RSpec.describe 'Audiobook assembly regressions' do
     it 'leaves the scanned contents pages out of the narration' do
       expect(spoken(book)).not_to include('Primum Non Nocere')
       expect(spoken(book)).not_to include('The Patient that Changed my Life')
+    end
+  end
+
+  describe 'beginners-guide-dosage-table.pdf' do
+    let(:book) { book_for('beginners-guide-dosage-table.pdf', 'en') }
+
+    # Prose above, a four-column protocol table below. Judged as a page it was neither: the rows
+    # read as a contents list and the whole page went silent, prose and all.
+    it 'keeps the prose a table shares its page with' do
+      expect(spoken(book)).to include('I recommend to anyone that they learn how to measure and use both')
+    end
+
+    it 'reads a table row by row, each cell under its own heading' do
+      expect(spoken(book)).to match(/B: Basic.*3 drops MMS1.*8 doses per day for 21 days/m)
+    end
+
+    it 'does not read a column down the page' do
+      expect(spoken(book)).not_to match(/3 drops MMS1\W+10 ml CDS per 1 liter water/m)
+    end
+  end
+
+  describe 'guia-dosage-table.pdf' do
+    let(:book) { book_for('guia-dosage-table.pdf', 'pt') }
+
+    # One table over a page break: the first half scored above the page threshold and went
+    # silent, the second half below it and was read out a column at a time.
+    it 'reads both halves of a table that runs over a page break' do
+      expect(spoken(book)).to match(/Peso do Animal.*1 - 2 libras/m)
+      expect(spoken(book)).to match(/1500 - 2300 libras/m)
     end
   end
 end

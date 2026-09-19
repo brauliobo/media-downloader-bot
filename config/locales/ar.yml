@@ -1,5 +1,7 @@
 ar:
   audiobook:
+    table:
+      long: "جدول من %{rows} صفًا، لم يُقرأ."
     ewprs:
       caption:
         type: "النوع: %{kind}"

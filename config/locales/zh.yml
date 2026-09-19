@@ -1,5 +1,7 @@
 zh:
   audiobook:
+    table:
+      long: "%{rows} 行的表格，未朗读。"
     ewprs:
       caption:
         type: "类型：%{kind}"
