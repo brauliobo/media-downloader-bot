@@ -10,6 +10,7 @@ module Audiobook
     class Factory
       MAX_SENTENCE_CHARS = 800
       ISOLATED_MAX_WORDS = 12
+      VERSE_MEASURE      = 0.75
       TERMINAL_PUNCTUATION = /[.!?…]["”’)\]»]*\z/u
       CLAUSE_PUNCTUATION   = /[.!?…,;:]["”’)\]»]*\z/u
       NEVER_HEADING        = TextHelpers::NEVER_HEADING
@@ -38,7 +39,7 @@ module Audiobook
             next item_data(group, create_section(group.first, TextHelpers.extract_markers(normalized).first))
           end
 
-          sentences = create_sentences(normalized, group.first.language)
+          sentences = verse?(group) ? verse_sentences(group) : create_sentences(normalized, group.first.language)
           next if sentences.empty?
 
           create_item(group, sentences)
@@ -79,6 +80,23 @@ module Audiobook
         normalized = TextHelpers.join_pdf_lines(group.map { |line| TextHelpers.strip_toc_leaders(line.text) })
         normalized = TextHelpers.strip_bullet(normalized).gsub(/\bN\s*\.\s*T\./i, 'N.T.')
         TextHelpers.spoken_urls(normalized)
+      end
+
+      # Run together, a stanza puts a capital in the middle of a sentence and reads as prose
+      # that lost its punctuation. What makes a page verse is settled where the page can be
+      # seen; what makes these lines its lines is that each opens with a capital and none runs
+      # to the measure, which is what separates a stanza from a paragraph printed beside it.
+      def verse?(group)
+        group.size > 1 && group.all?(&:verse) && group.all? { |line| verse_line?(line) }
+      end
+
+      def verse_line?(line)
+        width = line.page_width.to_f
+        line.text.match?(/\A\p{Lu}/) && width.positive? && line.x_max.to_f < width * VERSE_MEASURE
+      end
+
+      def verse_sentences(group)
+        group.flat_map { |line| create_sentences(normalize_group_text([line]), line.language) }
       end
 
       def create_sentences(normalized, language)

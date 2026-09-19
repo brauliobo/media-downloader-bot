@@ -486,6 +486,13 @@ RSpec.describe 'Audiobook assembly regressions' do
     it 'keeps an indented verse line that sits at the page edge' do
       expect(spoken(book)).to include('à luz que se bifurca Em réstias infinitas Das barracas')
     end
+
+    # Run together, a stanza puts a capital in the middle of a sentence and reads as prose that
+    # lost its punctuation.
+    it 'reads a stanza one line at a time' do
+      expect(sentences(book).map(&:text))
+        .to include('A máquina assovia', 'Vomitando fumaça, e move-se, a ranger...')
+    end
   end
   describe 'salud-abbreviation-line-end.pdf' do
     let(:book) { book_for('salud-abbreviation-line-end.pdf', 'es') }

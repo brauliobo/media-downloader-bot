@@ -6,12 +6,12 @@ module Audiobook
   class Line
     attr_reader :text, :font_size, :y_position, :page_number, :x_position, :x_max, :page_width,
                 :top_spacing, :bottom_spacing, :section_level, :language, :alignment,
-                :bold, :italic, :color, :font_name, :block
+                :bold, :italic, :color, :font_name, :block, :verse
 
     def initialize(text, font_size: nil, y_position: nil, page_number: nil, x_position: nil, x_max: nil,
                    page_width: nil, top_spacing: nil, bottom_spacing: nil, section_level: nil, language: nil,
                    alignment: nil, bold: nil, italic: nil, color: nil, font_name: nil, shared_edge: false,
-                   block: nil)
+                   block: nil, verse: false)
       @text = text.to_s.strip
       @font_size = font_size
       @y_position = y_position
@@ -32,6 +32,8 @@ module Audiobook
       # Which source block this line came from, where the source draws blocks itself. A page of
       # type does not, and leaves it nil for the geometry to answer instead.
       @block = block
+      # Set from the page: on a page of verse the line is the unit the narration reads.
+      @verse = verse
     end
 
     def empty?
@@ -44,7 +46,7 @@ module Audiobook
         x_position: x_position, x_max: x_max, page_width: page_width,
         top_spacing: top_spacing, bottom_spacing: bottom_spacing,
         section_level: section_level, language: language, alignment: alignment,
-        bold: bold, italic: italic, color: color, font_name: font_name, block: block
+        bold: bold, italic: italic, color: color, font_name: font_name, block: block, verse: verse
       }
     end
 

@@ -1,3 +1,4 @@
+require 'set'
 require_relative 'line'
 require_relative 'page_filter'
 
@@ -14,12 +15,29 @@ module Audiobook
       # the page repeats rather than against each line's own midpoint.
       shared = PageFilter.shared_left_edges(rows)
 
-      rows.map { |row| line_from(row, shared) }.reject(&:empty?)
+      verse = verse_pages(rows)
+
+      rows.map { |row| line_from(row, shared, verse) }.reject(&:empty?)
     end
 
-    def self.line_from(row, shared)
+    # A page whose lines nearly all begin with a capital is verse: prose reaches two thirds at
+    # most, because a sentence carries on past the line it started on. A list and a page set one
+    # sentence to a line reach it too, and on those a line break already is a sentence break.
+    VERSE_LINES = 8
+    VERSE_SHARE = 0.9
+
+    def self.verse_pages(rows)
+      rows.group_by(&:page).select do |_, page_rows|
+        lines = page_rows.reject { |row| row.text.to_s.split.size < 2 }
+        lines.size >= VERSE_LINES &&
+          lines.count { |row| row.text.to_s.match?(/\A\p{Lu}/) } >= lines.size * VERSE_SHARE
+      end.keys.to_set
+    end
+
+    def self.line_from(row, shared, verse)
       Line.new(
         row.text,
+        verse:       verse.include?(row.page),
         shared_edge: shared.include?(PageFilter.left_edge(row)),
         y_position:  row.y,
         page_number: row.page,
