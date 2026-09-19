@@ -51,7 +51,7 @@ module Bot
 
       def download_file(file_id_or_info, priority: 32, offset: 0, limit: 0, synchronous: true, dir: nil)
         call(:download_file, file_id_or_info: file_id_or_info, priority: priority, offset: offset, limit: limit, synchronous: synchronous, dir: dir) do |result|
-          result.is_a?(Hash) ? result['path'] || result[:path] : result
+          unwrap(result, :path)
         end
       end
 
@@ -60,17 +60,13 @@ module Bot
       end
 
       def max_caption
-        @max_caption ||= call(:max_caption) { |r| r.is_a?(Hash) ? r[:max_caption] || r['max_caption'] : r }
+        @max_caption ||= call(:max_caption) { |result| unwrap(result, :max_caption) }
       rescue
         self.class.max_caption
       end
 
       def job_cancelled?(id)
-        call(:job_cancelled, id: id) do |result|
-          next result unless result.is_a?(Hash)
-
-          result.key?(:cancelled) ? result[:cancelled] : result['cancelled']
-        end
+        call(:job_cancelled, id: id) { |result| unwrap(result, :cancelled) }
       end
 
       def finish_job(id)
@@ -78,6 +74,9 @@ module Bot
       end
 
       private
+
+      # The DRb transport answers with the value itself, the HTTP one with a body naming it.
+      def unwrap(result, key) = result.is_a?(Hash) ? result[key] : result
 
       def call(method, **kwargs)
         kwargs = normalize_kwargs(kwargs)
@@ -91,7 +90,9 @@ module Bot
           payload[:file_id_or_info] = self.class.td_file_id(payload[:file_id_or_info]) if payload[:file_id_or_info]
           response = @http_client.post("/#{method}", payload)
           raise "bot HTTP service returned #{response.status}" unless response.success?
-          block_given? ? yield(response.body) : response.body
+
+          body = response.body.is_a?(Hash) ? SymMash.new(response.body) : response.body
+          block_given? ? yield(body) : body
         end
       end
 
