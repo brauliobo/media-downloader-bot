@@ -177,17 +177,20 @@ module Audiobook
     SUBJECT_ENTRY = /(?:\A|\s)\d{1,2}\.\s+\p{Lu}/
     RECORD_WORDS  = 5
 
-    # The opening pages carry a cataloguing record: the notice, the identifiers and the shelf
-    # codes. The same page may still hold a dedication or an acknowledgement, so only the
-    # record goes.
+    # The opening or closing pages carry a cataloguing record: the notice, the identifiers and
+    # the shelf codes. The same page may still hold a dedication or an acknowledgement, so only
+    # the record goes.
     def without_rights_record(lines_data)
       lines  = wrap(lines_data)
       pages  = lines.group_by(&:page)
-      rights = pages.keys.sort.first(RIGHTS_PAGES).select { |page| catalog_page?(pages[page]) }.to_set
+      rights = record_pages(pages.keys.sort).select { |page| catalog_page?(pages[page]) }.to_set
       return lines_data if rights.empty?
 
       reject_lines(lines_data, lines) { |line| rights.include?(line.page) && record_line?(line.text) }
     end
+
+    # A book prints its record at the front or at the back, never in the middle.
+    def record_pages(pages) = pages.first(RIGHTS_PAGES) | pages.last(RIGHTS_PAGES)
 
     def catalog_page?(page_lines) = page_lines.map { |line| line.text.to_s }.join(' ').match?(CATALOG_MARK)
 
