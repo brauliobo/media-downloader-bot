@@ -835,4 +835,16 @@ RSpec.describe 'Audiobook assembly regressions' do
       expect(spoken(book)).to match(/1500 - 2300 libras/m)
     end
   end
+
+  describe 'dispenza-endnote-section.pdf' do
+    let(:book) { book_for('dispenza-endnote-section.pdf', 'pt') }
+
+    # "Notas" stands alone on its page and the entries start on the next, two to a page. The
+    # section was looked for one page ahead and needed three entries, so it was never found.
+    it 'binds a note whose section title stands alone on its page' do
+      expect(references(book).map(&:id)).to include('1')
+      expect(references(book).flat_map(&:sentences).map(&:text).join(' '))
+        .to include('Global Union of Scientists for Peace')
+    end
+  end
 end

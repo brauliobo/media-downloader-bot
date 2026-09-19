@@ -26,6 +26,8 @@ module Audiobook
     # The entries are the bulk of the section, so a line set larger than them heads a group.
     LABEL_SIZE   = 1.1
     MIN_ENTRIES  = 3
+    LOOKAHEAD    = 3
+    SKIP_PAGES   = 1
     TITLE_LINES  = 4
 
     attr_reader :pages
@@ -44,8 +46,14 @@ module Audiobook
     # A note is looked for under the chapter that cites it, then under the group the section
     # lists at that position, and last under the only group there is.
     def entry(chapter, id, ordinal = nil)
-      (chapter && @groups.dig(chapter, id)) || ordered(ordinal, id) || @groups.dig(nil, id) ||
-        (@groups.values.first[id] if @groups.one?)
+      (chapter && @groups.dig(chapter, id)) || ordered(ordinal, id) || @groups.dig(nil, id) || only(id)
+    end
+
+    # A book that numbers its notes straight through the whole text has no groups to speak of:
+    # where a number names one note and no other, that note is the one the call points at.
+    def only(id)
+      found = @groups.values.filter_map { |entries| entries[id].presence }
+      found.first if found.one?
     end
 
     def ordered(ordinal, id)
@@ -67,11 +75,14 @@ module Audiobook
       @groups = {} if @pages.empty?
     end
 
-    # The section announces itself; a book that repeats the word over its pages does not.
+    # The section announces itself; a book that repeats the word over its pages does not. Its
+    # title often stands alone on a page, and a book set in large type fits two notes to a page,
+    # so the entries are counted over the pages that follow rather than over the next one.
     def section_start(pages)
-      pages.keys.sort.reverse.find do |page|
+      keys = pages.keys.sort
+      keys.reverse.find do |page|
         pages[page].first(TITLE_LINES).any? { |line| notes_title?(line.text) } &&
-          numbered(pages[page]) + numbered(pages[page + 1] || []) >= MIN_ENTRIES
+          keys.select { |other| (page...page + LOOKAHEAD).cover?(other) }.sum { |other| numbered(pages[other]) } >= MIN_ENTRIES
       end
     end
 
@@ -80,9 +91,16 @@ module Audiobook
       title.match?(NOTES_TITLE) && title.split.size <= TITLE_WORDS
     end
 
+    # A long note fills a page without opening a new entry, so the section carries on over a
+    # page that numbers nothing; two of them in a row are the end of it.
     def section_pages(pages, start)
-      pages.keys.sort.select { |page| page >= start }
-        .take_while { |page| page == start || numbered(pages[page]).positive? }.to_set
+      skipped = 0
+      pages.keys.sort.select { |page| page >= start }.take_while do |page|
+        next true if page == start
+
+        numbered(pages[page]).positive? ? skipped = 0 : skipped += 1
+        skipped <= SKIP_PAGES
+      end.to_set
     end
 
     def numbered(page_lines) = page_lines.count { |line| line.text.to_s.strip.match?(ENTRY_START) }
