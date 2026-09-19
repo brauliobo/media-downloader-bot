@@ -12,8 +12,7 @@ module Audiobook
       ISOLATED_MAX_WORDS = 12
       TERMINAL_PUNCTUATION = /[.!?…]["”’)\]»]*\z/u
       CLAUSE_PUNCTUATION   = /[.!?…,;:]["”’)\]»]*\z/u
-      # An attribution, a rights line and a leftover drop cap are never headings, however short.
-      NEVER_HEADING        = /\A(?:[—–]|©|\(c\)\s|\p{L}\z)/u
+      NEVER_HEADING        = TextHelpers::NEVER_HEADING
 
       def self.create_items_from_lines(lines, start_page, max_sentence_chars: MAX_SENTENCE_CHARS, isolated: false)
         new(lines, start_page, max_sentence_chars: max_sentence_chars, isolated: isolated).create
@@ -193,26 +192,11 @@ module Audiobook
 
       def contents?(group) = group.any? { |line| TextHelpers.toc_entry?(line.text) }
 
-      def self.heading_like?(text)
-        return false unless text
-        return false if text.strip.match?(/\A[^\p{L}]*\z/u) || text.strip.match?(NEVER_HEADING)
-
-        words = text.split(/\s+/)
-        return false if words.empty? || words.size > 10
-
-        return true if words.size <= 3 && text !~ /[.!?…,;:]\z/
-
-        upper_ratio = words.count { |w| w == w.upcase && w.length > 1 }.fdiv(words.size)
-        return true if upper_ratio > 0.6
-
-        words.all? { |w| w.match?(/\A[A-Z]/) } && text !~ /[.!?]$/
-      end
-
       # A list entry is not a heading, and a short opening line says nothing about the block it starts.
       def heading_like?(group, text)
         return false if TextHelpers.enumerated?(text)
 
-        self.class.heading_like?(text) || (group.one? && group.first.heading_like?)
+        TextHelpers.heading_like?(text) || (group.one? && group.first.heading_like?)
       end
     end
   end

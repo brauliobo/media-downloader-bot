@@ -62,18 +62,7 @@ module Audiobook
       false
     end
 
-    def heading_like?
-      return false if @text.strip.match?(/\A[^\p{L}]*\z/u)
-
-      words = @text.split(/\s+/)
-      return false if words.empty? || words.size > 10
-      return true if words.size <= 3 && starts_with_capital? && @text !~ /[.!?…,;:]\z/
-
-      upper_ratio = words.count { |w| w == w.upcase && w.length > 1 }.fdiv(words.size)
-      return true if upper_ratio > 0.6
-
-      words.all? { |w| w.match?(/\A[A-Z]/) } && @text !~ /[.!?]$/
-    end
+    def heading_like? = TextHelpers.heading_like?(@text)
 
     def section?
       section_level.to_i.positive?

@@ -135,13 +135,22 @@ module TextHelpers
     end
   end
 
-  def self.heading_line?(text)
+  # A short line set in title case or in capitals reads as a heading. An attribution, a rights
+  # line and a leftover drop cap never do, however short they are.
+  NEVER_HEADING      = /\A(?:[—–]|©|\(c\)\s|\p{L}\z)/u
+  HEADING_MAX_WORDS  = 10
+  HEADING_CAPS_RATIO = 0.6
+
+  def self.heading_like?(text)
+    text = text.to_s.strip
+    return false if text.match?(/\A[^\p{L}]*\z/u) || text.match?(NEVER_HEADING)
+
     words = text.split(/\s+/)
-    return false if words.empty? || words.size > 10
-    upper_ratio = words.count { |w| w == w.upcase }.fdiv(words.size)
-    return true if upper_ratio > 0.8
-    return true if words.all? { |w| w.match?(/\A[A-Z][a-z]+\z/) }
-    false
+    return false if words.empty? || words.size > HEADING_MAX_WORDS
+    return true if words.size <= 3 && text.match?(/\A\p{Lu}/u) && !text.match?(/[.!?…,;:]\z/)
+    return true if words.count { |word| word == word.upcase && word.length > 1 }.fdiv(words.size) > HEADING_CAPS_RATIO
+
+    words.all? { |word| word.match?(/\A[A-Z]/) } && !text.match?(/[.!?]\z/)
   end
 
   def self.sentences_from_entries(entries)
