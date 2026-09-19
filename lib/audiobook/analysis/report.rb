@@ -1,6 +1,7 @@
 require 'benchmark'
 require 'fileutils'
 require_relative 'corpus'
+require_relative 'coverage'
 require_relative 'detectors'
 
 module Audiobook
@@ -26,6 +27,7 @@ module Audiobook
         @seconds = seconds
         @spoken  = Detectors.spoken(book)
         @hits    = Detectors.hits(book, @spoken)
+        @hits[:unspoken] = Coverage.unspoken(book, @spoken)
       end
 
       def name = Corpus.name_for(path)
@@ -34,6 +36,7 @@ module Audiobook
       def counts
         Detectors.names.to_h { |detector| [detector, @hits[detector].size] }.merge(
           sentences:  @spoken.size,
+          unspoken:   @hits[:unspoken].size,
           paras:      count_items { |item| Detectors.narrated?(item) },
           refs:       references.size,
           empty_refs: references.count { |reference| reference.sentences.empty? },

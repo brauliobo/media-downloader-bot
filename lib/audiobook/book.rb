@@ -40,7 +40,7 @@ module Audiobook
     MAX_STRUCTURED_BYTES = ENV.fetch('MAX_STRUCTURED_DOCUMENT_BYTES', 20 * 1024 * 1024).to_i
     CHINESE_MAX_SENTENCE_CHARS = 30
 
-    attr_reader :metadata, :pages, :translated, :translated_base, :author_gender, :font_roles
+    attr_reader :data, :metadata, :pages, :translated, :translated_base, :author_gender, :font_roles
 
     def title    = field(:title)
     def author   = field(:author)

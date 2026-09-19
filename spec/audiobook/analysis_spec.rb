@@ -20,6 +20,26 @@ RSpec.describe Audiobook::Analysis do
     end
   end
 
+  describe Audiobook::Analysis::Coverage do
+    def unspoken_texts(name)
+      book = Audiobook::Analysis::Corpus.open(fixture(name))
+      described_class.unspoken(book, Audiobook::Analysis::Detectors.spoken(book)).map(&:last)
+    end
+
+    it 'says nothing about a book whose prose is all narrated' do
+      expect(unspoken_texts('adios-one-line-paragraphs.pdf')).to be_empty
+    end
+
+    it 'counts the contents page it was right to drop, so a drop rule can be read both ways' do
+      expect(unspoken_texts('hooks-sumario-no-folios.pdf')).not_to be_empty
+    end
+
+    it 'ignores the ends of a line, which assembly rewrites either way' do
+      expect(described_class.probe('the hyphenated word runs past the line brea-')).to eq('hyphenated word runs past the line')
+      expect(described_class.probe('too few words here')).to be_nil
+    end
+  end
+
   describe Audiobook::Analysis::Detectors do
     let(:book) { Audiobook::Analysis::Corpus.open(fixture('adios-one-line-paragraphs.pdf')) }
 

@@ -1,5 +1,6 @@
 require_relative '../audiobook'
 require_relative 'analysis/corpus'
+require_relative 'analysis/coverage'
 require_relative 'analysis/detectors'
 require_relative 'analysis/breaks'
 require_relative 'analysis/report'
