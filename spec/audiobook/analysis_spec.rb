@@ -38,6 +38,23 @@ RSpec.describe Audiobook::Analysis do
       expect(described_class.probe('the hyphenated word runs past the line brea-')).to eq('hyphenated word runs past the line')
       expect(described_class.probe('too few words here')).to be_nil
     end
+
+    # A heading, an index entry and a table cell are all too short to probe, so they were simply
+    # absent from the count rather than counted as loss. They are counted apart from prose
+    # because a page of them means something different.
+    it 'counts a silenced line too short to probe apart from the prose' do
+      book    = Audiobook::Analysis::Corpus.open(fixture('hooks-sumario-no-folios.pdf'))
+      spoken  = Audiobook::Analysis::Detectors.spoken(book)
+
+      expect(described_class.short(book, spoken)).not_to be_empty
+      expect(described_class.short(book, spoken) & described_class.unspoken(book, spoken)).to be_empty
+    end
+
+    it 'counts a page whose content never reaches the text layer' do
+      book = Audiobook::Analysis::Corpus.open(fixture('mms-animais-image-page.pdf'))
+
+      expect(described_class.imaged(book)).to eq([2])
+    end
   end
 
   describe Audiobook::Analysis::Detectors do

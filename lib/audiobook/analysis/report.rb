@@ -28,6 +28,7 @@ module Audiobook
         @spoken  = Detectors.spoken(book)
         @hits    = Detectors.hits(book, @spoken)
         @hits[:unspoken] = Coverage.unspoken(book, @spoken)
+        @hits[:short]    = Coverage.short(book, @spoken)
       end
 
       def name = Corpus.name_for(path)
@@ -37,6 +38,8 @@ module Audiobook
         Detectors.names.to_h { |detector| [detector, @hits[detector].size] }.merge(
           sentences:  @spoken.size,
           unspoken:   @hits[:unspoken].size,
+          short:      @hits[:short].size,
+          imaged:     Coverage.imaged(book).size,
           paras:      count_items { |item| Detectors.narrated?(item) },
           refs:       references.size,
           empty_refs: references.count { |reference| reference.sentences.empty? },
