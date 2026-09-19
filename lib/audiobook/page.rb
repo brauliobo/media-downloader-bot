@@ -35,7 +35,7 @@ module Audiobook
             stl: kwargs[:stl],
             tts_options: kwargs[:tts_options] || {}
           )
-          heading_pause = item.pause_file(dir) if item.respond_to?(:pause_file)
+          heading_pause = item.pause_file(dir)
           [heading_pause, wav].compact
         end
       end.compact
@@ -57,25 +57,23 @@ module Audiobook
       para_counter = base_para
 
       items.each_with_index do |item, iidx|
-        if item.respond_to?(:page_idx=)
-          item.page_idx = page_idx
-          item.page_total = page_total
-        end
+        # Only a paragraph is narrated in pieces, so only a paragraph is told where it sits.
+        next unless item.is_a?(Audiobook::Paragraph)
 
-        if item.is_a?(Audiobook::Paragraph)
-          para_counter += 1
-          item.para_idx = para_counter
-          item.para_total = total_paras
-          item.page_num = number
-          item.item_idx = iidx + 1
-          item.item_total = items.size
-          item.lang = lang
-          item.stl = stl
-          item.dir = dir
-          item.idx = "#{idx}_#{iidx}"
-          item.is_ocr = is_ocr_book || item.is_a?(Audiobook::Image)
-          item.tts_options = tts_options
-        end
+        item.page_idx = page_idx
+        item.page_total = page_total
+        para_counter += 1
+        item.para_idx = para_counter
+        item.para_total = total_paras
+        item.page_num = number
+        item.item_idx = iidx + 1
+        item.item_total = items.size
+        item.lang = lang
+        item.stl = stl
+        item.dir = dir
+        item.idx = "#{idx}_#{iidx}"
+        item.is_ocr = is_ocr_book || item.is_a?(Audiobook::Image)
+        item.tts_options = tts_options
       end
 
       { page_idx: page_idx, page_total: page_total, is_ocr_book: is_ocr_book }
@@ -89,7 +87,7 @@ module Audiobook
       items.each_with_index.flat_map do |item, iidx|
         if item.is_a?(Audiobook::Paragraph)
           paragraph_jobs(item, lang)
-        elsif item.respond_to?(:spoken_text)
+        elsif item.is_a?(Sentence)
           sentence_job(item, File.join(dir, "#{idx}_#{iidx}.wav"), lang, item_status(item, iidx, page_idx, page_total))
         end
       end.compact

@@ -261,7 +261,7 @@ module Audiobook
 
     def self.apply_item_style(item, data)
       FontRoles.copy_style(item, data) if item && data
-      item.role = data.role.to_s.to_sym if item.respond_to?(:role=) && data.respond_to?(:role) && data.role
+      item.role = data.role.to_s.to_sym if item && data.role
       item
     end
 
@@ -321,7 +321,7 @@ module Audiobook
 
     def outline_entry(item, page)
       entry = { 'text' => item.text, 'page' => page.number }
-      entry['role'] = item.role.to_s if item.respond_to?(:role) && item.role
+      entry['role'] = item.role.to_s if item.role
       entry['level'] = item.level if item.is_a?(Section)
       entry['font_size'] = item.font_size if item.font_size
       entry['alignment'] = item.alignment.to_s if item.alignment
@@ -575,13 +575,13 @@ module Audiobook
         boundary_sentences = page_candidates.fetch(page).to_set
         page.items.reject! do |item|
           remove_item = prune_repeated_sentences!(item, boundary_sentences, repeated_normalized, repeated_exact)
-          remove_item || (item.respond_to?(:empty?) && item.empty?)
+          remove_item || (item.is_a?(Paragraph) && item.empty?)
         end
       end
     end
 
     def direct_sentences(item)
-      item.is_a?(Sentence) ? [item] : (item.respond_to?(:sentences) ? item.sentences : [])
+      item.is_a?(Sentence) ? [item] : Array(item.is_a?(Paragraph) ? item.sentences : nil)
     end
 
     def prune_repeated_sentences!(item, boundary_sentences, repeated_normalized, repeated_exact)
@@ -589,7 +589,7 @@ module Audiobook
         prune_repeated_references!(item, repeated_exact)
         return repeated_sentence?(item, boundary_sentences, repeated_normalized, repeated_exact)
       end
-      return false unless item.respond_to?(:sentences)
+      return false unless item.is_a?(Paragraph)
 
       item.sentences.reject! do |sentence|
         prune_repeated_references!(sentence, repeated_exact)

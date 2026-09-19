@@ -54,7 +54,7 @@ module Audiobook
     end
 
     def html_styles
-      body_size = @book.respond_to?(:font_roles) ? @book.font_roles&.body_size : nil
+      body_size = @book.font_roles&.body_size
       body_rule = body_size ? "font-size: #{FontRoles.format_pt(body_size)}; " : ''
       <<~CSS
         <style>
@@ -142,7 +142,7 @@ module Audiobook
     def attached_references(item)
       return [] if item.is_a?(Reference)
       return item.references || [] if item.is_a?(Sentence)
-      return [] unless item.respond_to?(:sentences)
+      return [] unless item.is_a?(Paragraph)
 
       item.sentences.flat_map { |sentence| sentence.references || [] }
     end
