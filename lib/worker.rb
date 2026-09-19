@@ -156,7 +156,7 @@ class Worker
       i.p = p = i.processor
       i.stl = p.stl = stline
 
-      p.download_one i, pos: output_pos if p.respond_to? :download_one
+      p.download_one i, pos: output_pos
       next if stline.error?
 
       stline.update 'transcoding'

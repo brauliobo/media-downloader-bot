@@ -54,6 +54,9 @@ module Processors
       result
     end
 
+    # An input that is already local has nothing to fetch; a URL processor overrides this.
+    def download_one(input, pos: nil) = nil
+
     def cleanup
       return if ENV['TMPDIR']
       FileUtils.remove_entry tmp if ::File.exist?(tmp)
