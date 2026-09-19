@@ -1,3 +1,4 @@
+require 'uri'
 require 'faraday'
 require 'faraday/multipart'
 require 'open3'
@@ -7,6 +8,16 @@ require_relative '../zipper'
 
 class VoiceSeparator
   module HTTPBackend
+    # 16-bit stereo 44.1 kHz WAV is ~10.6 MB/min per stem. 8 GiB covers ~12 h.
+    MAX_STEM_BYTES = ENV.fetch('VOICE_SEPARATOR_MAX_STEM_BYTES', 8 * 1024 * 1024 * 1024).to_i
+    STEM_NAMES = %w[vocals.wav no_vocals.wav].freeze
+
+    # Every backend is the same service behind a different name and port.
+    def configure(env:, port:)
+      mattr_accessor :api
+      self.api = URI.parse(ENV.fetch(env, "http://127.0.0.1:#{port}"))
+    end
+
     def separate(path, dir:)
       FileUtils.mkdir_p(dir)
       archive = download(path)
@@ -92,13 +103,8 @@ class VoiceSeparator
       raise 'invalid voice separation response: unzip failed' unless ok
     end
 
-    def stem_names
-      const_get(:STEM_NAMES)
-    end
-
-    def max_stem_bytes
-      const_get(:MAX_STEM_BYTES)
-    end
+    def stem_names = STEM_NAMES
+    def max_stem_bytes = MAX_STEM_BYTES
 
     def backend_name
       name.split('::').last.downcase
