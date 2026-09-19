@@ -26,9 +26,10 @@ module Audiobook
       def self.words_of(text) = text.to_s.downcase.scan(/\p{L}{2,}/).join(' ')
 
       # Assembly breaks a hyphenated word back together and drops a marker, so neither end of a
-      # source line is evidence either way; what stands between them is.
+      # source line is evidence either way; what stands between them is. A URL is asked for by
+      # the host the narration says, not by the address the page printed.
       def self.probe(text)
-        words = words_of(text).split
+        words = words_of(TextHelpers.spoken_urls(text)).split
         words[1..-2].join(' ') if words.size >= MIN_WORDS + 2
       end
     end
