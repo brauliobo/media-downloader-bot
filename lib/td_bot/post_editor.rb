@@ -161,53 +161,61 @@ module TDBot
       thumbnail  = generated_thumbnail(params)
 
       case media_type
-      when 'audio'
-        {
-          '@type'   => 'inputMessageAudio',
-          'audio'   => {
-            '@type'                 => 'inputAudio',
-            'audio'                 => input_file,
-            'album_cover_thumbnail' => thumbnail,
-            'duration'              => params[:duration].to_i,
-            'title'                 => params[:title].to_s,
-            'performer'             => params[:performer].to_s
-          },
-          'caption' => caption
-        }
-      when 'video'
-        {
-          '@type'                    => 'inputMessageVideo',
-          'video'                    => {
-            '@type'                  => 'inputVideo',
-            'video'                  => input_file,
-            'thumbnail'              => thumbnail,
-            'cover'                  => nil,
-            'start_timestamp'        => 0,
-            'added_sticker_file_ids' => [],
-            'duration'               => params[:duration].to_i,
-            'width'                  => params[:width].to_i,
-            'height'                 => params[:height].to_i,
-            'supports_streaming'     => params.fetch(:supports_streaming, false)
-          },
-          'caption'                  => caption,
-          'show_caption_above_media' => false,
-          'self_destruct_type'       => nil,
-          'has_spoiler'              => false
-        }
-      when 'document'
-        {
-          '@type'    => 'inputMessageDocument',
-          'document' => {
-            '@type'                          => 'inputDocument',
-            'document'                       => input_file,
-            'thumbnail'                      => thumbnail,
-            'disable_content_type_detection' => false
-          },
-          'caption'  => caption
-        }
-      else
-        raise ArgumentError, "unsupported generated message type: #{media_type.inspect}"
+      when 'audio'    then audio_message_content(input_file, thumbnail, caption, params)
+      when 'video'    then video_message_content(input_file, thumbnail, caption, params)
+      when 'document' then document_message_content(input_file, thumbnail, caption)
+      else raise ArgumentError, "unsupported generated message type: #{media_type.inspect}"
       end
+    end
+
+    def audio_message_content(input_file, thumbnail, caption, params)
+      {
+        '@type'   => 'inputMessageAudio',
+        'audio'   => {
+          '@type'                 => 'inputAudio',
+          'audio'                 => input_file,
+          'album_cover_thumbnail' => thumbnail,
+          'duration'              => params[:duration].to_i,
+          'title'                 => params[:title].to_s,
+          'performer'             => params[:performer].to_s
+        },
+        'caption' => caption
+      }
+    end
+
+    def video_message_content(input_file, thumbnail, caption, params)
+      {
+        '@type'                    => 'inputMessageVideo',
+        'video'                    => {
+          '@type'                  => 'inputVideo',
+          'video'                  => input_file,
+          'thumbnail'              => thumbnail,
+          'cover'                  => nil,
+          'start_timestamp'        => 0,
+          'added_sticker_file_ids' => [],
+          'duration'               => params[:duration].to_i,
+          'width'                  => params[:width].to_i,
+          'height'                 => params[:height].to_i,
+          'supports_streaming'     => params.fetch(:supports_streaming, false)
+        },
+        'caption'                  => caption,
+        'show_caption_above_media' => false,
+        'self_destruct_type'       => nil,
+        'has_spoiler'              => false
+      }
+    end
+
+    def document_message_content(input_file, thumbnail, caption)
+      {
+        '@type'    => 'inputMessageDocument',
+        'document' => {
+          '@type'                          => 'inputDocument',
+          'document'                       => input_file,
+          'thumbnail'                      => thumbnail,
+          'disable_content_type_detection' => false
+        },
+        'caption'  => caption
+      }
     end
 
     def generated_input_file(media_type, params)
