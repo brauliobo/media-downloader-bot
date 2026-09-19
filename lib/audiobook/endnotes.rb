@@ -36,7 +36,7 @@ module Audiobook
     def initialize(lines_data)
       @pages = Set.new
       @groups = {}
-      parse(lines_data.map { |line| line.is_a?(SymMash) ? line : SymMash.new(line) })
+      parse(lines_data.map { |line| SymMash.wrap(line) })
     end
 
     def empty? = @groups.empty?

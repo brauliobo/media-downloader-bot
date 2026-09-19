@@ -25,7 +25,7 @@ module Audiobook
 
     private
 
-    def wrap(lines_data) = lines_data.map { |line| line.is_a?(SymMash) ? line : SymMash.new(line) }
+    def wrap(lines_data) = lines_data.map { |line| SymMash.wrap(line) }
 
     def reject_lines(lines_data, lines, &drop)
       kept = lines_data.select.with_index { |_, idx| !drop.call(lines[idx]) }

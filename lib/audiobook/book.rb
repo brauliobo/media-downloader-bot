@@ -122,7 +122,7 @@ module Audiobook
         parsed = Parsers::Pdf.parse(pdf_path, stl: stl, opts: opts)
         # Preserve the compiled PDF path in metadata for downstream upload
         begin
-          parsed = SymMash.new(parsed) unless parsed.is_a?(SymMash)
+          parsed = SymMash.wrap(parsed)
           md = parsed.metadata || SymMash.new
           md.kindle_pdf = pdf_path
           parsed.metadata = md
@@ -205,7 +205,7 @@ module Audiobook
     end
 
     def self.parse_item(item)
-      item = SymMash.new(item) unless item.is_a?(SymMash)
+      item = SymMash.wrap(item)
       # Item is a hash with single key indicating type
       if item.heading
         heading = Heading.new(item.heading.text, language: item.heading.language) if Sentence.speakable_text?(item.heading.text)
@@ -226,13 +226,13 @@ module Audiobook
         img
       elsif item.paragraph
         sentences = (item.paragraph.sentences || []).map do |s|
-          s = SymMash.new(s) unless s.is_a?(SymMash)
+          s = SymMash.wrap(s)
           sent = Sentence.build(s)
           next unless sent
           if s.references
             sent.references = s.references.map do |r|
               ref_info = r.reference || r
-              ref_info = SymMash.new(ref_info) unless ref_info.is_a?(SymMash)
+              ref_info = SymMash.wrap(ref_info)
               ref_sents = Sentence.build_all(ref_info.sentences)
               Reference.new(ref_info.id, ref_sents)
             end
@@ -461,7 +461,7 @@ module Audiobook
     end
 
     def normalize_symmash(obj)
-      obj.is_a?(SymMash) ? obj : SymMash.new(obj)
+      SymMash.wrap(obj)
     end
 
     # Build pages from Line objects (new format with font metadata)
@@ -506,7 +506,7 @@ module Audiobook
       total = @metadata.page_count
       added = Set.new
       images_data.each do |img_data|
-        img_data = SymMash.new(img_data) unless img_data.is_a?(SymMash)
+        img_data = SymMash.wrap(img_data)
         next unless img_data.path && img_data.page
         next unless added.add?([img_data.page, img_data.path])
 
@@ -672,7 +672,7 @@ module Audiobook
     end
 
     def process_header(page, prev_headers)
-      page = SymMash.new(page) unless page.is_a?(SymMash)
+      page = SymMash.wrap(page)
       return unless page.header&.strip&.length&.positive?
       header_text = page.header.strip
       result = header_text unless prev_headers.include?(header_text)
@@ -681,7 +681,7 @@ module Audiobook
     end
 
     def process_footer(page, prev_footers)
-      page = SymMash.new(page) unless page.is_a?(SymMash)
+      page = SymMash.wrap(page)
       return unless page.footer&.strip&.length&.positive?
       footer_text = page.footer.strip
       result = footer_text unless prev_footers.include?(footer_text)

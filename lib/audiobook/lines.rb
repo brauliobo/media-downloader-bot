@@ -9,7 +9,7 @@ module Audiobook
                     alignment bold italic color font_name block].freeze
 
     def self.build(lines_data)
-      rows = lines_data.map { |line| line.is_a?(SymMash) ? line : SymMash.new(line) }
+      rows = lines_data.map { |line| SymMash.wrap(line) }
       # A ragged block reads as centred line by line, so alignment is judged against the edges
       # the page repeats rather than against each line's own midpoint.
       shared = PageFilter.shared_left_edges(rows)
