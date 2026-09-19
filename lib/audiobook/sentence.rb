@@ -145,10 +145,5 @@ module Audiobook
       FontRoles.copy_style(sentence, item)
     end
     private_class_method :copy_style
-
-    class << self
-      alias_method :speakable_text?, :speakable_text? unless method_defined?(:speakable_text?)
-      alias_method :build_all, :build_all unless method_defined?(:build_all)
-    end
   end
 end
