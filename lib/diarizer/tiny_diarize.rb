@@ -23,7 +23,7 @@ class Diarizer
           response_format: 'verbose_json',
           tinydiarize:     'true'
         )
-        raise "diarization failed: #{response.code}" unless response.code == '200'
+        Utils::HTTP.assert_ok!(response, 'diarization')
 
         subtitle = Subtitler::Subtitle.from_whisper_verbose_json(response.body)
         unless subtitle.entries.all? { |entry| entry.metadata.key?('speaker_turn_next') }

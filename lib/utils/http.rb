@@ -38,6 +38,13 @@ module Utils
       def request(verb, ...) = Retry.http { (Thread.current[:utils_http] || client).public_send(verb, ...) }
       private :request
 
+      # Every service backend refuses the same way; only the label differs.
+      def assert_ok!(response, label)
+        raise "#{label} failed: #{response.code}" unless response.code.to_i == 200
+
+        response
+      end
+
       def get_public(value, max_bytes: PUBLIC_MAX_BYTES, redirects: PUBLIC_REDIRECTS)
         uri       = URI.parse(value.to_s)
         addresses = Safety.public_addresses(uri.host)

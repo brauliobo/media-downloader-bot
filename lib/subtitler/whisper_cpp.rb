@@ -38,7 +38,7 @@ class Subtitler
 
         url = "#{api.scheme}://#{api.host}:#{api.port}/inference"
         res = Utils::HTTP.post(url, params)
-        raise "TTS failed: #{res.code}" unless res.code == '200'
+        Utils::HTTP.assert_ok!(res, 'TTS')
 
         res.body
       end

@@ -4,6 +4,8 @@ require 'json'
 require 'tempfile'
 require 'fileutils'
 
+require_relative '../utils/http'
+
 require_relative '../zipper'
 
 class TTS
@@ -59,7 +61,7 @@ class TTS
         form,
         speaker_wav || ENV['SPEAKER_WAV']
       )
-      raise "TTS batch failed: #{response.code}" unless response.code == '200'
+      Utils::HTTP.assert_ok!(response, 'TTS batch')
 
       audios = JSON.parse(response.body).fetch('items')
       raise "TTS batch returned #{audios.size} items for #{out_paths.size} requests" unless audios.size == out_paths.size
@@ -122,7 +124,7 @@ class TTS
       kwargs.each { |k, v| form[k.to_s] = v.to_s }
 
       res = post_form(agent, url, form, file_path)
-      raise "TTS failed: #{res.code}" unless res.code == '200'
+      Utils::HTTP.assert_ok!(res, 'TTS')
 
       File.binwrite(wav, res.body)
       wav

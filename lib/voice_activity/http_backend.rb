@@ -11,7 +11,7 @@ class VoiceActivity
     def detect(api, path)
       Zipper.with_audio_wav(path, sample_rate: 16_000, channels: 1) do |file|
         response = Utils::HTTP.post("#{api.to_s.delete_suffix('/')}/v1/vad", file: file)
-        raise "voice activity detection failed: #{response.code}" unless response.code == '200'
+        Utils::HTTP.assert_ok!(response, 'voice activity detection')
 
         parse(response.body)
       end

@@ -13,7 +13,7 @@ class Diarizer
         params = {file: file}
         params[:speakers] = speakers.to_i.to_s if speakers.to_i.positive?
         response = Utils::HTTP.post("#{api.to_s.delete_suffix('/')}/v1/diarize", params)
-        raise "diarization failed: #{response.code}" unless response.code == '200'
+        Utils::HTTP.assert_ok!(response, 'diarization')
 
         Result.from_json(response.body)
       end
