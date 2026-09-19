@@ -189,13 +189,11 @@ module Audiobook
     def self.from_h(data)
       data = SymMash.new(data || {})
       obj = allocate
-      obj.instance_variable_set(:@body_size, data[:body_size] || data['body_size'])
+      obj.instance_variable_set(:@body_size, data[:body_size])
       map = {}
-      Array(data[:map] || data['map']).each do |entry|
+      Array(data[:map]).each do |entry|
         entry = SymMash.new(entry)
-        key = entry[:key] || entry['key']
-        role = entry[:role] || entry['role']
-        level = entry[:level] || entry['level']
+        key, role, level = entry[:key], entry[:role], entry[:level]
         map[normalize_key(key)] = { role: role&.to_sym, level: level }.compact
       end
       obj.instance_variable_set(:@map, map)

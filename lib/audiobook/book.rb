@@ -51,10 +51,6 @@ module Audiobook
       pages.flat_map(&:items)
     end
 
-    def paragraphs
-      items
-    end
-
     def self.from_input(input_path, opts: nil, stl: nil, translate: true)
       return parse_url_kindle(input_path, opts: opts, stl: stl, translate: translate) if url_kindle?(input_path)
 
@@ -648,16 +644,6 @@ module Audiobook
       alt = find_alternative_text
       return [] unless alt&.strip&.length&.positive?
       [SymMash.new(text: alt, page_numbers: [1])]
-    end
-
-    def extract_raw_paragraphs
-      paras = @data.content&.paragraphs || []
-      return paras.map { |p| p['text'] || p[:text] || p.text } unless paras.empty?
-
-      @stl&.update 'No paragraphs found, checking alternative text'
-      alt = find_alternative_text
-      return [] unless alt&.strip&.length&.positive?
-      [alt]
     end
 
     def find_alternative_text
