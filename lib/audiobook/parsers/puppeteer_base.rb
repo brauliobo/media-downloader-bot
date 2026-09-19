@@ -59,7 +59,7 @@ module Audiobook
         return if images.empty?
         sorted = images.sort
         # Prefer img2pdf when available; fallback to ImageMagick convert
-        if system('which', 'img2pdf', out: File::NULL, err: File::NULL)
+        if Sh.which?('img2pdf')
           system('img2pdf', *sorted, '-o', out_pdf)
         else
           system('convert', *sorted, out_pdf)

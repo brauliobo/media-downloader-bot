@@ -261,15 +261,15 @@ module Audiobook
     end
 
     def chromium_bin
-      CHROMIUM_BINS.find { system('which', _1, out: File::NULL, err: File::NULL) }
+      CHROMIUM_BINS.find { Sh.which?(_1) }
     end
 
     def wkhtmltopdf_available?
-      system('which', 'wkhtmltopdf', out: File::NULL, err: File::NULL)
+      Sh.which?('wkhtmltopdf')
     end
 
     def pandoc_available?
-      system('which', 'pandoc', out: File::NULL, err: File::NULL)
+      Sh.which?('pandoc')
     end
 
     def chromium_convert(chrome, html_path, pdf_path)

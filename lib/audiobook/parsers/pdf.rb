@@ -401,7 +401,7 @@ module Audiobook
       end
 
       def self.pdftohtml_bin
-        @pdftohtml_bin ||= %w[pdftohtml].find { system('which', _1, out: File::NULL, err: File::NULL) }
+        @pdftohtml_bin ||= %w[pdftohtml].find { Sh.which?(_1) }
       end
 
       def self.sanitize_xml(text) = text.to_s.gsub(XML_CHAR, '')

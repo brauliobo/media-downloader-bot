@@ -46,6 +46,9 @@ class Sh
     raise Error.new(label, stderr, status: status) unless ok
   end
 
+  # Whether a binary is on PATH. Asked of five optional tools that each have a fallback.
+  def self.which?(bin) = system('which', bin.to_s, out: File::NULL, err: File::NULL)
+
   def self.printable(cmd)
     cmd.is_a?(Array) ? cmd.map { |part| escape(part.to_s) }.join(' ') : cmd
   end
