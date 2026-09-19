@@ -11,7 +11,7 @@ class Diarizer
   end
 
   def self.assign_speakers!(subtitle, speaker_segments, sentence_level: false)
-    raise TypeError, 'subtitle must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitler::Subtitle)
+    Subtitler::Subtitle.assert!(subtitle, 'subtitle')
 
     segments = Array(speaker_segments)
     raise 'diarization returned no speaker segments' if segments.empty?

@@ -9,9 +9,7 @@ require_relative 'audio'
 module Dubbing
   class SpeechSynthesizer
     def initialize(sentences:, references:, opts:, target_lang:, workdir:, video_duration:, stl: nil)
-      unless sentences.is_a?(Array) && sentences.all? { |sentence| sentence.is_a?(Subtitler::Subtitle::Entry) }
-        raise TypeError, 'sentences must be an Array of Subtitler::Subtitle::Entry objects'
-      end
+      Subtitler::Subtitle::Entry.assert_all!(sentences, 'sentences')
 
       @sentences       = sentences
       @references      = references

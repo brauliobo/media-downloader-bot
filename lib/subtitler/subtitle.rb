@@ -19,6 +19,14 @@ class Subtitler
 
     attr_reader :language, :text, :entries, :metadata
 
+    # The same contract is asserted wherever a subtitle crosses a module boundary; the message
+    # names the argument so the caller can tell which one it was.
+    def self.assert!(value, name)
+      raise TypeError, "#{name} must be a Subtitler::Subtitle" unless value.is_a?(self)
+
+      value
+    end
+
     def self.from_whisper_verbose_json(input)
       data = parse_json_object(input)
       metadata = metadata_from(data, %w[language text segments]).merge('timing_source' => 'whisper')
@@ -811,6 +819,14 @@ class Subtitler
       UNSPECIFIED = Object.new.freeze
 
       attr_reader :start, :finish, :text, :words, :speaker_id, :cue_id, :source_text, :source_words, :metadata
+
+      def self.assert_all!(values, name)
+        unless values.is_a?(Array) && values.all? { |value| value.is_a?(self) }
+          raise TypeError, "#{name} must contain only Subtitler::Subtitle::Entry objects"
+        end
+
+        values
+      end
 
       def self.from_whisper(data)
         data  = Subtitle.send(:json_object, data, 'segment')

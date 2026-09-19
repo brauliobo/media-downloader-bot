@@ -21,9 +21,7 @@ module Dubbing
     module_function
 
     def extract_by_speaker(input_path, segments, sentences:, dir:, min_duration: MIN_DURATION, max_duration: MAX_DURATION, filter: :raw, pad_duration: nil, transcriber: nil)
-      unless sentences.is_a?(Array) && sentences.all? { |sentence| sentence.is_a?(Subtitler::Subtitle::Entry) }
-        raise TypeError, 'sentences must be an Array of Subtitler::Subtitle::Entry objects'
-      end
+      Subtitler::Subtitle::Entry.assert_all!(sentences, 'sentences')
 
       segments_by_speaker = Array(segments).group_by(&:speaker_id)
       Array(sentences).group_by(&:speaker_id).each_with_index.filter_map do |(speaker_id, speaker_sentences), index|
@@ -116,7 +114,7 @@ module Dubbing
       return selections.map(&:text).reject(&:empty?).join(' ') unless transcriber
 
       transcript = transcriber.call_vocals(path)
-      raise TypeError, 'transcript must be a Subtitler::Subtitle' unless transcript.is_a?(Subtitler::Subtitle)
+      Subtitler::Subtitle.assert!(transcript, 'transcript')
 
       transcript.entries.map { |entry| entry.text.strip }
         .reject(&:empty?).join(' ')

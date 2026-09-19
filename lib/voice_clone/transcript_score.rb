@@ -9,7 +9,7 @@ class VoiceClone
     end
 
     def call(expected:, transcript:)
-      raise TypeError, 'transcript must be a Subtitler::Subtitle' unless transcript.is_a?(Subtitler::Subtitle)
+      Subtitler::Subtitle.assert!(transcript, 'transcript')
 
       observed = transcript.entries.map { |entry| entry.text.strip }.reject(&:empty?).join(' ')
       expected_words = VoiceReference::TranscriptQuality.words(expected)

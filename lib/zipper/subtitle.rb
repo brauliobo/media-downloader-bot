@@ -124,9 +124,7 @@ class Zipper
 
     def provided_subtitle(zipper)
       if (provided = zipper.opts.subtitle)
-        unless provided.is_a?(Subtitler::Subtitle)
-          raise TypeError, 'opts.subtitle must be a Subtitler::Subtitle'
-        end
+        Subtitler::Subtitle.assert!(provided, 'opts.subtitle')
         subtitle = provided
       elsif (provided = zipper.opts.sub_vtt).present?
         subtitle = Subtitler::Subtitle.from_vtt(Subtitler::VTT.clean(provided.to_s))

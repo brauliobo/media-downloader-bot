@@ -200,7 +200,7 @@ class Subtitler
     end
 
     def document_for(subtitle, portrait: false, mode: :instagram, preset: 'default')
-      raise TypeError, 'subtitle must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitler::Subtitle)
+      Subtitler::Subtitle.assert!(subtitle, 'subtitle')
 
       preset = preset.to_s
       preset = 'default' unless PRESETS.key?(preset)

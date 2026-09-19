@@ -35,7 +35,7 @@ class VoiceReference
     attr_reader :language, :analyzer, :strict
 
     def transcript_candidates(audio, transcript)
-      raise TypeError, 'transcript must be a Subtitler::Subtitle' unless transcript.is_a?(Subtitler::Subtitle)
+      Subtitler::Subtitle.assert!(transcript, 'transcript')
       return [] unless transcript.language == language
       return [] if unique_trigram_ratio(transcription_text(transcript)) < MIN_RECORDING_UNIQUE_RATIO
 

@@ -28,7 +28,7 @@ class VoiceActivity
   end
 
   def self.restore_timing!(subtitle, ranges)
-    raise TypeError, 'subtitle must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitler::Subtitle)
+    Subtitler::Subtitle.assert!(subtitle, 'subtitle')
     return subtitle if ranges.nil? || ranges.empty?
 
     intervals = ranges.intervals

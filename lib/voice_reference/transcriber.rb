@@ -34,7 +34,7 @@ class VoiceReference
       end
 
       subtitle = yield
-      raise TypeError, 'transcription must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitler::Subtitle)
+      Subtitler::Subtitle.assert!(subtitle, 'transcription')
 
       File.write(cache, JSON.pretty_generate(cache_payload(subtitle))) if cache
       subtitle

@@ -154,9 +154,7 @@ class Subtitler
       private
 
       def validate_subtitle!(value, field)
-        return if value.is_a?(Subtitler::Subtitle)
-
-        raise TypeError, "#{field} must be a Subtitler::Subtitle"
+        Subtitler::Subtitle.assert!(value, field)
       end
 
       def align_cues(before_entries, after_entries, before_texts, after_texts)

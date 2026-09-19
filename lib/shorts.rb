@@ -99,6 +99,6 @@ module Shorts
   end
 
   def require_subtitle!(subtitle)
-    raise TypeError, 'subtitle must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitler::Subtitle)
+    Subtitler::Subtitle.assert!(subtitle, 'subtitle')
   end
 end

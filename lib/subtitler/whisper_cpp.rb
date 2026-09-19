@@ -52,7 +52,7 @@ class Subtitler
     private
 
     def merge_split_words!(subtitle)
-      raise TypeError, 'subtitle must be a Subtitler::Subtitle' unless subtitle.is_a?(Subtitle)
+      Subtitle.assert!(subtitle, 'subtitle')
 
       subtitle.merge_split_words!
     end
