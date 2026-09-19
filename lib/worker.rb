@@ -111,60 +111,22 @@ class Worker
   def run
     workdir do |work_dir|
       @dir = work_dir
-      procs  = []
-      inputs = []
       init_status
 
-      ctx = Context.new(dir: work_dir, msg: msg, st: @st, session: @session, service: service)
-      
-      lines = Utils::InputParser.message_lines(msg)
-      procs = process_lines(lines, ctx)
-      
-      procs.each do |p|
-        inputs.concat Array.wrap p.process
-      end
+      ctx    = Context.new(dir: work_dir, msg: msg, st: @st, session: @session, service: service)
+      inputs = collect_inputs(ctx)
 
       return if inputs.first.blank? and @st&.error?
       return @st&.error('No inputs generated') if inputs.first.blank?
 
-      inputs.uniq!{ |i| i.info.display_id }
-      @opts = inputs.first&.opts || SymMash.new
-      inputs.sort_by!{ |i| i.info.title } if opts[:sort]
-      inputs.reverse! if opts[:reverse]
+      order_inputs!(inputs)
 
       ordered  = opts[:sort] || opts[:number] || opts[:ordered] || opts[:reverse]
       up_queue = inputs.size.times.to_a
       uploader = UploadCoordinator.new(self)
 
       inputs.each.with_index.api_peach(threads: peach_threads) do |i, pos|
-        output_pos = inputs.size > 1 ? pos + 1 : nil
-        @st.add 'downloading', prefix: i.info.title do |stline|
-          i.p = p = i.processor
-          i.stl = p.stl = stline
-
-          p.download_one i, pos: output_pos if p.respond_to? :download_one
-          next if stline.error?
-
-          stline.update 'transcoding'
-          p.handle_input i, pos: output_pos
-          next if stline.error?
-
-          stline.update 'queued to upload' if ordered
-          sleep 0.1 while up_queue.first != pos if ordered
-          t = i.type&.name || i.type
-          stline.update "uploading #{t}"
-          uploader.upload_or_queue i, pos
-
-        rescue => e
-          if e.respond_to?(:user_message)
-            stline.error e.user_message
-          else
-            stline.error "Processing error", exception: e
-          end
-          report_error(msg, e)
-        ensure
-          up_queue.delete pos
-        end
+        process_input(i, pos: pos, total: inputs.size, ordered: ordered, up_queue: up_queue, uploader: uploader)
       end
 
       uploader.flush
@@ -173,6 +135,50 @@ class Worker
       return if inputs.blank? or @st.keep?
     end
     msg.resp
+  end
+
+  def collect_inputs(ctx)
+    lines = Utils::InputParser.message_lines(msg)
+    process_lines(lines, ctx).flat_map { |p| Array.wrap p.process }
+  end
+
+  def order_inputs!(inputs)
+    inputs.uniq!{ |i| i.info.display_id }
+    @opts = inputs.first&.opts || SymMash.new
+    inputs.sort_by!{ |i| i.info.title } if opts[:sort]
+    inputs.reverse! if opts[:reverse]
+  end
+
+  # The queue position is released in an ensure so a failed input never holds up the ones behind it.
+  def process_input(i, pos:, total:, ordered:, up_queue:, uploader:)
+    output_pos = total > 1 ? pos + 1 : nil
+    @st.add 'downloading', prefix: i.info.title do |stline|
+      i.p = p = i.processor
+      i.stl = p.stl = stline
+
+      p.download_one i, pos: output_pos if p.respond_to? :download_one
+      next if stline.error?
+
+      stline.update 'transcoding'
+      p.handle_input i, pos: output_pos
+      next if stline.error?
+
+      stline.update 'queued to upload' if ordered
+      sleep 0.1 while up_queue.first != pos if ordered
+      t = i.type&.name || i.type
+      stline.update "uploading #{t}"
+      uploader.upload_or_queue i, pos
+
+    rescue => e
+      if e.respond_to?(:user_message)
+        stline.error e.user_message
+      else
+        stline.error "Processing error", exception: e
+      end
+      report_error(msg, e)
+    ensure
+      up_queue.delete pos
+    end
   end
 
   def upload i
