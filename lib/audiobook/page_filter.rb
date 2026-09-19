@@ -39,6 +39,7 @@ module Audiobook
     OUTLIER_MARGIN  = 0.1
     MARGIN_BAND     = 0.15
     MARGINALIA_SIZE = 0.55
+    EDGE_RUN        = 4
     TITLE_SIZE      = 1.25
 
     # Page furniture is a folio, a running head repeated across pages, or a short line parked
@@ -56,14 +57,17 @@ module Audiobook
 
     def furniture_lines(pages, lines)
       metrics = body_metrics(lines)
+      counts  = repeat_counts(pages)
+      limit   = repeat_limit(pages.size)
       edges   = pages.values.map { |page_lines| edge_lines(page_lines) }
       # A re-rendered PDF reflows folios and running heads into the text, so the two patterns
       # that name themselves are also looked for in the page bands and outside the column.
       parked  = edges.zip(pages.values).map do |edge, page_lines|
-        edge | margin_band(page_lines) | off_column_lines(page_lines, metrics)
+        edge | margin_band(page_lines) | off_column_lines(page_lines, metrics) |
+          repeated_run(page_lines, counts, limit)
       end
       folios = parked.flatten.select { |line| folio?(line, pages[line.page]) }
-      (folios + repeated_margins(parked, folios, pages.size, metrics) +
+      (folios + repeated_margins(parked, folios, counts, limit, metrics) +
         column_outliers(edges, folios, metrics, lines) + marginalia(lines, metrics)).to_set
     end
 
@@ -71,6 +75,24 @@ module Audiobook
 
     # The outermost lines of a page are where a header or footer lands when nothing else moved it.
     def edge_lines(page_lines) = page_lines.values_at(0, 1, -2, -1).compact.uniq.select { |line| short_line?(line) }
+
+    # How often each line is printed, counted once per page so a refrain within one page is not
+    # mistaken for a line the book repeats.
+    def repeat_counts(pages)
+      pages.values.flat_map { |page_lines| page_lines.map { |line| TextHelpers.comparable_key(line.text) }.uniq }.tally
+    end
+
+    def repeat_limit(page_count) = [[(page_count * 0.3).ceil, 3].min, 2].max
+
+    # A running head or foot is as many lines as keep repeating from the page edge inward: a
+    # footer set on three lines is one piece of furniture, not two lines of it and one of prose.
+    # Width says nothing here, so a long footer is caught where the geometry tests above miss it.
+    def repeated_run(page_lines, counts, limit)
+      repeats = ->(line) { counts[TextHelpers.comparable_key(line.text)] >= limit }
+      head = page_lines.take_while(&repeats).first(EDGE_RUN)
+      tail = page_lines.reverse.take_while(&repeats).first(EDGE_RUN)
+      (head + tail).uniq
+    end
 
     def margin_band(page_lines)
       page_lines.select do |line|
@@ -96,11 +118,8 @@ module Audiobook
     end
 
     # A running head repeats across pages; a chapter title that quotes it is set larger.
-    def repeated_margins(margins, folios, page_count, metrics)
-      edges  = margins.map { |page_edges| page_edges - folios }
-      counts = edges.flat_map { |page_edges| page_edges.map { |line| TextHelpers.comparable_key(line.text) }.uniq }.tally
-      limit  = [[(page_count * 0.3).ceil, 3].min, 2].max
-      edges.flatten.select do |line|
+    def repeated_margins(margins, folios, counts, limit, metrics)
+      (margins.flatten - folios).select do |line|
         counts[TextHelpers.comparable_key(line.text)] >= limit && !title_size?(line, metrics)
       end
     end

@@ -688,4 +688,72 @@ RSpec.describe 'Audiobook assembly regressions' do
       )
     end
   end
+
+  describe 'milagroso-running-foot.pdf' do
+    let(:book) { book_for('milagroso-running-foot.pdf', 'es') }
+
+    # Every page of this book ends with the same eleven-word footer selling the product. Page
+    # furniture used to be recognised only up to eight words, so the footer reached the assembly
+    # and stood between the two halves of the paragraph that ran across the page break.
+    it 'joins the paragraph the footer used to stand in the middle of' do
+      expect(spoken(book)).to include('Había otro socio que se suponía llegaría muy pronto')
+    end
+
+    it 'never speaks the footer' do
+      expect(spoken(book)).not_to include('Ver capitulo')
+    end
+  end
+
+  describe 'milagroso-foot-spoken.pdf' do
+    let(:book) { book_for('milagroso-foot-spoken.pdf', 'es') }
+
+    # The same plea repeats at the foot of page after page; it is furniture, not narration.
+    it 'never speaks the repeated footer' do
+      expect(spoken(book)).not_to include('platique a sus amigos')
+    end
+  end
+
+  describe 'fauci-patent-table.pdf' do
+    let(:book) { book_for('fauci-patent-table.pdf', 'en') }
+
+    # These pages are a patent table set at the body size of the document, so the font map reads
+    # every cell as body. A capitalised title used to be promoted to a heading all the same.
+    it 'leaves a table cell as the body text the font map says it is' do
+      expect(headings(book)).not_to include(
+        'Substituted 2,3-dihydrobenzofuranyl compounds and uses thereof'
+      )
+      expect(headings(book).size).to be < 10
+    end
+
+    it 'never reads a fragment of the date column as a heading' do
+      expect(headings(book).grep(/\A\d*\s*\d{1,2}-\s*\p{Lu}\p{Ll}{2}-?\z/)).to be_empty
+    end
+  end
+
+  describe 'hooks-sumario-no-folios.pdf' do
+    let(:book) { book_for('hooks-sumario-no-folios.pdf', 'pt') }
+    let(:everything) { book_for('hooks-sumario-no-folios.pdf', 'pt', includeall: true) }
+
+    # This contents page names itself "SUMÁRIO" and prints no page numbers beside its entries,
+    # so the entries had no folio to prove themselves by and the whole list was read out.
+    it 'leaves a contents page that names itself out of the narration' do
+      expect(spoken(book)).not_to include('Clareza: pôr o amor em palavras')
+      expect(spoken(book)).not_to include('Justiça: lições de amor na infância')
+    end
+
+    it 'still reads its entries when asked for everything' do
+      expect(spoken(everything)).to include('Clareza: pôr o amor em palavras')
+    end
+  end
+
+  describe 'whatdoctors-ocr-contents.pdf' do
+    let(:book) { book_for('whatdoctors-ocr-contents.pdf', 'en') }
+
+    # A scan whose leader dots came through as "oo" and "ao:" left its contents pages looking
+    # like prose: no leaders, no chapter labels, and entries that are bare titles.
+    it 'leaves the scanned contents pages out of the narration' do
+      expect(spoken(book)).not_to include('Primum Non Nocere')
+      expect(spoken(book)).not_to include('The Patient that Changed my Life')
+    end
+  end
 end
