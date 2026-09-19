@@ -137,6 +137,9 @@ module Audiobook
 
     def consume_note(entry, idx)
       return false unless entry.item.is_a?(Paragraph) && entry.item.sentences.any?
+      # A marker is a label; the note it points at has words in it. Where a book prints the
+      # marker on its own line, the line after it is the note and the line itself is not.
+      return false if entry.item.sentences.all? { |sentence| TextHelpers.marker_line?(sentence.text) }
       # Small print is what marks a note out on a page of body text. On a page that is nothing
       # but notes there is no smaller print, and the marker opened just above says it instead.
       return false unless note_font?(entry) || @pending[entry.page].any?

@@ -847,4 +847,17 @@ RSpec.describe 'Audiobook assembly regressions' do
         .to include('Global Union of Scientists for Peace')
     end
   end
+
+  describe 'hollis-nested-blocks.epub notes' do
+    let(:book) { book_for('hollis-nested-blocks.epub', 'en') }
+
+    # This book prints the marker on one line and the note on the next, so a note took the
+    # number of the note after it for its text.
+    it 'does not bind a note to the number of the next one' do
+      bound = references(book).map { |ref| ref.sentences.map(&:text).join(' ') }.reject(&:empty?)
+
+      expect(bound).not_to be_empty
+      expect(bound).to all(match(/\p{L}/))
+    end
+  end
 end
