@@ -38,10 +38,7 @@ module Audiobook
       (size.to_f * 2).round / 2.0
     end
 
-    def self.size_of(line)
-      value = line.respond_to?(:font_size) ? line.font_size : line[:font_size] || line['font_size']
-      quantize(value)
-    end
+    def self.size_of(line) = quantize(line.font_size)
 
     def self.alignment_for(x:, x_max:, page_width:, shared_edge: false)
       width = page_width.to_f
@@ -109,10 +106,7 @@ module Audiobook
       !!a&.bold == !!b&.bold
     end
 
-    def self.alignment_of(line)
-      value = line.respond_to?(:alignment) ? line.alignment : line[:alignment] || line['alignment']
-      value&.to_s&.to_sym
-    end
+    def self.alignment_of(line) = line.alignment&.to_s&.to_sym
 
     def self.flow_alignment(item, text: nil, paragraph: false)
       align = alignment_of(item)
@@ -341,7 +335,7 @@ module Audiobook
     end
 
     def truthy(line, attr)
-      value = line.respond_to?(attr) ? line.public_send(attr) : line[attr] || line[attr.to_s]
+      value = line.public_send(attr)
       value == true || value.to_s == 'true'
     end
 
@@ -350,8 +344,7 @@ module Audiobook
     end
 
     def uppercase?(line)
-      text = line.respond_to?(:text) ? line.text : line[:text] || line['text']
-      letters = text.to_s.scan(/\p{L}/)
+      letters = line.text.to_s.scan(/\p{L}/)
       return false if letters.size < 3
 
       letters.count { |char| char == char.upcase } >= letters.size * 0.7
