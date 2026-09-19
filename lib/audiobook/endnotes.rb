@@ -8,11 +8,11 @@ module Audiobook
   class Endnotes
     # The section names itself, sometimes with a qualifier: "Notas", "Notas Explicativas",
     # "Notes on the Text". Letter spacing splits the qualifier, so only the opening word counts.
-    NOTES_TITLE  = /\A(?:notas?|notes|endnotes|refer[êe]ncias?|references)\b/i
+    NOTES_TITLE  = /\A(?:notas?|notes|endnotes|refer(?:ê|e)ncias?|references)\b/i
     TITLE_WORDS  = 4
-    GROUP_LABEL  = /\A(?:cap[íi]tulo|chapter|parte|part|introdu|pref[áa]cio|ep[íi]logo|
-                        ap[êe]ndice|appendix|conclus|posf[áa]cio)/xi
-    GROUP_NUMBER = /\A(?:cap[íi]tulo|chapter)\s*(\d+)/i
+    GROUP_LABEL  = /\A(?:cap(?:í|i)tulo|chapter|parte|part|introdu|pref(?:á|a)cio|ep(?:í|i)logo|
+                        ap(?:ê|e)ndice|appendix|conclus|posf(?:á|a)cio)/xi
+    GROUP_NUMBER = /\A(?:cap(?:í|i)tulo|chapter)\s*(\d+)/i
     # A section may head each group with the chapter's own numbered title instead of labelling it.
     GROUP_INDEX  = /\A(\d{1,3})[.)]\s+\S/
     # A group label runs into its first entry, whose text may start on the next line:

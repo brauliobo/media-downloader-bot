@@ -168,10 +168,10 @@ module Audiobook
     CATALOG_MARK = /\bis[bs]n\b|\bcd[du]\b|\bp\. cm\.|\bdc\d\d\b|catalogaç|cataloging/i
     # On such a page these lines are the record librarians need, not text to read out.
     RECORD_START = /\A(?:©|\(c\)|copyright|is[bs]n|cdd|cdu|p\.\s*cm\.|www\.|https?:|
-                        dep[oó]sito\s+legal|printed\s+(?:in|on)|impreso\s+en|
+                        dep(?:o|ó)sito\s+legal|printed\s+(?:in|on)|impreso\s+en|
                         all\s+rights\s+reserved|todos\s+os\s+direitos|todos\s+los\s+derechos|
                         [\p{L}'-]+,\s+[\p{L}'-]+,\s+\d{4})/xi
-    RECORD_INSIDE = /\bis[bs]n[:\s]|\bcd[du][-:\s]|\b[ivx]+\.\s*(?:t[íi]tul|title)|\bdc\d\d\b|
+    RECORD_INSIDE = /\bis[bs]n[:\s]|\bcd[du][-:\s]|\b[ivx]+\.\s*(?:t(?:í|i)tul|title)|\bdc\d\d\b|
                      cat[a]?log|\A\p{Lu}{2}\d|\A[\w.+-]+@[\w.-]+\z/xi
     # The subject headings of a record run several numbered entries to the line.
     SUBJECT_ENTRY = /(?:\A|\s)\d{1,2}\.\s+\p{Lu}/
@@ -202,12 +202,16 @@ module Audiobook
 
     # ---------- contents pages ----------
 
-    CONTENTS_TITLE = /\A(?:contents|table\s+of\s+contents|conte[úu]dos?|sum[áa]rio|[íi]ndice|contenido|
-                          tabela?\s+de\s+conte[úu]dos?|inhalt)\b/xi
-    CHAPTER_LABEL  = /\A(?:cap[íi]tulo|chapter|parte|part|se[cç][çc]?[ãa]o|anexo|ap[êe]ndice|appendix)
+    CONTENTS_TITLE = /\A(?:contents|table\s+of\s+contents|conte(?:ú|u)dos?|sum(?:á|a)rio|(?:í|i)ndice|contenido|
+                          tabela?\s+de\s+conte(?:ú|u)dos?|inhalt)\b/xi
+    CHAPTER_LABEL  = /\A(?:cap(?:í|i)tulo|chapter|parte|part|se(?:c|ç)(?:ç|c)?(?:ã|a)o|anexo|ap(?:ê|e)ndice|appendix)
                        \s*(?:\d|[ivxlc]+\b)/xi
     CONTENTS_ENTRIES = 5
     LISTED_ENTRIES   = 3
+    # A page announces the contents with a title, not with a sentence that opens on the word.
+    TITLE_WORDS      = 3
+    ENTRY_WORDS      = 12
+    ENTRY_SHARE      = 0.8
 
     # A contents page lists what is elsewhere: leader lines, chapter labels and the pages they
     # point at. Reading it aloud tells the listener nothing, and the pages that carry the list
@@ -221,18 +225,41 @@ module Audiobook
     end
 
     def contents_pages(pages)
+      leaderless = Set.new
       pages.keys.sort.each_with_object(Set.new) do |page, found|
         texts = pages[page].map { |line| line.text.to_s.strip }.reject(&:empty?)
         next if texts.size < LISTED_ENTRIES
 
-        entries = texts.count { |text| contents_entry?(text) }
-        listed  = entries + texts.count { |text| text.match?(/\S\s\d{1,4}\z/) }
-        opened  = found.include?(page - 1) || texts.first(3).any? { |text| text.match?(CONTENTS_TITLE) }
-        found << page if entries >= CONTENTS_ENTRIES || (opened && listed >= LISTED_ENTRIES)
+        named = texts.first(3).any? { |text| contents_title?(text) }
+        next found << page if folio_list?(texts, opened: named || found.include?(page - 1))
+        # A list with nothing to recognise it by but its entries carries on the same way, or the
+        # chapter that follows an ordinary contents page would be read as more of the list.
+        next unless (named || leaderless.include?(page - 1)) && leaderless_list?(texts)
+
+        leaderless << page
+        found << page
       end
     end
 
+    # The list names itself entry by entry: leaders, a chapter label, or the page each points at.
+    def folio_list?(texts, opened:)
+      entries = texts.count { |text| contents_entry?(text) }
+      return true if entries >= CONTENTS_ENTRIES
+
+      opened && entries + texts.count { |text| text.match?(/\S\s\d{1,4}\z/) } >= LISTED_ENTRIES
+    end
+
+    # A book converted from an ebook prints no page number beside an entry, so the entries are
+    # the only evidence: such a page is almost nothing but short lines that name something
+    # instead of saying it, where body text wraps and only looks like them in places.
+    def leaderless_list?(texts)
+      listing = texts.count { |text| entry_line?(text) }
+      listing >= CONTENTS_ENTRIES && listing >= texts.size * ENTRY_SHARE
+    end
+
     def contents_entry?(text) = TextHelpers.toc_entry?(text) || text.match?(CHAPTER_LABEL)
+    def contents_title?(text) = text.match?(CONTENTS_TITLE) && text.split.size <= TITLE_WORDS
+    def entry_line?(text) = text.split.size.between?(1, ENTRY_WORDS) && !TextHelpers.ends_with_punctuation?(text)
 
     # Endnotes are read where they are called, so the list they came from is not read again.
     def without_skipped_pages(lines_data)

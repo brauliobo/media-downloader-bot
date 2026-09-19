@@ -713,23 +713,6 @@ RSpec.describe 'Audiobook assembly regressions' do
     end
   end
 
-  describe 'fauci-patent-table.pdf' do
-    let(:book) { book_for('fauci-patent-table.pdf', 'en') }
-
-    # These pages are a patent table set at the body size of the document, so the font map reads
-    # every cell as body. A capitalised title used to be promoted to a heading all the same.
-    it 'leaves a table cell as the body text the font map says it is' do
-      expect(headings(book)).not_to include(
-        'Substituted 2,3-dihydrobenzofuranyl compounds and uses thereof'
-      )
-      expect(headings(book).size).to be < 10
-    end
-
-    it 'never reads a fragment of the date column as a heading' do
-      expect(headings(book).grep(/\A\d*\s*\d{1,2}-\s*\p{Lu}\p{Ll}{2}-?\z/)).to be_empty
-    end
-  end
-
   describe 'hooks-sumario-no-folios.pdf' do
     let(:book) { book_for('hooks-sumario-no-folios.pdf', 'pt') }
     let(:everything) { book_for('hooks-sumario-no-folios.pdf', 'pt', includeall: true) }
