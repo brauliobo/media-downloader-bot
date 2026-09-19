@@ -18,6 +18,15 @@ RSpec.describe 'Audiobook assembly regressions' do
   def spoken(book)    = item_texts(book).join("\n")
   def item_texts(book) = paragraph_texts(book) + headings(book)
 
+  describe 'beginners-guide-urls.pdf' do
+    it 'says where a link points instead of spelling it out' do
+      spoken_text = spoken(book_for('beginners-guide-urls.pdf', 'en'))
+
+      expect(spoken_text).to include('rumble.com', 'tv.gab.com')
+      expect(spoken_text).not_to include('https://', 'vlm2ii')
+    end
+  end
+
   describe 'fauci-patent-table.pdf' do
     it 'does not read a table out cell by cell' do
       expect(item_texts(book_for('fauci-patent-table.pdf', 'en'))).to be_empty

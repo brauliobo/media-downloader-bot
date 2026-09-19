@@ -77,7 +77,8 @@ module Audiobook
 
       def normalize_group_text(group)
         normalized = TextHelpers.join_pdf_lines(group.map { |line| TextHelpers.strip_toc_leaders(line.text) })
-        TextHelpers.strip_bullet(normalized).gsub(/\bN\s*\.\s*T\./i, 'N.T.')
+        normalized = TextHelpers.strip_bullet(normalized).gsub(/\bN\s*\.\s*T\./i, 'N.T.')
+        TextHelpers.spoken_urls(normalized)
       end
 
       def create_sentences(normalized, language)

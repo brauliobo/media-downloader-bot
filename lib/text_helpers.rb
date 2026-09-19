@@ -66,6 +66,12 @@ module TextHelpers
     clean.strip
   end
 
+  # Spelled out, a URL is a minute of letters and slashes. Its host is the part a listener can
+  # do anything with, so that is what is said.
+  URL = %r{\b(?:https?://|www\.)([^\s/?\#]+)\S*}i
+
+  def self.spoken_urls(text) = text.to_s.gsub(URL) { Regexp.last_match(1).sub(/\Awww\./i, '') }
+
   # Join an array of line strings from a PDF into one paragraph string using sane defaults
   def self.join_pdf_lines(lines)
     merged = Array(lines).map { |line| normalize_text(line.to_s.sub(/[­‐‑]\z/, '-')) }.reject(&:empty?).reduce(nil) do |text, line|
