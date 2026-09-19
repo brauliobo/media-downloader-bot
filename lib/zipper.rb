@@ -366,7 +366,7 @@ class Zipper
   end
 
   def scale_filters
-    stream = probe.streams.find { |candidate| candidate.codec_type == 'video' }
+    stream = Prober.video_stream(probe)
     return preserve_resolution_scale stream if opts.preserve_resolution
 
     modulus = format_name == :vp9 ? 8 : 2
@@ -521,7 +521,7 @@ class Zipper
   end
 
   def add_video_scale builder
-    stream = probe.streams.find { |candidate| candidate.codec_type == 'video' }
+    stream = Prober.video_stream(probe)
     modulus = format_name == :vp9 ? 8 : 2
     if opts.preserve_resolution
       builder.preserve_resolution_scale modulus: modulus unless stream.width % modulus == 0 && stream.height % modulus == 0
@@ -671,7 +671,7 @@ class Zipper
   end
 
   def audio_stream?
-    probe.streams.any? { |stream| stream.codec_type == 'audio' }
+    Prober.audio_stream?(probe)
   end
 
   def apply_voice_quality
@@ -683,7 +683,7 @@ class Zipper
   end
 
   def check_width
-    stream = probe.streams.find { |candidate| candidate.codec_type == 'video' }
+    stream = Prober.video_stream(probe)
     opts.width ||= opts.format&.opts&.width || stream&.width || 720
     if opts.preserve_resolution
       opts.width = stream.width

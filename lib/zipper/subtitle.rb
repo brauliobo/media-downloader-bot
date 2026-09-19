@@ -2,6 +2,7 @@ require_relative '../subtitler/ass'
 require_relative '../subtitler'
 require_relative '../output'
 require_relative '../ffmpeg'
+require_relative '../prober'
 
 class Zipper
   # All subtitle-related responsibilities live here.
@@ -22,7 +23,7 @@ class Zipper
 
       zipper.stl&.update 'transcoding'
 
-      stream = zipper.probe.streams.find { |s| s.codec_type == 'video' }
+      stream = Prober.video_stream(zipper.probe)
       portrait = stream.width < stream.height
       ass_mode = zipper.opts.nowords ? :plain : :instagram
       ass_body = subtitle.to_ass(portrait:, mode: ass_mode, preset: zipper.opts.subpreset)

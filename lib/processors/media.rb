@@ -8,6 +8,7 @@ require_relative '../dubbing'
 require_relative '../presets/camera'
 require_relative '../hashtags'
 require 'timeout'
+require_relative '../prober'
 
 module Processors
   class Media < File
@@ -37,8 +38,8 @@ module Processors
       # Derive type from MIME if recognized, otherwise fall back to ffprobe streams
       i.type = if mtype&.index('video') then Types.video
                elsif mtype&.index('audio') then Types.audio
-               elsif i.probe.streams&.any? { |s| s.codec_type == 'video' } then Types.video
-               elsif i.probe.streams&.any? { |s| s.codec_type == 'audio' } then Types.audio
+               elsif Prober.video_stream?(i.probe) then Types.video
+               elsif Prober.audio_stream?(i.probe) then Types.audio
                end
       i.type = Types.audio if i.opts.audio
       i

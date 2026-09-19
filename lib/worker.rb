@@ -276,7 +276,7 @@ class Worker
     caption = caption_for(i)
     return send_message msg, caption if opts.simulate
 
-    vstrea     = oprobe&.streams&.find{ |s| s.codec_type == 'video' }
+    vstrea     = Prober.video_stream(oprobe)
     thumb_path = i.thumbnail_path || i.thumb
     mime       = i.mime.presence || i.opts.format&.mime || 'application/octet-stream'
     file_path  = i.fn_out

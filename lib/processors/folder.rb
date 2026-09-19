@@ -1,5 +1,6 @@
 require 'find'
 require_relative '../presets/camera'
+require_relative '../prober'
 
 module Processors
   class Folder
@@ -141,7 +142,7 @@ module Processors
       return false unless replace? && (opts.camera || opts.efficient)
       return false unless Presets::Camera.tier(path)[:noaudio]
 
-      Prober.for(path).streams&.none? { |stream| stream.codec_type == 'audio' }
+      !Prober.audio_stream?(Prober.for(path))
     rescue
       false
     end

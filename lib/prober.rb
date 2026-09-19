@@ -17,6 +17,11 @@ module Prober
     SymMash.new probe
   end
 
+  # The same two questions are asked of a probe all over the codebase.
+  def self.video_stream(probe) = Array(probe&.streams).find { |stream| stream.codec_type.to_s == 'video' }
+  def self.audio_stream?(probe) = Array(probe&.streams).any? { |stream| stream.codec_type.to_s == 'audio' }
+  def self.video_stream?(probe) = !video_stream(probe).nil?
+
   def self.audio_stream file, ffmpeg: FFmpeg.new
     probe  = self.for file, ffmpeg: ffmpeg
     stream = Array(probe.streams).find { |candidate| candidate.codec_type.to_s == 'audio' }
