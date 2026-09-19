@@ -21,11 +21,9 @@ module Shorts
     TIMESTAMP = /\A\d{2}:\d{2}:\d{2}\z/
 
     def initialize(start:, finish:, title:)
-      start_time  = Subtitler.parse_timestamp(start) if start.is_a?(String) && start.match?(TIMESTAMP)
-      finish_time = Subtitler.parse_timestamp(finish) if finish.is_a?(String) && finish.match?(TIMESTAMP)
-      valid = start.is_a?(String) && finish.is_a?(String) && title.is_a?(String) &&
-        start_time && finish_time && finish_time > start_time
-      raise ArgumentError, 'short cut is malformed' unless valid
+      start_time  = Subtitler.parse_timestamp(start) if start.to_s.match?(TIMESTAMP)
+      finish_time = Subtitler.parse_timestamp(finish) if finish.to_s.match?(TIMESTAMP)
+      raise ArgumentError, 'short cut is malformed' unless start_time && finish_time && finish_time > start_time
 
       super
     end
@@ -47,10 +45,9 @@ module Shorts
       Transcript (SRT):
       #{subtitle.to_srt}
     INPUT
-    arr = [arr] if arr.is_a?(Hash)
-    arr = [] unless arr.is_a?(Array)
+    # The schema is validated before this returns, so the shape is already settled: the only
+    # thing left to check is that a cut ends after it starts.
     arr.filter_map do |h|
-      next unless h.is_a?(Hash)
       s, e, t = h.values_at('start', 'end', 'title')
       Cut.new(start: s, finish: e, title: normalize_title(t))
     rescue ArgumentError, TypeError
@@ -94,8 +91,7 @@ module Shorts
       parsed = JSON.parse(s)
       s = parsed['title'] || parsed.first if parsed.is_a?(Hash) || parsed.is_a?(Array)
     rescue JSON::ParserError; end
-    s = s.to_s.strip.gsub(/^[\[\"]+|[\]\"]+$/, '').gsub(/\s+/, ' ').strip
-    s[0, 120]
+    s.to_s.strip.gsub(/^[\[\"]+|[\]\"]+$/, '').gsub(/\s+/, ' ').strip[0, 120]
   end
 
   def require_subtitle!(subtitle)
