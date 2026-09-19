@@ -80,7 +80,7 @@ module Audiobook
         return true if HEADING_LIKE_ROLES.include?(role)
         return false if %i[body footnote].include?(role)
       end
-      line.respond_to?(:heading_like?) && line.heading_like?
+      line.heading_like?
     end
 
     def self.heading_continuation?(prev, line)
@@ -98,8 +98,7 @@ module Audiobook
     def self.labeled_line?(line) = line.text.to_s.match?(LABEL)
 
     def self.long_body_line?(line)
-      words = line.respond_to?(:word_count) ? line.word_count : line.text.to_s.split.size
-      words > SHORT_CENTER_WORDS && !heading_item?(line)
+      line.word_count > SHORT_CENTER_WORDS && !heading_item?(line)
     end
 
     def self.same_emphasis?(a, b)
@@ -112,7 +111,7 @@ module Audiobook
       align = alignment_of(item)
       return unless align
 
-      body = text || (item.respond_to?(:text) ? item.text : '')
+      body = text || item.text
       return if paragraph && align == :center && body.to_s.split.size >= SHORT_CENTER_WORDS
       return if paragraph && align == :left
 
@@ -128,18 +127,16 @@ module Audiobook
 
       align = alignment == :keep ? alignment_of(item) : alignment
       rules = []
-      rules << "font-size: #{format_pt(item.font_size)}" if item.respond_to?(:font_size) && item.font_size
+      rules << "font-size: #{format_pt(item.font_size)}" if item.font_size
       rules << "text-align: #{align}" if align
-      rules << 'font-weight: bold' if item.respond_to?(:bold) && item.bold
-      rules << 'font-style: italic' if item.respond_to?(:italic) && item.italic
-      rules << "color: #{item.color}" if item.respond_to?(:color) && item.color
+      rules << 'font-weight: bold' if item.bold
+      rules << 'font-style: italic' if item.italic
+      rules << "color: #{item.color}" if item.color
       rules
     end
 
     def self.copy_style(target, source)
       STYLE_ATTRS.each do |attr|
-        next unless target.respond_to?(:"#{attr}=") && source.respond_to?(attr)
-
         value = source.public_send(attr)
         next if value.nil?
 

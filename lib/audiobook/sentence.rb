@@ -113,10 +113,12 @@ module Audiobook
     end
 
     def self.build(text)
-      new(text_value(text), language: language_value(text)).then do |sentence|
+      source = wrap(text)
+      new(text_value(source), language: language_value(source)).then do |sentence|
         next unless sentence.speakable?
 
-        copy_style(sentence, wrap(text))
+        # A sentence can be built from a bare string, which carries no style to copy.
+        copy_style(sentence, source) if source.is_a?(SymMash)
         sentence
       end
     end
