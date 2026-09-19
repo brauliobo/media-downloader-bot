@@ -153,7 +153,7 @@ class Zipper
       fmt = fmt.to_sym if fmt.is_a? String
       fmt = nil unless fmt.is_a? Symbol
 
-      kind = (type_hash[:name] || type_hash['name']).to_s
+      kind = type_hash[:name].to_s
       if fmt
         if kind == 'video'
           fmt = :h264 if fmt.in? %i[mp4 x264 h.264]
@@ -165,16 +165,16 @@ class Zipper
         end
       end
 
-      default      = type_hash[:default] || type_hash['default']
-      long_default = type_hash[:ldefault] || type_hash['ldefault']
+      default      = type_hash[:default]
+      long_default = type_hash[:ldefault]
       use_long_default = kind == 'video' && durat && durat >= 10.minutes && long_default && cuda?(opts)
       fmt ||= use_long_default ? long_default : default
       fmt = :aac if Zipper.size_mb_limit && fmt == :opus && durat && durat <= 122
-      chosen = type_hash[fmt] || type_hash[fmt.to_s]
+      chosen = type_hash[fmt]
       return chosen if chosen
 
       fmt = use_long_default ? long_default : default
-      type_hash[fmt] || type_hash[fmt.to_s]
+      type_hash[fmt]
     end
   end
 end
