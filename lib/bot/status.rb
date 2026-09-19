@@ -31,8 +31,7 @@ module Bot
 
       def error text, exception: nil
         @error = true
-        text = "#{text}: #{exception.class}: #{exception.message}" if exception
-        STDERR.puts "#{text}\n#{exception.backtrace.first(15).join("\n")}" if exception
+        text = Status.report_error(text, exception) if exception
         keep.update text
       end
     end
@@ -63,18 +62,24 @@ module Bot
     end
 
     TELEGRAM_ERROR_LIMIT = 3500
+    BACKTRACE_LINES      = 20
 
     def error text, *args, exception: nil, **params
       @error = true
-      if exception
-        STDERR.puts "#{text}: #{exception.class}: #{sanitize_error(exception.message)}\n#{Array(exception.backtrace).first(20).join("\n")}"
-        text = "#{text}: #{exception.class}: #{sanitize_error(exception.message)}"
-      end
+      text = self.class.report_error(text, exception) if exception
       send_update text, *args, **params
       nil
     end
 
-    def sanitize_error(message)
+    # Both callers name the failure the same way and print the same trace; only one of them
+    # used to sanitize what it printed, which is the half worth keeping.
+    def self.report_error(text, exception)
+      text = "#{text}: #{exception.class}: #{sanitize_error(exception.message)}"
+      STDERR.puts "#{text}\n#{Array(exception.backtrace).first(BACKTRACE_LINES).join("\n")}"
+      text
+    end
+
+    def self.sanitize_error(message)
       clean = message.to_s.encode('UTF-8', invalid: :replace, undef: :replace)
                      .gsub(/[\x00-\x08\x0B\x0C\x0E-\x1F]/, '')
       clean.length > TELEGRAM_ERROR_LIMIT ? "#{clean[0, TELEGRAM_ERROR_LIMIT]}…" : clean
