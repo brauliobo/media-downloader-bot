@@ -7,7 +7,7 @@ module Audiobook
   # record and the contents pages are all printed for a reader who can see the page, and say
   # nothing to a listener.
   class PageFilter
-    FILTERS = %i[furniture rights_record contents index skipped_pages].freeze
+    FILTERS = %i[tables furniture rights_record contents index skipped_pages].freeze
 
     def self.narrated(lines_data, selected_pages: nil, skip_pages: nil)
       new(lines_data, selected_pages: selected_pages, skip_pages: skip_pages).narrated
@@ -30,6 +30,14 @@ module Audiobook
     def reject_lines(lines_data, lines, &drop)
       kept = lines_data.select.with_index { |_, idx| !drop.call(lines[idx]) }
       kept.size == lines_data.size ? lines_data : kept
+    end
+
+    # ---------- tables ----------
+
+    # A table is drawn for the eye. Read out cell by cell it is a list of names and numbers with
+    # nothing holding them together, and the columns of a row arrive interleaved with each other.
+    def without_tables(lines_data)
+      reject_lines(lines_data, wrap(lines_data)) { |line| line.table }
     end
 
     # ---------- page furniture ----------

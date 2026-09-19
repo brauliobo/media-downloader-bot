@@ -18,6 +18,18 @@ RSpec.describe 'Audiobook assembly regressions' do
   def spoken(book)    = item_texts(book).join("\n")
   def item_texts(book) = paragraph_texts(book) + headings(book)
 
+  describe 'fauci-patent-table.pdf' do
+    it 'does not read a table out cell by cell' do
+      expect(item_texts(book_for('fauci-patent-table.pdf', 'en'))).to be_empty
+    end
+  end
+
+  describe 'apometria-colour-list.pdf' do
+    it 'keeps a numbered list whose entries happen to line up with each other' do
+      expect(spoken(book_for('apometria-colour-list.pdf', 'pt'))).to include('imobilização instantânea dos espíritos')
+    end
+  end
+
   describe 'fixing-gaze-back-index.pdf' do
     it 'stops before reading out the back-of-book index' do
       expect(item_texts(book_for('fixing-gaze-back-index.pdf', 'en'))).to be_empty

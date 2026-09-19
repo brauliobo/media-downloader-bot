@@ -154,6 +154,7 @@ module Audiobook
               y_max:       y_max
             )
           end
+          lines.each { |line| line.table = true } if table_page?(page)
           SymMash.new(
             number: first_page + index,
             width:  page['width'].to_f,
@@ -163,6 +164,34 @@ module Audiobook
         end
         apply_xml_styles(pages, pdf_path, first_page: first_page, last_page: last_page)
         pages
+      end
+
+      # Files printed from a word processor draw their tables without rulings. What a table row
+      # does have is the blank space between its cells: two or more gaps far wider than a word
+      # space, again and again down the page. A line of prose has none, whatever its words line
+      # up with above it.
+      TABLE_ROWS      = 8
+      TABLE_GAPS      = 2
+      TABLE_GAP_RATIO = 1.5
+      TABLE_SHARE     = 0.4
+
+      def self.table_page?(page)
+        words  = page.xpath('.//word')
+        height = median_height(words)
+        return false unless height.to_f.positive?
+
+        rows = words.group_by { |word| word['yMin'].to_f.round }.values
+        rows.size >= TABLE_ROWS && rows.count { |row| celled?(row, height) } >= rows.size * TABLE_SHARE
+      end
+
+      def self.celled?(row, height)
+        row.sort_by { |word| word['xMin'].to_f }.each_cons(2)
+          .count { |left, right| right['xMin'].to_f - left['xMax'].to_f > height * TABLE_GAP_RATIO } >= TABLE_GAPS
+      end
+
+      def self.median_height(words)
+        heights = words.map { |word| height_of(word) }.sort
+        heights[heights.size / 2]
       end
 
       def self.extract_pdfinfo(pdf_path)
