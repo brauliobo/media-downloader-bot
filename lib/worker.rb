@@ -188,12 +188,10 @@ class Worker
   def cleanup_input(input)
     return if skip_cleanup || !dir
 
-    Array(input.uploads).each { |upload| cleanup_input(upload) } if input.respond_to?(:uploads)
+    Array(input.uploads).each { |upload| cleanup_input(upload) }
 
     root = "#{File.expand_path(dir)}/"
-    %i[fn_in fn_out thumb thumbnail_path].filter_map do |name|
-      input.public_send(name) if input.respond_to?(name)
-    end.uniq.each do |path|
+    %i[fn_in fn_out thumb thumbnail_path].filter_map { |name| input.public_send(name) }.uniq.each do |path|
       path = File.expand_path(path)
       FileUtils.rm_f(path) if path.start_with?(root)
     end

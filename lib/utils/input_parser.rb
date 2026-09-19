@@ -35,7 +35,7 @@ module Utils
     def self.attached_file?(msg)
       return false unless msg
 
-      %i[video audio document].any? { |attr| msg.respond_to?(attr) && msg.public_send(attr).present? }
+      %i[video audio document].any? { |attr| msg.public_send(attr).present? }
     end
 
     def self.message_text(msg)
@@ -105,15 +105,16 @@ module Utils
     end
 
     def self.raw_message_text(msg)
-      text = msg.text if msg.respond_to?(:text)
-      text = msg.caption if text.to_s.strip.empty? && msg.respond_to?(:caption)
+      text = msg.text
+      text = msg.caption if text.to_s.strip.empty?
       text.to_s
     end
 
     def self.attached_media(msg)
-      %i[document video audio].lazy.map { |attr| msg.public_send(attr) if msg.respond_to?(attr) }.find(&:present?)
+      %i[document video audio].lazy.map { |attr| msg.public_send(attr) }.find(&:present?)
     end
 
+    # A photo and a voice note carry no file name at all, so ask before reading one.
     def self.media_file_name(msg)
       media = attached_media(msg)
       media.file_name if media.respond_to?(:file_name)
