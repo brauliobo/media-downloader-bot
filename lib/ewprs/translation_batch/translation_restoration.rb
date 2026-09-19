@@ -8,6 +8,57 @@ module Ewprs
 
       private
 
+      # Which repair each kind of failure asks for. Every one is a question about the unit and
+      # the error only, so the retry loop below stays the one place that changes the output.
+      def editorial_projection?(unit, error)
+        error.message.match?(/changed editorial tags|changed editorial brackets/) ||
+          (error.is_a?(ProtectedTokenError) && unit.prepared.match?(EDITORIAL_TAG))
+      end
+
+      def untranslated_editorial?(unit, error)
+        unit.prepared.match?(EDITORIAL_TAG) && %i[untranslated target_language].include?(error.code)
+      end
+
+      def smart_quote_projection?(unit, error)
+        return true if error.code == :quotes
+        return false unless unit.prepared.match?(Translator::SMART_QUOTE)
+        return true if error.code == :markers || error.is_a?(ProtectedTokenError)
+
+        error.code == :untranslated && !unit.prepared.match?(PLACEHOLDER)
+      end
+
+      def placeholder_smart_quote_projection?(unit, error)
+        error.code == :untranslated &&
+          unit.prepared.match?(PLACEHOLDER) && unit.prepared.match?(Translator::SMART_QUOTE)
+      end
+
+      def character_reference_projection?(unit, error)
+        error.code == :untranslated &&
+          !unit.prepared.match?(PLACEHOLDER) && unit.prepared.match?(Translator::CHARACTER_REFERENCE)
+      end
+
+      def clause_projection?(unit, error)
+        return false unless %i[untranslated target_language].include?(error.code) && unit.prepared.match?(/\s/)
+
+        !unit.prepared.match?(PLACEHOLDER) ||
+          error.message.match?(/source-language word|retained English phrase/) ||
+          unit.prepared.match?(%r{[ \t]/[ \t]})
+      end
+
+      def placeholder_order_projection?(unit, error)
+        return true if error.is_a?(ProtectedTokenError) && error.message.match?(/reordered structural tokens/)
+
+        error.code == :delimiters && unit.tokens.any? { |_marker, value| nested_editorial_token?(value) }
+      end
+
+      def placeholder_projection?(unit, error)
+        return true if error.is_a?(ProtectedTokenError) && error.message.match?(/missing:/)
+        return true if %i[untranslated delimiters markers target_language].include?(error.code) &&
+          unit.prepared.match?(PLACEHOLDER)
+
+        placeholder_order_projection?(unit, error)
+      end
+
       def restore_tokens_with_retries(unit, output)
         attempted_projections = {}
         allow_moved_editorial = output.to_s.scan(EDITORIAL_TAG) == unit.prepared.scan(EDITORIAL_TAG)
@@ -51,11 +102,8 @@ module Ewprs
             output = projected
             retry
           end
-          project_editorial = error.message.match?(/changed editorial tags|changed editorial brackets/)
-          project_editorial ||= error.is_a?(ProtectedTokenError) && unit.prepared.match?(EDITORIAL_TAG)
-          untranslated_editorial = unit.prepared.match?(EDITORIAL_TAG) &&
-                                   %i[untranslated target_language].include?(error.code)
-          if (project_editorial || untranslated_editorial) &&
+          project_editorial = editorial_projection?(unit, error)
+          if (project_editorial || untranslated_editorial?(unit, error)) &&
              !attempted_projections[:editorial_segments] &&
              TranslationValidator::CJK_TARGET.key?(target)
             attempted_projections[:editorial_segments] = true
@@ -73,13 +121,7 @@ module Ewprs
             output = projected
             retry
           end
-          quote_projection = error.code == :quotes
-          quote_projection ||= error.code == :markers &&
-                               unit.prepared.match?(Translator::SMART_QUOTE)
-          quote_projection ||= error.code == :untranslated &&
-                               !unit.prepared.match?(PLACEHOLDER) && unit.prepared.match?(Translator::SMART_QUOTE)
-          quote_projection ||= error.is_a?(ProtectedTokenError) && unit.prepared.match?(Translator::SMART_QUOTE)
-          if quote_projection && !attempted_projections[:smart_quotes]
+          if smart_quote_projection?(unit, error) && !attempted_projections[:smart_quotes]
             attempted_projections[:smart_quotes] = true
             projected = translator.translate_preserving_smart_quotes(
               unit.prepared, from: source_language, to: target
@@ -89,10 +131,7 @@ module Ewprs
               retry
             end
           end
-          entity_projection = error.code == :untranslated &&
-                              !unit.prepared.match?(PLACEHOLDER) &&
-                              unit.prepared.match?(Translator::CHARACTER_REFERENCE)
-          if entity_projection && !attempted_projections[:character_references]
+          if character_reference_projection?(unit, error) && !attempted_projections[:character_references]
             attempted_projections[:character_references] = true
             projected = translator.translate_preserving_character_references(
               unit.prepared, from: source_language, to: target
@@ -102,12 +141,7 @@ module Ewprs
               retry
             end
           end
-          clause_projection = %i[untranslated target_language].include?(error.code) &&
-                              unit.prepared.match?(/\s/)
-          clause_projection &&= !unit.prepared.match?(PLACEHOLDER) ||
-                                error.message.match?(/source-language word|retained English phrase/) ||
-                                unit.prepared.match?(%r{[ \t]/[ \t]})
-          if clause_projection && !attempted_projections[:clauses]
+          if clause_projection?(unit, error) && !attempted_projections[:clauses]
             attempted_projections[:clauses] = true
             projected = translator.translate_by_clauses(
               unit.prepared, from: source_language, to: target
@@ -117,21 +151,9 @@ module Ewprs
               retry
             end
           end
-          project_placeholders = error.is_a?(ProtectedTokenError) && error.message.match?(/missing:/)
-          project_placeholders ||= error.code == :untranslated &&
-                                  unit.prepared.match?(PLACEHOLDER)
-          project_placeholders ||= error.code == :delimiters &&
-                                   unit.prepared.match?(PLACEHOLDER)
-          project_placeholders ||= error.code == :markers &&
-                                   unit.prepared.match?(PLACEHOLDER)
-          project_placeholders ||= error.code == :target_language &&
-                                   unit.prepared.match?(PLACEHOLDER)
-          project_order = error.is_a?(ProtectedTokenError) && error.message.match?(/reordered structural tokens/)
-          project_order ||= error.code == :delimiters &&
-                            unit.tokens.any? { |_marker, value| nested_editorial_token?(value) }
-          project_placeholders ||= project_order
+          project_order  = placeholder_order_projection?(unit, error)
           projection_key = project_order ? :placeholder_order : :placeholders
-          if project_placeholders && !attempted_projections[projection_key]
+          if placeholder_projection?(unit, error) && !attempted_projections[projection_key]
             attempted_projections[projection_key] = true
             projected = if project_order
               translator.translate_preserving_placeholder_order(
@@ -147,9 +169,7 @@ module Ewprs
               retry
             end
           end
-          quote_projection = error.code == :untranslated &&
-                             unit.prepared.match?(PLACEHOLDER) && unit.prepared.match?(Translator::SMART_QUOTE)
-          if quote_projection && !attempted_projections[:smart_quotes]
+          if placeholder_smart_quote_projection?(unit, error) && !attempted_projections[:smart_quotes]
             attempted_projections[:smart_quotes] = true
             projected = translator.translate_preserving_smart_quotes(
               unit.prepared, from: source_language, to: target
