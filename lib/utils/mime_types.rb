@@ -11,10 +11,16 @@ module Utils
     module_function
 
     def telegram_type(upload)
-      mime = value(upload, :mime) || upload
       type = value(upload, :type)
       type = type.name if type.respond_to?(:name)
 
+      type_for(value(upload, :mime), type)
+    end
+
+    # A downloader knows the MIME type before it has an upload to describe.
+    def type_for_mime(mime) = type_for(mime, nil)
+
+    def type_for(mime, type)
       return :audio if mime.to_s.match?(/\Aaudio\//)
       return :photo if mime.to_s.match?(/\Aimage\//)
       return :video if mime.to_s.match?(/\Avideo\//)
@@ -27,11 +33,7 @@ module Utils
       %i[photo video].include?(telegram_type(upload)) && File.file?(value(upload, :fn_out).to_s)
     end
 
-    def value(object, key)
-      return object[key] || object[key.to_s] if object.is_a?(Hash)
-      return object.public_send(key) if object.respond_to?(key)
-
-      nil
-    end
+    # An upload is a SymMash, which symbolizes its keys.
+    def value(object, key) = object[key]
   end
 end

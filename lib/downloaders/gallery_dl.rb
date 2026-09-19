@@ -120,7 +120,7 @@ module Downloaders
       mime  = Rack::Mime.mime_type(File.extname(file)) || 'application/octet-stream'
       SymMash.new(
         fn_out: file,
-        type:   SymMash.new(name: Utils::MimeTypes.telegram_type(mime)),
+        type:   SymMash.new(name: Utils::MimeTypes.type_for_mime(mime)),
         mime:   mime,
         opts:   gopts.deep_dup,
         url:    normalized_url,
