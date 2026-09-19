@@ -12,19 +12,17 @@ class VoiceActivity
   end
 
   def self.with_speech(path, dir: nil)
-    workdir = nil
     ranges = detect(path)
     return yield(nil, ranges) if ranges.empty?
 
-    workdir = Utils::Tmp.dir('voice-activity-', dir)
-    speech = File.join(workdir, 'speech.wav')
-    FFmpeg.new.extract_speech_ranges(
-      input: path, output: speech, ranges: ranges,
-      sample_rate: 16_000, channels: 1, label: 'voice range extraction failed'
-    )
-    yield speech, ranges
-  ensure
-    FileUtils.remove_entry(workdir) if workdir && Dir.exist?(workdir)
+    Utils::Tmp.dir('voice-activity-', dir) do |workdir|
+      speech = File.join(workdir, 'speech.wav')
+      FFmpeg.new.extract_speech_ranges(
+        input: path, output: speech, ranges: ranges,
+        sample_rate: 16_000, channels: 1, label: 'voice range extraction failed'
+      )
+      yield speech, ranges
+    end
   end
 
   def self.restore_timing!(subtitle, ranges)

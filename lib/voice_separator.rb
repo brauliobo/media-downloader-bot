@@ -16,9 +16,6 @@ class VoiceSeparator
   end
 
   def self.with_stems(path, dir: nil)
-    workdir = Utils::Tmp.dir('voice-separation-', dir)
-    yield separate(path, dir: workdir)
-  ensure
-    FileUtils.remove_entry(workdir) if workdir && Dir.exist?(workdir)
+    Utils::Tmp.dir('voice-separation-', dir) { |workdir| yield separate(path, dir: workdir) }
   end
 end
