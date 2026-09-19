@@ -10,7 +10,7 @@ module Audiobook
       ROMAN    = /(?:ix|iv|v?i{1,3}|xi{0,3}|xiv|xv)/
       TERMINAL = /[.!?…:;]["”’)\]»]*\z/
       BULLETS  = /\A[•●○◦▪♦►▶■□➢✔✓✗➤★]|\A[o0°]\s\p{Lu}|\s[o0]\z/
-      CATALOG  = /\A(?:p\. cm\.|I+\. T[ií]tul|ISBN|isbn|CDD|CDU|\d+\.\d+\/\d+—dc)|\A\w+\d+\.\w\d+ \w\d+ \d{4}\z/
+      CATALOG  = /\A(?:p\. cm\.|I+\. T(?:i|í)tul|ISBN|isbn|CDD|CDU|\d+\.\d+\/\d+—dc)|\A\w+\d+\.\w\d+ \w\d+ \d{4}\z/
 
       # Read as: this sentence is wrong because…
       SENTENCE = {

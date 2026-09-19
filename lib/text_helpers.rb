@@ -20,7 +20,7 @@ module TextHelpers
   MARKER_ANCHOR  = /(?:(?<=\p{L})\p{Ll}|(?<=[\p{L}\p{N}.,;:!?…])[\)\]"”’»]|(?<!\d)[.,;:]|[?!…])/u
   # A text layer that lost a space glues a cross-reference to the word introducing it,
   # "página278". That number points at a page, so it is never a call.
-  PAGE_REFERENCE  = /\b(p[áa]g(?:ina)?s?\.?|pages?)(\d{1,4})\b/iu
+  PAGE_REFERENCE  = /\b(p(?:á|a)g(?:ina)?s?\.?|pages?)(\d{1,4})\b/iu
   TRAILING_HYPHEN = /\s*[-­‐‑]\z/
   # An ellipsis is a pause; whether it closes the sentence depends on what follows.
   TRAILING_ELLIPSIS = /(?:\.{3}|…)["”’)\]»]*\s*\z/u

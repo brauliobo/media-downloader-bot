@@ -11,7 +11,7 @@ module Audiobook
       # are measuring; the corpus is small enough to name the exceptions to Portuguese.
       LANGUAGES = {
         /kybalion|path_of_empowerment|savin|32 reasons|fixing_my_gaze|why_good_people|what_doctors|beginners guide|fauci/i => 'en',
-        /adi[oó]s|salud prohibida|cura_en_un_minuto|milagroso/i => 'es',
+        /adi(?:o|ó)s|salud prohibida|cura_en_un_minuto|milagroso/i => 'es',
       }.freeze
       DEFAULT_LANGUAGE = 'pt'.freeze
 
