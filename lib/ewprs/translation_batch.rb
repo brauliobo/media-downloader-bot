@@ -32,7 +32,11 @@ module Ewprs
     MAX_INLINE_PARENTHETICAL_CHARS = 60
     TOKEN_RETRIES  = 5
 
-    class ProtectedTokenError < StandardError; end
+    # Rescued alongside TranslationValidator::Error, which names the rule the translation broke.
+    # This one never names a rule, so a reader can ask either for its code without checking first.
+    class ProtectedTokenError < StandardError
+      def code = nil
+    end
 
     Entry = Struct.new(:kind, :path, keyword_init: true) do
       def slug = File.basename(path, File.extname(path))
