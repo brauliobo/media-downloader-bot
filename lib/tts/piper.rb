@@ -6,12 +6,10 @@ class TTS
 
     configure_backend(
       base_url:      "http://127.0.0.1:#{ENV['PIPER_PORT']&.to_i || 10222}",
-      segment_chars: ENV['PIPER_SEGMENT_CHARS']&.to_i || 500
+      segment_chars: ENV['PIPER_SEGMENT_CHARS']&.to_i || 500,
+      sample_rate:     22_050,
+      sample_rate_env: 'PIPER_SAMPLE_RATE'
     )
-
-    def self.output_sample_rate
-      TTS.env_sample_rate('PIPER_SAMPLE_RATE') || 22_050
-    end
 
     extend self
   end

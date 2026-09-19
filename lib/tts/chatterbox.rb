@@ -6,15 +6,13 @@ class TTS
 
     configure_backend(
       base_url:      "http://127.0.0.1:#{ENV['CHATTERBOX_PORT']&.to_i || 10250}",
-      segment_chars: ENV['CHATTERBOX_SEGMENT_CHARS']&.to_i || 300
+      segment_chars: ENV['CHATTERBOX_SEGMENT_CHARS']&.to_i || 300,
+      sample_rate:     24_000,
+      sample_rate_env: 'CHATTERBOX_SAMPLE_RATE'
     )
 
     def self.supports_temperature?
       true
-    end
-
-    def self.output_sample_rate
-      TTS.env_sample_rate('CHATTERBOX_SAMPLE_RATE') || 24_000
     end
 
     def synthesize(text:, lang:, out_path:, **kwargs)

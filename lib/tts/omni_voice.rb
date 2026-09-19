@@ -9,7 +9,9 @@ class TTS
       segment_chars:         ENV['OMNIVOICE_SEGMENT_CHARS']&.to_i || 420,
       batch_synth_path:      '/synthesize_batch',
       segment:               false,
-      stable_voice_reference: true
+      stable_voice_reference: true,
+      sample_rate:     24_000,
+      sample_rate_env: 'OMNIVOICE_SAMPLE_RATE'
     )
 
     def self.supports_batch_synthesis?
@@ -26,10 +28,6 @@ class TTS
       require_clone_text!(speaker_wav, ref_text)
       kwargs = kwargs.merge(ref_text: ref_text, normalize_text: true)
       super(items: items, lang: lang, speaker_wav: speaker_wav, **kwargs)
-    end
-
-    def self.output_sample_rate
-      TTS.env_sample_rate('OMNIVOICE_SAMPLE_RATE') || 24_000
     end
 
     private

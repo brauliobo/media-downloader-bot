@@ -7,15 +7,13 @@ class TTS
     configure_backend(
       base_url:               "http://127.0.0.1:#{ENV['MOSS_TTS_PORT']&.to_i || 10260}",
       segment_chars:          ENV['MOSS_TTS_SEGMENT_CHARS']&.to_i || 500,
-      stable_voice_reference: true
+      stable_voice_reference: true,
+      sample_rate:     48_000,
+      sample_rate_env: 'MOSS_TTS_SAMPLE_RATE'
     )
 
     def self.supports_temperature?
       true
-    end
-
-    def self.output_sample_rate
-      TTS.env_sample_rate('MOSS_TTS_SAMPLE_RATE') || 48_000
     end
 
     def synthesize(text:, lang:, out_path:, **kwargs)

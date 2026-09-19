@@ -6,12 +6,10 @@ class TTS
 
     configure_backend(
       base_url:      "http://127.0.0.1:#{ENV['FISH_SPEECH_PORT']&.to_i || 10242}",
-      segment_chars: ENV['FISH_SPEECH_SEGMENT_CHARS']&.to_i || 500
+      segment_chars: ENV['FISH_SPEECH_SEGMENT_CHARS']&.to_i || 500,
+      sample_rate:     44_100,
+      sample_rate_env: 'FISH_SPEECH_SAMPLE_RATE'
     )
-
-    def self.output_sample_rate
-      TTS.env_sample_rate('FISH_SPEECH_SAMPLE_RATE') || 44_100
-    end
 
     extend self
   end

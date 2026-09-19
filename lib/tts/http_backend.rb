@@ -24,13 +24,15 @@ class TTS
     end
 
     class_methods do
-      def configure_backend(base_url:, segment_chars: 500, synth_path: '/synthesize', batch_synth_path: nil, segment: true, stable_voice_reference: false)
+      def configure_backend(base_url:, segment_chars: 500, synth_path: '/synthesize', batch_synth_path: nil, segment: true, stable_voice_reference: false, sample_rate: nil, sample_rate_env: nil)
         self.base_url               = base_url
         self.segment_chars          = segment_chars
         self.segment                = segment
         self.synth_path             = synth_path
         self.batch_synth_path       = batch_synth_path
         self.stable_voice_reference = stable_voice_reference
+        # Read from the environment on every call, the way each backend used to declare it.
+        define_singleton_method(:output_sample_rate) { TTS.env_sample_rate(sample_rate_env) || sample_rate } if sample_rate
       end
     end
 
