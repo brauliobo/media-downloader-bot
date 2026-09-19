@@ -552,6 +552,9 @@ module Audiobook
       @pages = pages.select { |page| selected_pages.include?(page.number) }
     end
 
+    # A book assembled from lines has its running heads and feet removed while they are still
+    # lines, where their repetition and their place on the page can both be read. One loaded
+    # from YAML arrives already assembled, and their repetition is all that is left to go on.
     def filter_repeated_page_boundaries!
       return if pages.size < 3
 
