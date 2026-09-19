@@ -1,5 +1,14 @@
 class VoiceReference
   module TranscriptQuality
+    # The tenth percentile of the word confidences: what tells a transcript with one bad word
+    # from one that is unreliable throughout. Utils::Stats rounds the other way, which would
+    # pick a different word for a sample whose size is an exact multiple of ten.
+    def self.p10(probabilities)
+      return 0 if probabilities.empty?
+
+      probabilities.sort[(probabilities.size * 0.1).floor]
+    end
+
     module_function
 
     def words(value)

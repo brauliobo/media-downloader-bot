@@ -1,3 +1,6 @@
+require_relative '../utils/stats'
+require_relative 'transcript_quality'
+
 class VoiceReference
   class Selector
     DURATION_RANGE               = 4.0..14.0
@@ -52,8 +55,8 @@ class VoiceReference
         probabilities = segments.flat_map { |segment| TranscriptQuality.word_confidences(segment) }
         next if probabilities.empty?
 
-        average = probabilities.sum / probabilities.size
-        p10     = probabilities.sort[(probabilities.size * 0.1).floor]
+        average = Utils::Stats.mean(probabilities)
+        p10     = TranscriptQuality.p10(probabilities)
         next if average < MIN_AVERAGE_PROBABILITY || p10 < MIN_P10_PROBABILITY
 
         Candidate.new(
@@ -73,12 +76,7 @@ class VoiceReference
       segment_p10_probability(segment) < MIN_EDGE_P10_PROBABILITY
     end
 
-    def segment_p10_probability(segment)
-      probabilities = TranscriptQuality.word_confidences(segment).sort
-      return 0 if probabilities.empty?
-
-      probabilities[(probabilities.size * 0.1).floor]
-    end
+    def segment_p10_probability(segment) = TranscriptQuality.p10(TranscriptQuality.word_confidences(segment))
 
     def segment_windows(segments)
       segments = Array(segments)

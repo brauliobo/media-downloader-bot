@@ -4,6 +4,7 @@ require 'fileutils'
 require_relative '../utils/tmp'
 
 require_relative '../ffmpeg'
+require_relative '../utils/stats'
 require_relative 'transcript_quality'
 
 class VoiceReference
@@ -101,8 +102,8 @@ class VoiceReference
       Subtitler::Subtitle.assert!(transcript, 'transcript')
 
       probabilities = transcript.entries.flat_map { |entry| TranscriptQuality.word_confidences(entry) }
-      average       = probabilities.empty? ? 0 : probabilities.sum.fdiv(probabilities.size)
-      p10           = probabilities.empty? ? 0 : probabilities.sort[(probabilities.size * 0.1).floor]
+      average       = Utils::Stats.mean(probabilities)
+      p10           = TranscriptQuality.p10(probabilities)
       observed      = transcript.entries.map(&:text).join(' ')
       similarity    = VoiceReference::TranscriptQuality.word_similarity(expected, observed)
       transcript_language = transcript.language.presence || language
