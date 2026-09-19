@@ -144,30 +144,6 @@ module TextHelpers
     false
   end
 
-  def self.merge_paragraphs(paragraphs)
-    result = []
-    paragraphs.each do |para|
-      blocks = para[:text].to_s.split(/\n{2,}/).map { |b| normalize_text(b) }.reject(&:empty?)
-      blocks.each do |block|
-        lines = block.split(/\n+/).map { |l| normalize_text(l) }.reject(&:empty?)
-        lines.each do |line|
-          if heading_line?(line)
-            result << SymMash.new(text: line, page_numbers: para[:page_numbers].dup, merged: false, kind: 'heading')
-            next
-          end
-          if result.any? && result.last[:text] !~ /[\.!?？¡!;:]"?\)?$/ && result.last[:kind] != 'heading'
-            result.last[:text] << ' ' << line
-            result.last[:page_numbers] |= para[:page_numbers]
-            result.last[:merged] = true
-          else
-            result << SymMash.new(text: line, page_numbers: para[:page_numbers].dup, merged: para[:merged] || false, kind: 'text')
-          end
-        end
-      end
-    end
-    result
-  end
-
   def self.sentences_from_entries(entries)
     unless entries.is_a?(Array) && entries.all? { |entry| entry.is_a?(Subtitler::Subtitle::Entry) }
       raise TypeError, 'entries must contain only Subtitler::Subtitle::Entry objects'
