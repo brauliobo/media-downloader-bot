@@ -27,6 +27,12 @@ RSpec.describe 'Audiobook assembly regressions' do
     end
   end
 
+  describe 'dispenza-summary-columns.pdf' do
+    it 'reads a section the book sets in smaller type instead of taking it for margin notes' do
+      expect(spoken(book_for('dispenza-summary-columns.pdf', 'pt'))).to include('Dominar o momento presente')
+    end
+  end
+
   describe 'fauci-patent-table.pdf' do
     it 'does not read a table out cell by cell' do
       expect(item_texts(book_for('fauci-patent-table.pdf', 'en'))).to be_empty

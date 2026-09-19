@@ -150,12 +150,20 @@ module Audiobook
     end
 
     # Marginalia set far below body size outside the text column is print noise, not narration.
+    # A page set wholly in smaller type is a section of the book rather than a margin: what makes
+    # a note a note is that it stands apart from the page it is printed on.
     def marginalia(lines, metrics)
       return [] unless metrics
 
+      page_body = page_font_sizes(lines)
       lines.select do |line|
-        FontRoles.quantize(line.font_size).to_f < metrics.font * MARGINALIA_SIZE && off_column?(line, metrics)
+        size = FontRoles.quantize(line.font_size).to_f
+        size < metrics.font * MARGINALIA_SIZE && size != page_body[line.page] && off_column?(line, metrics)
       end
+    end
+
+    def page_font_sizes(lines)
+      lines.group_by(&:page).transform_values { |page_lines| mode_of(page_lines.map { |line| FontRoles.quantize(line.font_size) }) }
     end
 
     def off_column?(line, metrics) = (line.x.to_f - metrics.x).abs > metrics.width * OUTLIER_MARGIN
