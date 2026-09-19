@@ -7,7 +7,7 @@ module Audiobook
   # record and the contents pages are all printed for a reader who can see the page, and say
   # nothing to a listener.
   class PageFilter
-    FILTERS = %i[furniture rights_record contents skipped_pages].freeze
+    FILTERS = %i[furniture rights_record contents index skipped_pages].freeze
 
     def self.narrated(lines_data, selected_pages: nil, skip_pages: nil)
       new(lines_data, selected_pages: selected_pages, skip_pages: skip_pages).narrated
@@ -260,6 +260,52 @@ module Audiobook
     def contents_entry?(text) = TextHelpers.toc_entry?(text) || text.match?(CHAPTER_LABEL)
     def contents_title?(text) = text.match?(CONTENTS_TITLE) && text.split.size <= TITLE_WORDS
     def entry_line?(text) = text.split.size.between?(1, ENTRY_WORDS) && !TextHelpers.ends_with_punctuation?(text)
+
+    # ---------- index and reference lists ----------
+
+    INDEX_ENTRIES = 8
+    # An entry names the pages it appears on: "Bactérias 28, 41, 53, 60".
+    FOLIO_LIST    = /,\s*\d{1,4}(?:\s*[–—-]\s*\d{1,4})?(?:\s*,\s*\d{1,4}(?:\s*[–—-]\s*\d{1,4})?)*\z/
+    FOLIO_SHARE   = 0.3
+    SORTED_SHARE  = 0.8
+    SORTED_PAGES  = 3
+    SORT_KEY      = 12
+
+    # An index is a lookup table: entries in alphabetical order, each naming a page rather than
+    # saying anything. Read aloud it is minutes of names and numbers.
+    def without_index(lines_data)
+      lines = wrap(lines_data)
+      pages = index_pages(lines.group_by(&:page))
+      return lines_data if pages.empty?
+
+      reject_lines(lines_data, lines) { |line| pages.include?(line.page) }
+    end
+
+    def index_pages(pages)
+      entries = pages.to_h { |page, page_lines| [page, entry_texts(page_lines)] }
+        .select { |_, texts| texts.size >= INDEX_ENTRIES }
+      folios  = entries.select { |_, texts| folio_entries?(texts) }.keys
+      sorted  = entries.select { |_, texts| sorted_entries?(texts) }.keys
+      (close_gaps(folios) + runs(close_gaps(sorted))).to_set
+    end
+
+    def entry_texts(page_lines)
+      page_lines.map { |line| line.text.to_s.strip }.reject { |text| text.scan(/\p{L}/).size < 3 }
+    end
+
+    def folio_entries?(texts) = texts.count { |text| text.match?(FOLIO_LIST) } >= texts.size * FOLIO_SHARE
+
+    def sorted_entries?(texts)
+      keys = texts.filter_map { |text| text.downcase.sub(/\A[^\p{L}]+/, '')[0, SORT_KEY].presence }
+      keys.size > 1 && keys.each_cons(2).count { |above, below| above <= below } >= (keys.size - 1) * SORTED_SHARE
+    end
+
+    # A page between two index pages is one, whatever its own entries look like.
+    def close_gaps(pages) = (pages + pages.select { |page| pages.include?(page + 2) }.map(&:succ)).sort
+
+    # A chapter that lists something in order is not an index: ordering only names one when it
+    # is the point of several pages running.
+    def runs(pages) = pages.slice_when { |prev, page| page > prev + 1 }.select { |run| run.size >= SORTED_PAGES }.flatten
 
     # Endnotes are read where they are called, so the list they came from is not read again.
     def without_skipped_pages(lines_data)

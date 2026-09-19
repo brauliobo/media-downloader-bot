@@ -18,6 +18,27 @@ RSpec.describe 'Audiobook assembly regressions' do
   def spoken(book)    = item_texts(book).join("\n")
   def item_texts(book) = paragraph_texts(book) + headings(book)
 
+  describe 'fixing-gaze-back-index.pdf' do
+    it 'stops before reading out the back-of-book index' do
+      expect(item_texts(book_for('fixing-gaze-back-index.pdf', 'en'))).to be_empty
+    end
+  end
+
+  describe 'nao-comecou-back-index.pdf' do
+    it 'reads an index by its entries, not by the language its headings are in' do
+      expect(item_texts(book_for('nao-comecou-back-index.pdf', 'pt'))).to be_empty
+    end
+  end
+
+  describe 'salud-sorted-disease-list.pdf' do
+    it 'keeps a chapter that happens to list its subject in alphabetical order' do
+      spoken_text = spoken(book_for('salud-sorted-disease-list.pdf', 'es'))
+
+      expect(spoken_text).to include('el dióxido de cloro es muy eficaz')
+      expect(spoken_text).to include('Absceso').or include('Abceso')
+    end
+  end
+
   describe 'kybalion-dropcap-roman-pages.pdf' do
     let(:book) { book_for('kybalion-dropcap-roman-pages.pdf', 'en') }
 
