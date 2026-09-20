@@ -2,6 +2,7 @@ require 'set'
 require_relative '../text_helpers'
 require_relative 'font_roles'
 require_relative 'page_roles'
+require_relative 'ledger'
 
 module Audiobook
   # Decides which extracted lines belong to the narration. Page furniture, the cataloguing
@@ -22,16 +23,19 @@ module Audiobook
     end
 
     def narrated
-      FILTERS.reduce(@lines_data) { |lines, filter| send(:"without_#{filter}", lines) }
+      FILTERS.reduce(@lines_data) { |lines, filter| send(:"without_#{filter}", lines, filter) }
     end
 
     private
 
     def wrap(lines_data) = lines_data.map { |line| SymMash.wrap(line) }
 
-    def reject_lines(lines_data, lines, &drop)
-      kept = lines_data.select.with_index { |_, idx| !drop.call(lines[idx]) }
-      kept.size == lines_data.size ? lines_data : kept
+    def reject_lines(lines_data, lines, rule, &drop)
+      kept, dropped = lines_data.each_with_index.partition { |_, idx| !drop.call(lines[idx]) }
+      return lines_data if dropped.empty?
+
+      Ledger.record(rule, dropped.map { |_, idx| lines[idx] })
+      kept.map(&:first)
     end
 
     # ---------- page furniture ----------
@@ -46,7 +50,7 @@ module Audiobook
 
     # Page furniture is a folio, a running head repeated across pages, or a short line parked
     # away from the text block. None of it belongs in the narration.
-    def without_furniture(lines_data)
+    def without_furniture(lines_data, rule)
       return lines_data if lines_data.empty?
 
       lines = wrap(lines_data)
@@ -54,7 +58,7 @@ module Audiobook
       return lines_data if @selected_pages && pages.size < 3
 
       furniture = furniture_lines(pages, lines).map(&:object_id).to_set
-      reject_lines(lines_data, lines) { |line| furniture.include?(line.object_id) }
+      reject_lines(lines_data, lines, rule) { |line| furniture.include?(line.object_id) }
     end
 
     def furniture_lines(pages, lines)
@@ -193,26 +197,26 @@ module Audiobook
     end
 
 
-    def without_rights_record(lines_data)
+    def without_rights_record(lines_data, rule)
       return lines_data if @roles.rights.empty?
 
-      reject_lines(lines_data, wrap(lines_data)) { |line| @roles.rights.include?(line.page) && record_line?(line.text) }
+      reject_lines(lines_data, wrap(lines_data), rule) { |line| @roles.rights.include?(line.page) && record_line?(line.text) }
     end
 
-    def without_contents(lines_data) = without_pages(lines_data, @roles.contents)
-    def without_index(lines_data)    = without_pages(lines_data, @roles.index)
+    def without_contents(lines_data, rule) = without_pages(lines_data, @roles.contents, rule)
+    def without_index(lines_data, rule)    = without_pages(lines_data, @roles.index, rule)
 
-    def without_pages(lines_data, pages)
+    def without_pages(lines_data, pages, rule)
       return lines_data if pages.empty?
 
-      reject_lines(lines_data, wrap(lines_data)) { |line| pages.include?(line.page) }
+      reject_lines(lines_data, wrap(lines_data), rule) { |line| pages.include?(line.page) }
     end
 
     # Endnotes are read where they are called, so the list they came from is not read again.
-    def without_skipped_pages(lines_data)
+    def without_skipped_pages(lines_data, rule)
       return lines_data if @skip_pages.blank?
 
-      reject_lines(lines_data, wrap(lines_data)) { |line| @skip_pages.include?(line.page) }
+      reject_lines(lines_data, wrap(lines_data), rule) { |line| @skip_pages.include?(line.page) }
     end
 
     # ---------- shared left edges ----------

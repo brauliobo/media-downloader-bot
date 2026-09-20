@@ -16,15 +16,18 @@ module Audiobook
       attr_reader :path, :book, :seconds, :hits
 
       def self.for(path, pages: nil, lang: nil)
-        book = nil
-        seconds = Benchmark.realtime { book = Corpus.open(path, pages: pages, lang: lang) }
-        new(path, book, seconds)
+        book = ledger = nil
+        seconds = Benchmark.realtime do
+          ledger = Ledger.collect { book = Corpus.open(path, pages: pages, lang: lang) }
+        end
+        new(path, book, seconds, ledger)
       end
 
-      def initialize(path, book, seconds = 0.0)
+      def initialize(path, book, seconds = 0.0, ledger = nil)
         @path    = path
         @book    = book
         @seconds = seconds
+        @ledger  = ledger
         @spoken  = Detectors.spoken(book)
         @hits    = Detectors.hits(book, @spoken)
         @hits[:unspoken] = Coverage.unspoken(book, @spoken)
@@ -40,6 +43,8 @@ module Audiobook
           unspoken:   @hits[:unspoken].size,
           short:      @hits[:short].size,
           imaged:     Coverage.imaged(book).size,
+          dropped:    @ledger&.drops&.size.to_i,
+          dead:       dead_pages,
           paras:      count_items { |item| Detectors.narrated?(item) },
           refs:       references.size,
           empty_refs: references.count { |reference| reference.sentences.empty? },
@@ -68,7 +73,16 @@ module Audiobook
           references: #{references.size} (#{references.count { |reference| reference.sentences.empty? }} unbound)
           repeated sentences (>=#{DUPLICATE_MIN}x): #{duplicates.size} #{duplicates.keys.first(5).inspect}
           headings: #{count_items { |item| item.is_a?(Heading) }} sections: #{count_items { |item| item.is_a?(Section) }}
+          dropped: #{@ledger&.by_rule&.map { |rule, count| "#{rule}=#{count}" }&.join(' ')}
         HEAD
+      end
+
+      # A page the book set ten lines on and the narration says nothing from at all.
+      def dead_pages
+        return 0 unless @ledger
+
+        narrated = book.pages.reject { |page| page.items.empty? }.map(&:number).to_set
+        @ledger.dead_pages(narrated, Array(book.data&.content&.lines))
       end
 
       def sections

@@ -35,8 +35,11 @@ module Audiobook
         words.join(' ') if words.size.between?(2, MIN_WORDS + 1)
       end
 
+      # A heading is narrated like anything else, so its text is not lost when it is a heading.
+      def self.headings(book) = book.pages.flat_map { |page| page.items.grep(Heading).map(&:text) }
+
       def self.silent(book, spoken, &probe)
-        said = words_of(spoken.map { |sentence, _| sentence.text }.join(' '))
+        said = words_of((spoken.map { |sentence, _| sentence.text } + headings(book)).join(' '))
         Array(book.data&.content&.lines).filter_map do |line|
           asked = probe.call(line.text)
           [line.page, line.text.to_s.strip] if asked && !said.include?(asked)
