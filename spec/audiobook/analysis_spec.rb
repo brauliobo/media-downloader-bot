@@ -76,7 +76,7 @@ RSpec.describe Audiobook::Analysis do
     end
 
     it 'names the detectors that count correct assembly as often as a defect' do
-      expect(described_class::NOISY).to all(satisfy { |name| described_class.names.include?(name) })
+      expect(described_class::SHAPE).to all(satisfy { |name| described_class.names.include?(name) })
     end
   end
 
@@ -115,17 +115,17 @@ RSpec.describe Audiobook::Analysis do
       end
     end
 
-    it 'says what a change did, and marks the counts that are noisy' do
+    it 'says what a change did, and reports prose shape apart from defects' do
       Dir.mktmpdir do |dir|
         before = File.join(dir, 'before.tsv')
         after  = File.join(dir, 'after.tsv')
         File.write(before, described_class.tsv(rows))
         File.write(after, described_class.tsv([['one', { lower_start: 5, paras: 6 }], ['two', rows.last.last]]))
 
-        expect(described_class.diff(before, after)).to include(
-          a_string_matching(/lower_start\s+4 → 6\s+\+2 \(noisy\)/),
-          a_string_matching(/paras\s+14 → 10\s+-4\z/)
-        )
+        diff = described_class.diff(before, after)
+
+        expect(diff).to include(a_string_matching(/paras\s+14 → 10\s+-4\z/))
+        expect(diff.index('-- shape --')).to be < diff.index { |line| line.start_with?('lower_start') }
         expect(described_class.per_book(before, after).join).to include('one', 'lower_start 3→5')
       end
     end

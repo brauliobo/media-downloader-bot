@@ -27,9 +27,13 @@ module Audiobook
         end
       end
 
+      # Defects are meant to reach zero; shape says how the books are written and never will.
+      # Summing the two is what makes a book look worse the more of it is read correctly.
       def self.diff(before, after)
         left, right = totals(before), totals(after)
-        columns(left, right).map { |column| line(column, left[column], right[column]) }
+        defects, shape = columns(left, right).partition { |column| !Detectors::SHAPE.include?(column.to_sym) }
+        [*defects.map { |column| line(column, left[column], right[column]) }, '', '-- shape --',
+         *shape.map { |column| line(column, left[column], right[column]) }]
       end
 
       def self.per_book(before, after)
@@ -45,9 +49,8 @@ module Audiobook
 
       def self.line(column, before, after)
         delta = after - before
-        note  = ' (noisy)' if !delta.zero? && Detectors::NOISY.include?(column.to_sym)
-        format('%-16s %9s → %-9s %s%s', column, number(before), number(after),
-               delta.zero? ? '' : format('%+g', delta), note)
+        format('%-16s %9s → %-9s %s', column, number(before), number(after),
+               delta.zero? ? '' : format('%+g', delta))
       end
 
       def self.number(value) = value.to_i == value ? value.to_i : value.round(1)

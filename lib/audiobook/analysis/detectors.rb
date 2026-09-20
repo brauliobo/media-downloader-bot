@@ -22,8 +22,12 @@ module Audiobook
         page_num_tail:  ->(text, _at) { text =~ /\p{L}[.,;]?\s\d{1,3}\z/ || text =~ /\p{Ll}[.,;]?\s#{ROMAN}\z/ },
         # "vi" is a roman numeral and also how Portuguese says "I saw", so it is left out.
         roman_inline:   ->(text, _at) { text =~ /\p{Ll}\s(?:ix|xi{1,3}|vi{2,3}|iv|i{2,3}|xiv|xv)\s\p{Ll}/ },
-        marker_tail:    ->(text, _at) { text =~ /\p{L}[.,;:]?\d{1,2}(?=[\s.,;:]|\z)/ },
-        footnote_lead:  ->(text, at)  { at.opens && text =~ /\A\d{1,3}[.)]?\s+\p{L}/ },
+        # A call sits where the sentence it belongs to ends. Anywhere else the digits belong to
+        # the word: MMS1, ClO2, a street number, an abbreviation.
+        marker_tail:    ->(text, _at) { text =~ /\p{L}[.!?][”’")\]]?\d{1,2}(?=\s|\z)/ || text =~ /\p{L}\d{1,2}\z/ },
+        # A note repeats its number bare; "1. " opens an item of a list, which is how most of a
+        # book's numbered openings are written.
+        footnote_lead:  ->(text, at)  { at.opens && text =~ /\A\d{1,3}\s+\p{L}/ },
         list_num_tail:  ->(text, _at) { text =~ /\s\d{1,2}[.)]\z/ || text =~ /\s\p{Lu}[.)]\z/ },
         # Leaders that survived; a spaced ellipsis in prose stays under the same bar as production.
         toc_leader:     ->(text, _at) { text =~ TextHelpers::TOC_LEADERS },
@@ -51,13 +55,12 @@ module Audiobook
         letter_heading:   ->(text) { text =~ /\A\p{Lu}\z/ },
       }.freeze
 
-      # A bulleted list item reads as its own short paragraph, a lead-in keeps its colon, and a
-      # citation or a street address ends in a number, so these count correct assembly as often
-      # as they count a defect. Read them as trends, not as totals.
-      # A line of verse and an entry of a hard-broken list both end without a stop and are
-      # followed by a lowercase line, so `broken_para` reads a source that draws its own blocks
-      # as torn prose.
-      NOISY = %i[lower_start colon_end footnote_lead caps_para marker_tail tiny
+      # These say how a book is written, not that it was assembled wrongly. A bulleted item reads
+      # as its own short paragraph, a lead-in keeps its colon, a citation ends in a number, and a
+      # line of verse ends without a stop before a lowercase line. Sampled against the corpus,
+      # one hit in ten is a defect, so they are read as trends and are reported apart from the
+      # counts that are meant to reach zero.
+      SHAPE = %i[lower_start colon_end footnote_lead caps_para marker_tail tiny
                  list_num_tail page_num_tail broken_para].freeze
 
       def self.names = SENTENCE.keys + HEADING.keys
