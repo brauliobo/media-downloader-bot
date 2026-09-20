@@ -27,6 +27,12 @@ module Audiobook
     LABEL_SIZE   = 1.1
     MIN_ENTRIES  = 3
     LOOKAHEAD    = 3
+    # A note is a remark on a sentence. Where the entries run to the length of chapters, the
+    # numbers they were cut at are the book's own and the section is a chapter of it.
+    ENTRY_WORDS  = 100
+    # A note is written to be pointed at, so a section the text hardly calls is read where it
+    # is printed rather than gathered and bound.
+    CALL_SHARE   = 0.1
     SKIP_PAGES   = 1
     TITLE_LINES  = 4
 
@@ -66,21 +72,41 @@ module Audiobook
 
     def parse(lines)
       pages = lines.group_by(&:page)
-      start = section_start(pages)
-      return unless start
+      candidates(pages).each do |start|
+        @pages  = section_pages(pages, start)
+        @groups = {}
+        collect(@pages.sort.flat_map { |page| pages[page] }.reject { |row| row.text.to_s.strip.empty? })
+        return if notes?(lines)
+      end
+      @pages = Set.new
+      @groups = {}
+    end
 
-      @pages = section_pages(pages, start)
-      collect(@pages.sort.flat_map { |page| pages[page] }.reject { |row| row.text.to_s.strip.empty? })
-      @pages = Set.new if @groups.values.sum { |entries| entries.count { |_, text| text.present? } } < MIN_ENTRIES
-      @groups = {} if @pages.empty?
+    def notes?(lines) = entries.size >= MIN_ENTRIES && short_enough? && called?(lines)
+
+    def entries = @groups.values.flat_map { |group| group.values.select(&:present?) }
+
+    # The median, because one long note among short ones is a note and a section of them is not.
+    def short_enough?
+      lengths = entries.map { |text| text.split.size }.sort
+      lengths[lengths.size / 2] <= ENTRY_WORDS
+    end
+
+    # A call is read from the text the way the binding stage reads it, so a section is judged by
+    # the calls that will actually reach it.
+    def called?(lines)
+      calls = lines.reject { |row| @pages.include?(row.page) }
+        .sum { |row| TextHelpers.strip_inline_markers(row.text.to_s).last.size }
+      calls >= entries.size * CALL_SHARE
     end
 
     # The section announces itself; a book that repeats the word over its pages does not. Its
     # title often stands alone on a page, and a book set in large type fits two notes to a page,
-    # so the entries are counted over the pages that follow rather than over the next one.
-    def section_start(pages)
+    # so the entries are counted over the pages that follow rather than over the next one. The
+    # last such page is tried first, because a book gathers its notes once.
+    def candidates(pages)
       keys = pages.keys.sort
-      keys.reverse.find do |page|
+      keys.reverse.select do |page|
         pages[page].first(TITLE_LINES).any? { |line| notes_title?(line.text) } &&
           keys.select { |other| (page...page + LOOKAHEAD).cover?(other) }.sum { |other| numbered(pages[other]) } >= MIN_ENTRIES
       end

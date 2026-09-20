@@ -871,4 +871,30 @@ RSpec.describe 'Audiobook assembly regressions' do
       expect(repeated.select { |_, count| count > 1 }).to be_empty
     end
   end
+  describe 'salud-author-note-not-endnotes.pdf' do
+    let(:book) { book_for('salud-author-note-not-endnotes.pdf', 'es') }
+
+    # The book prints "Nota de Autor:" inside its disease chapters and numbers its testimonials,
+    # so the last such page opened a notes section that swallowed every page after it.
+    it 'does not take an author\'s note in a chapter for the start of the endnotes' do
+      expect(spoken(book)).to include('Delirios, alucinaciones', 'Testimonio: David')
+    end
+
+    # Bound to the calls that happened to carry those numbers, a chapter of testimonials was
+    # read out in place of a citation, once per call site.
+    it 'does not bind a chapter to a note number' do
+      expect(references(book).map { |ref| ref.sentences.size }).to all(be < 20)
+    end
+  end
+
+  describe 'fixing-gaze-quoted-endnotes.pdf' do
+    let(:book) { book_for('fixing-gaze-quoted-endnotes.pdf', 'en') }
+
+    # This book keys each note to a quoted phrase instead of printing a marker, so nothing binds
+    # and the whole section — a fifth of the book — was removed and never read.
+    it 'reads a notes section no call can bind' do
+      expect(spoken(book)).to include('Binocular interaction in striate')
+    end
+  end
+
 end
