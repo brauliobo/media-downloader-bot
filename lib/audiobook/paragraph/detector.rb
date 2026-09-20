@@ -24,7 +24,9 @@ module Audiobook
       )
 
       def initialize(lines)
-        @pages = lines.group_by(&:page_number).transform_values { |page_lines| measure(page_lines) }
+        pages  = lines.group_by(&:page_number)
+        @pages = pages.transform_values { |page_lines| measure(page_lines) }
+        @steps = pages.transform_values { |page_lines| steps_by_size(page_lines) }
       end
 
       # Consecutive baselines on one page sit a step apart; a paragraph opens with more than that.
@@ -33,9 +35,11 @@ module Audiobook
         return false unless above && below && above.page_number == below.page_number
 
         grid = page(below)
-        return below.top_spacing.to_f > grid.spacing * GAP_STEP unless grid.step.positive?
+        step = step_for(below)
+        step = grid.step unless step.positive?
+        return below.top_spacing.to_f > grid.spacing * GAP_STEP unless step.positive?
 
-        (above.y_position.to_f - below.y_position.to_f) > grid.step * GAP_STEP
+        (above.y_position.to_f - below.y_position.to_f) > step * GAP_STEP
       end
 
       def indented?(line) = indent?(line, page(line).column)
@@ -57,6 +61,22 @@ module Audiobook
       private
 
       def page(line) = @pages[line.page_number] || EMPTY
+      def step_for(line) = @steps.dig(line.page_number, FontRoles.quantize(line.font_size)).to_f
+
+      # A page set in two sizes is set on two grids: the leading of an epigraph is not that of
+      # the body, and one step for the whole page makes every line of the body look like the
+      # opening of a paragraph. Only a size that repeats a leading has a grid of its own; three
+      # headings a page apart share a size and no leading at all.
+      REPEATED_STEPS = 3
+
+      def steps_by_size(page_lines)
+        page_lines.each_cons(2).group_by { |_, below| FontRoles.quantize(below.font_size) }
+          .filter_map do |size, pairs|
+            steps = pairs.map { |above, below| (above.y_position.to_f - below.y_position.to_f).round }.select(&:positive?)
+            leading = steps.tally.select { |_, count| count >= REPEATED_STEPS }.keys.min
+            [size, leading.to_f] if leading
+          end.to_h
+      end
 
       def indent?(line, column) = line.x_position.to_f - column >= line.font_size.to_f * INDENT_EM
 

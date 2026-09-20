@@ -228,15 +228,15 @@ module Audiobook
     end
 
     # The body font of a page is the size most of its paragraphs are set in.
+    # The body of a page is the size most of its words are set in. Counting paragraphs instead
+    # lets three short notes outweigh two columns of prose and the page lose its body size.
     def body_font_by_page(items)
-      items.each_with_object(SymMash.new { |hash, page| hash[page] = SymMash.new }) do |entry, counts|
+      items.each_with_object(Hash.new { |hash, page| hash[page] = Hash.new(0) }) do |entry, counts|
         next unless entry.item.is_a?(Paragraph) && entry.font_size
 
         size = (entry.font_size.to_f * 10).round / 10.0
-        counts[entry.page][size] = counts[entry.page][size].to_i + 1
-      end.each_with_object(SymMash.new) do |(page, counts), body|
-        body[page] = counts.to_a.max_by { |_, count| count }&.first
-      end
+        counts[entry.page][size] += entry.item.sentences.sum { |sentence| sentence.text.to_s.split.size }
+      end.transform_values { |counts| counts.max_by(&:last)&.first }
     end
   end
 end
