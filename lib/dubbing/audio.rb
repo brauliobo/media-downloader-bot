@@ -1,6 +1,7 @@
 require_relative '../ffmpeg'
 require_relative 'audio/clip'
 require_relative 'audio/scheduler'
+require_relative 'audio/speech_span'
 require_relative 'audio/speech_speed'
 require_relative 'timing_score'
 

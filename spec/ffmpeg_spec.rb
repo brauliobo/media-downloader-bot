@@ -211,6 +211,9 @@ RSpec.describe FFmpeg do
       )
       expect(described_class.atempo_chain(4.8))
         .to eq 'atempo=2.000000,atempo=2.000000,atempo=1.200000'
+      expect(described_class.dub_timeline_filter(
+        clips: [double(start: 0.5, speed: 1.0, leading: 0.2, speech: 1.5)], duration: 3.0
+      )).to include('atrim=start=0.2:duration=1.5', 'asetpts=PTS-STARTPTS', 'adelay=500:all=1')
       expect(described_class.voice_reference_filter(
         :clone, silence_threshold_db: -35, pad_duration: 0.15
       )).to eq 'highpass=f=80,afftdn=nf=-25,loudnorm=I=-16:TP=-1.5:LRA=11,apad=pad_dur=0.15'

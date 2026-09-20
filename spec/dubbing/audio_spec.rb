@@ -6,9 +6,15 @@ RSpec.describe Dubbing::Audio do
 
   after { FileUtils.remove_entry(dir) if Dir.exist?(dir) }
 
-  def probe_duration(path, duration, ffmpeg: anything)
+  def probe_duration(path, duration, ffmpeg: anything, leading: 0.0, trailing: 0.0)
+    file_duration = duration + leading + trailing
     allow(Prober).to receive(:for).with(path, ffmpeg: ffmpeg)
-      .and_return(SymMash.new(format: SymMash.new(duration: duration)))
+      .and_return(SymMash.new(format: SymMash.new(duration: file_duration)))
+    allow(described_class::SpeechSpan).to receive(:detect).with(path, ffmpeg: ffmpeg).and_return(
+      described_class::SpeechSpan.new(
+        duration: file_duration, leading: leading, trailing: trailing, speech: duration
+      )
+    )
   end
 
   it 'preserves synthesized edge padding without changing speech speed' do
@@ -20,6 +26,18 @@ RSpec.describe Dubbing::Audio do
     ).and_return output
 
     expect(described_class.normalize(input, output, ffmpeg: ffmpeg)).to eq(output)
+  end
+
+  it 'fits tempo to audible speech instead of synthesized leading pad' do
+    clip = described_class::Clip.new(path: File.join(dir, 'speech.wav'), start: 0.0, end: 2.0)
+    probe_duration clip.path, 2.0, leading: 0.4
+
+    scheduled = described_class.schedule([clip], duration: 4.0)
+
+    expect(scheduled.first.speed).to eq(1.0)
+    expect(scheduled.first.leading).to eq(0.4)
+    expect(scheduled.first.speech).to eq(2.0)
+    expect([scheduled.first.start, scheduled.first.end]).to eq([0.0, 2.0])
   end
 
   it 'uses the gap after a sentence before speeding it up' do
@@ -198,6 +216,24 @@ RSpec.describe Dubbing::Audio do
     expect(FFmpeg).to have_received(:dub_timeline_filter).with(
       clips: [an_instance_of(described_class::ScheduledClip)], duration: 3.0
     )
+  end
+
+  it 'trims synthesized leading pad before placing speech on the timeline' do
+    input  = File.join(dir, 'input.wav')
+    output = File.join(dir, 'output.wav')
+    clip   = described_class::Clip.new(path: input, start: 0.5, end: 2.0)
+    ffmpeg = instance_double FFmpeg
+    probe_duration input, 1.5, leading: 0.2, ffmpeg: ffmpeg
+    allow(FFmpeg).to receive(:dub_timeline_filter).and_call_original
+    expect(ffmpeg).to receive(:render_dub_timeline) do |**arguments|
+      expect(arguments[:filter]).to include(
+        'atrim=start=0.2:duration=1.5', 'asetpts=PTS-STARTPTS', 'adelay=500:all=1'
+      )
+      expect(arguments[:filter]).not_to include('atempo')
+      output
+    end
+
+    described_class.render_timeline([clip], output, duration: 3.0, ffmpeg: ffmpeg)
   end
 
   it 'creates silence through FFmpeg for an empty timeline' do

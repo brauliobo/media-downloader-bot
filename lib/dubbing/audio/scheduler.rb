@@ -1,7 +1,7 @@
-require_relative '../../prober'
 require_relative '../../utils/stats'
 require_relative 'clip'
 require_relative 'slot'
+require_relative 'speech_span'
 require_relative 'speech_speed'
 
 module Dubbing
@@ -14,7 +14,7 @@ module Dubbing
 
       def initialize(clips, duration:, ffmpeg:)
         @duration = duration.to_f
-        @slots    = clips.map { |clip| Slot.new clip, duration: probe(clip, ffmpeg), limit: @duration }
+        @slots    = clips.map { |clip| build_slot(clip, ffmpeg) }
         @cursor   = 0.0
         assign_ceilings!
         assign_latest_ends!
@@ -27,7 +27,12 @@ module Dubbing
 
       private
 
-      def probe(clip, ffmpeg) = Prober.for(clip.path, ffmpeg: ffmpeg).format.duration.to_f
+      def build_slot(clip, ffmpeg)
+        span = SpeechSpan.detect(clip.path, ffmpeg: ffmpeg)
+        Slot.new(
+          clip, duration: span.speech, leading: span.leading, trailing: span.trailing, limit: @duration
+        )
+      end
 
       # A speaker may exceed the pace it already sustains by SpeechSpeed::TOLERANCE. The median
       # keeps mistranscribed slots from raising the ceiling for the whole speaker.

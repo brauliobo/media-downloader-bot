@@ -91,8 +91,16 @@ class FFmpeg
     def dub_timeline_filter clips:, duration:
       chains = clips.map.with_index do |clip, idx|
         delay = (clip.start.to_f * 1000).round
-        speed = clip.speed == 1.0 ? '' : "#{atempo_chain clip.speed},"
-        "[#{idx}:a]#{speed}adelay=#{delay}:all=1[a#{idx}]"
+        parts = []
+        leading = clip.respond_to?(:leading) ? clip.leading.to_f : 0.0
+        speech  = clip.respond_to?(:speech) ? clip.speech.to_f : 0.0
+        if leading.positive? && speech.positive?
+          parts << "atrim=start=#{time_value leading}:duration=#{time_value speech}"
+          parts << 'asetpts=PTS-STARTPTS'
+        end
+        parts << atempo_chain(clip.speed) unless clip.speed == 1.0
+        parts << "adelay=#{delay}:all=1"
+        "[#{idx}:a]#{parts.join ','}[a#{idx}]"
       end
       mix_inputs = clips.each_index.map { |idx| "[a#{idx}]" }.join
       "#{chains.join ';'};#{mix_inputs}amix=inputs=#{clips.size}:normalize=0," \

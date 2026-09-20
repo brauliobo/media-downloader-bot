@@ -6,8 +6,18 @@ module Dubbing
       def initialize(speaker_id: nil, **attributes) = super(speaker_id: speaker_id, **attributes)
     end
 
-    ScheduledClip = Data.define(:path, :start, :end, :speed) do
-      def initialize(**attributes) = super(**attributes, speed: SpeechSpeed.validate!(attributes.fetch(:speed)))
+    ScheduledClip = Data.define(:path, :start, :end, :speed, :leading, :trailing, :speech) do
+      def initialize(leading: 0.0, trailing: 0.0, speech: nil, **attributes)
+        start  = attributes.fetch(:start)
+        finish = attributes.fetch(:end)
+        super(
+          **attributes,
+          speed:    SpeechSpeed.validate!(attributes.fetch(:speed)),
+          leading:  leading.to_f,
+          trailing: trailing.to_f,
+          speech:   speech.nil? ? (finish.to_f - start.to_f) : speech.to_f
+        )
+      end
     end
 
     Timeline = Data.define(:path, :clips, :score) do

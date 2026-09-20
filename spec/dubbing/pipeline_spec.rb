@@ -396,6 +396,60 @@ RSpec.describe Dubbing::Pipeline do
       .to raise_error(RuntimeError, 'dubbed timeline clip count mismatch: expected 2, got 1')
   end
 
+  it 'times dubbed subtitles from transcribed speech instead of source-word slots' do
+    pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), probe: probe)
+    sentences = [
+      subtitle_entry(
+        text: 'Hoje a maior notícia vem da região de Liman.',
+        source_text: 'Today the biggest news comes from the Lyman area.',
+        start: 0.0, finish: 2.32,
+        words: [
+          subtitle_word('Hoje', 0.0, 0.2),
+          subtitle_word('a', 0.2, 0.28),
+          subtitle_word('maior', 0.28, 0.5),
+          subtitle_word('notícia', 0.5, 0.8),
+          subtitle_word('vem', 0.8, 1.0),
+          subtitle_word('da', 1.0, 1.15),
+          subtitle_word('região', 1.15, 1.6),
+          subtitle_word('de', 1.6, 1.8),
+          subtitle_word('Liman.', 1.8, 2.32),
+        ]
+      )
+    ]
+    clips = [Dubbing::Audio::ScheduledClip.new(path: 'clip.wav', start: 0.69, end: 3.01, speed: 1.0)]
+    spoken = Subtitler::Subtitle.new(
+      language: 'pt',
+      entries: [
+        subtitle_entry(
+          text: 'Hoje a maior notícia vem da região de Liman.',
+          start: 0.89, finish: 2.73,
+          words: [
+            subtitle_word('Hoje', 0.89, 1.07),
+            subtitle_word('a', 1.07, 1.12),
+            subtitle_word('maior', 1.12, 1.37),
+            subtitle_word('notícia', 1.37, 1.71),
+            subtitle_word('vem', 1.72, 1.87),
+            subtitle_word('da', 1.87, 1.97),
+            subtitle_word('região', 1.97, 2.27),
+            subtitle_word('de', 2.27, 2.35),
+            subtitle_word('Liman.', 2.35, 2.73),
+          ]
+        )
+      ]
+    )
+    pipeline.instance_variable_set(:@sentences, sentences)
+
+    pipeline.send(:apply_scheduled_timings!, clips, spoken: spoken)
+    words = pipeline.sentences.first.words
+
+    expect(pipeline.sentences.first.start).to be_within(0.001).of(0.89)
+    expect(pipeline.sentences.first.finish).to be_within(0.001).of(2.73)
+    expect(words.map(&:text)).to eq(%w[Hoje a maior notícia vem da região de Liman.])
+    expect(words.first.start).to be_within(0.001).of(0.89)
+    expect(words.first.finish).to be_within(0.001).of(1.07)
+    expect(words[2].start).to be_within(0.001).of(1.12)
+  end
+
   it 'omits translated subtitles for zero-duration scheduled clips' do
     opts = SymMash.new(dub: 'pt', sub_mode: 'both')
     pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)
