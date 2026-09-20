@@ -897,4 +897,18 @@ RSpec.describe 'Audiobook assembly regressions' do
     end
   end
 
+  describe 'fixing-gaze-prose-heading.pdf' do
+    let(:book) { book_for('fixing-gaze-prose-heading.pdf', 'en') }
+
+    # Two body lines the alignment test read as centred became a heading at body size, taking a
+    # heading's pause and cutting the paragraph they opened in half.
+    it 'does not make a heading of a line that runs the measure' do
+      expect(headings(book)).to all(satisfy { |text| text.split.size <= 8 })
+    end
+
+    it 'keeps such a line in the paragraph it opens' do
+      expect(paragraph_texts(book)).to include(a_string_including('Dr. Brock was born in Switzerland in 1899 and came to the United States'))
+    end
+  end
+
 end

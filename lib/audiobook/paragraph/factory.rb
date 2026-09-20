@@ -137,6 +137,9 @@ module Audiobook
         # A contents entry points at a heading elsewhere and a bulleted line is an item in a
         # list; neither is a heading itself, however isolated it looks.
         return false if contents?(group) || TextHelpers.bulleted?(group.first.text)
+        # A line at body size that runs to the page's measure is body copy, whatever style it
+        # shares with the headings around it.
+        return false if !larger_than_body?(first_line) && group.any?(&:runs_measure?)
         # A lowercase opening is prose, an attribution or a caption unless the type outsizes the body.
         if first_line.starts_with_lowercase?
           return false if !larger_than_body?(first_line) || joined.match?(TERMINAL_PUNCTUATION)

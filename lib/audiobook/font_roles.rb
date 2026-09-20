@@ -80,7 +80,9 @@ module Audiobook
         return true if HEADING_LIKE_ROLES.include?(role)
         return false if %i[body footnote].include?(role)
       end
-      line.heading_like?
+      # A heading is a label and stops short of the margin; a line that runs to the measure the
+      # page keeps is body copy, whatever its wording looks like.
+      line.heading_like? && !line.runs_measure?
     end
 
     def self.heading_continuation?(prev, line)

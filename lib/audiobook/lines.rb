@@ -15,9 +15,22 @@ module Audiobook
       # the page repeats rather than against each line's own midpoint.
       shared = PageFilter.shared_left_edges(rows)
 
-      verse = verse_pages(rows)
+      verse    = verse_pages(rows)
+      measures = measures_of(rows)
 
-      rows.map { |row| line_from(row, shared, verse) }.reject(&:empty?)
+      rows.map { |row| line_from(row, shared, verse, measures[row.page]) }.reject(&:empty?)
+    end
+
+    # The measure of a page is the right edge most of its lines end at: prose is set to it and a
+    # heading is not, which is how a heading is told from body text set in the same type. Edges
+    # jitter by a point or two, so they are counted in bands rather than one by one.
+    MEASURE_BAND = 5
+
+    def self.measures_of(rows)
+      rows.group_by(&:page).transform_values do |page_rows|
+        page_rows.map { |row| (row.x_max.to_f / MEASURE_BAND).round * MEASURE_BAND }
+          .tally.max_by { |edge, count| [count, edge] }&.first
+      end
     end
 
     # A page whose lines nearly all begin with a capital is verse: prose reaches two thirds at
@@ -34,10 +47,11 @@ module Audiobook
       end.keys.to_set
     end
 
-    def self.line_from(row, shared, verse)
+    def self.line_from(row, shared, verse, measure)
       Line.new(
         row.text,
-        verse:       verse.include?(row.page),
+        verse:        verse.include?(row.page),
+        page_measure: measure,
         shared_edge: shared.include?(PageFilter.left_edge(row)),
         y_position:  row.y,
         page_number: row.page,

@@ -6,12 +6,12 @@ module Audiobook
   class Line
     attr_reader :text, :font_size, :y_position, :page_number, :x_position, :x_max, :page_width,
                 :top_spacing, :bottom_spacing, :section_level, :language, :alignment,
-                :bold, :italic, :color, :font_name, :block, :verse
+                :bold, :italic, :color, :font_name, :block, :verse, :page_measure
 
     def initialize(text, font_size: nil, y_position: nil, page_number: nil, x_position: nil, x_max: nil,
                    page_width: nil, top_spacing: nil, bottom_spacing: nil, section_level: nil, language: nil,
                    alignment: nil, bold: nil, italic: nil, color: nil, font_name: nil, shared_edge: false,
-                   block: nil, verse: false)
+                   block: nil, verse: false, page_measure: nil)
       @text = text.to_s.strip
       @font_size = font_size
       @y_position = y_position
@@ -34,7 +34,14 @@ module Audiobook
       @block = block
       # Set from the page: on a page of verse the line is the unit the narration reads.
       @verse = verse
+      # The right edge the page's lines keep to.
+      @page_measure = page_measure
     end
+
+    # Prose runs to the measure and a heading stops short of it, because a heading is a label.
+    MEASURE_TOLERANCE = 6
+
+    def runs_measure? = page_measure.to_f.positive? && x_max.to_f >= page_measure - MEASURE_TOLERANCE
 
     def empty?
       @text.empty?
@@ -43,6 +50,7 @@ module Audiobook
     def style_attrs
       {
         font_size: font_size, y_position: y_position, page_number: page_number,
+        page_measure: page_measure,
         x_position: x_position, x_max: x_max, page_width: page_width,
         top_spacing: top_spacing, bottom_spacing: bottom_spacing,
         section_level: section_level, language: language, alignment: alignment,
