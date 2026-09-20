@@ -302,20 +302,52 @@ module Audiobook
       def self.height_of(node) = node['yMax'].to_f - node['yMin'].to_f
 
       def self.line_text(words, baseline = word_baseline(words))
+        spaced   = letter_gaps(words.to_a)
         previous = nil
-        words.map do |word|
+        words.each_with_index.map do |word, at|
           marker = superscript_marker?(word, baseline)
           text   = marker ? TextHelpers.reference_marker(word.text) : word.text
           # A footnote call belongs to the word it follows, however wide a gap the raised glyph leaves.
-          text = "#{word_separator(previous, word)}#{text}" if previous && !marker
+          text = "#{word_separator(previous, word, spaced[at])}#{text}" if previous && !marker
           previous = word
           text
         end.join.strip
       end
 
-      def self.word_separator(previous, word)
-        height = previous['yMax'].to_f - previous['yMin'].to_f
-        word['xMin'].to_f - previous['xMax'].to_f < height * WORD_GAP_RATIO ? '' : ' '
+      # Letter-spaced type, and the small capitals a re-rendered PDF splits the same way, reach
+      # the text layer one letter to a word and are read out letter by letter. A run of them has
+      # gaps of two sizes and no others: between two letters of a word and between two words,
+      # and the widest step between the two is where the words divide. A line may letter-space a
+      # phrase and set the rest of itself normally, so the runs are read one at a time.
+      LETTER_RUN  = 3
+      LETTER_STEP = 1.5
+
+      def self.letter_gaps(words)
+        words.each_index.select { |at| single?(words[at]) }
+          .slice_when { |above, below| below > above + 1 }
+          .select { |run| run.count { |at| letter?(words[at]) } >= LETTER_RUN }
+          .each_with_object({}) do |run, gaps|
+            gap = letter_gap(words[run.first..run.last])
+            run.each { |at| gaps[at] = gap } if gap
+          end
+      end
+
+      # A digit or a mark set among the letters belongs to the run; letters alone declare one.
+      def self.single?(word) = word.text.to_s.strip.length == 1
+      def self.letter?(word) = word.text.to_s.strip.match?(/\A\p{L}\z/)
+
+      # A run showing only one size of gap is one word, and is left joined.
+      def self.letter_gap(words)
+        gaps = words.each_cons(2).map { |left, right| (right['xMin'].to_f - left['xMax'].to_f).round(1) }.uniq.sort
+        below, above = gaps.each_cons(2).max_by { |low, high| high - low }
+        (below + above) / 2.0 if above && above >= [below, 0.1].max * LETTER_STEP
+      end
+
+      def self.word_separator(previous, word, spaced = nil)
+        gap = word['xMin'].to_f - previous['xMax'].to_f
+        return gap > spaced ? ' ' : '' if spaced
+
+        gap < (previous['yMax'].to_f - previous['yMin'].to_f) * WORD_GAP_RATIO ? '' : ' '
       end
 
       # A bullet or a deep descender drags the line box down, so the baseline is the one most words share.

@@ -911,4 +911,14 @@ RSpec.describe 'Audiobook assembly regressions' do
     end
   end
 
+  describe 'guia-letterspaced-type.pdf' do
+    let(:book) { book_for('guia-letterspaced-type.pdf', 'pt') }
+
+    # Letter-spaced type reaches the text layer one letter to a word, and is read out letter by
+    # letter. The gap between two letters of a word is a quarter of the gap between two words.
+    it 'reads letter-spaced type as words' do
+      expect(spoken(book)).to include('Não faça mais cápsulas')
+      expect(spoken(book)).not_to match(/\p{L} \p{L} \p{L} \p{L} /)
+    end
+  end
 end
