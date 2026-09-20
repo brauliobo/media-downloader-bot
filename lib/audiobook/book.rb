@@ -26,6 +26,7 @@ require_relative 'page'
 require_relative 'page_selection'
 require_relative 'page_filter'
 require_relative 'page_roles'
+require_relative 'assembly'
 require_relative 'lines'
 require_relative 'notes'
 require_relative 'endnotes'
@@ -40,7 +41,6 @@ module Audiobook
     SAMPLE_SCAN_PAGES     = 40
     TOC_LEADER            = /(?:\.{4,}|\s{3,})\s*\d{1,4}\s*\z/
     MAX_STRUCTURED_BYTES = ENV.fetch('MAX_STRUCTURED_DOCUMENT_BYTES', 20 * 1024 * 1024).to_i
-    CHINESE_MAX_SENTENCE_CHARS = 30
 
     attr_reader :data, :metadata, :pages, :translated, :translated_base, :author_gender, :font_roles
 
@@ -468,70 +468,10 @@ module Audiobook
 
     # Build pages from Line objects (new format with font metadata)
     def pages_from_lines(lines_data, images_data = [])
-      roles    = PageRoles.from_lines(lines_data) unless include_all?
-      endnotes = roles ? Endnotes.from_lines(lines_data) : Endnotes.none
-      lines    = Lines.build(narrated(lines_data, roles, endnotes))
-
-      @font_roles = FontRoles.from_lines(lines)
-      items = FontRoles.use(@font_roles) do
-        Paragraph.discover_from_lines(lines, max_sentence_chars: max_sentence_chars)
-      end.map { |entry| SymMash.new(entry) }
-
-      build_pages(Repeats.strip(Blocks.merge(Notes.attach(items, endnotes: endnotes))), images_data)
-    end
-
-    def narrated(lines_data, roles, endnotes)
-      return lines_data unless roles
-
-      PageFilter.narrated(lines_data, roles: roles, selected_pages: @metadata.selected_pages,
-                          skip_pages: endnotes.pages)
-    end
-
-    def max_sentence_chars
-      @lang == 'zh' ? CHINESE_MAX_SENTENCE_CHARS : Paragraph::Factory::MAX_SENTENCE_CHARS
-    end
-
-    def build_pages(items_with_pages, images_data)
-      pages_hash = group_items_by_page(items_with_pages)
-      add_images(pages_hash, images_data)
-      # An empty page still takes its turn, so the narration keeps the book's numbering.
-      page_numbers&.each { |page_num| pages_hash[page_num] ||= [] }
-
-      pages_hash.sort.map { |page_num, items| Page.new(page_num, items) }
-    end
-
-    def page_numbers
-      total = @metadata.page_count
-      @metadata.selected_pages || (1.upto(total) if total)
-    end
-
-    # An image can share a page with text, and OCR happens as the Image is built.
-    def add_images(pages_hash, images_data)
-      total = @metadata.page_count
-      added = Set.new
-      images_data.each do |img_data|
-        img_data = SymMash.wrap(img_data)
-        next unless img_data.path && img_data.page
-        next unless added.add?([img_data.page, img_data.path])
-
-        context = SymMash.new(current: img_data.page, total: total) if total
-        pages_hash[img_data.page] ||= []
-        pages_hash[img_data.page] << Image.new(
-          img_data.path, stl: @stl, page_context: context, text: img_data.text, opts: ocr_opts
-        )
-      end
-    end
-
-    def ocr_opts
-      opts = SymMash.new(@opts || {})
-      opts.lang ||= @metadata.language if @metadata.language
-      opts
-    end
-
-    def group_items_by_page(items_with_pages)
-      items_with_pages.each_with_object(SymMash.new { |h, k| h[k] = [] }) do |item_data, h|
-        h[item_data.page] << item_data.item
-      end
+      @from_lines = true
+      assembly    = Assembly.new(metadata: @metadata, opts: @opts, stl: @stl, lang: @lang,
+                                 include_all: include_all?)
+      assembly.pages(lines_data, images_data).tap { @font_roles = assembly.font_roles }
     end
 
     def include_all?
@@ -540,7 +480,7 @@ module Audiobook
 
     def finish_pages!(translate: true)
       select_pages!
-      filter_repeated_page_boundaries! unless include_all?
+      filter_repeated_page_boundaries! unless include_all? || @from_lines
       detect_publication!
       translate! if translate && translation_needed?
     end
@@ -556,9 +496,9 @@ module Audiobook
       @pages = pages.select { |page| selected_pages.include?(page.number) }
     end
 
-    # A book assembled from lines has its running heads and feet removed while they are still
-    # lines, where their repetition and their place on the page can both be read. One loaded
-    # from YAML arrives already assembled, and their repetition is all that is left to go on.
+    # A book loaded from YAML arrives already assembled, and the repetition of a line is all
+    # that is left to go on. One assembled from lines has had its running heads and feet removed
+    # already, while they were still lines and their place on the page could be read too.
     def filter_repeated_page_boundaries!
       return if pages.size < 3
 

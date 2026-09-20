@@ -280,7 +280,7 @@ RSpec.describe Audiobook::Book do
     book = described_class.new(data: data)
     sentences = book.pages.first.all_sentences.map(&:text)
 
-    expect(sentences.map(&:length).max).to be <= described_class::CHINESE_MAX_SENTENCE_CHARS
+    expect(sentences.map(&:length).max).to be <= Audiobook::Assembly::CHINESE_MAX_SENTENCE_CHARS
     expect(sentences.join(' ')).to eq(text)
   end
 
