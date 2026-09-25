@@ -24,20 +24,16 @@ class WorkerDaemon
   private
 
   def run_http
-    http_client = Faraday.new(url: @service_uri, headers: {'Authorization' => "Bearer #{ENV.fetch('BOT_HTTP_TOKEN')}"}) do |conn|
-      conn.options.timeout = 0.1
-    end
+    http_client = Bot::Worker::HTTPClient.new(@service_uri, timeout: 0.1)
     puts "Worker connected to HTTP service at #{@service_uri}"
 
     loop do
       break if @shutdown_reason
 
       begin
-        response = http_client.get('/queue/dequeue')
-        raise "bot HTTP service returned #{response.status}" unless response.success?
-        result = response.body.is_a?(String) ? JSON.parse(response.body) : response.body
+        result   = http_client.get('queue/dequeue')
         job_data = result['job']
-        
+
         if job_data
           job = {job_data: job_data, worker_uri: result['service_uri'] || @service_uri}
           if @shutdown_reason

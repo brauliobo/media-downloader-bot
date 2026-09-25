@@ -11,6 +11,10 @@ module Bot
     class HTTPService < Roda
       plugin :json
       plugin :json_parser
+      plugin :error_handler do |e|
+        warn "bot HTTP service #{request.path}: #{e.inspect}"
+        {error: "#{e.class}: #{e.message}"}
+      end
 
       UPLOAD_PATH_KEYS = %i[file_path thumb_path thumbnail_path].freeze
 

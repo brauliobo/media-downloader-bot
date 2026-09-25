@@ -30,13 +30,8 @@ RSpec.describe Bot::Worker::Client do
         [200, {'Content-Type' => 'application/json'}, {'path' => '/tmp/file.pdf'}]
       end
     end
-    conn = Faraday.new(url: 'http://127.0.0.1:1181') do |f|
-      f.request :json
-      f.response :json
-      f.adapter :test, stubs
-    end
     client = described_class.new('http://127.0.0.1:1181')
-    client.instance_variable_set(:@http_client, conn)
+    client.instance_variable_get(:@http_client).instance_variable_get(:@conn).adapter :test, stubs
 
     path = client.download_file(double(document: double(id: 123)), dir: '/tmp')
 

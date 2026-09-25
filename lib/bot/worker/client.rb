@@ -1,9 +1,9 @@
 require 'drb/drb'
-require 'faraday'
 require 'fileutils'
 require 'json'
 require_relative '../../utils/tmp'
 require_relative '../msg_helpers'
+require_relative 'http_client'
 
 module Bot
   module Worker
@@ -16,10 +16,7 @@ module Bot
           @drb = DRbObject.new_with_uri(uri)
           @mode = :drb
         elsif uri.start_with?('http://') || uri.start_with?('https://')
-          @http_client = Faraday.new(url: uri, headers: {'Authorization' => "Bearer #{ENV.fetch('BOT_HTTP_TOKEN')}"}) do |f|
-            f.request :json
-            f.response :json
-          end
+          @http_client = HTTPClient.new(uri)
           @mode = :http
         else
           raise ArgumentError, "Unsupported URI scheme: #{uri}"
@@ -88,10 +85,8 @@ module Bot
           payload = kwargs.dup
           payload[:msg] = payload[:msg].to_h if payload[:msg] && payload[:msg].respond_to?(:to_h)
           payload[:file_id_or_info] = self.class.td_file_id(payload[:file_id_or_info]) if payload[:file_id_or_info]
-          response = @http_client.post("/#{method}", payload)
-          raise "bot HTTP service returned #{response.status}" unless response.success?
-
-          body = response.body.is_a?(Hash) ? SymMash.new(response.body) : response.body
+          body = @http_client.post(method, payload)
+          body = SymMash.new(body) if body.is_a?(Hash)
           block_given? ? yield(body) : body
         end
       end

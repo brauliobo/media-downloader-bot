@@ -1,37 +1,22 @@
+require_relative '../../../bot/worker/http_client'
+
 module Services
   class EditPosts
     module HTTPManager
       class Client
         def initialize(uri)
-          @client = Faraday.new(url: uri, headers: { 'Authorization' => "Bearer #{ENV.fetch('BOT_HTTP_TOKEN')}" }) do |conn|
-            conn.request :json
-            conn.response :json
-          end
+          @client = Bot::Worker::HTTPClient.new(uri)
         end
 
-        def chat_messages(**params) = get(:chat_messages, params)
-        def chat_message(**params) = get(:chat_message, params)
-        def edit_generated_message(**params) = post(:edit_generated_message, params)
+        def chat_messages(**params) = symbolize(@client.get(:chat_messages, params))
+        def chat_message(**params) = symbolize(@client.get(:chat_message, params))
+        def edit_generated_message(**params) = symbolize(@client.post(:edit_generated_message, params))
 
         def download_file(file_id_or_info, **params)
-          post(:download_file, params.merge(file_id_or_info: file_id_or_info))['path']
+          @client.post(:download_file, params.merge(file_id_or_info: file_id_or_info))['path']
         end
 
         private
-
-        def get(path, params)
-          response = @client.get("/#{path}", params)
-          raise "bot HTTP service returned #{response.status}" unless response.success?
-
-          symbolize(response.body)
-        end
-
-        def post(path, params)
-          response = @client.post("/#{path}", params)
-          raise "bot HTTP service returned #{response.status}" unless response.success?
-
-          symbolize(response.body)
-        end
 
         def symbolize(value)
           case value

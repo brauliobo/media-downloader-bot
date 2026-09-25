@@ -40,4 +40,27 @@ RSpec.describe Bot::Worker::HTTPService do
       expect(roots).to include(File.expand_path(File.join(Dir.pwd, 'tmp')))
     end
   end
+
+  describe 'errors' do
+    around do |example|
+      original = ENV['BOT_HTTP_TOKEN']
+      ENV['BOT_HTTP_TOKEN'] = 'token'
+      example.run
+    ensure
+      ENV['BOT_HTTP_TOKEN'] = original
+    end
+
+    it 'answers the exception for the client to raise' do
+      service = Object.new
+      def service.max_caption = raise(ArgumentError, 'Request Entity Too Large')
+      port   = TCPServer.open('127.0.0.1', 0) { |server| server.addr[1] }
+      thread = described_class.start(service, port)
+      client = Bot::Worker::HTTPClient.new("http://127.0.0.1:#{port}")
+
+      expect { expect { client.post(:max_caption) }.to output(/max_caption/).to_stderr }
+        .to raise_error(Bot::Worker::HTTPClient::Error, 'bot HTTP service /max_caption returned 500: ArgumentError: Request Entity Too Large')
+    ensure
+      thread&.kill
+    end
+  end
 end
