@@ -19,7 +19,7 @@ RSpec.describe Hashtags do
     result = described_class.new(backend: backend).call(subtitle)
 
     expect(result).to eq('#Mindfulness #Saúde #Two #Words')
-    expect(captured[:kwargs]).to include(model: 'gpt-5.6-luna', effort: 'low', schema: described_class::HASHTAG_SCHEMA)
+    expect(captured[:kwargs]).to include(model: 'gpt-6-luna', effort: 'low', schema: described_class::HASHTAG_SCHEMA)
     expect(captured[:prompt]).to include('Write every hashtag in pt.')
     expect(captured[:prompt]).to include('Ruby will format them as PascalCase hashtags')
     expect(captured[:prompt]).to include('majority of cases')

@@ -3,7 +3,7 @@ require_relative 'ai/codex'
 require_relative 'subtitler/subtitle'
 
 class Hashtags
-  MODEL  = 'gpt-5.6-luna'.freeze
+  MODEL  = 'gpt-6-luna'.freeze
   EFFORT = 'low'.freeze
 
   HASHTAG_SCHEMA = {

@@ -80,7 +80,7 @@ bundle exec ruby bin/zip input.wav '#'
 bundle exec ruby bin/zip input.wav hts
 ```
 
-The generator uses `gpt-5.6-luna` with low reasoning effort. It follows the
+The generator uses `gpt-6-luna` with low reasoning effort. It follows the
 requested `lang` language, chooses singular or plural based on the transcript,
 and only combines two words when they form a meaningful concept.
 
