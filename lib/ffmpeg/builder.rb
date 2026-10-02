@@ -93,6 +93,10 @@ class FFmpeg
     set_operation [:complex_filter], '-filter_complex', expression
   end
 
+  def set_complex_filter_script path
+    set_operation [:complex_filter], '-/filter_complex', path
+  end
+
   def add_map selector
     add_operation '-map', selector
   end
