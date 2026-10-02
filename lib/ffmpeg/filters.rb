@@ -88,23 +88,14 @@ class FFmpeg
       factors.map { |factor| speed_filter format('%.6f', factor), stream: :audio }.join ','
     end
 
+    # Clips are placed relative to offset, so a batch can be mixed apart and delayed by offset later.
+    def dub_mix_filter clips:, offset: 0.0
+      chains = clips.each_with_index.map { |clip, idx| dub_clip_chain clip, idx, offset }
+      "#{chains.join ';'};#{clips.each_index.map { |idx| "[a#{idx}]" }.join}amix=inputs=#{clips.size}:normalize=0"
+    end
+
     def dub_timeline_filter clips:, duration:
-      chains = clips.map.with_index do |clip, idx|
-        delay = (clip.start.to_f * 1000).round
-        parts = []
-        leading = clip.respond_to?(:leading) ? clip.leading.to_f : 0.0
-        speech  = clip.respond_to?(:speech) ? clip.speech.to_f : 0.0
-        if leading.positive? && speech.positive?
-          parts << "atrim=start=#{time_value leading}:duration=#{time_value speech}"
-          parts << 'asetpts=PTS-STARTPTS'
-        end
-        parts << atempo_chain(clip.speed) unless clip.speed == 1.0
-        parts << "adelay=#{delay}:all=1"
-        "[#{idx}:a]#{parts.join ','}[a#{idx}]"
-      end
-      mix_inputs = clips.each_index.map { |idx| "[a#{idx}]" }.join
-      "#{chains.join ';'};#{mix_inputs}amix=inputs=#{clips.size}:normalize=0," \
-        "loudnorm=I=-18:TP=-1.5:LRA=7,atrim=0:#{duration}"
+      "#{dub_mix_filter clips: clips},loudnorm=I=-18:TP=-1.5:LRA=7,atrim=0:#{duration}"
     end
 
     def dub_audio_mix_filter duration:
@@ -135,6 +126,13 @@ class FFmpeg
     end
 
     private
+
+    def dub_clip_chain clip, idx, offset
+      trim  = ["atrim=start=#{time_value clip.leading}:duration=#{time_value clip.speech}", 'asetpts=PTS-STARTPTS'] if
+        clip.leading.positive? && clip.speech.positive?
+      delay = "adelay=#{((clip.start - offset) * 1000).round}:all=1"
+      "[#{idx}:a]#{[*trim, atempo_chain(clip.speed), delay].reject(&:empty?).join ','}[a#{idx}]"
+    end
 
     def select_filters ranges, video:, audio:, negate:
       expression = time_ranges_expression ranges
