@@ -2,6 +2,15 @@ require_relative '../utils/tmp'
 require_relative '../utils/time_ranges'
 
 class FFmpeg
+  DUB_MIX_BATCH = 100
+
+  # A rendered batch, placed on the timeline like a clip that needs no trimming or tempo change.
+  MixedDubClip = Data.define(:path, :start) do
+    def speed = 1.0
+    def leading = 0.0
+    def speech = 0.0
+  end
+
   def extract_audio input:, output:, sample_rate:, channels:, label:, start: nil, duration: nil,
                     filter: nil, filter_profile: nil, silence_threshold_db: nil,
                     pad_duration: nil, codec: 'pcm_s16le'
@@ -102,16 +111,11 @@ class FFmpeg
     end
   end
 
-  def render_dub_timeline output:, label:, inputs: nil, clips: nil, duration: nil, filter: nil
-    inputs ||= clips.map(&:path)
-    filter ||= FFmpeg.dub_timeline_filter clips: clips, duration: duration
-
-    run_one_shot label: label do |builder|
-      inputs.each { |input| builder.input input }
-      builder.set_complex_filter filter
-      builder.channels 1
-      builder.sample_rate 48_000
-      builder.output output
+  # Mixing every clip in one graph outgrows the argument and open-file limits, so clips are mixed in batches.
+  def render_dub_timeline clips:, duration:, output:, label:
+    Utils::Tmp.dir('dub-timeline-') do |dir|
+      clips = mix_dub_batches clips, Utils::Tmp.dir('batches-', dir), label while clips.size > DUB_MIX_BATCH
+      mix_dub_clips clips, FFmpeg.dub_timeline_filter(clips: clips, duration: duration), output, label, dir
     end
   end
 
@@ -229,6 +233,30 @@ class FFmpeg
       builder.input input
       builder.channels channels if channels
       builder.sample_rate sample_rate if sample_rate
+      builder.output output
+    end
+  end
+
+  def mix_dub_batches clips, dir, label
+    clips.each_slice(DUB_MIX_BATCH).with_index.map do |batch, index|
+      offset = batch.map(&:start).min
+      path   = File.join dir, "#{index}.wav"
+      mix_dub_clips batch, FFmpeg.dub_mix_filter(clips: batch, offset: offset), path, label, dir, codec: 'pcm_f32le'
+      MixedDubClip.new path: path, start: offset
+    end
+  end
+
+  # The graph goes through a file: one chain per clip would still overflow a single argument.
+  def mix_dub_clips clips, filter, output, label, dir, codec: nil
+    script = File.join dir, 'filter.txt'
+    File.write script, filter
+
+    run_one_shot label: label do |builder|
+      clips.each { |clip| builder.input clip.path }
+      builder.set_complex_filter_script script
+      builder.codec codec, stream: :audio if codec
+      builder.channels 1
+      builder.sample_rate 48_000
       builder.output output
     end
   end

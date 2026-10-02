@@ -791,9 +791,19 @@ RSpec.describe FFmpeg do
 
   describe 'semantic operations' do
     let(:commands) { [] }
+    let(:scripts) { [] }
+
+    def dub_clips count
+      [[0.0, 1.0], [1.5, 2.4], [3.0, 1.0]].first(count).each_with_index.map do |(start, speed), idx|
+        double 'clip', path: "clip#{idx}.wav", start: start, speed: speed, leading: 0.0, speech: 0.0
+      end
+    end
+
     let(:runner) do
       lambda do |command|
         commands << command
+        script = command[command.index('-/filter_complex').to_i + 1] if command.include? '-/filter_complex'
+        scripts << File.read(script) if script
         File.write command.last, '' unless command.last == '-'
         ['stdout', '', status(true)]
       end
@@ -997,41 +1007,43 @@ RSpec.describe FFmpeg do
       end
     end
 
-    it 'renders multiple timeline inputs with the supplied filter graph' do
+    it 'renders timeline clips through a filter script' do
       Dir.mktmpdir do |dir|
         output = File.join dir, 'timeline.wav'
 
         expect(ffmpeg.render_dub_timeline(
-          inputs: %w[first.wav second.wav], output: output,
-          filter: '[0:a][1:a]amix=inputs=2:normalize=0', label: 'dub timeline'
+          clips: dub_clips(2), duration: 4.0, output: output, label: 'dub timeline'
         )).to eq output
-        expect(commands).to eq [[
-          'ffmpeg', '-y', '-threads', '2', '-loglevel', 'error',
-          '-i', 'first.wav', '-i', 'second.wav', '-filter_complex',
-          '[0:a][1:a]amix=inputs=2:normalize=0', '-ac', '1', '-ar', '48000', output
+        expect(commands).to match [[
+          'ffmpeg', '-y', '-threads', '2', '-loglevel', 'error', '-i', 'clip0.wav',
+          '-i', 'clip1.wav', '-/filter_complex', a_string_ending_with('filter.txt'),
+          '-ac', '1', '-ar', '48000', output
         ]]
+        expect(scripts).to eq [
+          '[0:a]adelay=0:all=1[a0];[1:a]atempo=2.000000,atempo=1.200000,' \
+          'adelay=1500:all=1[a1];[a0][a1]amix=inputs=2:normalize=0,' \
+          'loudnorm=I=-18:TP=-1.5:LRA=7,atrim=0:4.0'
+        ]
       end
     end
 
-    it 'renders timeline clips through semantic inputs and the owned graph constructor' do
+    it 'mixes clips in batches placed by their first clip before the final mix' do
+      stub_const 'FFmpeg::DUB_MIX_BATCH', 2
+
       Dir.mktmpdir do |dir|
         output = File.join dir, 'timeline.wav'
-        clips = [
-          instance_double('clip', path: 'first.wav', start: 0.0, speed: 1.0),
-          instance_double('clip', path: 'second.wav', start: 1.5, speed: 2.4),
-        ]
 
-        expect(ffmpeg.render_dub_timeline(
-          clips: clips, duration: 4.0, output: output, label: 'dub timeline'
-        )).to eq output
-        expect(commands).to eq [[
-          'ffmpeg', '-y', '-threads', '2', '-loglevel', 'error', '-i', 'first.wav',
-          '-i', 'second.wav', '-filter_complex',
-          '[0:a]adelay=0:all=1[a0];[1:a]atempo=2.000000,atempo=1.200000,' \
-          'adelay=1500:all=1[a1];[a0][a1]amix=inputs=2:normalize=0,' \
-          'loudnorm=I=-18:TP=-1.5:LRA=7,atrim=0:4.0',
-          '-ac', '1', '-ar', '48000', output
-        ]]
+        ffmpeg.render_dub_timeline clips: dub_clips(3), duration: 9.0, output: output, label: 'dub timeline'
+
+        expect(commands.map { |command| command.last == output }).to eq [false, false, true]
+        expect(commands.first).to include('-c:a', 'pcm_f32le')
+        expect(scripts).to eq [
+          '[0:a]adelay=0:all=1[a0];[1:a]atempo=2.000000,atempo=1.200000,adelay=1500:all=1[a1];' \
+          '[a0][a1]amix=inputs=2:normalize=0',
+          '[0:a]adelay=0:all=1[a0];[a0]amix=inputs=1:normalize=0',
+          '[0:a]adelay=0:all=1[a0];[1:a]adelay=3000:all=1[a1];[a0][a1]amix=inputs=2:normalize=0,' \
+          'loudnorm=I=-18:TP=-1.5:LRA=7,atrim=0:9.0'
+        ]
       end
     end
 

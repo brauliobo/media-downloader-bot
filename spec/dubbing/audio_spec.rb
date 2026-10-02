@@ -195,41 +195,15 @@ RSpec.describe Dubbing::Audio do
     expect(scheduled.first.speed).to eq(2.0)
   end
 
-  it 'normalizes the rendered dialogue mix to broadcast speech loudness' do
+  it 'renders the scheduled clips as one timeline' do
     input  = File.join(dir, 'input.wav')
     output = File.join(dir, 'output.wav')
     clip   = described_class::Clip.new(path: input, start: 0.0, end: 2.0)
     ffmpeg = instance_double FFmpeg
     probe_duration input, 1.5, ffmpeg: ffmpeg
-    allow(FFmpeg).to receive(:dub_timeline_filter).and_call_original
     expect(ffmpeg).to receive(:render_dub_timeline) do |**arguments|
-      expect(arguments[:inputs]).to eq [input]
-      expect(arguments[:output]).to eq output
-      expect(arguments[:filter]).to include('amix=inputs=1:normalize=0', 'loudnorm=I=-18:TP=-1.5:LRA=7')
-      expect(arguments[:filter]).not_to include('atempo')
-      expect(arguments[:label]).to eq 'dub timeline'
-      output
-    end
-
-    described_class.render_timeline([clip], output, duration: 3.0, ffmpeg: ffmpeg)
-
-    expect(FFmpeg).to have_received(:dub_timeline_filter).with(
-      clips: [an_instance_of(described_class::ScheduledClip)], duration: 3.0
-    )
-  end
-
-  it 'trims synthesized leading pad before placing speech on the timeline' do
-    input  = File.join(dir, 'input.wav')
-    output = File.join(dir, 'output.wav')
-    clip   = described_class::Clip.new(path: input, start: 0.5, end: 2.0)
-    ffmpeg = instance_double FFmpeg
-    probe_duration input, 1.5, leading: 0.2, ffmpeg: ffmpeg
-    allow(FFmpeg).to receive(:dub_timeline_filter).and_call_original
-    expect(ffmpeg).to receive(:render_dub_timeline) do |**arguments|
-      expect(arguments[:filter]).to include(
-        'atrim=start=0.2:duration=1.5', 'asetpts=PTS-STARTPTS', 'adelay=500:all=1'
-      )
-      expect(arguments[:filter]).not_to include('atempo')
+      expect(arguments[:clips]).to match [an_instance_of(described_class::ScheduledClip)]
+      expect(arguments.values_at(:duration, :output, :label)).to eq [3.0, output, 'dub timeline']
       output
     end
 

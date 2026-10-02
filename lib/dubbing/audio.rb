@@ -19,10 +19,7 @@ module Dubbing
       return silent_timeline(output, duration, ffmpeg) if clips.empty?
 
       scheduled = schedule(clips, duration: duration, ffmpeg: ffmpeg)
-      filter    = FFmpeg.dub_timeline_filter clips: scheduled, duration: duration
-      path      = ffmpeg.render_dub_timeline(
-        inputs: scheduled.map(&:path), output: output, filter: filter, label: 'dub timeline'
-      )
+      path      = ffmpeg.render_dub_timeline clips: scheduled, duration: duration, output: output, label: 'dub timeline'
 
       Timeline.new path: path, clips: scheduled, score: TimingScore.call(clips, scheduled)
     end
