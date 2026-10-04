@@ -1,8 +1,4 @@
 module Bot
-  require_relative 'msg_helpers'
-  require_relative 'album'
-  require_relative '../utils/mime_types'
-
   class Base
     include MsgHelpers
 
@@ -76,8 +72,5 @@ module Bot
 
     def perform_delete_message(_msg, _id)
     end
-  end
-
-  class Mock < Base
   end
 end

@@ -1,5 +1,3 @@
-require_relative '../../utils/cookie_jar'
-
 class Manager
   module Commands
     class Cookie
@@ -20,7 +18,7 @@ class Manager
         cookies_by_domain = Utils::CookieJar.parse_netscape(cookie_content)
         return bot.send_message(msg, Bot::MsgHelpers.me("No cookies found. Send a Netscape cookies.txt file or paste its contents after /cookies")) if cookies_by_domain.empty?
 
-        s = Models::Session.find_or_create uid: msg.from.id
+        s = Session.find_or_create uid: msg.from.id
         s.update cookies: (s.cookies || {}).merge(cookies_by_domain)
         bot.send_message msg, Bot::MsgHelpers.me("Saved #{cookies_by_domain.size} cookie(s) from Netscape file")
       rescue => e

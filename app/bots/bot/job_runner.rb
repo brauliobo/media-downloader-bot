@@ -1,5 +1,3 @@
-require_relative 'jobs'
-
 module Bot
   class JobRunner
     CANCEL_POLL_INTERVAL = 0.25

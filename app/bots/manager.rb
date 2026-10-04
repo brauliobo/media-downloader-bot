@@ -1,29 +1,4 @@
-require_relative 'boot'
-
-require 'mechanize'
-require 'roda'
 require 'ostruct'
-
-require_relative 'bot/user_queue'
-require_relative 'bot/jobs'
-require_relative 'bot/job_runner'
-require_relative 'bot/base'
-require_relative 'bot/message_result'
-require_relative 'bot/commands/cookie'
-require_relative 'bot/worker/drb_service'
-require_relative 'bot/worker/http_service'
-require_relative 'utils/input_parser'
-
-require_relative 'worker' if ENV['WITH_WORKER']
-require_relative 'services/edit_posts/job_manager' if ENV['TD_BOT']
-require_relative 'bot/tg_bot' if ENV['TG_BOT']
-require_relative 'bot/td_bot' if ENV['TD_BOT']
-
-if ENV['DB']
-  require 'sequel'
-  require_relative 'database'
-  require_relative 'models/session' if !$0.index('sequel') and DB
-end
 
 class Manager
 
@@ -52,7 +27,7 @@ EOS
 
   def initialize
     @jobs = Bot::Jobs.new
-    @edit_posts_jobs = Services::EditPosts::JobManager.new(self) if ENV['TD_BOT']
+    @edit_posts_jobs = EditPosts::JobManager.new(self) if ENV['TD_BOT']
   end
 
   def self.http
@@ -111,7 +86,7 @@ EOS
     job    = jobs.register(msg)
     forked = bot.fork_workers?
     Bot::JobRunner.new(cancelled: jobs.method(:cancelled?), interrupted: ->(_) {}, finished: jobs.method(:finish)).run(job[:id], fork: forked) do
-      DB.disconnect if defined?(DB) && forked
+      Sequel::Model.db.disconnect if forked
       Process.setproctitle 'media-downloader-tgbot worker' if forked
       service = forked && bot_service_uri.present? ? Bot::Worker::Client.new(bot_service_uri) : bot
       Worker.new(msg, service: service, job_id: job[:id]).process

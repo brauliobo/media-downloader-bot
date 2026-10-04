@@ -1,9 +1,6 @@
 require 'drb/drb'
 require 'fileutils'
 require 'json'
-require_relative '../../utils/tmp'
-require_relative '../msg_helpers'
-require_relative 'http_client'
 
 module Bot
   module Worker
@@ -144,7 +141,7 @@ module Bot
       end
 
       def album_proxy_root
-        File.expand_path(File.join(Dir.pwd, 'tmp', 'album-proxy'))
+        Rails.root.join('tmp/album-proxy').to_s
       end
 
       def self.td_file_id(info)

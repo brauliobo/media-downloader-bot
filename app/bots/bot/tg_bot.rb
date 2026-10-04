@@ -1,10 +1,6 @@
 require 'telegram/bot'
 require 'puma'
 require 'roda'
-require_relative 'base'
-require_relative 'jobs'
-require_relative 'rate_limiter'
-require_relative '../utils/safety'
 
 module Bot
   class TgBot < Base

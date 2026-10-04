@@ -2,12 +2,6 @@ require 'tdlib-ruby'
 require 'concurrent/map'
 require 'set'
 require 'fileutils'
-require_relative 'base'
-require_relative 'caption'
-require_relative 'jobs'
-require_relative 'rate_limiter'
-require_relative '../td_bot/chat_identifier'
-require_relative '../td_bot/post_editor'
 
 module Bot
   class TDBot < Base

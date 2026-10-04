@@ -1,32 +1,3 @@
-require_relative 'boot'
-
-require_relative 'utils/sh'
-require_relative 'bot/msg_helpers'
-require_relative 'models/session' if ENV['DB']
-require_relative 'context'
-
-require_relative 'prober'
-require_relative 'zipper'
-require_relative 'translator'
-require_relative 'tagger'
-require_relative 'downloaders'
-require_relative 'upload_coordinator'
-
-require_relative 'processors/base'
-require_relative 'processors/router'
-require_relative 'processors/url'
-require_relative 'processors/document'
-require_relative 'processors/media'
-require_relative 'processors/shorts'
-require_relative 'processors/local_file'
-
-require_relative 'bot/status'
-require_relative 'bot/jobs'
-require_relative 'bot/worker/client'
-
-require_relative 'audiobook'
-
-Faraday::UploadIO = Faraday::Multipart::FilePart unless defined?(Faraday::UploadIO)
 
 class Worker
 
@@ -63,8 +34,8 @@ class Worker
   delegate :send_message, :send_album, :edit_message, :delete_message, :download_file, :report_error, :msg_limit, to: :service
 
   def load_session
-    return unless defined? Models::Session
-    @session = Models::Session.find_or_create uid: ENV['SESSION_UID'] || msg.from.id
+    return unless ENV['DB']
+    @session = Session.find_or_create uid: ENV['SESSION_UID'] || msg.from.id
     @session.daylog.reject!{ |l| l['sent_at'].to_time < 1.day.ago }
     @session.daylog << {sent_at: Time.now}
     @session.msg_count += 1

@@ -1,9 +1,3 @@
-require_relative 'boot'
-
-require_relative 'bot/job_runner'
-require_relative 'bot/worker/client'
-require_relative 'worker'
-
 class WorkerDaemon
   def initialize(service_uri = nil)
     @service_uri = service_uri || ENV['BOT_HTTP'] || ENV['BOT_DRB']
@@ -95,7 +89,7 @@ class WorkerDaemon
       finished:  ->(id) { control.finish_job(id) },
     )
     runner.run(job_id) do
-      DB.disconnect if defined? DB
+      Sequel::Model.db.disconnect
       service = Bot::Worker::Client.new(worker_uri) if worker_uri
       worker  = Worker.new(SymMash.new(job_data.message), service: service || Worker.service, job_id: job_id)
       worker.process

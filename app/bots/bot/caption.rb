@@ -1,6 +1,3 @@
-require_relative 'msg_helpers'
-require_relative '../utils/url'
-
 module Bot
   module Caption
     module_function
