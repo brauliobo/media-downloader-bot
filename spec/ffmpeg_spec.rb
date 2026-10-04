@@ -1,6 +1,5 @@
-require 'spec_helper'
+require 'rails_helper'
 require 'tmpdir'
-require_relative '../lib/ffmpeg'
 
 RSpec.describe FFmpeg do
   def status success

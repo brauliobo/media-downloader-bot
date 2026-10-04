@@ -1,5 +1,3 @@
-require_relative '../utils/safety'
-
 class FFmpeg
   module Filters
     MAX_SELECT_TERMS = 100
@@ -160,6 +158,4 @@ class FFmpeg
       format('%.3f', value).sub(/0+\z/, '').delete_suffix '.'
     end
   end
-
-  extend Filters
 end
