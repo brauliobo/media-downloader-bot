@@ -5,7 +5,7 @@ These rules guide any AI-assisted edits in this project. They encode the repo’
 
 ### Scope & Stack
 - **Primary language**: Ruby (Ruby 3.x features are used: `class_attribute`, `delegate_missing_to`, one-line defs `def x = ...`).
-- **Key libs**: ActiveSupport, Faraday(+multipart), Mechanize, Roda, DRb, Rack::Mime, ChronicDuration, Sequel (optional), tdlib-ruby.
+- **Key libs**: ActiveSupport, Faraday(+multipart), Mechanize, Roda, DRb, Rack::Mime, ChronicDuration, Rails, Sequel (sequel-rails), vite_rails + Vue Vapor/Pug, tdlib-ruby.
 - **System**: systemd unit files in `services/` and shell/FFmpeg-like invocations via `Sh.run`.
 
 ### Global style
@@ -143,4 +143,4 @@ These rules guide any AI-assisted edits in this project. They encode the repo’
 
 ## ActiveSupport
 
-**DO NOT require ActiveSupport anywhere** - it is already required in `lib/boot.rb` via `require 'active_support/all'`. All ActiveSupport extensions are available globally after boot.rb is loaded.
+**DO NOT require ActiveSupport anywhere** - Rails loads it. All ActiveSupport extensions are available globally once `config/environment` is loaded (bin scripts require it).

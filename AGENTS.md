@@ -9,12 +9,15 @@
 
 - Fix root causes with small changes that follow existing patterns.
 - Keep localized static text in `config/locales`; do not embed language-specific labels in Ruby.
-- Keep EWPRS audiobook code under `lib/audiobook/ewprs/` with matching specs under `spec/audiobook/ewprs/`.
+- Rails app: domain code in `app/services`, external adapters in `app/clients`, bot/worker processes in `app/bots`, shared helpers in `app/support`, persistence in `app/models` (Sequel via sequel-rails). Namespace dirs keep constants unchanged; acronym inflections live in `config/initializers/zeitwerk.rb`.
+- No `require_relative` between app files; constants autoload (`bin/rails zeitwerk:check`). One constant per file.
+- Keep EWPRS audiobook code under `app/services/audiobook/ewprs/` with matching specs under `spec/audiobook/ewprs/`.
+- Frontend (Vue Vapor + Pug via vite_rails) lives in `app/frontend`.
 - Preserve unrelated worktree changes; never commit secrets, generated media, caches, or runtime logs.
 
 ## Verification
 
-- Run focused specs while developing, then `bundle exec rspec` before committing.
+- Run focused specs while developing, then `bundle exec rspec` before committing. Specs need the test database (`RAILS_ENV=test bin/rails sequel:create sequel:migrate`).
 - Run syntax checks and `git diff --check` for changed Ruby and text files.
 
 ## Operations
