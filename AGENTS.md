@@ -9,9 +9,9 @@
 
 - Fix root causes with small changes that follow existing patterns.
 - Keep localized static text in `config/locales`; do not embed language-specific labels in Ruby.
-- Rails app: domain code in `app/services`, external adapters in `app/clients`, bot/worker processes in `app/bots`, shared helpers in `app/support`, persistence in `app/models` (Sequel via sequel-rails). Namespace dirs keep constants unchanged; acronym inflections live in `config/initializers/zeitwerk.rb`.
+- Rails app: every domain lives directly in `app/<domain>` (`app/audiobook`, `app/ffmpeg`, `app/bot`, ...), `app` is the Zeitwerk root so the folder is the namespace; only `app/models` (Sequel via sequel-rails), `controllers` and `helpers` are nested roots. Do not add catch-all buckets (`services`, `clients`, `support`). Specs mirror `app/`. Acronym inflections live in `config/initializers/zeitwerk.rb`.
 - No `require_relative` between app files; constants autoload (`bin/rails zeitwerk:check`). One constant per file.
-- Keep EWPRS audiobook code under `app/services/audiobook/ewprs/` with matching specs under `spec/audiobook/ewprs/`.
+- Keep EWPRS audiobook code under `app/audiobook/ewprs/` with matching specs under `spec/audiobook/ewprs/`.
 - Frontend (Vue Vapor + Pug via vite_rails) lives in `app/frontend`.
 - Preserve unrelated worktree changes; never commit secrets, generated media, caches, or runtime logs.
 
