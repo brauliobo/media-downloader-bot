@@ -5,10 +5,7 @@ require 'fileutils'
 require 'json'
 require 'time'
 
-require_relative '../lib/boot'
-require_relative '../lib/audio'
-require_relative '../lib/job_pool'
-require_relative '../lib/jsonl_store'
+require_relative '../config/environment'
 
 opts = ARGV.to_h do |argument|
   key, value = argument.split('=', 2)

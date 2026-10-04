@@ -3,7 +3,7 @@
 ENV['WITH_WORKER'] = '1'
 ENV['PRINT_CMD']   = '1'
 
-require_relative '../lib/manager'
+require_relative '../config/environment'
 
 bot = Manager.new
 bot.mock_start

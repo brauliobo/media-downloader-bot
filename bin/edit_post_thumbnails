@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-require_relative '../lib/services/edit_post_thumbnails'
+require_relative '../config/environment'
 
 options = {}
 urls = ARGV.filter_map do |argument|
@@ -20,7 +20,7 @@ chat_ids = options[:chats].to_s.split(',').to_h do |entry|
   [username, Integer(chat_id)]
 end
 
-Services::EditPostThumbnails.new(
+EditPostThumbnails.new(
   urls:      urls,
   thumbnail: options.fetch(:thumb),
   source:    options[:source],

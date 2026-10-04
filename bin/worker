@@ -2,6 +2,6 @@
 
 instance = ENV.fetch('SYSTEMD_INSTANCE', '?')
 Process.setproctitle "media-downloader-worker-#{instance}"
-require_relative '../lib/worker_daemon'
+require_relative '../config/environment'
 
 WorkerDaemon.new.run

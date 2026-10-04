@@ -11,8 +11,7 @@
 # `lint` writes the assembled YAML and an issues report per book and prints the summary table;
 # `diff` reads two of those tables and says what a change did.
 
-require_relative '../lib/boot'
-require_relative '../lib/audiobook/analysis'
+require_relative '../config/environment'
 
 $stdout.sync = true
 $stderr.sync = true

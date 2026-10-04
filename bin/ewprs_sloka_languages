@@ -2,7 +2,7 @@
 
 require 'json'
 require 'optparse'
-require_relative '../lib/ewprs/sloka_languages'
+require_relative '../config/environment'
 
 options = {
   manifest: File.expand_path('../config/ewprs_sloka_languages.json', __dir__),

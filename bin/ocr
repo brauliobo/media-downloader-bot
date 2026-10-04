@@ -10,8 +10,7 @@ ENV['TRANSLATOR'] ||= 'LlamacppApi'
 ENV['OCR'] ||= 'Ollama'
 
 Dir.chdir File.expand_path "#{File.realpath __dir__}/.." do
-  require_relative '../lib/exts/sym_mash'
-  require_relative '../lib/audiobook/image'
+  require_relative '../config/environment'
 end
 
 class MockStatus

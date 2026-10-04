@@ -3,7 +3,7 @@
 require 'json'
 require 'optparse'
 
-require_relative '../lib/subtitler/semantic_diff'
+require_relative '../config/environment'
 
 module SubtitleSemanticDiffCLI
   DEFAULT_TIME_TOLERANCE = 0.01

@@ -4,9 +4,7 @@ require 'drb/drb'
 require 'fileutils'
 require 'json'
 require 'time'
-require_relative '../lib/boot'
-require_relative '../lib/audiobook'
-require_relative '../lib/audiobook/ewprs'
+require_relative '../config/environment'
 
 $stdout.sync = true
 $stderr.sync = true

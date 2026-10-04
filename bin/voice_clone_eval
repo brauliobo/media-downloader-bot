@@ -81,10 +81,7 @@ raise ArgumentError, 'output= is not supported; results are written to stdout' i
 repeats = opts.fetch(:repeats, 1).to_i
 reference_filter = (opts[:reference_filter] || (source_url ? 'quality' : 'raw')).to_sym
 
-require_relative '../lib/boot'
-require_relative '../lib/tts'
-require_relative '../lib/voice_reference'
-require_relative '../lib/voice_clone'
+require_relative '../config/environment'
 
 output_dir = Utils::Tmp.dir('voice-clone-eval-')
 

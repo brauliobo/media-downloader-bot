@@ -1,8 +1,7 @@
 #!/usr/bin/env ruby
 
 require 'json'
-require_relative '../lib/boot'
-require_relative '../lib/voice_reference'
+require_relative '../config/environment'
 
 opts = ARGV.to_h do |arg|
   key, value = arg.split('=', 2)

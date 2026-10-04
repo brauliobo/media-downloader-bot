@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-require_relative '../lib/manager'
+require_relative '../config/environment'
 
 obj = DRbObject.new_with_uri ENV['DRB_WORKER']
 Pry.start obj

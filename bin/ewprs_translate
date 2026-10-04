@@ -1,8 +1,7 @@
 #!/usr/bin/env ruby
 
 require 'json'
-require_relative '../lib/boot'
-require_relative '../lib/ewprs'
+require_relative '../config/environment'
 
 $stdout.sync = true
 $stderr.sync = true

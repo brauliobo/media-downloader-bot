@@ -2,7 +2,7 @@
 
 ENV['TG_BOT'] = '1'
 Process.setproctitle 'media-downloader-tgbot'
-require_relative '../lib/manager'
+require_relative '../config/environment'
 
 $bot = Manager.new
 $bot.start

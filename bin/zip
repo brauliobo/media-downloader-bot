@@ -9,9 +9,7 @@ ENV['DB'] = '1' if ENV['SESSION_UID']
 ENV['PUPPETEER_HEADLESS'] ||= '0'
 
 Dir.chdir File.expand_path "#{File.realpath __dir__}/.." do
-  require_relative '../lib/worker'
-  require_relative '../lib/bot/base'
-  require_relative '../lib/processors/folder'
+  require_relative '../config/environment'
 end
 
 opts  = SymMash.new metadata: {}

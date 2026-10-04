@@ -2,6 +2,6 @@
 
 ENV['TD_BOT'] = '1'
 
-require_relative '../lib/services/edit_posts'
+require_relative '../config/environment'
 
-Services::EditPosts.new(ARGV).run
+EditPosts.new(ARGV).run
