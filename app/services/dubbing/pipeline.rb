@@ -1,0 +1,245 @@
+require 'fileutils'
+require 'json'
+
+module Dubbing
+  class Pipeline
+    DEFAULT_TARGET_LANG = 'pt'.freeze
+    attr_reader :source_lang, :target_lang, :speaker_references, :sentences, :timing_score
+
+    def self.apply(input_path, dir:, opts:, stl: nil, probe: nil)
+      new(input_path, dir: dir, opts: opts, stl: stl, probe: probe).apply
+    end
+
+    def initialize(input_path, dir:, opts:, stl: nil, probe: nil)
+      @input_path  = input_path
+      @dir         = dir
+      @opts        = opts || SymMash.new
+      @stl         = stl
+      @probe       = probe
+      @target_lang = normalize_target_lang
+      @sentences   = []
+    end
+
+    def apply
+      @stl&.update 'dubbing: separating voice'
+      VoiceSeparator.with_stems(@input_path, dir: @dir) do |stems|
+        @stl&.update 'dubbing: transcribing'
+        transcript = Subtitler.transcribe_vocals(stems.vocals)
+        @transcript_output = transcript
+        @source_lang = transcript.language
+        next @input_path if @source_lang.present? && @source_lang == target_lang
+        next @input_path if transcript.sentence_entries.empty?
+
+        @stl&.update 'dubbing: diarizing'
+        diarization = Diarizer.diarize(stems.vocals, speakers: @opts.speakers&.to_i)
+        Diarizer.assign_speakers!(transcript, diarization.segments, sentence_level: true)
+
+        @stl&.update 'dubbing: translating'
+        replace_sentences!(translated_sentences(transcript))
+        next @input_path if @sentences.empty?
+
+        Utils::Tmp.dir('dub-', @dir) do |workdir|
+          @speaker_references = VoiceReference.extract_by_speaker(
+            stems.vocals,
+            diarization.segments,
+            sentences: @sentences,
+            dir:       workdir,
+            transcriber: ::VoiceReference::Transcriber.new
+          )
+          timeline = synthesize_timeline(workdir)
+          spoken   = transcribe_spoken_timeline(timeline.path)
+          apply_scheduled_timings!(timeline.clips, spoken: spoken)
+          @timing_score = timeline.score
+          write_timing_score
+          prepare_translated_subtitles
+          mix_video(timeline.path, stems.non_vocals, workdir)
+        end
+      end
+    end
+
+    private
+
+    def normalize_target_lang
+      Subtitler.normalize_lang(@opts.dub_lang || @opts.lang || @opts.slang) || DEFAULT_TARGET_LANG
+    end
+
+    def translated_sentences(subtitle)
+      sentences = subtitle.sentence_entries
+      texts     = sentences.map(&:text)
+      translations = if ::Translator.respond_to?(:translate_for_dubbing)
+        Array(::Translator.translate_for_dubbing(texts, from: source_lang, to: target_lang))
+      else
+        Array(::Translator.translate(texts, from: source_lang, to: target_lang))
+      end
+
+      sentences.zip(translations).filter_map do |sentence, translated|
+        text = Subtitler::Subtitle.clean_translation(translated)
+        next if text.empty?
+
+        translated_entry(sentence, text)
+      end
+    end
+
+    def translated_entry(sentence, text)
+      sentence.deep_copy
+        .replace_source!(text: sentence.text.strip, words: sentence.words.map(&:deep_copy))
+        .project_text!(text)
+    end
+
+    def synthesize_timeline(workdir)
+      SpeechSynthesizer.new(
+        sentences:       @sentences,
+        references:      @speaker_references,
+        opts:            @opts,
+        target_lang:     target_lang,
+        workdir:         workdir,
+        video_duration:  video_duration,
+        stl:             @stl
+      ).render
+    end
+
+    def apply_scheduled_timings!(clips, spoken: nil)
+      unless @sentences.size == clips.size
+        raise "dubbed timeline clip count mismatch: expected #{@sentences.size}, got #{clips.size}"
+      end
+
+      spoken_words = Array(spoken&.entries).flat_map(&:words)
+      scheduled = @sentences.zip(clips).filter_map do |sentence, clip|
+        target_start    = clip.start.to_f
+        target_end      = clip.end.to_f
+        next unless target_end > target_start
+
+        words = words_in_clip(spoken_words, target_start, target_end)
+        if words.empty?
+          sentence.retime!(start: target_start, finish: target_end)
+        else
+          align_sentence_to_speech!(sentence, words, fallback_start: target_start, fallback_end: target_end)
+        end
+        sentence
+      end
+      replace_sentences!(scheduled)
+    end
+
+    def transcribe_spoken_timeline(path)
+      @stl&.update 'dubbing: aligning subtitles'
+      Subtitler.transcribe_vocals(path)
+    end
+
+    def words_in_clip(words, start_time, end_time)
+      words.select do |word|
+        next if word.finish <= word.start
+
+        midpoint = (word.start + word.finish) / 2.0
+        midpoint >= start_time && midpoint < end_time
+      end
+    end
+
+    def align_sentence_to_speech!(sentence, words, fallback_start:, fallback_end:)
+      copies = words.map(&:deep_copy).filter_map do |word|
+        start  = word.start.to_f.clamp(fallback_start, fallback_end)
+        finish = word.finish.to_f.clamp(start, fallback_end)
+        next if finish <= start
+
+        word.retime!(start: start, finish: finish)
+      end
+      if copies.empty?
+        sentence.retime!(start: fallback_start, finish: fallback_end)
+        return sentence
+      end
+
+      sentence.retime!(start: copies.first.start, finish: copies.last.finish)
+      sentence.replace_words!(copies)
+      sentence.project_text!(sentence.text)
+      sentence
+    end
+
+    def prepare_translated_subtitles
+      mode = @opts.sub_mode.to_s
+      return if mode == 'none'
+      return unless @opts.gensubs || mode.present?
+
+      case mode
+      when 'source'
+        @opts.subtitle = source_subtitle
+        @opts.sub_lang = source_lang
+      when 'both'
+        @opts.subtitle = bilingual_subtitle
+        @opts.sub_lang = 'mul'
+      when 'language'
+        target_language = subtitle_target_lang == target_lang
+        subtitle        = target_language ? target_subtitle : alternate_subtitle
+        @opts.subtitle = prepare_subtitle(subtitle, normalize: target_language)
+        @opts.sub_lang = subtitle_target_lang
+      else
+        @opts.subtitle = prepare_subtitle(target_subtitle)
+        @opts.sub_lang = target_lang
+      end
+    end
+
+    def target_subtitle
+      Subtitler::Subtitle.new(language: target_lang, entries: @sentences.map(&:deep_copy))
+    end
+
+    def source_subtitle
+      (@transcript_output || Subtitler::Subtitle.new).deep_copy
+    end
+
+    def alternate_subtitle
+      target_subtitle.translated(
+        from:           target_lang,
+        to:             subtitle_target_lang,
+        merge_adjacent: false
+      )
+    end
+
+    def bilingual_subtitle
+      entries = @sentences.map do |sentence|
+        texts = [sentence.source_text, sentence.text].map { |text| text.to_s.strip }.reject(&:empty?).uniq
+        Subtitler::Subtitle::Entry.new(
+          text: texts.join("\n"), start: sentence.start, finish: sentence.finish, speaker_id: sentence.speaker_id
+        )
+      end
+      Subtitler::Subtitle.new(language: 'mul', entries: entries)
+    end
+
+    def prepare_subtitle(subtitle, normalize: true)
+      subtitle.normalize_entries! if normalize
+      subtitle
+    end
+
+    def replace_sentences!(sentences)
+      Subtitler::Subtitle::Entry.assert_all!(sentences, 'sentences')
+
+      @sentences = sentences
+    end
+
+    def subtitle_target_lang
+      @opts.sub_lang.presence || target_lang
+    end
+
+    def write_timing_score
+      return unless @opts.dubscore.present?
+
+      File.write(File.expand_path(@opts.dubscore.to_s), JSON.pretty_generate(timing_score))
+    end
+
+    def mix_video(dub_audio, non_vocals, workdir)
+      @stl&.update 'dubbing: mixing'
+      output = File.join(workdir, 'dubbed-source.mp4')
+      Audio.replace_video_audio(
+        @input_path, dub_audio, non_vocals, output, duration: video_duration
+      )
+
+      final = File.join(@dir, "dubbed-#{File.basename(@input_path, File.extname(@input_path))}.mp4")
+      FileUtils.cp(output, final)
+      final
+    end
+
+    def video_duration
+      @video_duration ||= begin
+        source = @probe || Prober.for(@input_path)
+        source.format.duration.to_f
+      end
+    end
+  end
+end
