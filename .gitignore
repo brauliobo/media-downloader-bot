@@ -11,12 +11,20 @@ services/*.mount
 .tdlib/db
 .tdlib/files
 /logs/
+/log/*
+!/log/.keep
 /tmp/*
 !/tmp/.gitkeep
 
 # bundle deployment
 vendor
 .serena
+
+# rails
+/config/master.key
+/node_modules
+/public/assets
+/public/vite*
 
 # envs
 .venv
@@ -27,7 +35,7 @@ input
 converted
 
 # whisper models
-models
+/models
 
 /*epub
 /*pdf

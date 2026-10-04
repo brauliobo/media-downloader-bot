@@ -1,6 +1,6 @@
 source 'https://rubygems.org'
 
-ruby File.read('.ruby-version')
+ruby file: '.ruby-version'
 
 LOCAL_GEMS_DIR = "#{ENV['HOME']}/Projects"
 def source github:, dir:
@@ -8,20 +8,20 @@ def source github:, dir:
   {github: github}
 end
 
-gem 'activesupport'
-gem 'i18n'
-gem 'dotenv'
+gem 'rails', '~> 8.1'
+gem 'puma'
+gem 'vite_rails'
+gem 'dotenv-rails'
+
 gem 'hashie'
 gem 'json_schemer'
 gem 'chronic'
 
 gem 'iso-639'
 
-gem 'telegram-bot-ruby', git: 'git@github.com:brauliobo/telegram-bot-ruby.git'
+gem 'telegram-bot-ruby', git: 'git@github.com:brauliobo/telegram-bot-ruby.git', require: 'telegram/bot'
 
-gem 'rack' # for better mime type
-gem 'roda'
-gem 'puma'
+gem 'roda' # bot <-> worker http service
 gem 'drb'
 
 gem 'addressable'
@@ -40,9 +40,9 @@ if ENV['TD_BOT']
 end
 
 gem 'pg'
-gem 'sequel'
+gem 'sequel-rails'
 
-group :development do
-  gem 'pry'
-  gem 'rspec'
+group :development, :test do
+  gem 'pry-rails'
+  gem 'rspec-rails'
 end
