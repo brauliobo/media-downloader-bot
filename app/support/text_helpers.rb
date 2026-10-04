@@ -1,5 +1,3 @@
-require_relative 'ewprs/sentence_splitter'
-
 module TextHelpers
   EOS_PUNCT      = /[.!?…]$/
   EOS_PUNCT_FULL = /[\.!?¡¿；。？！]"?\s*\z/

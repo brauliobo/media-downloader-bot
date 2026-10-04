@@ -1,5 +1,3 @@
-require_relative '../job_pool'
-
 Thread.report_on_exception = true
 Thread.abort_on_exception  = true
 
@@ -60,5 +58,3 @@ module Enumerable
   end
 
 end
-
-require_relative '../pipeline'

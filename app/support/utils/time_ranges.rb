@@ -1,6 +1,3 @@
-require_relative 'range_list'
-require_relative 'duration'
-
 module Utils
   class TimeRanges
     Interval = Data.define(:start, :finish)

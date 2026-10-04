@@ -1,5 +1,3 @@
-require_relative 'url'
-
 module Utils
   class InputParser
     Result = Data.define(:url, :opts)

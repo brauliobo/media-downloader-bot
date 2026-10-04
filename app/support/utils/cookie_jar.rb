@@ -1,7 +1,6 @@
 require 'time'
 require 'json'
 require 'fileutils'
-require_relative 'safety'
 
 module Utils
   module CookieJar

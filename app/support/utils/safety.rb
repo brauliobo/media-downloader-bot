@@ -1,6 +1,5 @@
 require 'ipaddr'
 require 'resolv'
-require_relative 'tmp'
 require 'uri'
 
 module Utils

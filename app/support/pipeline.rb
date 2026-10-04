@@ -1,5 +1,3 @@
-require_relative 'job_pool'
-
 class Pipeline
   def self.jobs(tasks = 1)
     [Enumerable.peach_threads / [tasks.to_i, 1].max, 1].max

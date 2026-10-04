@@ -1,7 +1,4 @@
 require 'fileutils'
-require_relative 'sh'
-require_relative 'http'
-require_relative 'safety'
 
 module Utils
   class Thumb

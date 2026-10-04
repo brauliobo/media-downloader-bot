@@ -3,8 +3,6 @@ require 'ipaddr'
 require 'mechanize'
 require 'net/http'
 require 'uri'
-require_relative 'safety'
-require_relative 'retry'
 
 module Utils
   class HTTP
