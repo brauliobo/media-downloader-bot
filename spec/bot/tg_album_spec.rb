@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/bot/tg_bot'
+require 'rails_helper'
 
 RSpec.describe Bot::TgBot do
   let(:dir) { Dir.mktmpdir('tg-album-') }

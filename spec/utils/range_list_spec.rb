@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/utils/range_list'
+require 'rails_helper'
 
 RSpec.describe Utils::RangeList do
   it 'parses comma-separated points and ranges through the supplied value parser' do

@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../../lib/dubbing/audio/speech_span'
+require 'rails_helper'
 
 RSpec.describe Dubbing::Audio::SpeechSpan do
   it 'treats silence from the start of the file as leading pad' do

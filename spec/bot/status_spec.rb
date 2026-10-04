@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/bot/status'
+require 'rails_helper'
 
 RSpec.describe Bot::Status do
   it 'runs empty cleanup after deleting the last successful line' do

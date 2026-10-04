@@ -1,7 +1,6 @@
-require 'spec_helper'
-require_relative '../../lib/services/edit_post_thumbnails'
+require 'rails_helper'
 
-RSpec.describe Services::EditPostThumbnails do
+RSpec.describe EditPostThumbnails do
   let(:urls) do
     [
       'https://t.me/industria_da_saude/1205',

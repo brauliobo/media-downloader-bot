@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Bot::MessageResult do
   it 'serializes message objects without calling to_h' do

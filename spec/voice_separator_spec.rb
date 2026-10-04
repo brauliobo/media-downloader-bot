@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../lib/voice_separator'
+require 'rails_helper'
 
 RSpec.describe VoiceSeparator do
   it 'uses Demucs as the default backend' do

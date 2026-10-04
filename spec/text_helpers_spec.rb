@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe TextHelpers do
   describe '.sentences_from_entries' do

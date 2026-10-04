@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../lib/language'
+require 'rails_helper'
 
 RSpec.describe Language do
   it 'detects language through Ollama JSON schema prompt' do

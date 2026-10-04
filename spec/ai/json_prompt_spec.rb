@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/ai/json_prompt'
+require 'rails_helper'
 
 RSpec.describe AI::JSONPrompt do
   let(:backend) do

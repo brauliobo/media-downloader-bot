@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/dubbing/voice_reference'
+require 'rails_helper'
 
 RSpec.describe Dubbing::VoiceReference do
   let(:dir) { Dir.mktmpdir('voice-ref-spec-') }

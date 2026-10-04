@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Bot::Worker::HTTPService do
   describe '.bind_host' do

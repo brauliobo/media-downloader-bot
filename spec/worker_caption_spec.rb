@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Worker do
   it 'keeps service dependencies instance-scoped' do

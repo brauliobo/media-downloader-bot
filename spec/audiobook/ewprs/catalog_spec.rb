@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../../lib/audiobook/ewprs'
+require 'rails_helper'
 
 RSpec.describe Audiobook::Ewprs::Catalog do
   around do |example|

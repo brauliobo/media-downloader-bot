@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Subtitler::Subtitle do
   def filter_noise(srt)

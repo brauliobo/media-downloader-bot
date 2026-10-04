@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Translator::HyMT2 do
   subject(:backend) { Class.new { extend Translator::HyMT2 } }

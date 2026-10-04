@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/voice_separator/demucs'
+require 'rails_helper'
 
 RSpec.describe VoiceSeparator::Demucs do
   let(:dir) { Dir.mktmpdir('demucs-spec-') }

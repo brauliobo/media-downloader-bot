@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/bot/caption'
+require 'rails_helper'
 
 RSpec.describe Bot::Caption do
   it 'normalizes escaped Markdown URLs without dropping the protocol' do

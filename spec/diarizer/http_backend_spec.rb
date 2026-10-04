@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/diarizer/http_backend'
+require 'rails_helper'
 
 RSpec.describe Diarizer::HTTPBackend do
   let(:dir) { Dir.mktmpdir('diarizer-http-spec-') }

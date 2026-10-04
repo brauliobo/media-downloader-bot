@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/ewprs/translation_validator'
+require 'rails_helper'
 
 RSpec.describe Ewprs::TranslationValidator do
   subject(:validator) { described_class.new(source_language: 'en', target_language: 'pt') }

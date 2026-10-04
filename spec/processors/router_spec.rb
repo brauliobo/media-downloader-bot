@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Processors::Router do
   it 'routes messages containing bare social urls' do

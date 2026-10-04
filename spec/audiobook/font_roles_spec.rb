@@ -1,6 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/audiobook/font_roles'
-require_relative '../../lib/audiobook/line'
+require 'rails_helper'
 
 RSpec.describe Audiobook::FontRoles do
   def line(text, size, **style)

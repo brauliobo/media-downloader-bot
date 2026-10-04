@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/diarizer/tiny_diarize'
+require 'rails_helper'
 
 RSpec.describe Diarizer::TinyDiarize do
   let(:dir) { Dir.mktmpdir('tinydiarize-spec-') }

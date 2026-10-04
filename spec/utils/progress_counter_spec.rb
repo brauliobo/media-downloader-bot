@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/utils/progress_counter'
+require 'rails_helper'
 
 RSpec.describe Utils::ProgressCounter do
   it 'reports synchronized count and total progress for batches and items' do

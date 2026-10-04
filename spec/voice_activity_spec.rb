@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../lib/voice_activity'
+require 'rails_helper'
 
 RSpec.describe VoiceActivity do
   let(:dir) { Dir.mktmpdir('voice-activity-spec-') }

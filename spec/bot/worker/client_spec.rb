@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 require 'drb/drb'
 
 RSpec.describe Bot::Worker::Client do

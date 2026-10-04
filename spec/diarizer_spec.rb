@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../lib/diarizer'
+require 'rails_helper'
 
 RSpec.describe Diarizer do
   def subtitle(*entries, text: nil, metadata: {})

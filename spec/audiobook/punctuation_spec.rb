@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe 'Audiobook punctuation-only text' do
   PUNCTUATION_ONLY = ['.', '...', '…', ' . … ', '"..."', '(...)', '[...]', '—', '***'].freeze

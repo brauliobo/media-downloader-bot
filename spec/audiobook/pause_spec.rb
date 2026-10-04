@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe 'Audiobook pause assembly' do
   it 'uses the paragraph pause before its first sentence and sentence pause thereafter' do

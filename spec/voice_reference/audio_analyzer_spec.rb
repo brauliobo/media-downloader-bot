@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/voice_reference'
+require 'rails_helper'
 
 RSpec.describe VoiceReference::AudioAnalyzer do
   let(:ffmpeg) { instance_double FFmpeg }

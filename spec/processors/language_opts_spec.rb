@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Processors::LanguageOpts do
   it 'copies lang= onto subtitle and audio language' do

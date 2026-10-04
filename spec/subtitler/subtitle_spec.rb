@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Subtitler::Subtitle do
   describe '.from_whisper_verbose_json' do

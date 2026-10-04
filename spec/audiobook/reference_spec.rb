@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe 'Reference extraction from PDF' do
   def fixture_path(name)

@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe 'Page paragraph cross-page merge' do
   def fixture_path(name) = File.expand_path("../fixtures/#{name}", __dir__)

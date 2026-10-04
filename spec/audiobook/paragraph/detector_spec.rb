@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Audiobook::Paragraph::Detector do
   def line(text, size: 12, page: 1, x: 50, top: 4, bottom: 4, **style)

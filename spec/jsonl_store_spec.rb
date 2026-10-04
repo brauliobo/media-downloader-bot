@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../lib/jsonl_store'
+require 'rails_helper'
 
 RSpec.describe JsonlStore do
   let(:dir) { Dir.mktmpdir('jsonl-store-') }

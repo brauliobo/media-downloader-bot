@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Downloaders::GalleryDl do
   let(:dir)  { Dir.mktmpdir('gallery-dl-spec-') }

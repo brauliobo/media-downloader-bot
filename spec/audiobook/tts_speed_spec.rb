@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe 'Audiobook TTS speed' do
   [TTS::OmniVoice, TTS::MossTTS].each do |backend|

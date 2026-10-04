@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Presets::Camera do
   it 'applies camera compression defaults without overriding explicit opts' do

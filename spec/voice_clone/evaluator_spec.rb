@@ -1,6 +1,5 @@
 require 'json'
-require 'spec_helper'
-require_relative '../../lib/voice_clone/evaluator'
+require 'rails_helper'
 
 RSpec.describe VoiceClone::Evaluator do
   it 'runs baseline and reference cases and writes reusable reports' do

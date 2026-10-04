@@ -1,8 +1,8 @@
-require 'spec_helper'
-require_relative '../../lib/dubbing/audio'
+require 'rails_helper'
 
 RSpec.describe Dubbing::Audio do
   let(:dir) { Dir.mktmpdir('dub-audio-spec-') }
+  let(:pause) { Audiobook::Pauses::SENTENCE }
 
   after { FileUtils.remove_entry(dir) if Dir.exist?(dir) }
 
@@ -49,8 +49,8 @@ RSpec.describe Dubbing::Audio do
     scheduled = described_class.schedule([first, second], duration: 5.0)
 
     expect(scheduled.map(&:start)).to eq([0.0, 2.0])
-    expect(scheduled.first.end).to eq(2.0)
-    expect(scheduled.first.speed).to be_within(0.001).of(2.4 / 2.0)
+    expect(scheduled.first.end).to be_within(0.001).of(2.0 - pause)
+    expect(scheduled.first.speed).to be_within(0.001).of(2.4 / (2.0 - pause))
     expect(scheduled.last.speed).to eq(1.0)
   end
 
@@ -64,7 +64,7 @@ RSpec.describe Dubbing::Audio do
 
     expect(scheduled.first.speed).to eq(1.0)
     expect([scheduled.first.start, scheduled.first.end]).to eq([0.5, 1.5])
-    expect([scheduled.last.start, scheduled.last.end]).to eq([2.0, 4.0])
+    expect([scheduled.last.start, scheduled.last.end]).to eq([2.0 + pause, 4.0 + pause])
   end
 
   it 'centers shorter speech inside the source interval available before the video ends' do
@@ -126,9 +126,10 @@ RSpec.describe Dubbing::Audio do
 
     scheduled = described_class.schedule([first, middle, last], duration: 5.0)
 
-    expect(scheduled.map(&:speed)).to eq([1.0, 1.0, 1.0])
-    expect(scheduled[1].start).to eq(1.0)
-    expect(scheduled[1].end).to eq(4.0)
+    expect(scheduled[1].start).to be_within(0.001).of(1.0 + pause)
+    expect(scheduled[1].end).to be_within(0.001).of(4.0 - pause)
+    expect(scheduled[1].speed).to be_within(0.001).of(3.0 / (3.0 - 2 * pause))
+    expect([scheduled[0].speed, scheduled[2].speed]).to eq([1.0, 1.0])
   end
 
   it 'shares a gap between neighboring sentences without overlapping them' do
@@ -137,11 +138,11 @@ RSpec.describe Dubbing::Audio do
     probe_duration first.path, 3.0
     probe_duration second.path, 3.0
 
-    scheduled = described_class.schedule([first, second], duration: 3.0)
+    scheduled = described_class.schedule([first, second], duration: 3.2)
 
-    expect(scheduled.map(&:speed)).to eq([2.0, 2.0])
+    expect(scheduled.first.speed).to eq(2.0)
     expect(scheduled.first.end).to eq(1.5)
-    expect(scheduled.last.start).to eq(1.5)
+    expect(scheduled.last.start - scheduled.first.end).to be_within(0.001).of(pause)
   end
 
   it 'uses the required speed even when it exceeds the former ceiling' do
@@ -154,7 +155,19 @@ RSpec.describe Dubbing::Audio do
 
     expect(scheduled.first.speed).to eq(2.0)
     expect(scheduled.first.end).to eq(2.0)
-    expect(scheduled.last.start).to eq(2.0)
+    expect(scheduled.last.start).to eq(2.0 + pause)
+  end
+
+  it 'keeps a pause between sentences that follow each other without silence' do
+    clips = [[0.0, 2.0], [2.0, 4.0], [4.0, 6.0]].map.with_index do |(start, finish), idx|
+      path = File.join(dir, "sentence-#{idx}.wav")
+      probe_duration path, 2.0
+      described_class::Clip.new(path: path, start: start, end: finish)
+    end
+
+    scheduled = described_class.schedule(clips, duration: 7.0)
+
+    expect(scheduled.each_cons(2).map { |left, right| right.start - left.end }).to all(be >= pause - 0.001)
   end
 
   it 'caps a sentence at its speaker pace and overruns into the slack ahead of it' do
@@ -167,13 +180,13 @@ RSpec.describe Dubbing::Audio do
     scheduled = described_class.schedule(clips, duration: 13.0)
 
     expect(scheduled[2].speed).to be_within(0.001).of(1.15)
-    expect(scheduled[2].end).to be_within(0.001).of(9.304)
-    expect(scheduled[3].start).to be >= scheduled[2].end
+    expect(scheduled[2].end).to be_within(0.001).of(8.0 + pause + 1.5 / 1.15)
+    expect(scheduled[3].start).to be >= scheduled[2].end + pause
   end
 
   it 'allows a faster speaker the pace it already sustains' do
     slow = [['a', 0.0, 4.0, 4.0], ['a', 4.0, 8.0, 4.0], ['a', 8.0, 9.0, 1.5]]
-    fast = [['b', 9.0, 13.0, 5.6], ['b', 13.0, 17.0, 5.6], ['b', 17.0, 18.0, 1.5]]
+    fast = [['b', 9.0, 13.0, 5.6], ['b', 13.0, 17.0, 5.6], ['b', 17.0, 18.0, 1.4]]
     clips = (slow + fast).map.with_index do |(speaker, start, finish, length), idx|
       path = File.join(dir, "sentence-#{idx}.wav")
       probe_duration path, length
@@ -183,7 +196,7 @@ RSpec.describe Dubbing::Audio do
     scheduled = described_class.schedule(clips, duration: 18.0)
 
     expect(scheduled[2].speed).to be_within(0.001).of(1.15)
-    expect(scheduled[5].speed).to be_within(0.001).of(1.5)
+    expect(scheduled[5].speed).to be_within(0.001).of(1.4 / (1.0 - pause))
   end
 
   it 'never compresses a sentence past the intelligible maximum' do

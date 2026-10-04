@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/audiobook/page_selection'
+require 'rails_helper'
 
 RSpec.describe Audiobook::PageSelection do
   it 'expands ranges, removes duplicates, and sorts pages' do

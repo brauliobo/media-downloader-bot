@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/diarizer/pyannote_community1'
+require 'rails_helper'
 
 RSpec.describe Diarizer::PyannoteCommunity1 do
   it 'uses the pyannote service endpoint' do

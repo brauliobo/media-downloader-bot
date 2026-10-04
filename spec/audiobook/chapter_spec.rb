@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Audiobook::Chapter do
   it 'keeps section pauses shorter than discourse chapter pauses' do

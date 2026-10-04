@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Audiobook::Parsers::Txt do
   def with_txt(content, encoding: Encoding::UTF_8, name: 'book.txt')

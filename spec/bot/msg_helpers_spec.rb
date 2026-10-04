@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Bot::MsgHelpers do
   describe '.in_group?' do

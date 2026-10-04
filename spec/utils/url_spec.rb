@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Utils::Url do
   it 'adds https to bare domains without changing complete urls' do

@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/voice_reference'
+require 'rails_helper'
 
 RSpec.describe VoiceReference::Builder do
   it 'transcribes recordings and writes the selected reference with sidecars' do

@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/ewprs/sentence_splitter'
+require 'rails_helper'
 
 RSpec.describe Ewprs::SentenceSplitter do
   it 'finds sentence boundaries through transparent markup tokens' do

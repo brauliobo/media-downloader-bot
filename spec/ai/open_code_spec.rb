@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/ai/open_code'
+require 'rails_helper'
 
 RSpec.describe AI::OpenCode do
   let(:schema) do

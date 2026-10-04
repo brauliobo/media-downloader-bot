@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/ai/json_schema'
+require 'rails_helper'
 
 RSpec.describe AI::JSONSchema do
   let(:schema) do

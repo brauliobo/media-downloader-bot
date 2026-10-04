@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/ewprs'
+require 'rails_helper'
 
 RSpec.describe Ewprs::TranslationBatch do
   class FakeMarkupTranslator

@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/voice_reference'
+require 'rails_helper'
 
 RSpec.describe VoiceReference do
   it 'separates unique sources once, preserves order, and keeps stems through selection' do

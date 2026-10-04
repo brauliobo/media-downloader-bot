@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Utils::InputParser do
   it 'parses a leading url and following options' do

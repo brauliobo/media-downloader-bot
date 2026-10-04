@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Downloaders::YtDlp do
   let(:dir)  { Dir.mktmpdir('ytdlp-spec-') }

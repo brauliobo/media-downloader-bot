@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 require 'timeout'
 
 RSpec.describe 'TTS batch synthesis' do

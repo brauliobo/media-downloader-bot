@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../lib/hashtags'
+require 'rails_helper'
 
 RSpec.describe Hashtags do
   it 'generates normalized hashtags with the requested language and rules' do

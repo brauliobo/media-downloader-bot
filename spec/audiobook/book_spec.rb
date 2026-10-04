@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/audiobook/book'
+require 'rails_helper'
 
 RSpec.describe Audiobook::Book do
   describe 'publication sampling' do

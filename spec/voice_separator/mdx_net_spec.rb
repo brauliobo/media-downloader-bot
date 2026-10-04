@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/voice_separator/mdx_net'
+require 'rails_helper'
 
 RSpec.describe VoiceSeparator::MDXNet do
   let(:dir) { Dir.mktmpdir('mdx-net-spec-') }

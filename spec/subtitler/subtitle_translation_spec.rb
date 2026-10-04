@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Subtitler::Subtitle, 'translation' do
   def word(text, s, e)

@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../lib/voice_reference'
+require 'rails_helper'
 
 RSpec.describe 'bin/select_voice_reference' do
   it 'routes local files through the shared recorded-source orchestration' do

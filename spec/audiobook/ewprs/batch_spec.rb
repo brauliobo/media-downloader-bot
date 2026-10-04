@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../../lib/audiobook/ewprs'
+require 'rails_helper'
 
 RSpec.describe Audiobook::Ewprs::Batch do
   Entry = Struct.new(:kind, :title, :path, :info, :sources, :chapters, keyword_init: true) do

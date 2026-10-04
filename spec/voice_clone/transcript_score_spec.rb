@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/voice_clone/transcript_score'
+require 'rails_helper'
 
 RSpec.describe VoiceClone::TranscriptScore do
   it 'scores matching text and word confidence' do

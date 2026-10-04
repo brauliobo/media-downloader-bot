@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe UploadCoordinator do
   let(:dir)    { Dir.mktmpdir('upload-coordinator-') }

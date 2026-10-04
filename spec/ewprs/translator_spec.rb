@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/ewprs/translator'
+require 'rails_helper'
 
 RSpec.describe Ewprs::Translator do
   subject(:translator) { described_class.new }

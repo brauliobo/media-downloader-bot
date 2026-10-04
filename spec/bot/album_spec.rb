@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Bot::Album do
   it 'keeps captions on the first item of each transport batch' do

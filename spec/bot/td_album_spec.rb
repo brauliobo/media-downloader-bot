@@ -1,7 +1,8 @@
-require 'spec_helper'
+require 'rails_helper'
 
 begin
-  require_relative '../../lib/bot/td_bot'
+  require 'tdlib-ruby'
+  Bot::TDBot
   td_load_error = nil
 rescue LoadError => e
   td_load_error = e

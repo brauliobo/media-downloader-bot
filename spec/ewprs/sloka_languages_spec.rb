@@ -1,6 +1,5 @@
 require 'json'
 require 'tmpdir'
-require_relative '../../lib/ewprs/sloka_languages'
 
 RSpec.describe Ewprs::SlokaLanguages do
   let(:sanskrit) { '<p class="Para_Sloka">Sarve bhavantu sukhinah.<br>Oṋḿ shántih.</p>' }

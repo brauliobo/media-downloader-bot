@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe 'Image handling in PDFs with text' do
   def fixture_path(name)

@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Bot::UserQueue do
   before { described_class.instance_variable_set(:@instance, nil) }

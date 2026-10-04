@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Subtitler::Subtitle, 'segment normalization' do
   def word(text, start, finish)

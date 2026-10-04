@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Audiobook::SourceFormats do
   describe '.document_kind' do

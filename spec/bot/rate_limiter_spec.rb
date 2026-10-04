@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/bot/rate_limiter'
+require 'rails_helper'
 
 RSpec.describe Bot::RateLimiter::Scheduler do
   subject(:scheduler) { described_class.new(0.02) }

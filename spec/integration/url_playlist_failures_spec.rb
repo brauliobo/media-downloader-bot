@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 require_relative '../support/integration_helper'
 
 RSpec.describe 'Worker playlist with mixed failures (integration)' do

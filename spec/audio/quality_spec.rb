@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/audio'
+require 'rails_helper'
 
 RSpec.describe Audio::Quality do
   it 'leaves FFmpeg analysis labels under FFmpeg' do

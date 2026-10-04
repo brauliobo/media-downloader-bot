@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../lib/worker_daemon'
+require 'rails_helper'
 
 RSpec.describe Bot::JobRunner do
   describe '#monitor' do

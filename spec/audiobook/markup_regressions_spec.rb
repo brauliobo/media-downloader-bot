@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 # These fixtures are parts of a real EPUB and pin the markup path, where the parser knows every
 # block boundary exactly and the assembly must carry it through instead of re-guessing it.

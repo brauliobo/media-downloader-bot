@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/processors/document'
+require 'rails_helper'
 
 RSpec.describe Processors::Document do
   def doc(file_name:, mime_type: nil)

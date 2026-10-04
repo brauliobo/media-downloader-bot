@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Downloaders::Telegram::Link do
   def parse(url) = described_class.parse(url)

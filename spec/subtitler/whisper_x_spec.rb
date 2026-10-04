@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/subtitler/whisper_x'
+require 'rails_helper'
 
 RSpec.describe Subtitler::WhisperX do
   subject(:backend) do

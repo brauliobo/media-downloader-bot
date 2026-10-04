@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../lib/job_pool'
+require 'rails_helper'
 
 RSpec.describe JobPool do
   it 'streams parallel results in input order' do

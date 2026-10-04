@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 require 'open3'
 
 RSpec.describe Audiobook::Parsers::Pdf do

@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/utils/stats'
+require 'rails_helper'
 
 RSpec.describe Utils::Stats do
   it 'averages the two middle samples of an even median' do

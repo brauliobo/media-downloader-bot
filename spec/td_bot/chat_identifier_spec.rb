@@ -1,5 +1,4 @@
 require 'uri'
-require_relative '../../lib/td_bot/chat_identifier'
 
 RSpec.describe TDBot::ChatIdentifier do
   describe '.resolve' do

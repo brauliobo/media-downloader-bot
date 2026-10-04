@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/voice_separator/bs_roformer'
+require 'rails_helper'
 
 RSpec.describe VoiceSeparator::BSRoformer do
   let(:dir) { Dir.mktmpdir('bs-roformer-spec-') }

@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Zipper do
   def video_probe duration: 60, audio: false, width: 1920, height: 1080

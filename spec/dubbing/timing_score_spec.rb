@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/dubbing/timing_score'
+require 'rails_helper'
 
 RSpec.describe Dubbing::TimingScore do
   def clip(start:, finish:)

@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/voice_activity/http_backend'
+require 'rails_helper'
 
 RSpec.describe VoiceActivity::HTTPBackend do
   let(:dir) { Dir.mktmpdir('voice-activity-http-spec-') }

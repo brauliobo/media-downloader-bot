@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/audiobook/analysis'
+require 'rails_helper'
 
 RSpec.describe Audiobook::Analysis do
   def fixture(name) = File.expand_path("../fixtures/audiobook/#{name}", __dir__)

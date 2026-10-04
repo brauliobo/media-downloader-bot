@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/utils/duration'
+require 'rails_helper'
 
 RSpec.describe Utils::Duration do
   def seconds(value) = described_class.parse(value)

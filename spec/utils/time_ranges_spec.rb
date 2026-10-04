@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/utils/time_ranges'
+require 'rails_helper'
 
 RSpec.describe Utils::TimeRanges do
   it 'parses time intervals and merges overlapping or adjacent values' do

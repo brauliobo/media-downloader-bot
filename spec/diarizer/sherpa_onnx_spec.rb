@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/diarizer/sherpa_onnx'
+require 'rails_helper'
 
 RSpec.describe Diarizer::SherpaOnnx do
   it 'uses the sherpa-onnx service endpoint' do

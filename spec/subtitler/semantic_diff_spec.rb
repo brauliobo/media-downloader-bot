@@ -3,8 +3,7 @@ require 'open3'
 require 'rbconfig'
 require 'tempfile'
 
-require 'spec_helper'
-require_relative '../../lib/subtitler/semantic_diff'
+require 'rails_helper'
 
 RSpec.describe Subtitler::Subtitle::SemanticDiff do
   let(:entry) { Subtitler::Subtitle::Entry }

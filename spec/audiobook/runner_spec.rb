@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Audiobook::Runner do
   it 'applies a configured audio floor to the combined audiobook only' do

@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../lib/shorts'
+require 'rails_helper'
 
 RSpec.describe Shorts do
   it 'generates cuts through the shared JSON schema helper' do

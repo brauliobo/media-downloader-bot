@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Zipper::Subtitle do
   let(:dir) { Dir.mktmpdir 'subtitle-spec-' }

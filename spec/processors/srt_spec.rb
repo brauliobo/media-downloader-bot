@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/processors/srt'
+require 'rails_helper'
 
 RSpec.describe Processors::Srt do
   it 'parses an uploaded SRT into Subtitle and renders the translated model' do

@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 # Each fixture is a page range lifted from a book a user sent to the bot, kept for the specific
 # assembly defect it exposes: font metrics, page furniture, references, or heading classification.

@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/voice_activity/silero'
+require 'rails_helper'
 
 RSpec.describe VoiceActivity::Silero do
   it 'uses the Silero VAD service endpoint' do

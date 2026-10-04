@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Audiobook::Parsers::Html do
   def with_html(content, encoding: Encoding::UTF_8)

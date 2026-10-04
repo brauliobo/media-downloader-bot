@@ -1,6 +1,5 @@
-require 'spec_helper'
+require 'rails_helper'
 require 'tmpdir'
-require_relative '../../lib/bot/tg_bot'
 require_relative '../support/spy_bot'
 
 RSpec.describe 'DeepSec regressions' do

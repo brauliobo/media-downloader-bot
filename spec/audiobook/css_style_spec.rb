@@ -1,6 +1,5 @@
-require 'spec_helper'
+require 'rails_helper'
 require 'nokogiri'
-require_relative '../../lib/audiobook/parsers/css_style'
 
 RSpec.describe Audiobook::Parsers::CssStyle do
   it 'maps tag, class, and inline CSS onto the generic line style' do

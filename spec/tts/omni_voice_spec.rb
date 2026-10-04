@@ -1,6 +1,5 @@
-require 'spec_helper'
+require 'rails_helper'
 require 'timeout'
-require_relative '../../lib/tts/omni_voice'
 
 RSpec.describe TTS::OmniVoice do
   it 'requires reference text when cloning a speaker voice' do

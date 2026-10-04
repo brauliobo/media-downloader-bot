@@ -1,6 +1,5 @@
 require 'json'
-require 'spec_helper'
-require_relative '../../lib/voice_clone/embedding_scorer'
+require 'rails_helper'
 
 RSpec.describe VoiceClone::EmbeddingScorer do
   it 'runs the configured embedding command and parses cosine similarity' do

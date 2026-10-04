@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/processors/shorts'
+require 'rails_helper'
 
 RSpec.describe Processors::Shorts do
   let(:source_srt) do

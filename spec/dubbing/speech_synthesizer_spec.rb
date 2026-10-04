@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/dubbing/speech_synthesizer'
+require 'rails_helper'
 
 RSpec.describe Dubbing::SpeechSynthesizer do
   let(:dir) { Dir.mktmpdir('speech-synthesizer-spec-') }

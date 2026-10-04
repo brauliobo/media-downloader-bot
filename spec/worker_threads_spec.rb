@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Worker, 'input concurrency' do
   let(:msg) { SymMash.new(from: {id: 123}, chat: {id: 123}) }

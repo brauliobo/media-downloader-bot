@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/dubbing'
+require 'rails_helper'
 
 RSpec.describe Dubbing::Pipeline do
   let(:dir) { Dir.mktmpdir('dub-spec-') }

@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe TTS::MossTTS do
   it 'enables stable seeded voice references without changing unrelated backends' do

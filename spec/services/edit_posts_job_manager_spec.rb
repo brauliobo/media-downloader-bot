@@ -1,8 +1,7 @@
-require 'spec_helper'
+require 'rails_helper'
 require 'tmpdir'
-require_relative '../../lib/services/edit_posts/job_manager'
 
-RSpec.describe Services::EditPosts::JobManager do
+RSpec.describe EditPosts::JobManager do
   class TestEditPostsRunner
     def initialize(args, manager:, output:)
       @args    = args

@@ -1,4 +1,4 @@
-require 'spec_helper'
+require 'rails_helper'
 
 RSpec.describe Bot::Worker::Client do
   let(:dir) { Dir.mktmpdir('worker-client-') }

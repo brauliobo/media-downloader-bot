@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/ai/codex'
+require 'rails_helper'
 
 RSpec.describe AI::Codex do
   describe '.prompt' do

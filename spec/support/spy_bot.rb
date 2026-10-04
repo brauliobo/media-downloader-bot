@@ -1,4 +1,3 @@
-require_relative '../../lib/bot/base'
 
 module Bot
   class Spy < Mock

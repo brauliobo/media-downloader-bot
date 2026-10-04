@@ -1,5 +1,4 @@
-require 'spec_helper'
-require_relative '../../lib/voice_separator/spleeter'
+require 'rails_helper'
 
 RSpec.describe VoiceSeparator::Spleeter do
   let(:dir) { Dir.mktmpdir('spleeter-spec-') }
