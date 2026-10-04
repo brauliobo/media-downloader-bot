@@ -1,0 +1,33 @@
+require 'active_support/core_ext/module/delegation'
+
+module Downloaders
+  class Base
+    attr_reader :ctx
+
+    delegate :url, :opts, :dir, :tmp, :st, :session, :msg, :stl, to: :ctx
+
+    def initialize(ctx)
+      @ctx = ctx
+    end
+
+    def normalized_url
+      @normalized_url ||= Utils::Url.normalize(url)
+    end
+
+    def self.build(ctx)
+      new(ctx) if supports?(ctx)
+    end
+
+    def download
+      raise NotImplementedError
+    end
+
+    private
+
+    def validate_public_url!(value)
+      raise ArgumentError, 'URL must resolve only to public addresses' unless Utils::Safety.public_http_url?(value)
+
+      value
+    end
+  end
+end
