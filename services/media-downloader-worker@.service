@@ -27,6 +27,7 @@ TimeoutStopSec=300
 
 Environment=BUNDLE_DEPLOYMENT=true
 Environment=BUNDLE_FROZEN=false
+Environment=RAILS_ENV=production
 Environment=SYSTEMD_INSTANCE=%i
 Environment=BOT_HTTP=http://localhost:8080
 Environment=THREADS=10
