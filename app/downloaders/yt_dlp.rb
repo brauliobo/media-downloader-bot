@@ -150,7 +150,7 @@ module Downloaders
       end
 
       mult = infos.size > 1
-      infos.map.with_index { |info, i| build_input(info, i, mult) }
+      infos.map.with_index { |info, i| build_input(info, i, mult) }.compact
     end
 
     def load_info(file)
@@ -164,8 +164,7 @@ module Downloaders
       info.url   = source_url
       info.title = format_title(info, i, mult)
       
-      err = check_duration!(info)
-      return err if err 
+      return if too_long?(info)
 
       SymMash.new(url: display_url(info, source_url), opts: opts.deep_dup, info: info)
     end
@@ -202,20 +201,21 @@ module Downloaders
       info.description if info.description && info.title.to_s.match?(/\.\.\.(?:\s+#\d+)?\s*\z/)
     end
 
-    def check_duration!(info)
+    def too_long?(info)
       # Calculate duration from fragments if needed
       unless info.duration
         durs = [Array(info.fragments).sum { |f| f.duration.to_f }]
         durs << Array(info.formats).map { |f| [f.duration.to_f, Array(f.fragments).sum { |fr| fr.duration.to_f }].max }.max
         info.duration = durs.compact.max&.to_i
       end
-      
+
       return unless Zipper.size_mb_limit && !opts.onlysrt && !admin?
-      
+
       max_min = (35.0 / 50 * Zipper.size_mb_limit)
-      if info.video_ext != 'none' && info.duration.to_i >= max_min.minutes
-        st.error "Can't download files bigger than #{max_min.round} minutes"
-      end
+      return unless info.video_ext != 'none' && info.duration.to_i >= max_min.minutes
+
+      st.error "Can't download files bigger than #{max_min.round} minutes"
+      true
     end
   end
 end
