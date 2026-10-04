@@ -113,7 +113,7 @@ else
 
       expect(result).to be(message)
       expect(td).to have_received(:send_message) do |args|
-        expect(args[:topic_id]).to be_a(TD::Types::MessageTopicForum)
+        expect(args[:topic_id]).to be_a(TD::Types::MessageTopic::Forum)
         expect(args[:topic_id].forum_topic_id).to eq(42)
         expect(args).not_to have_key(:message_thread_id)
       end

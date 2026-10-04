@@ -61,11 +61,11 @@ module TDBot
         ids << chat.id if chat
       end
 
-      found = td.search_chats(query: query.to_s, limit: limit).value(15)
+      found = td.search_chats(query: query.to_s, type_filter: nil, limit: limit).value(15)
       ids.concat Array(found&.chat_ids)
 
       if public
-        found = td.search_public_chats(query: query.to_s).value(30)
+        found = td.search_public_chats(query: query.to_s, type_filter: nil).value(30)
         ids.concat Array(found&.chat_ids)
       end
 
@@ -128,7 +128,7 @@ module TDBot
 
     def send_message_content(chat_id, forum_topic_id, content)
       content = td_payload(content)
-      topic   = TD::Types::MessageTopicForum.new(forum_topic_id: forum_topic_id) if forum_topic_id.positive?
+      topic   = TD::Types::MessageTopic::Forum.new(forum_topic_id: forum_topic_id) if forum_topic_id.positive?
       td.send_message(
         chat_id:               chat_id,
         topic_id:              topic,
