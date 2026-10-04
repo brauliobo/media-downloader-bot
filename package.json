@@ -1,0 +1,17 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "vue": "3.6.0-rc.10"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.9",
+    "pug": "^3.0.4",
+    "vite": "^8.3.2",
+    "vite-plugin-ruby": "^5.2.5"
+  }
+}
