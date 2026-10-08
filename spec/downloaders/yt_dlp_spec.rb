@@ -239,6 +239,14 @@ RSpec.describe Downloaders::YtDlp do
         expect(downloader.send(:build_input, info, 0, false).stream).to eq('135+140')
       end
 
+      it 'skips audio above 64kbps at the 50MB limit' do
+        allow(Bot::MsgHelpers).to receive(:from_admin?).with(msg).and_return(false)
+        info.formats << SymMash.new(format_id: '139', ext: 'm4a', vcodec: 'none', acodec: 'mp4a.40.5', abr: 48, filesize: 2**20)
+        info.formats.first.abr = 130
+
+        expect(downloader.send(:build_input, info, 0, false).stream).to eq('135+139')
+      end
+
       it 'is skipped for admins unless requested' do
         allow(Bot::MsgHelpers).to receive(:from_admin?).with(msg).and_return(true)
         expect(downloader.send(:build_input, info, 0, false).stream).to be_nil

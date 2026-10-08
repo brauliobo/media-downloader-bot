@@ -5,8 +5,8 @@ RSpec.describe Downloaders::YtDlp::FormatPicker do
     {format_id: id, ext: ext, vcodec: vcodec, acodec: 'none', width: height * 16 / 9, height: height, filesize: mb * 2**20}
   end
 
-  def audio(id, mb, language: nil, ext: 'm4a', acodec: 'mp4a.40.2')
-    {format_id: id, ext: ext, vcodec: 'none', acodec: acodec, language: language, filesize: mb * 2**20}
+  def audio(id, mb, language: nil, ext: 'm4a', acodec: 'mp4a.40.2', abr: nil)
+    {format_id: id, ext: ext, vcodec: 'none', acodec: acodec, language: language, abr: abr, filesize: mb * 2**20}
   end
 
   let(:formats) do
@@ -32,6 +32,21 @@ RSpec.describe Downloaders::YtDlp::FormatPicker do
   it 'falls back to the lighter audio when the best one does not fit' do
     info.formats = [audio('139', 2), audio('140', 4), video('135', 480, 44)]
     expect(pick(info)).to eq('135+139')
+  end
+
+  it 'skips audio above 64kbps at the 50MB limit even when it fits' do
+    info.formats = [audio('139', 2, abr: 48), audio('140', 4, abr: 130), video('135', 480, 25)]
+    expect(pick(info)).to eq('135+139')
+  end
+
+  it 'keeps any audio bitrate above the 50MB limit' do
+    info.formats = [audio('139', 2, abr: 48), audio('140', 4, abr: 130), video('135', 480, 25)]
+    expect(pick(info, limit_mb: 100)).to eq('135+140')
+  end
+
+  it 'gives up when only audio above the cap exists' do
+    info.formats = [audio('140', 4, abr: 130), video('135', 480, 25)]
+    expect(pick(info)).to be_nil
   end
 
   it 'gives up when nothing fits' do

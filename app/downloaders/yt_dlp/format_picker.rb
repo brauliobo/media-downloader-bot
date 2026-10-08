@@ -3,12 +3,16 @@ module Downloaders
     # Picks the best mp4-compatible format (or video+audio pair) whose estimated size fits the upload limit.
     class FormatPicker
       SAFETY      = 0.95
+      # audio is capped to leave the size budget to the video on small limits
+      SMALL_LIMIT_MB  = 50
+      SMALL_LIMIT_ABR = 64
       VIDEO_CODEC = /\A(avc1|h264)/
       AUDIO_CODEC = /\Amp4a/
 
       def initialize(info, limit_mb:, max_res:, clip: info.duration, alang: nil)
         @info, @max_res, @alang, @clip = info, max_res, alang, clip.to_f
-        @budget = limit_mb * 2**20 * SAFETY
+        @max_abr = SMALL_LIMIT_ABR if limit_mb <= SMALL_LIMIT_MB
+        @budget  = limit_mb * 2**20 * SAFETY
         @ratio  = @clip / info.duration.to_f
       end
 
@@ -30,7 +34,7 @@ module Downloaders
       def audios   = preferred_language(formats.select { |f| audio?(f) && f.vcodec == 'none' })
 
       def video?(format) = format.ext == 'mp4' && format.vcodec.to_s.match?(VIDEO_CODEC) && [format.width, format.height].compact.min.to_i <= @max_res
-      def audio?(format) = format.ext.in?(%w[mp4 m4a]) && format.acodec.to_s.match?(AUDIO_CODEC)
+      def audio?(format) = format.ext.in?(%w[mp4 m4a]) && format.acodec.to_s.match?(AUDIO_CODEC) && (!@max_abr || format.abr.to_f <= @max_abr)
 
       def preferred_language(audios)
         matching = audios.select { |f| f.language.to_s.start_with?(@alang.to_s) } if @alang
