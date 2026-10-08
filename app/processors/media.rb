@@ -60,15 +60,7 @@ module Processors
       end
 
       stream = streamable?(i)
-
-      if Zipper.size_mb_limit && !i.opts.onlysrt && !stream
-        if i.type == Types.video and i.durat > Zipper.vid_duration_thld.minutes.to_i
-          i.stl.update VID_TOO_LONG[]
-        end
-        if i.type == Types.audio and i.durat > Zipper.aud_duration_thld.minutes.to_i
-          i.stl.update AUD_TOO_LONG[]
-        end
-      end
+      warn_compromised_quality(i) unless stream || i.opts.onlysrt
 
       binding.pry if ENV['PRY_BEFORE_CONVERT']
 
@@ -111,6 +103,14 @@ module Processors
 
     def tag i
       Tagger.add_cover i.fn_out, i.thumb if i.thumb and i.type == Types.audio
+    end
+
+    # Only encoding squeezes the media to fit the limit; a streamed file was picked to fit it.
+    def warn_compromised_quality(i)
+      return unless Zipper.size_mb_limit
+
+      i.stl.update VID_TOO_LONG[] if i.type == Types.video && i.durat > Zipper.vid_duration_thld.minutes.to_i
+      i.stl.update AUD_TOO_LONG[] if i.type == Types.audio && i.durat > Zipper.aud_duration_thld.minutes.to_i
     end
 
     # The downloader already fetched a Telegram-playable file that fits the limit, so upload it untouched.
