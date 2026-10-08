@@ -141,7 +141,7 @@ To avoid slow, quality-losing re-encodes, **regular users get streaming uploads 
 - Any option that changes the video or audio (`audio`, `format=`, `width=`, `speed=`, `cuts=`, subtitles, dubbing, ...) uses the re-encoding path instead.
 - `ss=`, `to=` and `t=` do **not** disable it: only the requested section is downloaded.
 - If no format fits the limit, the bot falls back to re-encoding the video to fit.
-- Re-encoded audio is limited to 64 kbps when the upload limit is 50 MB, so long recordings still fit.
+- When the upload limit is 50 MB, streamed videos only use audio up to 64 kbps, leaving more of the size budget to the picture.
 - Very long videos are refused when they cannot fit the limit (about 35 minutes at 50 MB).
 
 ## Using it from the command line
