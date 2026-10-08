@@ -17,6 +17,13 @@ RSpec.describe Streaming do
       expect(described_class.enabled?(opts, admin: true)).to be true
     end
 
+    it 'is off with nostream, for everybody' do
+      opts.nostream = 1
+      expect(described_class.enabled?(opts, admin: false)).to be false
+      opts.stream = 1
+      expect(described_class.enabled?(opts, admin: true)).to be false
+    end
+
     it 'is off without a bot size limit' do
       Zipper.size_mb_limit = nil
       expect(described_class.enabled?(opts, admin: false)).to be false
@@ -26,6 +33,10 @@ RSpec.describe Streaming do
       described_class::ENCODING_KEYS.each do |key|
         expect(described_class.enabled?(SymMash.new(key => 1), admin: false)).to be(false), key.to_s
       end
+    end
+
+    it 'stays on for audio extraction' do
+      expect(described_class.enabled?(SymMash.new(audio: 1), admin: false)).to be true
     end
 
     it 'stays on when only a section is cut by ss, to or t' do
