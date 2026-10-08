@@ -130,7 +130,6 @@ class Worker
       p.download_one i, pos: output_pos
       next if stline.error?
 
-      stline.update 'transcoding'
       p.handle_input i, pos: output_pos
       next if stline.error?
 

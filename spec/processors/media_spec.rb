@@ -190,15 +190,36 @@ RSpec.describe Processors::Media do
       expect(File.read(i.fn_out)).to eq('video')
       expect(File.dirname(i.fn_out)).to eq(File.expand_path(dir))
       expect(i.mime).to eq('video/mp4')
+      expect(stl.to_s).not_to include('transcoding')
+    end
+
+    it 'uploads a downloaded audio track without transcoding' do
+      audio  = File.join(dir, 'in.m4a').tap { |f| File.write(f, 'audio') }
+      track  = input(fn_in: audio, stream: '140', info: SymMash.new(title: 't', _filename: 'f.m4a'))
+      allow(Prober).to receive(:for).and_return(SymMash.new(format: SymMash.new(duration: 10), streams: [SymMash.new(codec_type: 'audio')]))
+      allow(Zipper).to receive(:zip_audio)
+      allow(processor).to receive(:tag)
+
+      processor.handle_input(track)
+
+      expect(Zipper).not_to have_received(:zip_audio)
+      expect(File.extname(track.fn_out)).to eq('.m4a')
+      expect(File.read(track.fn_out)).to eq('audio')
+      expect(track.mime).to eq('audio/aac')
+      expect(stl.to_s).not_to include('transcoding')
     end
 
     it 'transcodes when the download does not fit the limit' do
       Zipper.size_mb_limit = 0
       allow(Zipper).to receive(:zip_video).and_return(['', 'x', instance_double(Process::Status, success?: false)])
 
+      statuses = []
+      allow(stl).to receive(:update).and_wrap_original { |m, text| statuses << text; m.call(text) }
+
       processor.handle_input(i)
 
       expect(Zipper).to have_received(:zip_video)
+      expect(statuses).to include('transcoding')
     end
   end
 
