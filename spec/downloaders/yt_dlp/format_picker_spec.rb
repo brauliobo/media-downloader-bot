@@ -49,6 +49,27 @@ RSpec.describe Downloaders::YtDlp::FormatPicker do
     expect(pick(info)).to be_nil
   end
 
+  describe 'audio only' do
+    def track(id, ext, acodec, abr, mb, vcodec: 'none') = {format_id: id, ext: ext, vcodec: vcodec, acodec: acodec, abr: abr, filesize: mb * 2**20}
+
+    def pick_audio(info, **opts) = pick(info, audio_only: true, **opts)
+
+    it 'picks the best m4a or mp3 track that fits, with no bitrate cap' do
+      info.formats = [track('mp3', 'mp3', 'mp3', 128, 3), track('aac96', 'm4a', 'mp4a.40.2', 96, 2), track('aac160', 'm4a', 'mp4a.40.2', 160, 4)]
+      expect(pick_audio(info)).to eq('aac160')
+    end
+
+    it 'falls to a lighter track when the best does not fit' do
+      info.formats = [track('aac96', 'm4a', 'mp4a.40.2', 96, 2), track('aac160', 'm4a', 'mp4a.40.2', 160, 60)]
+      expect(pick_audio(info)).to eq('aac96')
+    end
+
+    it 'ignores opus, webm and video formats' do
+      info.formats = [track('251', 'webm', 'opus', 130, 3), track('v', 'mp4', 'mp4a.40.2', 96, 3, vcodec: 'avc1.64001f')]
+      expect(pick_audio(info)).to be_nil
+    end
+  end
+
   it 'gives up when nothing fits' do
     expect(pick(limit_mb: 1)).to be_nil
   end

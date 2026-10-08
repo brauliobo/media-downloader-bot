@@ -134,6 +134,40 @@ RSpec.describe Downloaders::YtDlp do
       expect(captured).not_to include('bestvideo')
     end
 
+    it 'does not extract audio again when an audio format was picked' do
+      opts.audio = 1
+      i.stream = '140'
+      captured = nil
+      allow(Sh).to receive(:run) { |cmd, **_| captured = cmd; ['', '', 1] }
+
+      expect { downloader.download_one(i) }.to raise_error(/download error/)
+
+      expect(captured).to include('-f 140')
+      expect(captured).not_to include(' -x')
+    end
+
+    it 'extracts audio when transcoding' do
+      opts.audio = 1
+      captured = nil
+      allow(Sh).to receive(:run) { |cmd, **_| captured = cmd; ['', '', 1] }
+
+      expect { downloader.download_one(i) }.to raise_error(/download error/)
+
+      expect(captured).to include(' -x')
+    end
+
+    it 'expects an audio stream from a source without video' do
+      file = File.join(tmp, 'input-1.m4a')
+      File.write(file, '')
+      i.info = SymMash.new(video_ext: 'none')
+      allow(Sh).to receive(:run).and_return(['', '', 0])
+      allow(Prober).to receive(:for).and_return(SymMash.new(streams: [SymMash.new(codec_type: 'audio')]))
+
+      downloader.download_one(i)
+
+      expect(i.fn_in).to eq(file)
+    end
+
     it 'raises when yt-dlp exits non-zero' do
       allow(Sh).to receive(:run).and_return(['', 'boom', 1])
       expect { downloader.download_one(i) }.to raise_error(/download error.*boom/m)
@@ -245,6 +279,22 @@ RSpec.describe Downloaders::YtDlp do
         info.formats.first.abr = 130
 
         expect(downloader.send(:build_input, info, 0, false).stream).to eq('135+139')
+      end
+
+      it 'picks an audio track for the audio option' do
+        allow(Bot::MsgHelpers).to receive(:from_admin?).with(msg).and_return(false)
+        opts.audio = 1
+        info.formats << SymMash.new(format_id: '140x', ext: 'm4a', vcodec: 'none', acodec: 'mp4a.40.2', abr: 130, filesize: 4 * 2**20)
+
+        expect(downloader.send(:build_input, info, 0, false).stream).to eq('140x')
+      end
+
+      it 'picks an audio track for a source without video' do
+        allow(Bot::MsgHelpers).to receive(:from_admin?).with(msg).and_return(false)
+        info.video_ext = 'none'
+        info.formats   = [SymMash.new(format_id: 'sc', ext: 'mp3', vcodec: 'none', acodec: 'mp3', abr: 128, filesize: 3 * 2**20)]
+
+        expect(downloader.send(:build_input, info, 0, false).stream).to eq('sc')
       end
 
       it 'is skipped for admins unless requested' do

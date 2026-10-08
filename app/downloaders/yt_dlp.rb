@@ -35,7 +35,7 @@ module Downloaders
       raise "download error: #{e}" unless s == 0
 
       files = Dir["#{tmp}/#{fn}.*"].reject { |f| f.end_with?('.part') }.sort
-      want_video = !(opts.onlysrt || opts.audio)
+      want_video = !(opts.onlysrt || audio_only?(i.info))
       i.fn_in = pick_downloaded_file(files, want_video: want_video)
 
       raise(want_video ? "can't find video stream" : "can't find file") unless i.fn_in && File.exist?(i.fn_in)
@@ -57,15 +57,21 @@ module Downloaders
     end
 
     def format_args(stream)
-      return "-f #{Sh.escape(format_selector)}" unless stream
+      return "-f #{Sh.escape(stream)} --merge-output-format mp4 --postprocessor-args #{Sh.escape(FASTSTART)}" if stream
 
-      "-f #{Sh.escape(stream)} --merge-output-format mp4 --postprocessor-args #{Sh.escape(FASTSTART)}"
+      "-f #{Sh.escape(format_selector)}#{' -x' if opts.audio || opts.onlysrt}"
     end
 
-    def stream_selector(info)
-      return unless Streaming.enabled?(opts, admin: admin?) && info.video_ext != 'none'
+    # a source without a video track (e.g. SoundCloud) is audio whether or not `audio` was asked
+    def audio_only?(info) = opts.audio || info&.video_ext == 'none'
 
-      FormatPicker.new(info, limit_mb: Zipper.size_mb_limit, max_res: MAX_RES.to_i, clip: clip_seconds(info), alang: opts.alang).selector
+    def stream_selector(info)
+      return unless Streaming.enabled?(opts, admin: admin?)
+
+      FormatPicker.new(
+        info, limit_mb: Zipper.size_mb_limit, max_res: MAX_RES.to_i, clip: clip_seconds(info), alang: opts.alang,
+        audio_only: audio_only?(info)
+      ).selector
     end
 
     def clip_seconds(info)
@@ -128,8 +134,6 @@ module Downloaders
 
         apply_playlist_options(cmd)
 
-        cmd << '-x' if opts.audio || opts.onlysrt
-        
         %i[referer].each { |k| cmd << "--#{k} #{Sh.escape(opts[k])}" if opts[k] }
         
         cmd.join(' ')
