@@ -20,12 +20,6 @@ while ARGV[-1] and !File.exist?(ARGV[-1]) and ARGV[-1] !~ URI::regexp
   Processors::Base.add_opt opts, opt
 end
 
-# streams by default like a regular bot user; `nostream` re-encodes instead
-unless lopts.include?('nostream') || lopts.include?('stream')
-  lopts.push 'stream'
-  Processors::Base.add_opt opts, 'stream'
-end
-
 Zipper.size_mb_limit = ENV['SIZE_MB_LIMIT']&.to_i || 2_000
 
 bot = Bot::Mock.new
