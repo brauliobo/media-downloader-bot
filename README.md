@@ -1,155 +1,199 @@
 # media-downloader-bot
 
-## Audiobook TTS Test
+A Telegram bot that downloads videos, audio and images from the web, converts them to fit Telegram's upload limits, and can also transcribe, subtitle, translate, dub and narrate media.
 
-Use `bin/zip` to exercise the same local-file pipeline used by the bot:
+Send it a link (or a file) in Telegram, add optional keywords after the link, and get the result back in the chat.
 
-```bash
-THREADS=1 TTS=OmniVoice /home/braulio/.rvm/wrappers/ruby-3.4.4/ruby bin/zip \
-  1908kybalion-pages-1-10.pdf \
-  speed=1.0
+## What it can do
+
+- **Download from almost anywhere**: YouTube, Instagram, Facebook, X/Twitter, SoundCloud, Bandcamp, Rumble and the other sites supported by [yt-dlp](https://github.com/yt-dlp/yt-dlp), image galleries via [gallery-dl](https://github.com/mikf/gallery-dl), and Telegram message links.
+- **Fit Telegram's limits**: media is delivered as a playable Telegram video or audio message. When the file would be too large it is either downloaded in a smaller format or compressed to fit.
+- **Extract audio** from any video.
+- **Trim and edit**: cut a section, remove parts, silence parts, change speed.
+- **Subtitles**: transcribe speech, translate subtitles, or get just the `.srt` file.
+- **Dubbing**: re-voice a video in another language.
+- **Hashtags and captions**: title, uploader, description, translated caption and generated hashtags.
+- **Audiobooks**: send a PDF, EPUB, TXT or YAML file and get a spoken audiobook back, optionally in a cloned or described voice.
+- **Shorts**: split a long video into short clips with AI-planned cuts.
+- **Playlists and albums**: download several items at once, number or sort them, and send them as albums.
+
+## Using the bot
+
+Open a chat with the bot and send `/help` to see the built-in cheat sheet.
+
+### Download a link
+
+Send a link, optionally followed by keywords separated by spaces:
+
+```
+https://youtu.be/FtGEzUKcAnE
+https://youtu.be/n8TOOEXsrLw audio caption
+https://www.instagram.com/p/CTAXxxODblP/
+https://soundcloud.com/br-ulio-bhavamitra/sets/didi-gunamrta caption number
 ```
 
-The default audiobook voice is `female, middle-aged, moderate pitch, american accent`.
-Override it with `voice=` when testing a specific narrator profile:
+You can send several links in one message, up to 10, one per line. Keywords on a line apply to that link; keywords on a first line without a link apply to all of them.
 
-```bash
-THREADS=1 TTS=OmniVoice /home/braulio/.rvm/wrappers/ruby-3.4.4/ruby bin/zip \
-  1908kybalion-pages-1-10.pdf \
-  speed=1.0 \
-  voice=male,young_adult,moderate_pitch,american_accent
+In group chats the bot only reacts to messages that contain a link or a media file.
+
+### Send a file
+
+- **Video or audio file**: converted with the options you put in the caption.
+- **PDF, EPUB, TXT or YAML**: turned into an audiobook.
+- **`.srt` subtitle file with `lang=xx`**: translated into that language.
+
+### Commands
+
+| Command | What it does |
+|---|---|
+| `/start`, `/help` | Show the help message |
+| `/stop` | Cancel all your active jobs in the chat (or press the Cancel button on a job) |
+| `/cookies` | Save your cookies for sites that need a login. Send a Netscape `cookies.txt` as a document, or paste its content after the command |
+
+## Options
+
+Options are plain words (`audio`) or `key=value` pairs (`speed=1.5`) written after the link, or in the caption of a file you send.
+
+### What to send
+
+| Option | Effect |
+|---|---|
+| `audio` | Extract the audio instead of sending the video |
+| `format=` | Output format. Video: `h264` (`mp4`), `h265` (`hevc`), `av1`, `vp9` (`webm`). Audio: `opus` (`ogg`), `aac` (`m4a`), `mp3` |
+| `width=` | Video width in pixels |
+| `quality=` | Video quality (lower is better) |
+| `bitrate=`, `abrate=` | Audio bitrate for audio files / for the audio track of videos, in kbps |
+| `noaudio` | Remove the audio track |
+| `maxfr=` | Limit the frame rate |
+| `ac=`, `ar=` | Audio channels / sample rate |
+| `alang=pt` | Prefer the audio track in that language |
+| `referer=` | Referer header for sites that require one |
+
+### Trimming and editing
+
+Times accept seconds (`90`, `90.5`), clock (`1:30`, `1:30:00`) or compact (`90s`, `1m30s`, `1h30m`).
+
+| Option | Effect |
+|---|---|
+| `ss=` | Start at this time |
+| `to=` | Stop at this time |
+| `t=` | Duration after `ss=` (do not combine with `to=`) |
+| `cuts=` | Remove intervals and close the gaps, e.g. `cuts=30-40,1:30-1:45` |
+| `silences=` | Mute intervals, keeping the duration, e.g. `silences=10-20` |
+| `speed=` | Change speed, e.g. `speed=1.5` |
+
+```
+https://youtu.be/abc ss=1m30s t=30s
+https://youtu.be/abc ss=1:30 to=2:00
+https://youtu.be/abc cuts=30-40,1:30.5-1:45
 ```
 
-Non-URL `voice=` values are passed to OmniVoice as direct voice instructions. Use underscores for spaces inside attributes when calling from the shell, for example `young_adult`, `moderate_pitch`, or `american_accent`.
+### Captions and text
 
-For audiobook voice cloning, pass an HTTP(S) audio or video link. The audiobook pipeline downloads its best audio stream and reuses the voice-reference quality pipeline to extract the clearest complete passage and transcript:
+| Option | Effect |
+|---|---|
+| `caption` | Add title and uploader (videos always get one; add this for audio) |
+| `nocaption` | Send without a caption |
+| `description` | Add the video description |
+| `clang=pt` | Translate the caption into that language |
+| `hashtags`, `#`, `hts` | Add generated Instagram-style hashtags, based on the transcription and written in the language from `lang=` |
 
-```bash
-THREADS=1 TTS=OmniVoice /home/braulio/.rvm/wrappers/ruby-3.4.4/ruby bin/zip \
-  1908kybalion-pages-1-10.pdf \
-  voice=https://example.com/narrator-recording
-```
+### Subtitles, dubbing and clips
 
-## transcribe.cpp Subtitles
+| Option | Effect |
+|---|---|
+| `lang=pt` | Language for subtitles and audio. Shortcut for `slang=pt alang=pt` |
+| `slang=pt` | Add subtitles in that language, transcribing and translating when needed |
+| `sub=pt` | Same, or `sub=source`, `sub=both`, `sub=none` to choose what to show |
+| `gensubs` | Always generate subtitles with speech recognition |
+| `nowords` | Plain subtitles, without word-by-word highlighting |
+| `onlysrt` | Send only the `.srt` file |
+| `dub=pt` | Dub the video into that language, with subtitles |
+| `genshorts` | Cut the video into short clips |
 
-The `TranscribeCpp` subtitle backend runs the local CLI and maps its segment and
-word timestamps directly into the shared `Subtitler::Subtitle` model:
+### Playlists and albums
 
-```bash
-SUBTITLER=TranscribeCpp \
-TRANSCRIBE_CPP_CLI=/path/to/transcribe.cpp/build/bin/transcribe-cli \
-TRANSCRIBE_CPP_MODEL=/path/to/canary-1b-v2-timestamps-Q8_0.gguf \
-TRANSCRIBE_CPP_LANGUAGE=en \
-TRANSCRIBE_CPP_BACKEND=cuda \
-TRANSCRIBE_CPP_DEVICE=0 \
-bundle exec ruby bin/zip input.wav gensubs onlysrt
-```
+| Option | Effect |
+|---|---|
+| `number` | Prefix each file with its position |
+| `sort`, `reverse` | Order the items by title, or in reverse |
+| `album` | Send photos and videos grouped as albums |
 
-The model must advertise word timestamps. Canary requires an explicit language;
-`TRANSCRIBE_CPP_LANGUAGE` defaults to `en`. The adapter converts input media to
-16 kHz mono PCM before invoking the CLI. Canary rejects inputs longer than its
-model limit (about 400 seconds for the current v2 model), so long-form bot media
-still requires a chunking layer. Canary word timestamps do not include
-confidence scores and therefore cannot be used by the separate voice-reference
-quality selector.
+Full playlist downloads (`limit=`, `after=`) are available to the bot's administrator. Everyone else gets the single video of the link.
 
-### Semantic subtitle comparison
+### Audiobooks
 
-Compare two SRT or VTT files by parsed cue text, timing, words, speakers, and
-VTT presentation metadata:
+Send a document and add options in its caption:
 
-The reusable API is `Subtitler::Subtitle::SemanticDiff.compare(before, after, ...)`.
+| Option | Effect |
+|---|---|
+| `voice=` | A voice description, e.g. `voice=male,young_adult,moderate_pitch,american_accent`, or a link to an audio/video recording of the voice to clone |
+| `speed=` | Speaking speed |
+| `lang=` | Language of the narration |
 
-```bash
-bundle exec ruby bin/subtitle_semantic_diff before.srt after.srt \
-  --time-tolerance 0.01 --max-details 5
-```
+## Streaming uploads and size limits
 
-Use `--format vtt` when the filename extension is unavailable, `--json` for a
-machine-readable report, and `--fail-on-difference` to return status 1 when
-meaningful differences are found. Input and usage errors return status 2.
+The bot has an upload limit that depends on how it runs: 50 MB on the regular Telegram Bot API, 2 GB when it runs as a Telegram user client.
 
-## Transcription hashtags
+To avoid slow, quality-losing re-encodes, **regular users get streaming uploads by default**: the bot picks the best mp4 (h264/AAC) format of the video that fits the limit and uploads it exactly as downloaded, so it is also fast. For example, a 3:30 video at a 20 MB limit is delivered as 480p instead of being recompressed.
 
-Append Codex-generated Instagram-style hashtags to the media caption with any of
-these options:
+- The administrator keeps the re-encoding behavior unless they add `stream`.
+- Any option that changes the video or audio (`audio`, `format=`, `width=`, `speed=`, `cuts=`, subtitles, dubbing, ...) uses the re-encoding path instead.
+- `ss=`, `to=` and `t=` do **not** disable it: only the requested section is downloaded.
+- If no format fits the limit, the bot falls back to re-encoding the video to fit.
+- Re-encoded audio is limited to 64 kbps when the upload limit is 50 MB, so long recordings still fit.
+- Very long videos are refused when they cannot fit the limit (about 35 minutes at 50 MB).
 
-```bash
-bundle exec ruby bin/zip input.wav hashtags lang=pt
-bundle exec ruby bin/zip input.wav '#'
-bundle exec ruby bin/zip input.wav hts
-```
+## Using it from the command line
 
-The generator uses `gpt-6-luna` with low reasoning effort. It follows the
-requested `lang` language, chooses singular or plural based on the transcript,
-and only combines two words when they form a meaningful concept.
-
-## Media edits
-
-Use comma-separated time intervals to silence audio or remove sections from
-audio and video. The same flexible timestamps work for `ss=`, `to=`, `t=`,
-`cuts=`, and `silences=`:
-
-- seconds: `90`, `90.5`
-- clock (`M:SS` or `H:MM:SS`), with padding/zeros optional: `1:30`, `1:5`,
-  `:30`, `1:`, `1::`, `1::5`, `01:30:00.123`
-- compact periods: `90s`, `1m30s`, `1h30m`, `1.5m`
-
-`ss=` starts at that offset. `to=` is an absolute end. `t=` is a duration
-after `ss=` (or from 0); do not combine `t=` with `to=`.
+The same conversion pipeline works locally with `bin/zip`, without Telegram:
 
 ```bash
-bundle exec ruby bin/zip input.mp4 ss=1m30s t=30s
-bundle exec ruby bin/zip input.mp4 ss=1:30 to=2:00
-bundle exec ruby bin/zip input.mp4 silences=10-20,1:00-1:05
-bundle exec ruby bin/zip input.mp4 cuts=30-40,1:30.5-1:45
-bundle exec ruby bin/zip input.mp4 cuts=1m-2m,:30-45
+bin/zip https://youtu.be/FtGEzUKcAnE audio
+bin/zip movie.mkv ss=1m30s t=30s speed=1.5
+bin/zip lecture.mp4 slang=pt onlysrt
+bin/zip book.pdf voice=male,young_adult,moderate_pitch,american_accent
+bin/zip ~/Videos
 ```
 
-`silences=` preserves the media duration. `cuts=` removes each interval from
-both tracks and closes the resulting gaps.
+Results are written to a `converted/` folder, next to the input file or in the current folder for links. Passing a folder converts every media file in it. `SIZE_MB_LIMIT=50` makes the CLI behave like the 50 MB bot.
 
-## Voice cloning evaluation
+## Running your own bot
 
-Use `bin/voice_clone_eval` for repeatable OmniVoice clone comparisons. It uses
-the repository's `key=value` opts convention. Repeat `case=` for baseline,
-reference, and parameter-sweep cases. Each run writes generated audio,
-transcription scores, speaker-embedding cosine scores, `results.json`, and
-`summary.csv` under a temporary directory and prints the report to stdout:
+### Requirements
+
+- Ruby (see `.ruby-version`) and Bundler
+- PostgreSQL
+- `ffmpeg`/`ffprobe`, `yt-dlp` and, for galleries, `gallery-dl`
+- Node.js and pnpm for the web dashboard assets
+- Optional, for the corresponding features: speech recognition (whisper.cpp / WhisperX), translation, text-to-speech and voice services. Example systemd units are in `services/`.
+
+### Setup
 
 ```bash
-VOICE_CLONE_EMBEDDING_PYTHON=/srv/sherpa-onnx/runtime/bin/python \
-WHISPER_CPP_SERVER=http://127.0.0.1:8080 \
-bundle exec ruby bin/voice_clone_eval \
-  https://example.com/narrator-recording \
-  comparison=source.wav \
-  embedding_model=/srv/sherpa-onnx/models/embedding/nemo_en_titanet_small.onnx \
-  case=baseline \
-  case=raw-default:reference \
-  case=guidance-1:reference:guidance=1 \
-  case=steps-48:reference:steps=48
+bundle install
+pnpm install
+createdb mdb          # or the name you set in DB_NAME
+bin/rails db:migrate
 ```
 
-The first argument is an HTTP(S) URL. The evaluator downloads it, uses the
-existing voice-reference transcriber to detect its language, extracts the best
-voice-reference passage, and uses that passage as the evaluation text and
-reference text. Results are printed as JSON to stdout; generated artifacts are
-kept in a temporary directory for the run. Use `reference=PATH` with `text=`
-or `text_file=` when the reference has already been extracted.
+Configure through environment variables (a `.env` file works):
 
-The Sherpa/TitaNet cosine value is a local speaker-similarity proxy, not
-OmniVoice's official SIM-o metric. Set `embedding=false` or `transcription=false`
-when the corresponding local service is unavailable.
+| Variable | Purpose |
+|---|---|
+| `TG_BOT_TOKEN` | Token of your bot from [@BotFather](https://t.me/BotFather) |
+| `ADMIN_CHAT_ID` | Telegram user id of the administrator |
+| `DB_NAME`, `DB_USER`, `DB_HOST`, `DB_PASSWORD` | PostgreSQL connection |
+| `BLOCKED_USERS`, `BLOCKED_DOMAINS` | Users and domains to refuse |
+| `MAX_RES` | Maximum video height to download (default 1080) |
 
-## Dubbing timing evaluation
-
-Pass `dubscore=PATH` to write a JSON timing report for a dubbing run:
+### Start
 
 ```bash
-bundle exec ruby bin/zip input.mp4 dub=pt dubscore=/tmp/dubbing-timing.json
+bin/tgbot   # regular Telegram bot (50 MB uploads)
+bin/tdbot   # Telegram user client through TDLib (2 GB uploads)
 ```
 
-`deviation_index` is the root-mean-square absolute `log2` tempo adjustment,
-scaled by 100. A natural-speed run scores `0`; both `0.5x` and `2x` score `100`.
-The report also includes subtitle-slot error and speed distribution values for
-comparison across future runs.
+## Contributing
+
+Report issues at <https://github.com/brauliobo/media-downloader-bot/issues/new>. Developer and evaluation notes live in [docs/development.md](docs/development.md).
