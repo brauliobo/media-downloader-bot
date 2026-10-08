@@ -306,6 +306,37 @@ RSpec.describe Downloaders::YtDlp do
         expect(downloader.send(:build_input, info, 0, false).stream).to eq('sc')
       end
 
+      describe 'for videos longer than the encoding limit' do
+        let(:status) { instance_double(Bot::Status, error: nil) }
+
+        before do
+          allow(Bot::MsgHelpers).to receive(:from_admin?).with(msg).and_return(false)
+          ctx.st        = status
+          info.duration = 50 * 60
+        end
+
+        it 'streams them when a format fits' do
+          input = downloader.send(:build_input, info, 0, false)
+
+          expect(input.stream).to eq('135+140')
+          expect(status).not_to have_received(:error)
+        end
+
+        it 'refuses them when nothing fits and they must be encoded' do
+          info.formats.last.filesize = 80 * 2**20
+
+          expect(downloader.send(:build_input, info, 0, false)).to be_nil
+          expect(status).to have_received(:error).with("Can't download files bigger than 35 minutes")
+        end
+
+        it 'refuses them when encoding is requested' do
+          opts.nostream = 1
+
+          expect(downloader.send(:build_input, info, 0, false)).to be_nil
+          expect(status).to have_received(:error).with(/bigger than 35 minutes/)
+        end
+      end
+
       it 'is skipped with nostream' do
         opts.nostream = 1
 

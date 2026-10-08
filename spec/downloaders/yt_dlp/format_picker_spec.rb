@@ -18,7 +18,7 @@ RSpec.describe Downloaders::YtDlp::FormatPicker do
   end
   let(:info)    { SymMash.new(duration: 600, formats: formats) }
 
-  def pick(info = self.info, limit_mb: 50, max_res: 1080, **opts) = described_class.new(info, limit_mb: limit_mb, max_res: max_res, **opts).selector
+  def pick(info = self.info, limit_mb: 50, max_res: 1080, **opts) = described_class.for(info, limit_mb: limit_mb, max_res: max_res, **opts).selector
 
   it 'picks the best mp4 pair that fits the limit' do
     expect(pick).to eq('135+140')

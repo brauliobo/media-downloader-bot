@@ -8,7 +8,6 @@ module Downloaders
     MAX_RES  = ENV['MAX_RES'] || 1080
     BASE_CMD = "yt-dlp -S 'res:#{MAX_RES}' --ignore-errors --compat-options no-live-chat".freeze
     REMOTE   = ENV['YT_DLP_REMOTE_COMPONENTS']
-    FASTSTART = 'Merger+ffmpeg_o:-movflags +faststart'.freeze
 
     def download
       source_url = normalized_url
@@ -16,7 +15,7 @@ module Downloaders
       source_url = normalize_rumble_url(source_url)
       validate_public_url!(source_url)
 
-      cmd = "#{base_cmd} -f #{Sh.escape(format_selector)} --write-info-json --no-clean-infojson --skip-download -o #{Sh.escape("info-%(playlist_index)s.%(ext)s")} #{Sh.escape(source_url)}"
+      cmd = "#{base_cmd} #{formats.encoded} --write-info-json --no-clean-infojson --skip-download -o #{Sh.escape("info-%(playlist_index)s.%(ext)s")} #{Sh.escape(source_url)}"
       cmd << " --match-filter #{Sh.escape('live_status != is_upcoming')}" if source_url.match?(/youtu\.?be/)
       
       _, e, s = Sh.run cmd, chdir: dir
@@ -30,7 +29,7 @@ module Downloaders
       source_url = Utils::Url.normalize(i.info&.webpage_url.presence || i.url)
       source_url = normalize_rumble_url(source_url)
       validate_public_url!(source_url)
-      cmd = "#{base_cmd} #{format_args(i.stream)} -o #{Sh.escape("#{fn}.%(ext)s")} #{Sh.escape(source_url)}"
+      cmd = "#{base_cmd} #{formats.for(i.stream)} -o #{Sh.escape("#{fn}.%(ext)s")} #{Sh.escape(source_url)}"
       _, e, s = Sh.run cmd, chdir: dir
       raise "download error: #{e}" unless s == 0
 
@@ -48,37 +47,13 @@ module Downloaders
 
     private
 
-    def format_selector
-      return 'mp3-320' if opts.audio && url.include?('bandcamp.com')
-      base = (opts.onlysrt || opts.audio) ? 'bestaudio' : 'bestvideo+bestaudio'
-      al = opts.alang
-      return "#{base}/best" unless al
-      "#{base}[language^=#{al}]/best[language^=#{al}]/#{base}/best"
-    end
-
-    def format_args(stream)
-      return "-f #{Sh.escape(stream)} --merge-output-format mp4 --postprocessor-args #{Sh.escape(FASTSTART)}" if stream
-
-      "-f #{Sh.escape(format_selector)}#{' -x' if opts.audio || opts.onlysrt}"
-    end
+    def formats = @formats ||= FormatArgs.new(opts, url)
 
     # a source without a video track (e.g. SoundCloud) is audio whether or not `audio` was asked
     def audio_only?(info) = opts.audio || info&.video_ext == 'none'
 
     def stream_selector(info)
-      return unless Streaming.enabled?(opts)
-
-      FormatPicker.new(
-        info, limit_mb: Zipper.size_mb_limit, max_res: MAX_RES.to_i, clip: clip_seconds(info), alang: opts.alang,
-        audio_only: audio_only?(info)
-      ).selector
-    end
-
-    def clip_seconds(info)
-      return info.duration unless Utils::Duration.cut?(opts)
-
-      cut = Utils::Duration.from_opts(opts)
-      (cut.finish || info.duration) - cut.start
+      StreamSelector.new(info, opts: opts, audio_only: audio_only?(info), max_res: MAX_RES.to_i).selector
     end
 
     def pick_downloaded_file(files, want_video:)
@@ -186,9 +161,11 @@ module Downloaders
       info.url   = source_url
       info.title = format_title(info, i, mult)
       
-      return if too_long?(info)
+      resolve_duration(info)
+      stream = stream_selector(info)
+      return if !stream && too_long_to_encode?(info)
 
-      SymMash.new(url: display_url(info, source_url), opts: opts.deep_dup, info: info, stream: stream_selector(info))
+      SymMash.new(url: display_url(info, source_url), opts: opts.deep_dup, info: info, stream: stream)
     end
 
     def display_url(info, source_url)
@@ -223,14 +200,18 @@ module Downloaders
       info.description if info.description && info.title.to_s.match?(/\.\.\.(?:\s+#\d+)?\s*\z/)
     end
 
-    def too_long?(info)
-      # Calculate duration from fragments if needed
-      unless info.duration
-        durs = [Array(info.fragments).sum { |f| f.duration.to_f }]
-        durs << Array(info.formats).map { |f| [f.duration.to_f, Array(f.fragments).sum { |fr| fr.duration.to_f }].max }.max
-        info.duration = durs.compact.max&.to_i
-      end
+    # Calculate duration from fragments if needed
+    def resolve_duration(info)
+      return if info.duration
 
+      durs = [Array(info.fragments).sum { |f| f.duration.to_f }]
+      durs << Array(info.formats).map { |f| [f.duration.to_f, Array(f.fragments).sum { |fr| fr.duration.to_f }].max }.max
+      info.duration = durs.compact.max&.to_i
+    end
+
+    # Encoding squeezes the video to fit the limit and gets too lossy past this length. A streamed
+    # entry has no such guard: the format picker already found a combination that fits the limit.
+    def too_long_to_encode?(info)
       return unless Zipper.size_mb_limit && !opts.onlysrt && !admin?
 
       max_min = (35.0 / 50 * Zipper.size_mb_limit)
