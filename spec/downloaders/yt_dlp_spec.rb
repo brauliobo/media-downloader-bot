@@ -273,8 +273,19 @@ RSpec.describe Downloaders::YtDlp do
         expect(downloader.send(:build_input, info, 0, false).stream).to eq('135+140')
       end
 
+      it 'is picked for admins too' do
+        allow(Bot::MsgHelpers).to receive(:from_admin?).with(msg).and_return(true)
+
+        expect(downloader.send(:build_input, info, 0, false).stream).to eq('135+140')
+      end
+
+      it 'is picked with options that do not touch the encoding' do
+        opts.clang = 'pt'
+
+        expect(downloader.send(:build_input, info, 0, false).stream).to eq('135+140')
+      end
+
       it 'skips audio above 64kbps at the 50MB limit' do
-        allow(Bot::MsgHelpers).to receive(:from_admin?).with(msg).and_return(false)
         info.formats << SymMash.new(format_id: '139', ext: 'm4a', vcodec: 'none', acodec: 'mp4a.40.5', abr: 48, filesize: 2**20)
         info.formats.first.abr = 130
 
@@ -282,7 +293,6 @@ RSpec.describe Downloaders::YtDlp do
       end
 
       it 'picks an audio track for the audio option' do
-        allow(Bot::MsgHelpers).to receive(:from_admin?).with(msg).and_return(false)
         opts.audio = 1
         info.formats << SymMash.new(format_id: '140x', ext: 'm4a', vcodec: 'none', acodec: 'mp4a.40.2', abr: 130, filesize: 4 * 2**20)
 
@@ -290,23 +300,19 @@ RSpec.describe Downloaders::YtDlp do
       end
 
       it 'picks an audio track for a source without video' do
-        allow(Bot::MsgHelpers).to receive(:from_admin?).with(msg).and_return(false)
         info.video_ext = 'none'
         info.formats   = [SymMash.new(format_id: 'sc', ext: 'mp3', vcodec: 'none', acodec: 'mp3', abr: 128, filesize: 3 * 2**20)]
 
         expect(downloader.send(:build_input, info, 0, false).stream).to eq('sc')
       end
 
-      it 'is skipped for admins unless requested' do
-        allow(Bot::MsgHelpers).to receive(:from_admin?).with(msg).and_return(true)
-        expect(downloader.send(:build_input, info, 0, false).stream).to be_nil
+      it 'is skipped with nostream' do
+        opts.nostream = 1
 
-        opts.stream = 1
-        expect(downloader.send(:build_input, info, 0, false).stream).to eq('135+140')
+        expect(downloader.send(:build_input, info, 0, false).stream).to be_nil
       end
 
       it 'is skipped when an option needs transcoding' do
-        allow(Bot::MsgHelpers).to receive(:from_admin?).with(msg).and_return(false)
         opts.speed = 2
 
         expect(downloader.send(:build_input, info, 0, false).stream).to be_nil

@@ -19,10 +19,9 @@ module Streaming
 
   module_function
 
-  # On by default for non admins, for admins only with `stream`; never with `nostream` or an encoding option.
-  def enabled?(opts, admin:)
-    Zipper.size_mb_limit.present? && (!admin || opts.stream.present?) && opts.nostream.blank? &&
-      ENCODING_KEYS.none? { |key| opts[key].present? }
+  # On by default for everybody; never with `nostream` or an encoding option.
+  def enabled?(opts)
+    Zipper.size_mb_limit.present? && opts.nostream.blank? && ENCODING_KEYS.none? { |key| opts[key].present? }
   end
 
   def fits?(path) = ::File.size(path) < Zipper.size_mb_limit * 2**20
