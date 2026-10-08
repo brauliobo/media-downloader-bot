@@ -25,31 +25,11 @@ RSpec.describe Zipper::Limits do
   it 'reduces long audio bitrate to fit the Telegram limit' do
     Zipper.size_mb_limit = 50
     opts   = SymMash.new(onlysrt: false, bitrate: 96, percent: 0.95)
-    zipper = Struct.new(:opts, :duration).new(opts, 9_000)
+    zipper = Struct.new(:opts, :duration).new(opts, 4_506)
 
     described_class.apply_audio_size_limit! zipper
 
-    expect(opts.bitrate).to be_within(0.001).of(42.222)
-  end
-
-  it 'caps audio at 64kbps for a 50MB limit' do
-    Zipper.size_mb_limit = 50
-    opts   = SymMash.new(onlysrt: false, bitrate: 96, percent: 0.95)
-    zipper = Struct.new(:opts, :duration).new(opts, 600)
-
-    described_class.apply_audio_size_limit! zipper
-
-    expect(opts.bitrate).to eq(64)
-  end
-
-  it 'keeps the format bitrate for larger limits' do
-    Zipper.size_mb_limit = 2_000
-    opts   = SymMash.new(onlysrt: false, bitrate: 96, percent: 0.95)
-    zipper = Struct.new(:opts, :duration).new(opts, 600)
-
-    described_class.apply_audio_size_limit! zipper
-
-    expect(opts.bitrate).to eq(96)
+    expect(opts.bitrate).to be_within(0.001).of(84.332)
   end
 
   it 'returns semantic video size data with the existing calculations' do

@@ -6,8 +6,6 @@ class Zipper
     VID_WIDTH_REDUC        = SymMash.new width: 80, minutes: 8
     AUD_BRATE_REDUC        = SymMash.new brate: 8, minutes: 8
     MAX_VIDEO_MAXRATE_KBIT = 50_000
-    SMALL_LIMIT_MB         = 50
-    SMALL_LIMIT_AUDIO_KBIT = 64
     VideoSize = Data.define :maxrate, :bufsize, :rate_control, :bitrate
 
     module_function
@@ -32,7 +30,6 @@ class Zipper
       return if zipper.opts.onlysrt
       return unless Zipper.size_mb_limit
 
-      zipper.opts.bitrate = [zipper.opts.bitrate, SMALL_LIMIT_AUDIO_KBIT].min if Zipper.size_mb_limit <= SMALL_LIMIT_MB
       if max_audio_duration(zipper.opts.bitrate, Zipper.size_mb_limit) < zipper.duration / 60.0
         zipper.opts.bitrate = (zipper.opts.percent * 8 * Zipper.size_mb_limit * 1000) / zipper.duration.to_f
       end
