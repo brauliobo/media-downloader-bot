@@ -137,7 +137,7 @@ The bot has an upload limit that depends on how it runs: 50 MB on the regular Te
 
 To avoid slow, quality-losing re-encodes, **regular users get streaming uploads by default**: the bot picks the best mp4 (h264/AAC) format of the video that fits the limit and uploads it exactly as downloaded, so it is also fast. For example, a 3:30 video at a 20 MB limit is delivered as 480p instead of being recompressed.
 
-- The administrator keeps the re-encoding behavior unless they add `stream`.
+- The administrator keeps the re-encoding behavior unless they add `stream`. Anyone can add `nostream` to get the re-encoded version instead.
 - Any option that changes the video or audio (`audio`, `format=`, `width=`, `speed=`, `cuts=`, subtitles, dubbing, ...) uses the re-encoding path instead.
 - `ss=`, `to=` and `t=` do **not** disable it: only the requested section is downloaded.
 - If no format fits the limit, the bot falls back to re-encoding the video to fit.
@@ -156,7 +156,7 @@ bin/zip book.pdf voice=male,young_adult,moderate_pitch,american_accent
 bin/zip ~/Videos
 ```
 
-Results are written to a `converted/` folder, next to the input file or in the current folder for links. Passing a folder converts every media file in it. `SIZE_MB_LIMIT=50` makes the CLI behave like the 50 MB bot.
+Links are downloaded with streaming uploads, like a regular bot user; add `nostream` to re-encode them instead. Results are written to a `converted/` folder, next to the input file or in the current folder for links. Passing a folder converts every media file in it. `SIZE_MB_LIMIT=50` makes the CLI behave like the 50 MB bot.
 
 ## Running your own bot
 
