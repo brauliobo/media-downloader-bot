@@ -53,7 +53,9 @@ module Processors
         return i
       end
 
-      if Zipper.size_mb_limit && !i.opts.onlysrt
+      stream = streamable?(i)
+
+      if Zipper.size_mb_limit && !i.opts.onlysrt && !stream
         if i.type == Types.video and i.durat > Zipper.vid_duration_thld.minutes.to_i
           i.stl.update VID_TOO_LONG[]
         end
@@ -72,7 +74,7 @@ module Processors
       i.thumb = i.opts.thumb = Timeout.timeout(15) do
         Utils::Thumb.process(i.info, base_filename: i.info._filename, on_error: -> e { service.report_error(msg, e) })
       end rescue nil
-      i.fn_out = convert(i, pos: pos)
+      i.fn_out = stream ? passthrough(i, pos: pos) : convert(i, pos: pos)
       return if i.stl.error?
 
       if Zipper.size_mb_limit
@@ -103,6 +105,17 @@ module Processors
 
     def tag i
       Tagger.add_cover i.fn_out, i.thumb if i.thumb and i.type == Types.audio
+    end
+
+    # The downloader already fetched an mp4 format that fits the limit, so upload it untouched.
+    def streamable?(i)
+      i.stream.present? && i.type == Types.video && ::File.extname(i.fn_in) == '.mp4' && Streaming.fits?(i.fn_in)
+    end
+
+    def passthrough(i, pos: nil)
+      i.format = Types.video.h264
+      i.mime   = i.format.mime
+      ::File.expand_path(Output.filename(i.info, dir: dir, ext: i.format.ext, pos: pos)).tap { |fn_out| FileUtils.mv i.fn_in, fn_out }
     end
 
     def convert i, pos: nil

@@ -172,6 +172,36 @@ RSpec.describe Processors::Media do
     end
   end
 
+  describe '#handle_input streaming' do
+    let(:source) { File.join(dir, 'in.mp4').tap { |f| File.write(f, 'video') } }
+    let(:i)      { input(fn_in: source, stream: '135+140', info: SymMash.new(title: 't', _filename: 'f.mp4')) }
+
+    before do
+      Zipper.size_mb_limit = 50
+      allow(Prober).to receive(:for).and_return(SymMash.new(format: SymMash.new(duration: 10), streams: [SymMash.new(codec_type: 'video')]))
+      allow(Zipper).to receive(:zip_video)
+    end
+    after { Zipper.size_mb_limit = nil }
+
+    it 'uploads the downloaded file without transcoding' do
+      processor.handle_input(i)
+
+      expect(Zipper).not_to have_received(:zip_video)
+      expect(File.read(i.fn_out)).to eq('video')
+      expect(File.dirname(i.fn_out)).to eq(File.expand_path(dir))
+      expect(i.mime).to eq('video/mp4')
+    end
+
+    it 'transcodes when the download does not fit the limit' do
+      Zipper.size_mb_limit = 0
+      allow(Zipper).to receive(:zip_video).and_return(['', 'x', instance_double(Process::Status, success?: false)])
+
+      processor.handle_input(i)
+
+      expect(Zipper).to have_received(:zip_video)
+    end
+  end
+
   describe '#convert' do
     let(:i) do
       input(
