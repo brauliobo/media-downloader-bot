@@ -8,6 +8,7 @@ module Downloaders
     MAX_RES  = ENV['MAX_RES'] || 1080
     BASE_CMD = "yt-dlp -S 'res:#{MAX_RES}' --ignore-errors --compat-options no-live-chat".freeze
     REMOTE   = ENV['YT_DLP_REMOTE_COMPONENTS']
+    FASTSTART = 'Merger+ffmpeg_o:-movflags +faststart'.freeze
 
     def download
       source_url = normalized_url
@@ -15,7 +16,7 @@ module Downloaders
       source_url = normalize_rumble_url(source_url)
       validate_public_url!(source_url)
 
-      cmd = "#{base_cmd} --write-info-json --no-clean-infojson --skip-download -o #{Sh.escape("info-%(playlist_index)s.%(ext)s")} #{Sh.escape(source_url)}"
+      cmd = "#{base_cmd} -f #{Sh.escape(format_selector)} --write-info-json --no-clean-infojson --skip-download -o #{Sh.escape("info-%(playlist_index)s.%(ext)s")} #{Sh.escape(source_url)}"
       cmd << " --match-filter #{Sh.escape('live_status != is_upcoming')}" if source_url.match?(/youtu\.?be/)
       
       _, e, s = Sh.run cmd, chdir: dir
@@ -29,7 +30,7 @@ module Downloaders
       source_url = Utils::Url.normalize(i.info&.webpage_url.presence || i.url)
       source_url = normalize_rumble_url(source_url)
       validate_public_url!(source_url)
-      cmd = "#{base_cmd} -o #{Sh.escape("#{fn}.%(ext)s")} #{Sh.escape(source_url)}"
+      cmd = "#{base_cmd} #{format_args(i.stream)} -o #{Sh.escape("#{fn}.%(ext)s")} #{Sh.escape(source_url)}"
       _, e, s = Sh.run cmd, chdir: dir
       raise "download error: #{e}" unless s == 0
 
@@ -53,6 +54,25 @@ module Downloaders
       al = opts.alang
       return "#{base}/best" unless al
       "#{base}[language^=#{al}]/best[language^=#{al}]/#{base}/best"
+    end
+
+    def format_args(stream)
+      return "-f #{Sh.escape(format_selector)}" unless stream
+
+      "-f #{Sh.escape(stream)} --merge-output-format mp4 --postprocessor-args #{Sh.escape(FASTSTART)}"
+    end
+
+    def stream_selector(info)
+      return unless Streaming.enabled?(opts, admin: admin?) && info.video_ext != 'none'
+
+      FormatPicker.new(info, limit_mb: Zipper.size_mb_limit, max_res: MAX_RES.to_i, clip: clip_seconds(info), alang: opts.alang).selector
+    end
+
+    def clip_seconds(info)
+      return info.duration unless Utils::Duration.cut?(opts)
+
+      cut = Utils::Duration.from_opts(opts)
+      (cut.finish || info.duration) - cut.start
     end
 
     def pick_downloaded_file(files, want_video:)
@@ -105,8 +125,6 @@ module Downloaders
           cut = Utils::Duration.from_opts(opts)
           cmd << "--download-sections #{Sh.escape("*#{cut.start}-#{cut.finish || 'inf'}")}"
         end
-
-        cmd << "-f #{Sh.escape(format_selector)}"
 
         apply_playlist_options(cmd)
 
@@ -166,7 +184,7 @@ module Downloaders
       
       return if too_long?(info)
 
-      SymMash.new(url: display_url(info, source_url), opts: opts.deep_dup, info: info)
+      SymMash.new(url: display_url(info, source_url), opts: opts.deep_dup, info: info, stream: stream_selector(info))
     end
 
     def display_url(info, source_url)

@@ -123,6 +123,17 @@ RSpec.describe Downloaders::YtDlp do
   describe '#download_one' do
     let(:i) { SymMash.new(url: 'https://example.com/v', opts: opts) }
 
+    it 'downloads the picked streaming format as mp4 with faststart' do
+      i.stream = '135+140'
+      captured = nil
+      allow(Sh).to receive(:run) { |cmd, **_| captured = cmd; ['', '', 1] }
+
+      expect { downloader.download_one(i) }.to raise_error(/download error/)
+
+      expect(captured).to include('-f 135+140', '--merge-output-format mp4', 'Merger+ffmpeg_o')
+      expect(captured).not_to include('bestvideo')
+    end
+
     it 'raises when yt-dlp exits non-zero' do
       allow(Sh).to receive(:run).and_return(['', 'boom', 1])
       expect { downloader.download_one(i) }.to raise_error(/download error.*boom/m)
@@ -206,6 +217,42 @@ RSpec.describe Downloaders::YtDlp do
       allow(Sh).to receive(:run) { |cmd, **_| captured = cmd; ['', '', 1] }
       expect { downloader.download_one(i) }.to raise_error(/download error/)
       expect(captured).to match(%r{https://www\\?\.youtube\\?\.com/watch})
+    end
+
+    describe 'streaming format' do
+      let(:info) do
+        SymMash.new(
+          webpage_url: 'https://example.com/v', display_id: 'v', _filename: 'v.mp4', duration: 600,
+          formats: [
+            {format_id: '140', ext: 'm4a', vcodec: 'none', acodec: 'mp4a.40.2', filesize: 4 * 2**20},
+            {format_id: '135', ext: 'mp4', vcodec: 'avc1.4d401e', acodec: 'none', width: 854, height: 480, filesize: 25 * 2**20},
+          ]
+        )
+      end
+
+      before { Zipper.size_mb_limit = 50 }
+      after  { Zipper.size_mb_limit = nil }
+
+      it 'is picked for non admins' do
+        allow(Bot::MsgHelpers).to receive(:from_admin?).with(msg).and_return(false)
+
+        expect(downloader.send(:build_input, info, 0, false).stream).to eq('135+140')
+      end
+
+      it 'is skipped for admins unless requested' do
+        allow(Bot::MsgHelpers).to receive(:from_admin?).with(msg).and_return(true)
+        expect(downloader.send(:build_input, info, 0, false).stream).to be_nil
+
+        opts.stream = 1
+        expect(downloader.send(:build_input, info, 0, false).stream).to eq('135+140')
+      end
+
+      it 'is skipped when an option needs transcoding' do
+        allow(Bot::MsgHelpers).to receive(:from_admin?).with(msg).and_return(false)
+        opts.speed = 2
+
+        expect(downloader.send(:build_input, info, 0, false).stream).to be_nil
+      end
     end
 
     it 'uses the regular short YouTube link format for Shorts' do
