@@ -52,8 +52,14 @@ module Downloaders
     # a source without a video track (e.g. SoundCloud) is audio whether or not `audio` was asked
     def audio_only?(info) = opts.audio || info&.video_ext == 'none'
 
+    # the yt-dlp format to upload as downloaded, nil to encode instead
     def stream_selector(info)
-      StreamSelector.new(info, opts: opts, audio_only: audio_only?(info), max_res: MAX_RES.to_i).selector
+      return unless Streaming.enabled?(opts)
+
+      FormatPicker.for(
+        info, audio_only: audio_only?(info), limit_mb: Zipper.size_mb_limit, max_res: MAX_RES.to_i,
+        clip: Utils::Duration.clip_length(opts, info.duration), alang: opts.alang
+      ).selector
     end
 
     def pick_downloaded_file(files, want_video:)
@@ -209,15 +215,16 @@ module Downloaders
       info.duration = durs.compact.max&.to_i
     end
 
-    # Encoding squeezes the video to fit the limit and gets too lossy past this length. A streamed
-    # entry has no such guard: the format picker already found a combination that fits the limit.
+    # Encoding lowers the bitrates with the duration, down to a floor; past that nothing can fit the limit.
+    # A streamed entry has no such guard: the format picker already found a combination that fits.
     def too_long_to_encode?(info)
       return unless Zipper.size_mb_limit && !opts.onlysrt && !admin?
 
-      max_min = (35.0 / 50 * Zipper.size_mb_limit)
-      return unless info.video_ext != 'none' && info.duration.to_i >= max_min.minutes
+      kind = audio_only?(info) ? :audio : :video
+      max  = Zipper::Limits.max_encoded_duration(kind, Zipper.size_mb_limit)
+      return unless Utils::Duration.clip_length(opts, info.duration.to_f) >= max
 
-      st.error "Can't download files bigger than #{max_min.round} minutes"
+      st.error "Can't fit #{kind} longer than #{(max / 60).floor} minutes in #{Zipper.size_mb_limit}MB"
       true
     end
   end

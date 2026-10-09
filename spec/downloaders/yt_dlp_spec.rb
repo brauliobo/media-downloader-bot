@@ -285,6 +285,24 @@ RSpec.describe Downloaders::YtDlp do
         expect(downloader.send(:build_input, info, 0, false).stream).to eq('135+140')
       end
 
+      it 'is nil when no format fits the limit, so the video is encoded' do
+        Zipper.size_mb_limit = 20
+
+        expect(downloader.send(:build_input, info, 0, false).stream).to be_nil
+      end
+
+      it 'only counts the requested section' do
+        info.formats = [
+          {format_id: '140', ext: 'm4a', vcodec: 'none', acodec: 'mp4a.40.2', abr: 48, filesize: 4 * 2**20},
+          {format_id: '137', ext: 'mp4', vcodec: 'avc1.640028', acodec: 'none', width: 1920, height: 1080, filesize: 120 * 2**20},
+        ]
+        expect(downloader.send(:build_input, info, 0, false).stream).to be_nil
+
+        opts.ss = '0:10'
+        opts.t  = '2:30'
+        expect(downloader.send(:build_input, info, 0, false).stream).to eq('137+140')
+      end
+
       it 'skips audio above 64kbps at the 50MB limit' do
         info.formats << SymMash.new(format_id: '139', ext: 'm4a', vcodec: 'none', acodec: 'mp4a.40.5', abr: 48, filesize: 2**20)
         info.formats.first.abr = 130
@@ -326,14 +344,63 @@ RSpec.describe Downloaders::YtDlp do
           info.formats.last.filesize = 80 * 2**20
 
           expect(downloader.send(:build_input, info, 0, false)).to be_nil
-          expect(status).to have_received(:error).with("Can't download files bigger than 35 minutes")
+          expect(status).to have_received(:error).with("Can't fit video longer than 43 minutes in 50MB")
         end
 
         it 'refuses them when encoding is requested' do
           opts.nostream = 1
 
           expect(downloader.send(:build_input, info, 0, false)).to be_nil
-          expect(status).to have_received(:error).with(/bigger than 35 minutes/)
+          expect(status).to have_received(:error).with(/longer than 43 minutes/)
+        end
+
+        it 'encodes them when the floor bitrates still fit them' do
+          opts.nostream = 1
+          info.duration = 40 * 60
+
+          expect(downloader.send(:build_input, info, 0, false)).not_to be_nil
+        end
+
+        it 'counts only the requested section' do
+          opts.nostream = 1
+          opts.ss = '0'
+          opts.t  = '30m'
+
+          expect(downloader.send(:build_input, info, 0, false)).not_to be_nil
+        end
+      end
+
+      describe 'for audio that does not fit as is' do
+        let(:status) { instance_double(Bot::Status, error: nil) }
+
+        before do
+          allow(Bot::MsgHelpers).to receive(:from_admin?).with(msg).and_return(false)
+          ctx.st        = status
+          opts.audio    = 1
+          info.formats  = [SymMash.new(format_id: '140', ext: 'm4a', vcodec: 'none', acodec: 'mp4a.40.2', abr: 130, filesize: 90 * 2**20)]
+        end
+
+        it 'is encoded when the minimum bitrate still fits it' do
+          info.duration = 3 * 3600
+          input = downloader.send(:build_input, info, 0, false)
+
+          expect(input.stream).to be_nil
+          expect(status).not_to have_received(:error)
+        end
+
+        it 'is refused when even the minimum bitrate does not fit it' do
+          info.duration = 7 * 3600
+
+          expect(downloader.send(:build_input, info, 0, false)).to be_nil
+          expect(status).to have_received(:error).with("Can't fit audio longer than 395 minutes in 50MB")
+        end
+
+        it 'counts only the requested section' do
+          info.duration = 7 * 3600
+          opts.ss = '0'
+          opts.t  = '1h'
+
+          expect(downloader.send(:build_input, info, 0, false)).not_to be_nil
         end
       end
 

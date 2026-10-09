@@ -7,10 +7,11 @@ module Downloaders
 
       def self.for(info, audio_only: false, **opts) = (audio_only ? Audio : Video).new(info, **opts)
 
-      def initialize(info, limit_mb:, clip: info.duration, alang: nil, **)
-        @info, @alang, @clip = info, alang, clip.to_f
+      # clip is the length that is downloaded (a requested section is cut while downloading)
+      def initialize(info, limit_mb:, max_res: nil, clip: info.duration, alang: nil)
+        @info, @limit_mb, @max_res, @alang = info, limit_mb, max_res, alang
         @budget = limit_mb * 2**20 * SAFETY
-        @ratio  = @clip / info.duration.to_f
+        @ratio  = clip.to_f / info.duration.to_f
       end
 
       # yt-dlp format ids joined with + (nil when nothing fits)
@@ -41,8 +42,8 @@ module Downloaders
       end
 
       def size(format)
-        bytes = format.filesize || format.filesize_approx
-        bytes ? bytes * @ratio : (format.tbr && format.tbr * 125 * @clip)
+        bytes = format.filesize || format.filesize_approx || (format.tbr && format.tbr * 125 * @info.duration)
+        bytes && bytes * @ratio
       end
     end
   end
