@@ -40,6 +40,14 @@ module Utils
 
     def self.from_opts(opts) = section(ss: opts.ss, to: opts.to, t: opts.t)
 
+    # Length of the part that is kept of something `total` seconds long.
+    def self.clip_length(opts, total)
+      return total unless cut?(opts)
+
+      cut = from_opts(opts)
+      (cut.finish || total) - cut.start
+    end
+
     def self.clear_cut!(*targets)
       targets.each { |opts| CUT_KEYS.each { |key| opts[key] = nil if opts[key] } }
     end
