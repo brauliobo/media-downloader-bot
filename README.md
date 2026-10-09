@@ -143,7 +143,7 @@ To avoid slow, quality-losing re-encodes, **everybody gets streaming uploads by 
 - `ss=`, `to=` and `t=` do **not** disable it: only the requested section is downloaded.
 - If no format fits the limit, the bot falls back to re-encoding the video to fit.
 - When the upload limit is 50 MB, streamed videos only use audio up to 64 kbps, leaving more of the size budget to the picture.
-- Very long videos are refused when they cannot fit the limit (about 35 minutes at 50 MB).
+- When nothing streams, encoding lowers the video width and the bitrates as the media gets longer, down to a floor (240p video at about 120 kbps, audio at 16 kbps). Media too long to fit even at the floor is refused before it is downloaded: about 43 minutes of video or 6.5 hours of audio at 50 MB.
 
 ## Using it from the command line
 
