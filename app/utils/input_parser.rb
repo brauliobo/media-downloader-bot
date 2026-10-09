@@ -57,12 +57,13 @@ module Utils
       return [] if url_indexes.empty?
       raise ArgumentError, "too many URLs (maximum #{MAX_URLS})" if url_indexes.size > MAX_URLS
 
-      base_opts = base_option_tokens(lines, url_indexes.first)
-
-      url_indexes.map.with_index do |line_index, index|
+      inputs = url_indexes.map.with_index do |line_index, index|
         next_url_index = url_indexes[index + 1] || lines.size
-        url_input(lines[line_index], lines[(line_index + 1)...next_url_index], base_opts)
+        url_input(lines[line_index], lines[(line_index + 1)...next_url_index])
       end
+
+      shared_opts = base_option_tokens(lines, url_indexes.first) + inputs.first.last
+      inputs.map { |url, opts| ([url] + (shared_opts + opts).uniq).join(' ') }
     end
 
     def self.line_has_url?(line)
@@ -81,14 +82,12 @@ module Utils
       option_tokens(lines.first)
     end
 
-    def self.url_input(url_line, option_lines, base_opts)
+    def self.url_input(url_line, option_lines)
       line_tokens = tokens(url_line)
       url_index   = line_tokens.index { |token| url_like?(token) }
-      url_token   = line_tokens[url_index]
       line_opts   = line_tokens[(url_index + 1)..] || []
-      opts        = base_opts + option_tokens(line_opts) + option_lines.flat_map { |line| option_tokens(line) }
 
-      ([url_token] + opts).join(' ')
+      [line_tokens[url_index], option_tokens(line_opts) + option_lines.flat_map { |line| option_tokens(line) }]
     end
 
     def self.option_tokens(value)

@@ -45,9 +45,15 @@ RSpec.describe Utils::InputParser do
   end
 
   it 'builds separate inputs for multiple url lines' do
-    inputs = described_class.url_inputs(['https://example.com/a audio', 'https://example.com/b video'])
+    inputs = described_class.url_inputs(['https://example.com/a', 'https://example.com/b video'])
 
-    expect(inputs).to eq(['https://example.com/a audio', 'https://example.com/b video'])
+    expect(inputs).to eq(['https://example.com/a', 'https://example.com/b video'])
+  end
+
+  it 'applies the first url options to every url input' do
+    inputs = described_class.url_inputs(['https://example.com/a album dub=pt', 'https://example.com/b', 'https://example.com/c'])
+
+    expect(inputs).to eq(['https://example.com/a album dub=pt', 'https://example.com/b album dub=pt', 'https://example.com/c album dub=pt'])
   end
 
   it 'applies first-line options to each url input' do
@@ -59,7 +65,7 @@ RSpec.describe Utils::InputParser do
   it 'groups following option lines with each url input' do
     inputs = described_class.url_inputs(['audio', 'https://example.com/a', 'speed=1.2', 'https://example.com/b', 'speed=1.5'])
 
-    expect(inputs).to eq(['https://example.com/a audio speed=1.2', 'https://example.com/b audio speed=1.5'])
+    expect(inputs).to eq(['https://example.com/a audio speed=1.2', 'https://example.com/b audio speed=1.2 speed=1.5'])
   end
 
   it 'does not treat a title line as base options' do

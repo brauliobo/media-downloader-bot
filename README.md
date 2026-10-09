@@ -32,7 +32,7 @@ https://www.instagram.com/p/CTAXxxODblP/
 https://soundcloud.com/br-ulio-bhavamitra/sets/didi-gunamrta caption number
 ```
 
-You can send several links in one message, up to 10, one per line. Keywords on a line apply to that link; keywords on a first line without a link apply to all of them.
+You can send several links in one message, up to 10, one per line. Keywords on the first link (or on a first line without a link) apply to all of them; keywords on a later link only add to that link.
 
 In group chats the bot only reacts to messages that contain a link or a media file.
 
