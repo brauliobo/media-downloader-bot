@@ -3,12 +3,8 @@ require 'timeout'
 module Processors
   class Media < File
     Types = Zipper::Types
-    # file extension => [media type, format] of what can be uploaded as downloaded
-    STREAM_FORMATS = {
-      '.mp4' => [Types.video, Types.video.h264],
-      '.m4a' => [Types.audio, Types.audio.aac],
-      '.mp3' => [Types.audio, Types.audio.mp3],
-    }.freeze
+    # file extension => format of what can be uploaded as downloaded
+    STREAM_FORMATS = {'.mp4' => Types.video.h264, '.m4a' => Types.audio.aac, '.mp3' => Types.audio.mp3}.freeze
 
     VID_TOO_LONG = -> { "\nQuality is compromised as the video is too long to fit the #{Zipper.size_mb_limit}MB upload limit on Telegram Bots" }
     AUD_TOO_LONG = -> { "\nQuality is compromised as the audio is too long to fit the #{Zipper.size_mb_limit}MB upload limit on Telegram Bots" }
@@ -115,12 +111,12 @@ module Processors
 
     # The downloader already fetched a Telegram-playable file that fits the limit, so upload it untouched.
     def streamable?(i)
-      type, = STREAM_FORMATS[::File.extname(i.fn_in)]
-      i.stream.present? && type && i.type == type && Streaming.fits?(i.fn_in)
+      format = STREAM_FORMATS[::File.extname(i.fn_in)]
+      i.stream.present? && format && i.type.name == Utils::MimeTypes.type_for_mime(format.mime) && Streaming.fits?(i.fn_in)
     end
 
     def passthrough(i, pos: nil)
-      i.format = STREAM_FORMATS.fetch(::File.extname(i.fn_in)).last
+      i.format = STREAM_FORMATS.fetch(::File.extname(i.fn_in))
       i.mime   = i.format.mime
       ::File.expand_path(Output.filename(i.info, dir: dir, ext: i.format.ext, pos: pos)).tap { |fn_out| FileUtils.mv i.fn_in, fn_out }
     end
