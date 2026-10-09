@@ -32,6 +32,42 @@ RSpec.describe Zipper::Limits do
     expect(opts.bitrate).to be_within(0.001).of(84.332)
   end
 
+  it 'never lowers the dynamic audio bitrate below the minimum' do
+    Zipper.size_mb_limit = 50
+    opts   = SymMash.new(onlysrt: false, bitrate: 96, percent: 0.95)
+    zipper = Struct.new(:opts, :duration).new(opts, 40_000)
+
+    described_class.apply_audio_size_limit! zipper
+
+    expect(opts.bitrate).to eq(described_class::MIN_AUDIO_BITRATE_KBIT)
+  end
+
+  it 'calculates the longest audio that fits at the minimum bitrate' do
+    expect(described_class.max_encoded_duration(:audio, 50)).to be_within(0.001).of(23_750)
+    expect(described_class.max_encoded_duration(:audio, 2_000)).to be_within(0.001).of(950_000)
+  end
+
+  it 'calculates the longest video that fits at the minimum bitrates' do
+    expect(described_class.max_encoded_duration(:video, 50)).to be_within(0.01).of(2_605.263)
+    expect(described_class.max_encoded_duration(:video, 2_000)).to be_within(0.01).of(104_210.526)
+  end
+
+  it 'never lowers the dynamic video bitrate below the minimum' do
+    Zipper.size_mb_limit = 50
+    opts = SymMash.new(
+      onlysrt: false, width: 720, abrate: 64, percent: 0.99, vbrate: nil, cudaenc: false
+    )
+    zipper = instance_double(
+      Zipper, opts: opts, dopts: SymMash.new(width: 720, abrate: 64), duration: 2_600, format_name: :h264
+    )
+
+    result = described_class.apply_video_size_limits! zipper
+
+    expect(result.maxrate).to eq("#{described_class::MIN_VIDEO_BITRATE_KBIT}k")
+    expect(opts.width).to eq(480)
+    expect(opts.abrate).to eq(40)
+  end
+
   it 'returns semantic video size data with the existing calculations' do
     Zipper.size_mb_limit = 2_000
     opts = SymMash.new(
