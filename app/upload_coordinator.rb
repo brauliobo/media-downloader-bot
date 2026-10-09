@@ -12,9 +12,9 @@ class UploadCoordinator
     end
   end
 
-  def upload(input)
+  def upload(input, caption: nil)
     uploads = Array.wrap(input.uploads.presence || input)
-    return upload_album(container(uploads, input)) if album_uploads?(uploads)
+    return upload_album(container(uploads, input), caption) if album_uploads?(uploads)
 
     uploads.each { |upload| worker.upload_item(upload) }
   ensure
@@ -25,16 +25,16 @@ class UploadCoordinator
     return if album_queue.empty?
     return upload(album_queue.first.second) if album_queue.one?
 
-    upload container(album_queue.sort_by(&:first).map(&:second), album_queue.first.second)
+    inputs = album_queue.sort_by(&:first).map(&:second)
+    upload container(inputs, inputs.first), caption: worker.album_caption(inputs)
   end
 
   private
 
   attr_reader :worker, :album_queue
 
-  def upload_album(input)
-    caption = worker.caption_for(input)
-    worker.send_album worker.msg, caption, uploads: input.uploads, parse_mode: 'MarkdownV2'
+  def upload_album(input, caption)
+    worker.send_album worker.msg, caption || worker.caption_for(input), uploads: input.uploads, parse_mode: 'MarkdownV2'
   end
 
   def album_uploads?(uploads)

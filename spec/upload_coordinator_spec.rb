@@ -31,7 +31,7 @@ RSpec.describe UploadCoordinator do
 
   it 'flushes queued mixed media as one album' do
     uploads = [item('1.jpg', 'image/jpeg'), item('2.mp4', 'video/mp4')]
-    allow(worker).to receive(:caption_for).with(anything).and_return('_caption_')
+    allow(worker).to receive(:album_caption).with(uploads).and_return('_caption_')
     allow(worker).to receive(:send_album)
 
     coordinator = described_class.new(worker)
@@ -42,30 +42,27 @@ RSpec.describe UploadCoordinator do
     expect(worker).to have_received(:cleanup_input).with(have_attributes(uploads: uploads))
   end
 
-  it 'limits album captions for media groups' do
-    uploads = [item('1.jpg', 'image/jpeg'), item('2.jpg', 'image/jpeg')]
-    long = 'a' * 2_000
-    allow(worker).to receive(:caption_for).with(anything).and_return(long.first(1024))
-    allow(worker).to receive(:send_album)
+  it 'combines the title and link of every queued item into the album caption' do
+    real_worker = Worker.new(SymMash.new(from: {id: 1}, chat: {id: 1}))
+    uploads     = [item('1.mp4', 'video/mp4'), item('2.mp4', 'video/mp4')]
+    uploads.each_with_index { |upload, i| upload.merge!(url: "https://x.com/i/status/#{i + 1}") }
+    allow(real_worker).to receive(:send_album)
+    allow(real_worker).to receive(:cleanup_input)
+    real_worker.instance_variable_set(:@opts, opts)
 
-    coordinator = described_class.new(worker)
+    coordinator = described_class.new(real_worker)
     uploads.each_with_index { |upload, i| coordinator.upload_or_queue(upload, i) }
     coordinator.flush
 
-    expect(worker).to have_received(:send_album).with(msg, long.first(1024), uploads: uploads, parse_mode: 'MarkdownV2')
+    caption = "_1\\.mp4_\n\nx\\.com\\/i\\/status\\/1\n\n_2\\.mp4_\n\nx\\.com\\/i\\/status\\/2"
+    expect(real_worker).to have_received(:send_album).with(real_worker.msg, caption, uploads: uploads, parse_mode: 'MarkdownV2')
   end
 
-  it 'uses the worker caption limit for albums' do
-    uploads = [item('1.jpg', 'image/jpeg'), item('2.jpg', 'image/jpeg')]
-    allow(worker).to receive(:caption_limit).and_return(4096)
-    allow(worker).to receive(:caption_for).with(anything).and_return('td caption')
-    allow(worker).to receive(:send_album)
+  it 'shares the caption limit between the album items' do
+    real_worker = Worker.new(SymMash.new(from: {id: 1}, chat: {id: 1}))
+    uploads     = Array.new(3) { |i| item("#{i}.mp4", 'video/mp4').merge!(info: SymMash.new(title: 'a' * 2_000, description: '')) }
 
-    coordinator = described_class.new(worker)
-    uploads.each_with_index { |upload, i| coordinator.upload_or_queue(upload, i) }
-    coordinator.flush
-
-    expect(worker).to have_received(:send_album).with(msg, 'td caption', uploads: uploads, parse_mode: 'MarkdownV2')
+    expect(real_worker.album_caption(uploads).size).to be <= real_worker.caption_limit
   end
 
   it 'uploads a single queued item normally' do

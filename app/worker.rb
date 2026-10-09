@@ -1,6 +1,8 @@
 
 class Worker
 
+  ALBUM_CAPTION_SEPARATOR = "\n\n".freeze
+
   class_attribute :service
 
   attr_reader :msg
@@ -171,9 +173,15 @@ class Worker
     service.respond_to?(:max_caption) ? service.max_caption : Bot::MsgHelpers::MEDIA_CAPTION_LIMIT
   end
 
-  def caption_for(input)
+  def caption_for(input, max: caption_limit)
     info = translate_caption_info(input.info, input.opts)
-    msg_caption(input, max: caption_limit, info: info)
+    msg_caption(input, max: max, info: info)
+  end
+
+  # One caption per item (title, source link, ...) sharing the album caption limit.
+  def album_caption(inputs)
+    budget = (caption_limit - ALBUM_CAPTION_SEPARATOR.size * (inputs.size - 1)) / inputs.size
+    inputs.map { |input| caption_for(input, max: budget) }.reject(&:blank?).join(ALBUM_CAPTION_SEPARATOR)
   end
 
   private
