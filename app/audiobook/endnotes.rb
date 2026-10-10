@@ -95,7 +95,7 @@ module Audiobook
     # the calls that will actually reach it.
     def called?(lines)
       calls = lines.reject { |row| @pages.include?(row.page) }
-        .sum { |row| TextHelpers.strip_inline_markers(row.text.to_s).last.size }
+        .sum { |row| Markers.strip_inline(row.text.to_s).last.size }
       calls >= entries.size * CALL_SHARE
     end
 
@@ -180,7 +180,7 @@ module Audiobook
     def add(group, id, text)
       entries = (@groups[group] ||= {})
       entries[id] ||= ''
-      entries[id] = TextHelpers.join_pdf_lines([entries[id], text]) if text.present?
+      entries[id] = Text.join_lines([entries[id], text]) if text.present?
     end
   end
 end

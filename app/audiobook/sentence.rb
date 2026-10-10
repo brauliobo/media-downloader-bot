@@ -36,7 +36,7 @@ module Audiobook
     end
 
     def spoken_text(lang = language)
-      speakable? ? SpokenNumbers.call(text, lang) : ''
+      speakable? ? SpokenText::Numbers.call(text, lang) : ''
     end
 
     def speakable?
@@ -97,8 +97,8 @@ module Audiobook
       h
     end
 
-    def self.ends_with_punctuation?(text)
-      TextHelpers.ends_with_punctuation?(text)
+    def self.split(text, **options)
+      ::Ewprs::SentenceSplitter.sentences(text, boundary_tokens: Markers::TOKEN, **options)
     end
 
     def self.speakable_text?(text)
@@ -122,7 +122,7 @@ module Audiobook
     end
 
     def self.from_text(text)
-      build_all(TextHelpers.split_sentences(TextHelpers.normalize_text(text)))
+      build_all(split(Text.normalize(text)))
     end
 
     def self.wrap(value)

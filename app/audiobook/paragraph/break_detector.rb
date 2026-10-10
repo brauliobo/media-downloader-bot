@@ -8,9 +8,9 @@ module Audiobook
       def break?(prev_line, line, buf, isolated: false, fenced: false, block_break: false)
         buffer_text = buf.map(&:text).join(' ').strip
         # A footnote marker sits on its own line above the note it introduces.
-        return false if TextHelpers.marker_line?(buffer_text)
+        return false if Markers.line?(buffer_text)
 
-        finished     = Sentence.ends_with_punctuation?(buffer_text)
+        finished     = Punctuation.closes?(buffer_text)
         continuation = FontRoles.heading_continuation?(prev_line, line)
         # Emphasis that carries a sentence on in mid-flow is a run inside the paragraph, not a new block.
         emphasis_run = line.continues?(buffer_text) && !line.font_changed?(prev_line)
@@ -40,9 +40,9 @@ module Audiobook
       # whatever the page geometry says, and whatever page it happens on.
       def structural?(prev_line, line, continuation, emphasis_run)
         return true if line.language != prev_line.language
-        return true if TextHelpers.marker_line?(line.text)
-        return true if TextHelpers.enumerated?(line.text) || FontRoles.labeled_line?(line)
-        return true if TextHelpers.toc_entry?(prev_line.text)
+        return true if Markers.line?(line.text)
+        return true if ListMark.enumerated?(line.text) || FontRoles.labeled_line?(line)
+        return true if Contents.entry?(prev_line.text)
         return true if font_changed?(prev_line, line, continuation, emphasis_run)
 
         !continuation && !emphasis_run && FontRoles.heading_item?(prev_line) != FontRoles.heading_item?(line)
@@ -55,7 +55,7 @@ module Audiobook
 
       # "5. Time (how long to take the protocols)" names the block that follows; it is not part of it.
       def label?(prev_line, line)
-        TextHelpers.enumerated?(prev_line.text) && line.starts_with_capital? &&
+        ListMark.enumerated?(prev_line.text) && line.starts_with_capital? &&
           !prev_line.ends_with_punctuation? && @grid.short?(prev_line)
       end
 

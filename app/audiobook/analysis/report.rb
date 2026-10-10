@@ -97,7 +97,7 @@ module Audiobook
 
       # The same line read three times over is a running head the furniture pass missed.
       def duplicates
-        @duplicates ||= @spoken.map { |sentence, _| TextHelpers.comparable(sentence.text) }
+        @duplicates ||= @spoken.map { |sentence, _| Text.comparable(sentence.text) }
           .tally.select { |text, count| count >= DUPLICATE_MIN && text.split.size >= 2 }
       end
 

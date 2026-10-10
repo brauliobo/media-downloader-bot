@@ -4,7 +4,7 @@ module Audiobook
       def self.extract_data(path, stl: nil, opts: nil, **_kwargs)
         paragraphs = paragraphs_from_plain_text(read_text(path))
         lines = paragraphs.filter_map do |paragraph|
-          font = TextHelpers.heading_like?(paragraph) ? HEADING_FONT_SIZE : BODY_FONT_SIZE
+          font = Heading.like?(paragraph) ? HEADING_FONT_SIZE : BODY_FONT_SIZE
           line(paragraph, font)
         end
         stamp_blocks(lines)

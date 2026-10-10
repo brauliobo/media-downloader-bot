@@ -83,9 +83,9 @@ module Audiobook
       listing >= CONTENTS_ENTRIES && listing >= texts.size * ENTRY_SHARE
     end
 
-    def contents_entry?(text) = TextHelpers.toc_entry?(text) || text.match?(CHAPTER_LABEL)
+    def contents_entry?(text) = Contents.entry?(text) || text.match?(CHAPTER_LABEL)
     def contents_title?(text) = text.match?(CONTENTS_TITLE) && text.split.size <= TITLE_WORDS
-    def entry_line?(text) = text.split.size.between?(1, ENTRY_WORDS) && !TextHelpers.ends_with_punctuation?(text)
+    def entry_line?(text) = text.split.size.between?(1, ENTRY_WORDS) && !Punctuation.closes?(text)
 
     # ---------- index and reference lists ----------
 

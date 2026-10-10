@@ -55,12 +55,12 @@ module Audiobook
             next unless container?(node)
 
             raw = block_of_interest?(node) ? extract_inline_text(node) : own_text(node)
-            next if TextHelpers.normalize_text(raw).empty?
+            next if Text.normalize(raw).empty?
 
             style = CssStyle.for_node(node, sheets)
             # Hard breaks separate list items and verses; normalizing first would fuse them.
             raw.split(/\n+/).each do |part|
-              part = TextHelpers.normalize_text(part)
+              part = Text.normalize(part)
               next if part.empty?
               lines << SymMash.new(
                 text: part, font_size: style[:font_size] || effective_font_size_for(node),

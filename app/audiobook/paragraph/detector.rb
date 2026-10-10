@@ -111,11 +111,11 @@ module Audiobook
       # An entry beside leader lines that ends in a number is a contents line whose leaders were lost.
       def strip_contents_numbers(lines)
         lines.each_with_index.map do |line, idx|
-          next line if TextHelpers.toc_entry?(line.text) || !line.text.match?(/\S\s\d{1,4}\z/)
+          next line if Contents.entry?(line.text) || !line.text.match?(/\S\s\d{1,4}\z/)
 
           beside = [idx.positive? ? lines[idx - 1] : nil, lines[idx + 1]].compact
             .select { |other| other.page_number == line.page_number }
-          next line unless beside.any? { |other| TextHelpers.toc_entry?(other.text) }
+          next line unless beside.any? { |other| Contents.entry?(other.text) }
 
           Line.new(line.text.sub(/\s+\d{1,4}\z/, ''), **line.style_attrs)
         end

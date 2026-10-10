@@ -115,3 +115,18 @@ RSpec.describe 'Audiobook punctuation-only text' do
     end
   end
 end
+
+RSpec.describe Audiobook::Punctuation do
+  describe '.closes?' do
+    it 'does not close a sentence on an honorific, an initial or a list label' do
+      expect(described_class.closes?('O relato é de Dra. Antje Oswald, Dr.')).to be(false)
+      expect(described_class.closes?('drugs are able to make it into the U.')).to be(false)
+      expect(described_class.closes?('a.')).to be(false)
+    end
+
+    it 'still closes a sentence on an ordinary stop' do
+      expect(described_class.closes?('Ele saiu de casa.')).to be(true)
+      expect(described_class.closes?('Quem chegou?')).to be(true)
+    end
+  end
+end

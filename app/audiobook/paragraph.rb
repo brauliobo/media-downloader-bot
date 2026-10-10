@@ -83,7 +83,7 @@ module Audiobook
         sentences = Sentence.from_text(para_text)
         next if sentences.empty?
 
-        TextHelpers.heading_like?(sentences.first.text) && sentences.size == 1 ? Heading.new(sentences.first.text) : new(sentences)
+        Heading.like?(sentences.first.text) && sentences.size == 1 ? Heading.new(sentences.first.text) : new(sentences)
       end.reject { |item| item.is_a?(Paragraph) && item.empty? }
     end
 

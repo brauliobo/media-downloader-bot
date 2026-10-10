@@ -47,11 +47,11 @@ module Audiobook
       SymMash.new(
         last:         last,
         first:        first,
-        unfinished:   !TextHelpers.ends_with_punctuation?(last),
-        continuation: first.match?(/\A[[:lower:]]/) && !TextHelpers.enumerated?(first),
+        unfinished:   !Punctuation.closes?(last),
+        continuation: first.match?(/\A[[:lower:]]/) && !ListMark.enumerated?(first),
         # A list entry opens its own block, and a lead-in or a numbered label names the block
         # that follows rather than running into it. A page break undoes none of that.
-        separate:     TextHelpers.enumerated?(first) || TextHelpers.bulleted?(first) ||
+        separate:     ListMark.enumerated?(first) || ListMark.bulleted?(first) ||
           last.end_with?(':') || label_only?(last)
       )
     end
@@ -90,6 +90,6 @@ module Audiobook
     end
 
     # "e. Compromised immune system" names the block that follows; it does not run into it.
-    def label_only?(text) = TextHelpers.enumerated?(text) && !TextHelpers.ends_with_punctuation?(text)
+    def label_only?(text) = ListMark.enumerated?(text) && !Punctuation.closes?(text)
   end
 end

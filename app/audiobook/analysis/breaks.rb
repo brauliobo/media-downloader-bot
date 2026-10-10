@@ -30,7 +30,7 @@ module Audiobook
 
       # The same questions the detector asked itself, named as the report names them.
       def self.reasons(previous, line, buf, grid)
-        finished = Sentence.ends_with_punctuation?(buf.map(&:text).join(' ').strip)
+        finished = Punctuation.closes?(buf.map(&:text).join(' ').strip)
 
         structural(previous, line) + layout(previous, line, grid, finished) +
           [(:block if previous.new_block?(line)), (:page if line.page_number != previous.page_number),
@@ -42,10 +42,10 @@ module Audiobook
           (:font   if line.font_changed?(previous)),
           (:style  if !line.font_changed?(previous) && line.style_changed?(previous)),
           (:role   if FontRoles.heading_item?(previous) != FontRoles.heading_item?(line)),
-          (:enum   if TextHelpers.enumerated?(line.text)),
+          (:enum   if ListMark.enumerated?(line.text)),
           (:label  if FontRoles.labeled_line?(line)),
-          (:toc    if TextHelpers.toc_entry?(previous.text)),
-          (:marker if TextHelpers.marker_line?(line.text)),
+          (:toc    if Contents.entry?(previous.text)),
+          (:marker if Markers.line?(line.text)),
         ].compact
       end
 

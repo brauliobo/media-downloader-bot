@@ -480,8 +480,8 @@ module Audiobook
       pages.each do |page|
         candidates = [page.items.first, page.items.last].compact.uniq.flat_map { |item| direct_sentences(item) }
         page_candidates[page] = candidates
-        candidates.map { |sentence| TextHelpers.comparable_key(sentence.text) }.uniq.each { |text| normalized_counts[text] += 1 }
-        candidates.map { |sentence| TextHelpers.comparable(sentence.text) }.uniq.each { |text| exact_counts[text] += 1 }
+        candidates.map { |sentence| Text.comparable_key(sentence.text) }.uniq.each { |text| normalized_counts[text] += 1 }
+        candidates.map { |sentence| Text.comparable(sentence.text) }.uniq.each { |text| exact_counts[text] += 1 }
       end
 
       threshold = [(pages.size * 0.3).ceil, 3].max
@@ -527,11 +527,11 @@ module Audiobook
 
     def repeated_sentence?(sentence, boundary_sentences, repeated_normalized, repeated_exact)
       repeated_exact_sentence?(sentence, repeated_exact) ||
-        (boundary_sentences.include?(sentence) && repeated_normalized.include?(TextHelpers.comparable_key(sentence.text)))
+        (boundary_sentences.include?(sentence) && repeated_normalized.include?(Text.comparable_key(sentence.text)))
     end
 
     def repeated_exact_sentence?(sentence, repeated_exact)
-      text = TextHelpers.comparable(sentence.text)
+      text = Text.comparable(sentence.text)
       repeated_exact.any? { |candidate| text == candidate || (candidate.length >= 40 && text.include?(candidate)) }
     end
 

@@ -273,7 +273,7 @@ module Audiobook
 
       def self.bullet_run?(words)
         text = words.map(&:text).join.strip
-        text.present? && TextHelpers::BULLETS.include?(text)
+        text.present? && ListMark::BULLETS.include?(text)
       end
 
       def self.baseline_slices(block)
@@ -300,7 +300,7 @@ module Audiobook
         previous = nil
         words.each_with_index.map do |word, at|
           marker = superscript_marker?(word, baseline)
-          text   = marker ? TextHelpers.reference_marker(word.text) : word.text
+          text   = marker ? Markers.wrap(word.text) : word.text
           # A footnote call belongs to the word it follows, however wide a gap the raised glyph leaves.
           text = "#{word_separator(previous, word, spaced[at])}#{text}" if previous && !marker
           previous = word
@@ -359,7 +359,7 @@ module Audiobook
       SUPERSCRIPT_RISE = 0.2
 
       def self.superscript_marker?(word, baseline)
-        word.text.match?(TextHelpers::MARKER_IDS_ONLY) && baseline - word['yMax'].to_f >= height_of(word) * SUPERSCRIPT_RISE
+        word.text.match?(Markers::IDS_ONLY) && baseline - word['yMax'].to_f >= height_of(word) * SUPERSCRIPT_RISE
       end
 
       BOLD_FONT   = /bold|black|heavy|semibold|demi|extrabold/i
@@ -415,10 +415,10 @@ module Audiobook
       # Text extraction can glue a raised marker onto the number before it; the style pass still sees them apart.
       def self.tag_superscript_markers(text, matches, dominant)
         matches.reduce(text) do |result, fragment|
-          next result unless fragment[:text].match?(TextHelpers::MARKER_IDS_ONLY)
+          next result unless fragment[:text].match?(Markers::IDS_ONLY)
           next result unless dominant[:top] - fragment[:top] >= fragment[:height] * SUPERSCRIPT_RISE
 
-          result.sub(/(?<=[^\d\s])#{fragment[:text]}(?=\s|\z)/, TextHelpers.reference_marker(fragment[:text]))
+          result.sub(/(?<=[^\d\s])#{fragment[:text]}(?=\s|\z)/, Markers.wrap(fragment[:text]))
         end
       end
 

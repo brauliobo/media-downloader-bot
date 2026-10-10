@@ -61,7 +61,7 @@ module Audiobook
       return unless reference.sentences.empty?
 
       text = @endnotes.entry(chapter, reference.id, @group_idx)
-      reference.add_sentences(Sentence.build_all(TextHelpers.split_sentences(text))) if text.present?
+      reference.add_sentences(Sentence.build_all(Sentence.split(text))) if text.present?
     end
 
     # A call glued to a word or its punctuation, "Troyes.1" or "Eschenbach2".
@@ -98,7 +98,7 @@ module Audiobook
 
     def attach_call(page, id, ref)
       last = @last_para[page]&.sentences&.last
-      return ref.tap { @deferred[page] << ref } unless TextHelpers.ends_with_punctuation?(last&.text)
+      return ref.tap { @deferred[page] << ref } unless Punctuation.closes?(last&.text)
 
       @refs[page][id] = last.add_reference(ref) || ref
     end
@@ -133,7 +133,7 @@ module Audiobook
       return false unless entry.item.is_a?(Paragraph) && entry.item.sentences.any?
       # A marker is a label; the note it points at has words in it. Where a book prints the
       # marker on its own line, the line after it is the note and the line itself is not.
-      return false if entry.item.sentences.all? { |sentence| TextHelpers.marker_line?(sentence.text) }
+      return false if entry.item.sentences.all? { |sentence| Markers.line?(sentence.text) }
       # Small print is what marks a note out on a page of body text. On a page that is nothing
       # but notes there is no smaller print, and the marker opened just above says it instead.
       return false unless note_font?(entry) || @pending[entry.page].any?
@@ -195,7 +195,7 @@ module Audiobook
     def marker_ids(sentence)
       return sentence.reference_ids if sentence.reference_ids.any?
 
-      text, ids = TextHelpers.strip_inline_markers(sentence.text)
+      text, ids = Markers.strip_inline(sentence.text)
       sentence.text = text if text != sentence.text
       ids
     end
@@ -213,7 +213,7 @@ module Audiobook
               when Paragraph then item.sentences.first.text if item.sentences.size == 1
               when Heading   then item.text
               end
-      value.to_s.strip.then { |text| text.scan(/\d+/) if TextHelpers.marker_line?(text) }
+      value.to_s.strip.then { |text| text.scan(/\d+/) if Markers.line?(text) }
     end
 
     def note_font?(entry)

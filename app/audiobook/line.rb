@@ -69,25 +69,27 @@ module Audiobook
       false
     end
 
-    def heading_like? = TextHelpers.heading_like?(@text)
+    def heading_like? = Heading.like?(@text)
 
     def section?
       section_level.to_i.positive?
     end
 
     def ends_with_punctuation?
-      TextHelpers.ends_with_punctuation?(@text)
+      Punctuation.closes?(@text)
     end
 
     def starts_with_capital?
       @text.match?(/\A\p{Lu}/u)
     end
 
+    TRAILING_HYPHEN = /\s*[-­‐‑]\z/
+
     def ends_with_hyphen?
-      @text.match?(TextHelpers::TRAILING_HYPHEN)
+      @text.match?(TRAILING_HYPHEN)
     end
 
-    def dehyphenate(text) = @text.sub(TextHelpers::TRAILING_HYPHEN, '') + text
+    def dehyphenate(text) = @text.sub(TRAILING_HYPHEN, '') + text
 
     def starts_with_lowercase?
       @text.match?(/\A\p{Ll}/u)
@@ -101,9 +103,9 @@ module Audiobook
     # A lowercase start after text that has not closed its sentence carries that sentence on.
     # An ellipsis is a pause rather than a close when what follows it is lowercase.
     def continues?(text)
-      return false unless starts_with_lowercase? && !TextHelpers.enumerated?(@text)
+      return false unless starts_with_lowercase? && !ListMark.enumerated?(@text)
 
-      !TextHelpers.ends_with_punctuation?(text) || TextHelpers.ends_with_ellipsis?(text)
+      !Punctuation.closes?(text) || Punctuation.ellipsis?(text)
     end
 
     # The source numbered the two lines as separate blocks, so it drew the boundary itself. A

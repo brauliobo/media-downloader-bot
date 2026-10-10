@@ -81,7 +81,7 @@ module Audiobook
     # How often each line is printed, counted once per page so a refrain within one page is not
     # mistaken for a line the book repeats.
     def repeat_counts(pages)
-      pages.values.flat_map { |page_lines| page_lines.map { |line| TextHelpers.comparable_key(line.text) }.uniq }.tally
+      pages.values.flat_map { |page_lines| page_lines.map { |line| Text.comparable_key(line.text) }.uniq }.tally
     end
 
     def repeat_limit(page_count) = [[(page_count * 0.3).ceil, 3].min, 2].max
@@ -90,7 +90,7 @@ module Audiobook
     # footer set on three lines is one piece of furniture, not two lines of it and one of prose.
     # Width says nothing here, so a long footer is caught where the geometry tests above miss it.
     def repeated_run(page_lines, counts, limit)
-      repeats = ->(line) { counts[TextHelpers.comparable_key(line.text)] >= limit }
+      repeats = ->(line) { counts[Text.comparable_key(line.text)] >= limit }
       head = page_lines.take_while(&repeats).first(EDGE_RUN)
       tail = page_lines.reverse.take_while(&repeats).first(EDGE_RUN)
       (head + tail).uniq
@@ -116,13 +116,13 @@ module Audiobook
       return false unless line.text.to_s.strip.match?(FOLIO)
 
       size = FontRoles.quantize(line.font_size)
-      page_lines.count { |other| FontRoles.quantize(other.font_size) == size && TextHelpers.marker_line?(other.text) } < 2
+      page_lines.count { |other| FontRoles.quantize(other.font_size) == size && Markers.line?(other.text) } < 2
     end
 
     # A running head repeats across pages; a chapter title that quotes it is set larger.
     def repeated_margins(margins, folios, counts, limit, metrics)
       (margins.flatten - folios).select do |line|
-        counts[TextHelpers.comparable_key(line.text)] >= limit && !title_size?(line, metrics)
+        counts[Text.comparable_key(line.text)] >= limit && !title_size?(line, metrics)
       end
     end
 
@@ -189,7 +189,7 @@ module Audiobook
       return true if value.scan(SUBJECT_ENTRY).size > 1
 
       # The subject headings of a record are a numbered list of two or three words each.
-      TextHelpers.enumerated?(value) && value.split.size <= RECORD_WORDS
+      ListMark.enumerated?(value) && value.split.size <= RECORD_WORDS
     end
 
 

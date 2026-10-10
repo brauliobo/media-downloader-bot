@@ -28,7 +28,7 @@ module Audiobook
         footnote_lead:  ->(text, at)  { at.opens && text =~ /\A\d{1,3}\s+\p{L}/ },
         list_num_tail:  ->(text, _at) { text =~ /\s\d{1,2}[.)]\z/ || text =~ /\s\p{Lu}[.)]\z/ },
         # Leaders that survived; a spaced ellipsis in prose stays under the same bar as production.
-        toc_leader:     ->(text, _at) { text =~ TextHelpers::TOC_LEADERS },
+        toc_leader:     ->(text, _at) { text =~ Contents::LEADERS },
         dropcap:        ->(text, at)  { at.opens && at.prev_letter && text =~ /\A\p{Ll}/ },
         colon_end:      ->(text, at)  { at.closes && text =~ /:\z/ },
         hyphen_end:     ->(text, _at) { text =~ /-\z/ },
@@ -37,7 +37,7 @@ module Audiobook
         long_sentence:  ->(text, _at) { text.length > 600 },
         # A list entry ends without a stop and the next one opens lowercase; that is the list
         # working, not a paragraph torn in half.
-        broken_para:    ->(text, at)  { at.closes && text !~ TERMINAL && at.next_lower && !TextHelpers.enumerated?(text) },
+        broken_para:    ->(text, at)  { at.closes && text !~ TERMINAL && at.next_lower && !ListMark.enumerated?(text) },
         caps_para:      ->(text, at)  { at.opens && at.closes && text.split.size <= 10 && text.scan(/\p{L}/).size > 3 && text == text.upcase },
         abbrev_end:     ->(text, at)  { at.closes && text =~ /(?:\A|[^\p{L}])(?:\p{Lu}|Dr|Dra|Sr|Sra|Prof|Mr|Mrs|St)\.\z/ },
         bullet_glyph:   ->(text, _at) { text =~ BULLETS },

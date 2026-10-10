@@ -68,7 +68,7 @@ module Audiobook
       end
 
       def self.normalize_plain_text(text)
-        value = TextHelpers.normalize_text(text)
+        value = Text.normalize(text)
         WINDOWS_CONTROLS.each { |from, to| value.gsub!(from, to) }
         value.unicode_normalize(:nfc)
       end

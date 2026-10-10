@@ -6,7 +6,6 @@ module Audiobook
       VERSE_MEASURE      = 0.75
       TERMINAL_PUNCTUATION = /[.!?…]["”’)\]»]*\z/u
       CLAUSE_PUNCTUATION   = /[.!?…,;:]["”’)\]»]*\z/u
-      NEVER_HEADING        = TextHelpers::NEVER_HEADING
 
       def self.create_items_from_lines(lines, start_page, max_sentence_chars: MAX_SENTENCE_CHARS, isolated: false)
         new(lines, start_page, max_sentence_chars: max_sentence_chars, isolated: isolated).create
@@ -29,7 +28,7 @@ module Audiobook
           next if normalized.empty?
 
           if group.first.section?
-            next item_data(group, create_section(group.first, TextHelpers.extract_markers(normalized).first))
+            next item_data(group, create_section(group.first, Markers.extract(normalized).first))
           end
 
           sentences = verse?(group) ? verse_sentences(group) : create_sentences(normalized, group.first.language)
@@ -70,9 +69,9 @@ module Audiobook
       end
 
       def normalize_group_text(group)
-        normalized = TextHelpers.join_pdf_lines(group.map { |line| TextHelpers.strip_toc_leaders(line.text) })
-        normalized = TextHelpers.strip_bullet(normalized).gsub(/\bN\s*\.\s*T\./i, 'N.T.')
-        TextHelpers.spoken_urls(normalized)
+        normalized = Text.join_lines(group.map { |line| Contents.strip_leaders(line.text) })
+        normalized = ListMark.strip_bullet(normalized).gsub(/\bN\s*\.\s*T\./i, 'N.T.')
+        SpokenText::Urls.call(normalized)
       end
 
       # Run together, a stanza puts a capital in the middle of a sentence and reads as prose
@@ -93,8 +92,8 @@ module Audiobook
       end
 
       def create_sentences(normalized, language)
-        TextHelpers.split_sentences(normalized, max_chars: @max_sentence_chars).filter_map do |text|
-          clean, ids = TextHelpers.extract_markers(text)
+        Sentence.split(normalized, max_chars: @max_sentence_chars).filter_map do |text|
+          clean, ids = Markers.extract(text)
           sentence = Sentence.build(clean)
           next unless sentence
 
@@ -126,10 +125,10 @@ module Audiobook
       def heading_group?(group, level, joined, sentence_count)
         first_line = group.first
         words = joined.split.size
-        return false if words > FontRoles::MAX_HEADING_WORDS || joined.match?(NEVER_HEADING)
+        return false if words > FontRoles::MAX_HEADING_WORDS || joined.match?(Heading::NEVER)
         # A contents entry points at a heading elsewhere and a bulleted line is an item in a
         # list; neither is a heading itself, however isolated it looks.
-        return false if contents?(group) || TextHelpers.bulleted?(group.first.text)
+        return false if contents?(group) || ListMark.bulleted?(group.first.text)
         # A line at body size that runs to the page's measure is body copy, whatever style it
         # shares with the headings around it.
         return false if !larger_than_body?(first_line) && group.any?(&:runs_measure?)
@@ -205,13 +204,13 @@ module Audiobook
          block: group.first.block}
       end
 
-      def contents?(group) = group.any? { |line| TextHelpers.toc_entry?(line.text) }
+      def contents?(group) = group.any? { |line| Contents.entry?(line.text) }
 
       # A list entry is not a heading, and a short opening line says nothing about the block it starts.
       def heading_like?(group, text)
-        return false if TextHelpers.enumerated?(text)
+        return false if ListMark.enumerated?(text)
 
-        TextHelpers.heading_like?(text) || (group.one? && group.first.heading_like?)
+        Heading.like?(text) || (group.one? && group.first.heading_like?)
       end
     end
   end
