@@ -20,7 +20,7 @@ RSpec.describe Worker do
     )
     worker.instance_variable_set(:@opts, input.opts)
 
-    expect(worker.send(:msg_caption, input, max: 1024)).to eq("Joe Tippens\n\nx\\.com\\/i\\/status\\/1")
+    expect(Worker::Caption.new(worker.opts).render(input, max: 1024)).to eq("Joe Tippens\n\nx\\.com\\/i\\/status\\/1")
   end
 
   it 'removes the protocol when building captions for source urls' do
@@ -33,7 +33,7 @@ RSpec.describe Worker do
     )
     worker.instance_variable_set(:@opts, input.opts)
 
-    expect(worker.send(:msg_caption, input, max: 1024)).to include('x\.com\/i\/status\/1')
+    expect(Worker::Caption.new(worker.opts).render(input, max: 1024)).to include('x\.com\/i\/status\/1')
   end
 
   it 'uploads photos through the media path without probing them as audio or video' do
@@ -71,7 +71,7 @@ RSpec.describe Worker do
     )
     worker.instance_variable_set(:@opts, input.opts)
 
-    caption = worker.send(:msg_caption, input, max: 1024)
+    caption = Worker::Caption.new(worker.opts).render(input, max: 1024)
 
     expect(caption.size).to be <= 1024
     expect(caption).to start_with('_AAAA')
@@ -87,7 +87,7 @@ RSpec.describe Worker do
       info: SymMash.new(title: '?' * 2_000, uploader: 'Slava', description: '')
     )
 
-    caption = worker.send(:msg_caption, input, max: 1024)
+    caption = Worker::Caption.new(worker.opts).render(input, max: 1024)
 
     expect(caption.size).to be <= 1024
     expect(caption.scan(/(?<!\\)_/).size).to eq(2)
@@ -103,7 +103,7 @@ RSpec.describe Worker do
       info: SymMash.new(title: "First paragraph.\n\nSecond paragraph @SpoogemanGhost", uploader: nil, description: '')
     )
 
-    caption = worker.send(:msg_caption, input, max: 1024)
+    caption = Worker::Caption.new(worker.opts).render(input, max: 1024)
 
     expect(caption).to eq("_First paragraph\\._\n\n_Second paragraph @SpoogemanGhost_")
   end
@@ -118,7 +118,7 @@ RSpec.describe Worker do
       info: SymMash.new(title: 'Input caption', uploader: nil, description: '')
     )
 
-    expect(worker.send(:msg_caption, input, max: 1024)).to eq('_Input caption_')
+    expect(Worker::Caption.new(worker.opts).render(input, max: 1024)).to eq('_Input caption_')
   end
 
   it 'appends generated hashtags to captions' do
@@ -130,7 +130,7 @@ RSpec.describe Worker do
       info: SymMash.new(title: 'Input caption', uploader: nil, description: '', hashtags: '#mindfulness #health'),
     )
 
-    expect(worker.send(:msg_caption, input, max: 1024)).to eq("_Input caption_\n\n\\#mindfulness \\#health")
+    expect(Worker::Caption.new(worker.opts).render(input, max: 1024)).to eq("_Input caption_\n\n\\#mindfulness \\#health")
   end
 
   it 'translates long captions paragraph by paragraph' do
@@ -140,7 +140,7 @@ RSpec.describe Worker do
     allow(Translator).to receive(:translate).with('First paragraph.', from: 'en', to: 'pt').and_return('Primeiro paragrafo.')
     allow(Translator).to receive(:translate).with('Second paragraph.', from: 'en', to: 'pt').and_return('Segundo paragrafo.')
 
-    expect(worker.send(:translate_caption_text, body, from: 'en', to: 'pt')).to eq("Primeiro paragrafo.\n\nSegundo paragrafo.")
+    expect(Worker::Caption.new.translate_text(body, from: 'en', to: 'pt')).to eq("Primeiro paragrafo.\n\nSegundo paragrafo.")
   end
 
   it 'selects caption translation from clang, dubbing, or legacy language only' do
@@ -158,7 +158,7 @@ RSpec.describe Worker do
       Processors::Base.normalize_options(opts)
       info = SymMash.new(title: 'English title', description: 'English description', language: 'en')
 
-      caption_info = worker.send(:translate_caption_info, info, opts)
+      caption_info = Worker::Caption.new.translate_info(info, opts)
 
       if target
         expect(caption_info.title).to eq("English title (en->#{target})")
