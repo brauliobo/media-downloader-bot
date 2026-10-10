@@ -242,6 +242,8 @@ GEM
       racc (~> 1.4)
     nokogiri (1.19.4-x86_64-linux-musl)
       racc (~> 1.4)
+    numbers_and_words (1.0.3)
+      i18n (<= 2)
     pg (1.6.2)
     pg (1.6.2-aarch64-linux)
     pg (1.6.2-aarch64-linux-musl)
@@ -399,6 +401,7 @@ DEPENDENCIES
   json_schemer
   mechanize
   nokogiri
+  numbers_and_words
   pg
   pry-rails
   puma

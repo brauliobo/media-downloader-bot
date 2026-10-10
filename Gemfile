@@ -18,6 +18,7 @@ gem 'json_schemer'
 gem 'chronic'
 
 gem 'iso-639'
+gem 'numbers_and_words'
 
 gem 'telegram-bot-ruby', git: 'git@github.com:brauliobo/telegram-bot-ruby.git', require: 'telegram/bot'
 
