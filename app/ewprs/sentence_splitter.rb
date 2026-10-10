@@ -49,6 +49,17 @@ module Ewprs
       sentences.flat_map { |sentence| split_long(sentence, max_chars) }
     end
 
+    # A period left at the end of a piece that is an abbreviation closed nothing; the next piece continues it.
+    def sentences(text, **options)
+      split(text, **options).each_with_object([]) do |part, result|
+        if result.last&.end_with?('.') && abbreviation?(result.last[0..-2])
+          result[-1] = "#{result[-1]} #{part}"
+        else
+          result << part
+        end
+      end
+    end
+
     def abbreviation?(prefix)
       prefix.match?(HONORIFIC_ABBREVIATION) || prefix.match?(INITIAL_ABBREVIATION) ||
         prefix.match?(NUMERAL_ABBREVIATION) || prefix.match?(ENUMERATOR)

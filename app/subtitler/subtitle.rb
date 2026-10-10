@@ -175,7 +175,7 @@ class Subtitler
         representation_and_boundary(left) == representation_and_boundary(right)
       end.flat_map do |run|
         if run.first.words.any?
-          TextHelpers.sentences_from_entries(run.map(&:deep_copy)).each do |entry|
+          Sentences.from_entries(run.map(&:deep_copy)).each do |entry|
             entry.assign_speaker!(run.first.speaker_id)
             entry.assign_cue!(run.first.cue_id)
             entry.replace_metadata!(derived_metadata(run.first.metadata))
@@ -693,7 +693,7 @@ class Subtitler
     end
 
     def text_sentence_entries(entry)
-      parts = TextHelpers.split_sentences(entry.text.strip)
+      parts = Ewprs::SentenceSplitter.sentences(entry.text.strip)
       return [] if parts.empty?
       return [derived_entry_copy(entry)] if parts.size == 1
 
