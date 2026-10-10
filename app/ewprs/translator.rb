@@ -367,7 +367,7 @@ module Ewprs
         max_tokens:  max_tokens,
       }
       response = @request_semaphore.acquire do
-        Utils::HTTP.post "#{host.delete_suffix('/')}#{API_PATH}", options.to_json, HEADERS
+        Utils::HTTP.post Utils::HTTP.url(host, API_PATH), options.to_json, HEADERS
       end
       JSON.parse(response.body).fetch('choices').fetch(0).fetch('message').fetch('content').strip
     end

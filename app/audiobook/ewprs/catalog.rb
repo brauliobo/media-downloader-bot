@@ -13,7 +13,7 @@ module Audiobook::Ewprs
     ACCENTED_LANGUAGES = %w[ja pt zh].freeze
 
     Entry = Struct.new(:kind, :title, :path, :info, :sources, :book_refs, :chapters, keyword_init: true) do
-      def slug = File.basename(path, File.extname(path))
+      include ::Ewprs::PathSlug
     end
 
     attr_reader :root, :language

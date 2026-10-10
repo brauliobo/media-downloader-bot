@@ -15,7 +15,7 @@ class VoiceActivity
       speech = File.join(workdir, 'speech.wav')
       FFmpeg.new.extract_speech_ranges(
         input: path, output: speech, ranges: ranges,
-        sample_rate: 16_000, channels: 1, label: 'voice range extraction failed'
+        **Zipper::AudioOps::SPEECH, label: 'voice range extraction failed'
       )
       yield speech, ranges
     end

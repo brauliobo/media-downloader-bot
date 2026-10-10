@@ -25,7 +25,7 @@ module Ewprs
     end
 
     Entry = Struct.new(:kind, :path, keyword_init: true) do
-      def slug = File.basename(path, File.extname(path))
+      include PathSlug
     end
 
     Document = Struct.new(:entry, :template, :encoding, :mode, :raw, keyword_init: true)

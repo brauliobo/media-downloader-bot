@@ -53,7 +53,7 @@ class VoiceClone
     def normalize_one(paths, normalized, &block)
       return block.call(normalized) if paths.empty?
 
-      Zipper::AudioOps.with_wav(paths.first, sample_rate: 16_000, channels: 1) do |file|
+      Zipper::AudioOps.with_speech_wav(paths.first) do |file|
         normalized << file.path
         normalize_one(paths.drop(1), normalized, &block)
       ensure

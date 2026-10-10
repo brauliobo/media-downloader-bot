@@ -47,7 +47,7 @@ class Translator
         temperature: 0,
         max_tokens:  512,
       }
-      response = Utils::HTTP.post "#{llama_api_host.delete_suffix('/')}#{API_PATH}", opts.to_json, HEADERS
+      response = Utils::HTTP.post Utils::HTTP.url(llama_api_host, API_PATH), opts.to_json, HEADERS
       JSON.parse(response.body).fetch('choices').fetch(0).fetch('message').fetch('content').strip
     end
 

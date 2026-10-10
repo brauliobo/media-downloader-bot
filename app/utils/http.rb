@@ -37,6 +37,9 @@ module Utils
       def post(...) = request(:post, ...)
       def get(...)  = request(:get, ...)
 
+      # A service base URL, however it was written, with the path of one of its endpoints.
+      def url(base, path = '') = "#{base.to_s.delete_suffix('/')}#{path}"
+
       def request(verb, ...) = Retry.http { (Thread.current[:utils_http] || client).public_send(verb, ...) }
       private :request
 

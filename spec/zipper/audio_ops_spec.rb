@@ -131,4 +131,12 @@ RSpec.describe Zipper::AudioOps do
       described_class.to_wav '/tmp/input.mp4', ffmpeg: ffmpeg
     }.to raise_error 'ffmpeg failed'
   end
+
+  it 'converts to the 16 kHz mono wav the speech models take' do
+    Tempfile.create(['speech', '.wav']) do |wav|
+      expect(described_class).to receive(:to_wav).with('/tmp/in.mp4', sample_rate: 16_000, channels: 1).and_return(wav.path)
+
+      expect { |block| described_class.with_speech_wav('/tmp/in.mp4', &block) }.to yield_control
+    end
+  end
 end

@@ -5,8 +5,8 @@ class VoiceActivity
     module_function
 
     def detect(api, path)
-      Zipper::AudioOps.with_wav(path, sample_rate: 16_000, channels: 1) do |file|
-        response = Utils::HTTP.post("#{api.to_s.delete_suffix('/')}/v1/vad", file: file)
+      Zipper::AudioOps.with_speech_wav(path) do |file|
+        response = Utils::HTTP.post(Utils::HTTP.url(api, '/v1/vad'), file: file)
         Utils::HTTP.assert_ok!(response, 'voice activity detection')
 
         parse(response.body)

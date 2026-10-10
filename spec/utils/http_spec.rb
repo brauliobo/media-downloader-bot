@@ -79,4 +79,11 @@ RSpec.describe Utils::HTTP do
       expect(calls).to eq(2)
     end
   end
+
+  describe '.url' do
+    it 'joins a service base and an endpoint however the base ends' do
+      expect(described_class.url('http://host:9000/', '/v1/vad')).to eq('http://host:9000/v1/vad')
+      expect(described_class.url(URI.parse('http://host:9000'), '/v1/vad')).to eq('http://host:9000/v1/vad')
+    end
+  end
 end

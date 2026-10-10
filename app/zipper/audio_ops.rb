@@ -1,6 +1,9 @@
 class Zipper
   # Operations on audio files on their own: joined, converted for a model, floored or sped up.
   module AudioOps
+    # What the speech models take: 16 kHz mono.
+    SPEECH = { sample_rate: 16_000, channels: 1 }.freeze
+
     module_function
 
     def concat(inputs, outfile, stl: nil, ffmpeg: nil, ffmpeg_factory: nil)
@@ -61,6 +64,8 @@ class Zipper
     ensure
       File.unlink wav if wav && File.exist?(wav)
     end
+
+    def with_speech_wav(path, **options, &block) = with_wav(path, **SPEECH, **options, &block)
 
     def with_copy(path, ffmpeg: nil, ffmpeg_factory: nil, &block)
       audio = copy(path, ffmpeg: ffmpeg, ffmpeg_factory: ffmpeg_factory)

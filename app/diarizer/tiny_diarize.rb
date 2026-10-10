@@ -11,7 +11,7 @@ class Diarizer
     def diarize(path, speakers: nil)
       Zipper::AudioOps.with_wav(path) do |file|
         response = Utils::HTTP.post(
-          "#{api.to_s.delete_suffix('/')}/inference",
+          Utils::HTTP.url(api, '/inference'),
           file:            file,
           language:        'en',
           temperature:     '0.0',
