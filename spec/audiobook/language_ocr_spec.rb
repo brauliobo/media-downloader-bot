@@ -26,7 +26,7 @@ RSpec.describe 'Audiobook OCR language detection' do
   end
 
   it 'OCRs only sample pages for detection and re-OCRs images with the detected language' do
-    stub_const('Audiobook::Book::LANGUAGE_SAMPLE_PAGES', 2)
+    stub_const('Audiobook::Publication::SAMPLE_PAGES', 2)
     calls = []
 
     allow(Audiobook::OcrText).to receive(:transcribe) do |path, opts: nil, **_kwargs|
@@ -50,7 +50,7 @@ RSpec.describe 'Audiobook OCR language detection' do
   end
 
   it 'passes audiobook options to sampled OCR and adds detected language to final image OCR' do
-    stub_const('Audiobook::Book::LANGUAGE_SAMPLE_PAGES', 1)
+    stub_const('Audiobook::Publication::SAMPLE_PAGES', 1)
     opts = SymMash.new(includeall: true)
     seen_opts = []
 
