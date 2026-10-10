@@ -21,7 +21,7 @@ module Audiobook
       # source line is evidence either way; what stands between them is. A URL is asked for by
       # the host the narration says, not by the address the page printed.
       def self.probe(text)
-        words = words_of(TextHelpers.spoken_urls(text)).split
+        words = words_of(SpokenText::Urls.call(text)).split
         words[1..-2].join(' ') if words.size >= MIN_WORDS + 2
       end
 
@@ -29,7 +29,7 @@ module Audiobook
       # they are asked about whole and counted apart: a page of them says something different
       # from a page of lost prose.
       def self.brief(text)
-        words = words_of(TextHelpers.spoken_urls(text)).split
+        words = words_of(SpokenText::Urls.call(text)).split
         words.join(' ') if words.size.between?(2, MIN_WORDS + 1)
       end
 
