@@ -56,7 +56,7 @@ module Audiobook
       combined = File.join(dir, "para_#{idx}.wav")
       return nil if wavs.empty?
 
-      Zipper.concat_audio(wavs, combined)
+      Zipper::AudioOps.concat(wavs, combined)
       combined
     end
 

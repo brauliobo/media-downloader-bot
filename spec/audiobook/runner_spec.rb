@@ -6,7 +6,7 @@ RSpec.describe Audiobook::Runner do
     wav = '/tmp/combined.wav'
 
     configured = described_class.new(book, nil, SymMash.new(audio_floor_amplitude: 0.001, audio_loudness_lufs: -18))
-    expect(Zipper).to receive(:add_audio_floor!).with(
+    expect(Zipper::AudioOps).to receive(:add_floor!).with(
       wav,
       amplitude: 0.001,
       loudness_lufs: -18.0,

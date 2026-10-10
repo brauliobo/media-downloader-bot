@@ -27,7 +27,7 @@ module Audiobook
         inputs = chapters.each_with_index.flat_map do |chapter, index|
           [index.positive? ? pause : nil, chapter.audio].compact
         end
-        Zipper.concat_audio(inputs, output)
+        Zipper::AudioOps.concat(inputs, output)
       end
     end
 

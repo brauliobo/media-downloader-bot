@@ -29,7 +29,7 @@ class VoiceSeparator
     def download(path)
       archive = Tempfile.new(["#{backend_name}-stems-", '.zip'])
       archive.binmode
-      Zipper.with_copy_audio(path) do |file|
+      Zipper::AudioOps.with_copy(path) do |file|
         status = stream_separate(file, archive)
         raise "voice separation failed: #{status}" unless status.to_s == '200'
       end

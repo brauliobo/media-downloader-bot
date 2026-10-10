@@ -141,7 +141,7 @@ class TTS
       return FileUtils.cp(wavs.first, out_path) if wavs.one?
 
       combined = File.join(dir, 'combined.wav')
-      Zipper.concat_audio(wavs, combined)
+      Zipper::AudioOps.concat(wavs, combined)
       FileUtils.cp(combined, out_path)
     end
   end

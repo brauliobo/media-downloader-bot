@@ -7,15 +7,15 @@ module Audiobook
       options[:format] = format.to_h.transform_keys(&:to_sym) if format
       options[:extension] = extension unless extension == '.wav'
       options[:amplitude] = amplitude if amplitude.to_f.positive?
-      Zipper.get_pause_file(seconds, dir, **options)
+      Zipper::Silence.pause(seconds, dir, **options)
     end
 
     def silence(path, seconds)
-      Zipper.silence_file(path, seconds, sample_rate: sample_rate)
+      Zipper::Silence.file(path, seconds, sample_rate: sample_rate)
     end
 
     def speed!(path, speed)
-      Zipper.speed_audio_file!(path, speed)
+      Zipper::AudioOps.speed!(path, speed)
     end
 
     def speed_all(paths, speed)

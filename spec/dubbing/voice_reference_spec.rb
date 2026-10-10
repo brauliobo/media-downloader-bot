@@ -35,7 +35,7 @@ RSpec.describe Dubbing::VoiceReference do
         File.write(path, "#{selection.start}:#{selection.duration}")
       end
     end
-    allow(Zipper).to receive(:concat_audio) do |clips, output|
+    allow(Zipper::AudioOps).to receive(:concat) do |clips, output|
       File.write(output, clips.join("\n"))
       output
     end

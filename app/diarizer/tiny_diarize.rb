@@ -9,7 +9,7 @@ class Diarizer
     module_function
 
     def diarize(path, speakers: nil)
-      Zipper.with_audio_wav(path) do |file|
+      Zipper::AudioOps.with_wav(path) do |file|
         response = Utils::HTTP.post(
           "#{api.to_s.delete_suffix('/')}/inference",
           file:            file,

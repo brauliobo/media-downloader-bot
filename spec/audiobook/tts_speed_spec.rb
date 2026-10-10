@@ -312,12 +312,12 @@ RSpec.describe 'Audiobook TTS speed' do
     ])
 
     Dir.mktmpdir do |dir|
-      expect(Zipper).to receive(:get_pause_file).with(
+      expect(Zipper::Silence).to receive(:pause).with(
         Audiobook::Pauses::PARAGRAPH,
         dir,
         sample_rate: TTS.output_sample_rate
       ).and_return(nil)
-      allow(Zipper).to receive(:concat_audio) do |_inputs, outfile, **_kwargs|
+      allow(Zipper::AudioOps).to receive(:concat) do |_inputs, outfile, **_kwargs|
         File.write(outfile, 'combined')
         outfile
       end
@@ -351,8 +351,8 @@ RSpec.describe 'Audiobook TTS speed' do
     ])
 
     Dir.mktmpdir do |dir|
-      allow(Zipper).to receive(:get_pause_file).and_return(nil)
-      allow(Zipper).to receive(:concat_audio) do |_inputs, outfile, **_kwargs|
+      allow(Zipper::Silence).to receive(:pause).and_return(nil)
+      allow(Zipper::AudioOps).to receive(:concat) do |_inputs, outfile, **_kwargs|
         File.write(outfile, 'combined')
         outfile
       end

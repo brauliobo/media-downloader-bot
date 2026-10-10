@@ -46,7 +46,7 @@ module Audiobook
 
         combined_wav = File.join(dir, 'combined.wav')
         @stl&.update 'Concatenating audio'
-        Zipper.concat_audio(wavs, combined_wav, stl: @stl)
+        Zipper::AudioOps.concat(wavs, combined_wav, stl: @stl)
         add_audio_floor!(combined_wav)
 
         @stl&.update 'Encoding combined audio'
@@ -62,7 +62,7 @@ module Audiobook
       amplitude = @opts&.audio_floor_amplitude.to_f
       return wav_path unless amplitude.positive?
 
-      Zipper.add_audio_floor!(
+      Zipper::AudioOps.add_floor!(
         wav_path,
         amplitude: amplitude,
         loudness_lufs: @opts&.audio_loudness_lufs.to_f,

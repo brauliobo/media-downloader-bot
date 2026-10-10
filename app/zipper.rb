@@ -6,8 +6,6 @@ require 'json'
 
 class Zipper
   class_attribute :size_mb_limit
-  class_attribute :pause_cache
-  class_attribute :pause_cache_mutex
 
   Types = Zipper::Formats::TYPES
   AUDIO_ENC = Zipper::Formats::AUDIO_ENC
@@ -36,170 +34,12 @@ class Zipper
     new(*args, **params).zip_audio
   end
 
-  def self.concat_audio inputs, outfile, stl: nil, ffmpeg: nil, ffmpeg_factory: nil
-    return FileUtils.cp inputs.first, outfile if inputs.size == 1
-
-    builder = ffmpeg || ffmpeg_factory&.call || FFmpeg.new
-    signatures = inputs.map { |input| Prober.audio_signature input, ffmpeg: builder }
-    Utils::Tmp.dir('concat-') do |dir|
-      listfile = File.join dir, 'concat.txt'
-      File.write listfile, inputs.map { |path| Utils::Safety.concat_manifest_path path }.join("\n")
-
-      copy = concat_copy_safe? signatures
-      sample_rate = signatures.map { |signature| signature[:sample_rate].to_i }.max
-      arguments = {
-        inputs: copy ? listfile : inputs,
-        output: outfile,
-        copy:   copy,
-        label:  'FFmpeg concat failed',
-      }
-      arguments[:sample_rate] = sample_rate if !copy && sample_rate.positive?
-
-      begin
-        builder.concat_audio(**arguments)
-      rescue Sh::Error
-        raise 'FFmpeg concat failed'
-      end
-    end
-
-    outfile
-  end
-
-  self.pause_cache       = {}
-  self.pause_cache_mutex = Mutex.new
-
-  def self.silence_file path, seconds, sample_rate: 22_050, format: nil, amplitude: nil,
-                        ffmpeg: nil, ffmpeg_factory: nil
-    format = normalize_audio_format format
-    sample_rate = format[:sample_rate].to_i if format[:sample_rate].to_i.positive?
-    channels = format[:channels].to_i
-    layout = format[:channel_layout].to_s
-    layout = channel_layout_for channels if layout.empty?
-
-    builder = ffmpeg || ffmpeg_factory&.call || FFmpeg.new
-    encoding = FFmpeg.pause_encoding format
-    builder.create_silence(
-      output:             path,
-      source_sample_rate: sample_rate,
-      duration:            seconds,
-      filter:              amplitude.to_f.positive? ? FFmpeg.lowpass_filter(6000) : nil,
-      sample_rate:         format.empty? ? nil : sample_rate,
-      channels:             format.empty? || !channels.positive? ? nil : channels,
-      channel_layout:       format.empty? ? nil : layout,
-      amplitude:             amplitude,
-      codec:                 encoding.codec,
-      codec_profile:        encoding.profile,
-      bitrate:               encoding.bitrate,
-      sample_format:        encoding.sample_format,
-      label:                 'Failed to create silent audio file'
-    )
-    path
-  end
-
-  def self.get_pause_file seconds, dir, sample_rate: nil, extension: '.wav', format: nil,
-                          amplitude: nil, ffmpeg: nil, ffmpeg_factory: nil
-    return nil if seconds.to_f <= 0
-
-    key = seconds.to_f.round 3
-    sample_rate = (sample_rate || 22_050).to_i
-    extension = ".#{extension}" unless extension.start_with? '.'
-    raise ArgumentError, "invalid audio extension: #{extension}" unless extension.match?(/\A\.[a-z0-9]+\z/i)
-
-    format = normalize_audio_format format
-    sample_rate = format[:sample_rate].to_i if format[:sample_rate].to_i.positive?
-    format[:sample_rate] = sample_rate unless format.empty?
-    format_key = pause_format_key format
-    format_suffix = format_key ? "_#{format_key}" : ''
-    amplitude_key = amplitude.to_f.positive? ? "_#{amplitude.to_f.to_s.tr '.', '_'}" : ''
-    cache_key = "#{dir}:#{key}:#{sample_rate}:#{extension}:#{format_suffix}:#{amplitude_key}"
-    pause_file = File.join dir, "pause_#{key.to_s.gsub '.', '_'}_#{sample_rate}#{format_suffix}#{amplitude_key}#{extension}"
-
-    cached_pause_file cache_key, pause_file do
-      silence_file pause_file, key, sample_rate: sample_rate, format: format, amplitude: amplitude,
-                   ffmpeg: ffmpeg, ffmpeg_factory: ffmpeg_factory
-    end
-  end
-
-  def self.normalize_audio_format format
-    format ? format.to_h.transform_keys(&:to_sym) : {}
-  end
-
-  def self.pause_format_key format
-    return if format.empty?
-
-    serialized = format.sort_by { |key, _value| key.to_s }.to_h
-    Digest::SHA256.hexdigest(JSON.generate serialized)[0, 12]
-  end
-
-  def self.pause_encoder format, fdk_aac: nil
-    FFmpeg.pause_encoding(format, fdk_aac: fdk_aac).codec
-  end
-
-  def self.pause_profile format, encoder, fdk_aac: nil
-    return unless encoder
-
-    FFmpeg.pause_encoding(format, fdk_aac: fdk_aac).profile
-  end
-
-  def self.pause_bitrate format, encoder, fdk_aac: nil
-    return unless encoder
-
-    FFmpeg.pause_encoding(format, fdk_aac: fdk_aac).bitrate
-  end
-
-  def self.pause_sample_format format, encoder, fdk_aac: nil
-    FFmpeg.pause_encoding(format, fdk_aac: fdk_aac).sample_format
-  end
-
-  def self.channel_layout_for channels
-    {1 => 'mono', 2 => 'stereo'}[channels.to_i] || 'mono'
-  end
-
-  def self.cached_pause_file cache_key, path
-    pause_cache_mutex.synchronize do
-      pause_cache[cache_key] ||= begin
-        yield unless File.exist? path
-        path
-      end
-    end
-  end
-
-  def self.add_audio_floor! wav_path, amplitude:, loudness_lufs:, sample_rate: 22_050,
-                              ffmpeg: nil, ffmpeg_factory: nil
-    output = File.join File.dirname(wav_path), "audio_floor_#{SecureRandom.hex 4}.wav"
-    builder = ffmpeg || ffmpeg_factory&.call || FFmpeg.new
-    builder.add_audio_floor(
-      input: wav_path, output: output, amplitude: amplitude, loudness_lufs: loudness_lufs,
-      sample_rate: sample_rate, label: 'Failed to add audiobook audio floor'
-    )
-    FileUtils.mv output, wav_path, force: true
-    wav_path
-  end
-
-  def self.speed_audio_file! wav_path, speed, ffmpeg: nil, ffmpeg_factory: nil
-    speed = speed.to_f
-    return wav_path unless speed.positive? && speed != 1
-
-    output = File.join File.dirname(wav_path), "speed_#{SecureRandom.hex 4}.wav"
-    builder = ffmpeg || ffmpeg_factory&.call || FFmpeg.new
-    builder.speed_audio(
-      input: wav_path, output: output, filter: speech_speed_filter(speed),
-      label: 'Failed to apply audio speed'
-    )
-    FileUtils.mv output, wav_path, force: true
-    wav_path
-  end
-
-  def self.speech_speed_filter speed
-    FFmpeg.speech_speed_filter speed
-  end
-
   def self.choose_format(*args)
     Zipper::Formats.choose_format(*args)
   end
 
   def self.extract_vtt infile, language, ffmpeg: nil, ffmpeg_factory: nil
-    ffmpeg ||= ffmpeg_factory&.call || FFmpeg.new
+    ffmpeg = FFmpeg.resolve(ffmpeg, ffmpeg_factory)
     new(infile, nil, opts: SymMash.new(format: Types.audio.opus), ffmpeg: ffmpeg,
         ffmpeg_factory: ffmpeg_factory).extract_vtt language, ffmpeg: ffmpeg
   end
@@ -376,7 +216,7 @@ class Zipper
     else
       subtitles.index { |stream| stream.tags.language == lang_or_index }
     end
-    ffmpeg ||= @ffmpeg || @ffmpeg_factory&.call || FFmpeg.new
+    ffmpeg ||= FFmpeg.resolve(@ffmpeg, @ffmpeg_factory)
     vtt = ffmpeg.convert_subtitle(
       input: infile, format: :vtt, stream_index: index, label: 'VTT extraction failed'
     )
@@ -399,48 +239,6 @@ class Zipper
     self
   end
 
-  def self.with_audio_wav path, sample_rate: nil, channels: nil, ffmpeg: nil, ffmpeg_factory: nil
-    options = {sample_rate: sample_rate, channels: channels}.compact
-    options[:ffmpeg] = ffmpeg if ffmpeg
-    options[:ffmpeg_factory] = ffmpeg_factory if ffmpeg_factory
-    wav = audio_to_wav path, **options
-    File.open(wav) { |file| yield file }
-  ensure
-    File.unlink wav if wav && File.exist?(wav)
-  end
-
-  def self.with_copy_audio path, ffmpeg: nil, ffmpeg_factory: nil
-    audio = copy_audio path, ffmpeg: ffmpeg, ffmpeg_factory: ffmpeg_factory
-    File.open(audio) { |file| yield file }
-  ensure
-    File.unlink audio if audio && File.exist?(audio)
-  end
-
-  def self.audio_to_wav path, sample_rate: nil, channels: nil, ffmpeg: nil, ffmpeg_factory: nil
-    wav = File.join Dir.pwd, "audio-#{SecureRandom.hex 6}.wav"
-    builder = ffmpeg || ffmpeg_factory&.call || FFmpeg.new
-    begin
-      builder.audio_to_wav(
-        input: path, output: wav, sample_rate: sample_rate, channels: channels,
-        label: 'ffmpeg failed'
-      )
-    rescue Sh::Error
-      raise 'ffmpeg failed'
-    end
-    wav
-  end
-
-  def self.copy_audio path, ffmpeg: nil, ffmpeg_factory: nil
-    audio   = File.join Dir.pwd, "audio-#{SecureRandom.hex 6}.mka"
-    builder = ffmpeg || ffmpeg_factory&.call || FFmpeg.new
-    begin
-      builder.extract_copy_audio input: path, output: audio, label: 'ffmpeg failed'
-    rescue Sh::Error
-      raise 'ffmpeg failed'
-    end
-    audio
-  end
-
   def self.prepare_subtitle(*args, **kwargs)
     Zipper::Subtitle.prepare_subtitle(*args, **kwargs)
   end
@@ -455,10 +253,6 @@ class Zipper
 
   def ffmpeg_builder
     @ffmpeg ||= @ffmpeg_factory&.call || self.class.default_ffmpeg
-  end
-
-  def self.concat_copy_safe? signatures
-    signatures.none?(&:empty?) && signatures.uniq.one?
   end
 
   def input_seek

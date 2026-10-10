@@ -9,7 +9,7 @@ RSpec.describe Diarizer::HTTPBackend do
   before do
     File.write(input, 'video')
     File.write(wav, 'wav')
-    allow(Zipper).to receive(:audio_to_wav)
+    allow(Zipper::AudioOps).to receive(:to_wav)
       .with(input, sample_rate: 16_000, channels: 1)
       .and_return(wav)
   end

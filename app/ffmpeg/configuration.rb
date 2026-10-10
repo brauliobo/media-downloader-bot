@@ -23,6 +23,9 @@ class FFmpeg
         )
       end
 
+      # The builder a caller handed in, the one its factory makes, or a fresh one.
+      def resolve(ffmpeg = nil, ffmpeg_factory = nil) = ffmpeg || ffmpeg_factory&.call || new
+
       def transcription_binary
         ENV.fetch 'TRANSCRIBE_CPP_FFMPEG', BINARIES.first
       end

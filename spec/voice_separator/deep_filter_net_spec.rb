@@ -9,7 +9,7 @@ RSpec.describe VoiceSeparator::DeepFilterNet do
   before do
     File.write(input, 'video')
     File.write(audio, 'audio')
-    allow(Zipper).to receive(:copy_audio).and_return(audio)
+    allow(Zipper::AudioOps).to receive(:copy).and_return(audio)
   end
 
   after { FileUtils.remove_entry(dir) if Dir.exist?(dir) }

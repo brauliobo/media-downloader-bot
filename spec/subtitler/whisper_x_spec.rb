@@ -16,7 +16,7 @@ RSpec.describe Subtitler::WhisperX do
   end
 
   before do
-    allow(Zipper).to receive(:with_audio_wav).with('audio.wav').and_yield('/tmp/audio.wav')
+    allow(Zipper::AudioOps).to receive(:with_wav).with('audio.wav').and_yield('/tmp/audio.wav')
   end
 
   it 'preserves WhisperX request parameters and returns a normalized subtitle' do

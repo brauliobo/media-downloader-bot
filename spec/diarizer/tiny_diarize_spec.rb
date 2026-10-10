@@ -8,7 +8,7 @@ RSpec.describe Diarizer::TinyDiarize do
   before do
     File.write(input, 'video')
     File.write(wav, 'wav')
-    allow(Zipper).to receive(:audio_to_wav).with(input).and_return(wav)
+    allow(Zipper::AudioOps).to receive(:to_wav).with(input).and_return(wav)
   end
 
   after { FileUtils.remove_entry(dir) if Dir.exist?(dir) }

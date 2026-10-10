@@ -31,7 +31,7 @@ module Dubbing
           extract_span(input_path, selection, speaker_dir, idx + 1, filter: filter, pad_duration: pad_duration)
         end
         path = File.join(speaker_dir, 'speaker.wav')
-        Zipper.concat_audio(clips, path)
+        Zipper::AudioOps.concat(clips, path)
         text = reference_text(path, selections, transcriber)
         next if text.empty?
 

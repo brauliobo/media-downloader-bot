@@ -41,7 +41,7 @@ RSpec.describe Audiobook::Chapter do
         extension: '.m4a',
         amplitude: 0.001
       ).and_return(pause)
-      expect(Zipper).to receive(:concat_audio).with([first_audio, pause, second_audio], output) do
+      expect(Zipper::AudioOps).to receive(:concat).with([first_audio, pause, second_audio], output) do
         File.write(output, 'joined')
         output
       end
