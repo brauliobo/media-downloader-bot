@@ -29,4 +29,12 @@ RSpec.describe Text do
       expect(described_class.lowercase?(nil)).to be(false)
     end
   end
+
+  describe '.spread' do
+    it 'counts the groups that say each thing, not how often it is said' do
+      groups = [%w[a a b], %w[a], %w[c]]
+
+      expect(described_class.spread(groups, &:itself)).to eq('a' => 2, 'b' => 1, 'c' => 1)
+    end
+  end
 end

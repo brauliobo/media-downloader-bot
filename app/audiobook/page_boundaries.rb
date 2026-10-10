@@ -8,16 +8,11 @@ module Audiobook
     def strip!(pages)
       return if pages.size < 3
 
-      normalized_counts = Hash.new(0)
-      exact_counts      = Hash.new(0)
-      page_candidates   = {}
-
-      pages.each do |page|
-        candidates = [page.items.first, page.items.last].compact.uniq.flat_map { |item| direct_sentences(item) }
-        page_candidates[page] = candidates
-        candidates.map { |sentence| Text.comparable_key(sentence.text) }.uniq.each { |text| normalized_counts[text] += 1 }
-        candidates.map { |sentence| Text.comparable(sentence.text) }.uniq.each { |text| exact_counts[text] += 1 }
+      page_candidates = pages.to_h do |page|
+        [page, [page.items.first, page.items.last].compact.uniq.flat_map { |item| direct_sentences(item) }]
       end
+      normalized_counts = Text.spread(page_candidates.values) { |sentence| Text.comparable_key(sentence.text) }
+      exact_counts      = Text.spread(page_candidates.values) { |sentence| Text.comparable(sentence.text) }
 
       threshold = [(pages.size * 0.3).ceil, 3].max
       repeated_normalized = normalized_counts.select { |_, count| count >= threshold }.keys.to_set

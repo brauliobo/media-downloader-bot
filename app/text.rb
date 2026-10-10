@@ -20,6 +20,9 @@ module Text
   def comparable(text) = text.to_s.downcase.gsub(/\s+/, ' ').strip
   def comparable_key(text) = comparable(text).gsub(/\d+/, '<d>')
 
+  # How many of the groups say each thing, a group saying it twice counting once.
+  def spread(groups, &key) = groups.flat_map { |group| group.map(&key).uniq }.tally
+
   # Join an array of line strings from a PDF into one paragraph string using sane defaults
   def join_lines(lines)
     merged = Array(lines).map { |line| normalize(line.to_s.sub(/[\u00AD\u2010\u2011]\z/, '-')) }.reject(&:empty?).reduce(nil) do |text, line|

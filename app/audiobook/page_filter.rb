@@ -81,7 +81,7 @@ module Audiobook
     # How often each line is printed, counted once per page so a refrain within one page is not
     # mistaken for a line the book repeats.
     def repeat_counts(pages)
-      pages.values.flat_map { |page_lines| page_lines.map { |line| Text.comparable_key(line.text) }.uniq }.tally
+      Text.spread(pages.values) { |line| Text.comparable_key(line.text) }
     end
 
     def repeat_limit(page_count) = [[(page_count * 0.3).ceil, 3].min, 2].max
