@@ -17,92 +17,94 @@ module Audiobook
       # more to the point, as something a block must not contain to be the one that speaks.
       CONTAINERS = (BLOCK_TAGS + %w[div]).freeze
 
+      # The page a line falls on: the one the last page break named, or one past it where the break names none.
+      PageCursor = Struct.new(:current, :max) do
+        def advance(number = nil)
+          self.current = number && number > current ? number : current + 1
+          self.max = [max, current].max
+        end
+      end
+
       def self.extract_data(epub_path, stl: nil, opts: nil, **_kwargs)
         Utils::Archive.validate_zip!(epub_path, **ARCHIVE_LIMITS)
-        lines = []
-        current_page = 1
-        max_page_seen = 1
+        lines  = []
+        cursor = PageCursor.new(1, 1)
         spine_idx = 0
 
         book = EPUB::Parser.parse(epub_path)
         book.each_page_on_spine do |spine_page|
           spine_idx += 1
-          stl&.update "Analyzing document: spine item #{spine_idx}" if stl
-
-          doc = Nokogiri::HTML(spine_page.read)
-          body = (doc.at('body') || doc)
-          sheets = css_sheets(book, doc)
-
-          # Note: We avoid CSS selectors that reference namespaced attributes like 'epub:type'
-          # because Nokogiri's auto-generated XPath may be invalid without namespace bindings.
-          # Page-break detection is handled during the DOM traversal below.
-
-          # Traverse elements in DOM order; update page counter on explicit pagebreak markers
-          changed_in_spine = false
-          body.css('*').each do |node|
-            if pagebreak_number = pagebreak_number_for(node)
-              # Prefer explicit number; otherwise just increment
-              if pagebreak_number > current_page
-                current_page = pagebreak_number
-              else
-                current_page += 1
-              end
-              max_page_seen = [max_page_seen, current_page].max
-              changed_in_spine = true
-              next
-            end
-
-            next unless container?(node)
-
-            raw = block_of_interest?(node) ? extract_inline_text(node) : own_text(node)
-            next if Text.normalize(raw).empty?
-
-            style = CssStyle.for_node(node, sheets)
-            # Hard breaks separate list items and verses; normalizing first would fuse them.
-            raw.split(/\n+/).each do |part|
-              part = Text.normalize(part)
-              next if part.empty?
-              lines << SymMash.new(
-                text: part, font_size: style[:font_size] || effective_font_size_for(node),
-                y: nil, page: current_page,
-                bold: style[:bold] || bold?(node), italic: style[:italic] || italic?(node),
-                alignment: style[:alignment] || alignment_for(node),
-                section_level: heading_level(node),
-                color: style[:color], font_name: style[:font_name]
-              )
-            end
-          end
-          # Ensure page number advances between spine items, even if no markers were found
-          current_page += 1 unless changed_in_spine
-          max_page_seen = [max_page_seen, current_page].max
+          stl&.update "Analyzing document: spine item #{spine_idx}"
+          read_spine_page(book, spine_page, cursor, lines)
         end
 
         stamp_blocks(lines)
-        page_count = [max_page_seen, current_page, lines.map { |l| l.page }.max || 1].compact.max
+        page_count = estimated_pages!(lines, [cursor.max, cursor.current, lines.map(&:page).max || 1].max, opts)
 
-        # Word-based pagination estimate (default ~300 words/page). Use the larger estimate.
-        total_words = lines.sum { |l| l.text.to_s.split(/\s+/).reject(&:empty?).size }
-        wpp = words_per_page(opts)
-        est_pages = [1, (total_words / wpp.to_f).ceil].max
-        desired_pages = [page_count, est_pages].max
-
-        if desired_pages > page_count && total_words > 0
-          words_per_page = total_words / desired_pages.to_f
-          acc = 0.0
-          lines.each do |l|
-            page_num = 1 + (acc / words_per_page).floor
-            l.page = [page_num, desired_pages].min
-            # Count at least one word to avoid zero-length lines skewing distribution
-            acc += [l.text.to_s.split(/\s+/).reject(&:empty?).size, 1].max
-          end
-          page_count = desired_pages
-        end
-        
         SymMash.new(
           metadata: SymMash.new(page_count: page_count),
           content: SymMash.new(lines: lines, images: []),
           opts: opts
         )
+      end
+
+      # Note: CSS selectors that reference namespaced attributes like 'epub:type' are avoided because
+      # Nokogiri's auto-generated XPath may be invalid without namespace bindings; page breaks are
+      # found during the DOM traversal instead.
+      def self.read_spine_page(book, spine_page, cursor, lines)
+        doc = Nokogiri::HTML(spine_page.read)
+        sheets = css_sheets(book, doc)
+        changed = false
+        (doc.at('body') || doc).css('*').each do |node|
+          if (number = pagebreak_number_for(node))
+            cursor.advance(number)
+            changed = true
+          else
+            lines.concat(block_lines(node, sheets, cursor.current))
+          end
+        end
+        # The page number advances between spine items, even if no markers were found
+        cursor.advance unless changed
+      end
+
+      def self.block_lines(node, sheets, page)
+        return [] unless container?(node)
+
+        raw = block_of_interest?(node) ? extract_inline_text(node) : own_text(node)
+        return [] if Text.normalize(raw).empty?
+
+        style = CssStyle.for_node(node, sheets)
+        # Hard breaks separate list items and verses; normalizing first would fuse them.
+        raw.split(/\n+/).filter_map do |part|
+          part = Text.normalize(part)
+          next if part.empty?
+
+          SymMash.new(
+            text: part, font_size: style[:font_size] || effective_font_size_for(node),
+            y: nil, page: page,
+            bold: style[:bold] || bold?(node), italic: style[:italic] || italic?(node),
+            alignment: style[:alignment] || alignment_for(node),
+            section_level: heading_level(node),
+            color: style[:color], font_name: style[:font_name]
+          )
+        end
+      end
+
+      # A book with few page breaks is paged by words (default ~300 per page), taking the larger
+      # of the two counts. Answers the number of pages.
+      def self.estimated_pages!(lines, page_count, opts)
+        total_words = lines.sum { |line| line.text.to_s.split.size }
+        desired = [page_count, [1, (total_words / words_per_page(opts).to_f).ceil].max].max
+        return page_count unless desired > page_count && total_words.positive?
+
+        words_per_page = total_words / desired.to_f
+        accumulated = 0.0
+        lines.each do |line|
+          line.page = [1 + (accumulated / words_per_page).floor, desired].min
+          # Count at least one word to avoid zero-length lines skewing distribution
+          accumulated += [line.text.to_s.split.size, 1].max
+        end
+        desired
       end
 
       def self.extract_inline_text(node)
