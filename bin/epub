@@ -1,0 +1,44 @@
+#!/usr/bin/env ruby
+
+require 'drb/drb'
+require 'optparse'
+require_relative '../config/environment'
+
+opts = { out: Rails.root.join('tmp/epub').to_s, stamp: Audiobook::EpubScrubber::STAMP }
+parser = OptionParser.new do |o|
+  o.banner = <<~USAGE
+    Usage:
+      bin/epub scrub FILE... [options]           strip the distributor stamp from local EPUBs
+      bin/epub post --chat ID --message ID       strip it from a Telegram post's EPUB and replace the document
+
+    A post already replaced by the service lives in its private /tmp and cannot be read back here.
+    Regenerate the audiobook replying to the post afterwards with bin/edit_posts_job.
+  USAGE
+  o.on('--out DIR', 'where cleaned EPUBs are written (the service must read it for post)') { |v| opts[:out] = v }
+  o.on('--stamp REGEX', 'paragraph text to remove (default: Book made for <email>)') { |v| opts[:stamp] = Regexp.new(v) }
+  o.on('--chat ID', Integer, 'Telegram chat id') { |v| opts[:chat] = v }
+  o.on('--message ID', Integer, 'Telegram message id of the EPUB') { |v| opts[:message] = v }
+end
+command, *files = parser.parse(ARGV)
+
+def scrub(src, opts)
+  FileUtils.mkdir_p opts[:out]
+  dest    = File.join(opts[:out], File.basename(src))
+  removed = Audiobook::EpubScrubber.call(src, dest, stamp: opts[:stamp])
+  puts "#{File.basename(src)}: removed=#{removed}"
+  dest if removed.positive?
+end
+
+def post(opts)
+  manager = DRbObject.new_with_uri(ENV['BOT_DRB'] || 'druby://127.0.0.1:1188')
+  post    = manager.chat_message(chat_id: opts.fetch(:chat), message_id: opts.fetch(:message))
+  dest    = scrub(manager.download_file(post.dig(:media, :file_id)), opts)
+  manager.edit_generated_message(chat_id: opts[:chat], message_id: post[:id], text: post[:text], type: 'document', file_path: dest) if dest
+  puts dest ? 'edited' : 'nothing to edit'
+end
+
+case command
+when 'scrub' then files.empty? ? abort(parser.help) : files.each { |file| scrub(file, opts) }
+when 'post'  then post(opts)
+else abort parser.help
+end
