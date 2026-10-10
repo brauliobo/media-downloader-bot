@@ -35,8 +35,8 @@ module Audiobook
       @reference_ids ||= []
     end
 
-    def spoken_text
-      speakable? ? text : ''
+    def spoken_text(lang = language)
+      speakable? ? SpokenNumbers.call(text, lang) : ''
     end
 
     def speakable?
@@ -64,7 +64,7 @@ module Audiobook
     protected
 
     def synthesize_audio(wav_path, lang, tts_options: {})
-      spoken = spoken_text
+      spoken = spoken_text(lang)
       if spoken.empty?
         super # generate silence
       else

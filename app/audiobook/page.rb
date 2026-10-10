@@ -116,8 +116,9 @@ module Audiobook
     def sentence_job(sentence, out_path, lang, status)
       return if File.exist?(out_path)
 
-      text = sentence.spoken_text
-      { text: text, lang: sentence.language || lang, out_path: out_path, status: status, sentence: sentence } unless text.empty?
+      lang = sentence.language || lang
+      text = sentence.spoken_text(lang)
+      { text: text, lang: lang, out_path: out_path, status: status, sentence: sentence } unless text.empty?
     end
 
     # Extract all sentences from all items for translation
