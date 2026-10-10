@@ -693,7 +693,7 @@ class Subtitler
     end
 
     def text_sentence_entries(entry)
-      parts = Ewprs::SentenceSplitter.sentences(entry.text.strip)
+      parts = Text::SentenceSplitter.sentences(entry.text.strip)
       return [] if parts.empty?
       return [derived_entry_copy(entry)] if parts.size == 1
 

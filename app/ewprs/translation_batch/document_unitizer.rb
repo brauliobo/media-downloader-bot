@@ -156,7 +156,7 @@ module Ewprs
         tags = {}
         masked = mask(source, MARKUP, tags)
         masked = mask_editorial_boundaries(masked, tags)
-        sentences = SentenceSplitter.split(masked, boundary_tokens: PLACEHOLDER, max_chars: MAX_UNIT_CHARS, clauses: true)
+        sentences = TranslationClauses.split(masked, boundary_tokens: PLACEHOLDER, max_chars: MAX_UNIT_CHARS)
         cursor = 0
 
         sentences.each_with_object(+'') do |sentence, template|

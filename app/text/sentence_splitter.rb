@@ -1,10 +1,5 @@
-module Ewprs
+module Text
   module SentenceSplitter
-    CONTRAST_BOUNDARY = /(?<=,)\s+(?=but\b)/i
-    CONTRAST_MIN_CHARS = 300
-    CONTRAST_MIN_COMMAS = 4
-    PAIRED_COORDINATION = /\bboth\b[^.!?]*,\s+[^.!?]*,\s+and\b[^.!?]*,/i
-    COMMA_BOUNDARY = /(?<=,)\s+/
     OPENING_QUOTE = /(?:&(?:ldquo|lsquo|quot);|["“‘])/
     HONORIFIC_ABBREVIATION = /\b(?:Dr|Dra|Mr|Mrs|Ms|Prof|Profa|Sr|Sra|Srta|St|Sto|Sta|Av|art|cap|cf|ed|fig|pp|vol|séc|sec)\z/i
     # "Roger L. Cole" and "the U. S." keep single-letter initials attached to the name that follows.
@@ -23,30 +18,8 @@ module Ewprs
 
     module_function
 
-    def split(text, boundary_tokens: NO_BOUNDARY_TOKENS, max_chars: Float::INFINITY, clauses: false)
-      transparent = "(?:#{boundary_tokens.source})*"
-      boundary = %r{
-        (#{SENTENCE_END}#{CLOSING_QUOTES})(\s*#{MARKER_RUN})?(#{transparent})
-        (?:
-          \s+(?=#{transparent}(?:(?:\[\[?|#{OPENING_QUOTE})?\p{Lu}|\(|#{ENUMERATED_START}))
-          |\s*(?=#{transparent}(?:#{OPENING_QUOTE})?#{CJK_CHARACTER})
-        )
-      }ux
-      sentences = Array(text).join
-        .gsub(/(?<=&#8230;)\s+/i, "\n")
-        .gsub(boundary) do |match|
-          if abbreviation?(Regexp.last_match.pre_match)
-            match
-          else
-            "#{Regexp.last_match(1)}#{Regexp.last_match(2)}#{Regexp.last_match(3)}\n"
-          end
-        end
-        .split(/\n+/)
-        .map(&:strip)
-        .reject(&:empty?)
-        .flat_map { |sentence| clauses ? split_clauses(sentence) : sentence }
-
-      sentences.flat_map { |sentence| split_long(sentence, max_chars) }
+    def split(text, boundary_tokens: NO_BOUNDARY_TOKENS, max_chars: Float::INFINITY)
+      fit(boundaries(text, boundary_tokens: boundary_tokens), max_chars)
     end
 
     # A period left at the end of a piece that is an abbreviation closed nothing; the next piece continues it.
@@ -60,17 +33,38 @@ module Ewprs
       end
     end
 
+    # Where sentences end, whatever their length.
+    def boundaries(text, boundary_tokens: NO_BOUNDARY_TOKENS)
+      transparent = "(?:#{boundary_tokens.source})*"
+      boundary = %r{
+        (#{SENTENCE_END}#{CLOSING_QUOTES})(\s*#{MARKER_RUN})?(#{transparent})
+        (?:
+          \s+(?=#{transparent}(?:(?:\[\[?|#{OPENING_QUOTE})?\p{Lu}|\(|#{ENUMERATED_START}))
+          |\s*(?=#{transparent}(?:#{OPENING_QUOTE})?#{CJK_CHARACTER})
+        )
+      }ux
+      Array(text).join
+        .gsub(/(?<=&#8230;)\s+/i, "\n")
+        .gsub(boundary) do |match|
+          if abbreviation?(Regexp.last_match.pre_match)
+            match
+          else
+            "#{Regexp.last_match(1)}#{Regexp.last_match(2)}#{Regexp.last_match(3)}\n"
+          end
+        end
+        .split(/\n+/)
+        .map(&:strip)
+        .reject(&:empty?)
+    end
+
+    # Pieces longer than the limit are cut at clause marks, then at words.
+    def fit(pieces, max_chars)
+      pieces.flat_map { |piece| split_long(piece, max_chars) }
+    end
+
     def abbreviation?(prefix)
       prefix.match?(HONORIFIC_ABBREVIATION) || prefix.match?(INITIAL_ABBREVIATION) ||
         prefix.match?(NUMERAL_ABBREVIATION) || prefix.match?(ENUMERATOR)
-    end
-
-    # Clause splitting builds translation units; narration keeps the sentence whole.
-    def split_clauses(sentence)
-      return sentence.split(COMMA_BOUNDARY) if sentence.match?(PAIRED_COORDINATION)
-      return sentence.split(CONTRAST_BOUNDARY) if sentence.length >= CONTRAST_MIN_CHARS || sentence.count(',') >= CONTRAST_MIN_COMMAS
-
-      sentence
     end
 
     def split_long(sentence, max_chars)
