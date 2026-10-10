@@ -221,7 +221,7 @@ RSpec.describe Dubbing::Pipeline do
       '00:00:04.000 --> 00:00:06.000',
       'Buenas <00:00:05.000>tardes.',
       '00:00:06.200 --> 00:00:07.200',
-      '¿ <00:00:06.450>Todo <00:00:06.700>bien?'
+      '¿Todo <00:00:06.700>bien?'
     )
     expect(opts.subtitle.to_vtt.scan('-->').size).to eq(2)
     expect(sentences.map(&:text)).to eq(['Boa tarde.', 'Tudo bem?'])

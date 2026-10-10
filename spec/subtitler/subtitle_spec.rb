@@ -348,4 +348,24 @@ RSpec.describe Subtitler::Subtitle do
       expect(subtitle.entries.map(&:speaker_id)).to eq([9])
     end
   end
+
+  describe '.tokenize' do
+    it 'keeps numbers, ordinals and compounds in one token' do
+      text = 'a 414ª Brigada fez 7.000 missões em 12/10/2026, às 10:30 (COVID-19) de www.site.com.'
+
+      expect(described_class.tokenize(text)).to eq(
+        %w[a 414ª Brigada fez 7.000 missões em 12/10/2026, às 10:30 (COVID-19) de www.site.com.]
+      )
+    end
+
+    it 'never changes the text it is rejoined into' do
+      text = 'R$ 1.234,56 e 3,5% em 1º lugar, km/h U.S. e-mail O\'Neil'
+
+      expect(described_class.tokenize(text).join(' ')).to eq(text)
+    end
+
+    it 'still splits languages written without spaces at clause marks' do
+      expect(described_class.tokenize('你好，世界。再见')).to eq(%w[你好， 世界。 再见])
+    end
+  end
 end

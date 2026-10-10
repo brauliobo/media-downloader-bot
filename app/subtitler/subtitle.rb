@@ -55,8 +55,14 @@ class Subtitler
       parse_cues(srt, format: :srt)
     end
 
+    # Tokens are the words as written: the text is rejoined with spaces, so splitting inside a word
+    # ("7.000", "414ª", "COVID-19", "www.site.com") would put spaces where there were none. Only
+    # the ideographic clause marks split, as languages written without spaces have no other boundary.
+    CLAUSE_MARKS = '、，。！？；：'.freeze
+    TOKEN        = /[^\s#{CLAUSE_MARKS}]*[#{CLAUSE_MARKS}]+|[^\s#{CLAUSE_MARKS}]+/
+
     def self.tokenize(text)
-      raw = optional_text(text, 'text').scan(/\p{L}+[\p{L}\p{M}'’\-]*|\d+|[^\p{L}\d\s]+/)
+      raw = optional_text(text, 'text').scan(TOKEN)
       raw.each_with_object([]) do |token, tokens|
         if token.match?(/\A[^\p{L}\d\s]+\z/) && tokens.any?
           tokens[-1] = "#{tokens.last}#{token}"
