@@ -9,7 +9,7 @@ RSpec.describe 'Audiobook TTS speed' do
 
       Dir.mktmpdir do |dir|
         syntheses = []
-        allow(Language).to receive(:voice_reference_text).with('en').and_return(Audiobook::Runner::VOICE_REFERENCE_TEXT)
+        allow(Language).to receive(:voice_reference_text).with('en').and_return(Language.reference_fallback('en'))
         allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'female')
         allow(TTS).to receive(:synthesize) do |out_path:, **kwargs|
           syntheses << kwargs
@@ -29,7 +29,7 @@ RSpec.describe 'Audiobook TTS speed' do
         end
         expect(options[:instruct]).to eq('female, middle-aged, moderate pitch')
         expect(options[:speaker_wav]).to end_with('audiobook_voice_reference.wav')
-        expect(options[:ref_text]).to eq(Audiobook::Runner::VOICE_REFERENCE_TEXT)
+        expect(options[:ref_text]).to eq(Language.reference_fallback('en'))
         expect(reused_options[:speaker_wav]).to eq(options[:speaker_wav])
         expect(syntheses.one?).to eq(true)
       end
@@ -226,7 +226,7 @@ RSpec.describe 'Audiobook TTS speed' do
     end
 
     Dir.mktmpdir do |dir|
-      allow(Language).to receive(:voice_reference_text).with('en').and_return(Audiobook::Runner::VOICE_REFERENCE_TEXT)
+      allow(Language).to receive(:voice_reference_text).with('en').and_return(Language.reference_fallback('en'))
       allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'male')
 
       expect(runner.send(:tts_options, dir)).not_to have_key(:temperature)
@@ -238,7 +238,7 @@ RSpec.describe 'Audiobook TTS speed' do
     book = instance_double(Audiobook::Book, metadata: { 'title' => 'Frankenstein' }, pages: [], author_gender: 'female')
     runner = Audiobook::Runner.new(book, nil, SymMash.new)
 
-    allow(Language).to receive(:voice_reference_text).with('en').and_return(Audiobook::Runner::VOICE_REFERENCE_TEXT)
+    allow(Language).to receive(:voice_reference_text).with('en').and_return(Language.reference_fallback('en'))
     allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
       File.write(out_path, 'wav')
     end
@@ -252,7 +252,7 @@ RSpec.describe 'Audiobook TTS speed' do
     book = instance_double(Audiobook::Book, metadata: {}, pages: [])
     runner = Audiobook::Runner.new(book, nil, SymMash.new(voice: 'male,high_pitch'))
 
-    allow(Language).to receive(:voice_reference_text).with('en').and_return(Audiobook::Runner::VOICE_REFERENCE_TEXT)
+    allow(Language).to receive(:voice_reference_text).with('en').and_return(Language.reference_fallback('en'))
     allow(Language).to receive(:book_metadata).and_raise('should not detect')
     allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
       File.write(out_path, 'wav')

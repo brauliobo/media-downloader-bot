@@ -52,7 +52,7 @@ RSpec.describe Language do
   it 'uses a stable language fallback when voice reference text is too short' do
     allow(AI::JSONSchema).to receive(:ask).and_return({ 'text' => 'Ouça atentamente.' })
 
-    expect(described_class.voice_reference_text('pt')).to eq(described_class::REF_FALLBACKS['pt'])
+    expect(described_class.voice_reference_text('pt')).to eq(I18n.t('language.reference_fallback', locale: :pt))
   end
 
   it 'asks Ollama for title, author, gender, and language together' do

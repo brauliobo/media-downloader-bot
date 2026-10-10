@@ -4,11 +4,6 @@ require 'timeout'
 module Language
   BOOK_PROMPT     = "From the supplied filename, metadata, and sample pages, detect the predominant language as an ISO 639-1 two-letter code (do not return `en` unless the text is actually English), identify the book title and author, and infer the author's likely gender for choosing an audiobook narrator voice. Treat the filename as a hint for title and author when the opening pages omit them. Prefer a named person on a title, copyright, or author line over a publisher, church, or organization in metadata. Distinguish Portuguese (`pt`) from Spanish (`es`) using function words and diacritics such as ã, õ, and ç versus ñ. Return gender as exactly `male` or `female`. If the title or author is unknown, return an empty string for that field. If the author is unknown, ambiguous, a group, an organization, or gender cannot be inferred confidently, return `male`. Return only valid JSON.".freeze
   REF_PROMPT      = "Write one neutral audiobook narrator reference sentence in the requested language, between 12 and 20 words. Return only valid JSON.".freeze
-  REF_FALLBACK    = 'This narrator voice reads the audiobook with calm, clear, natural pacing and keeps a steady tone across sentences.'.freeze
-  REF_FALLBACKS   = {
-    'en' => REF_FALLBACK,
-    'pt' => 'Esta voz narra o audiolivro com calma, clareza e ritmo natural, mantendo o mesmo tom em todas as frases.',
-  }.freeze
   MIN_REF_CHARS   = 80
   BOOK_SCHEMA     = AI::JSONSchema.object(
     lang:   { type: 'string', pattern: '^[a-z]{2}$' },
@@ -82,8 +77,11 @@ module Language
     text.length >= MIN_REF_CHARS ? text : reference_fallback(lang)
   end
 
+  # Narrator sentence per language; a language without one reads the English.
   def self.reference_fallback(lang)
-    REF_FALLBACKS[lang.to_s] || REF_FALLBACK
+    key  = 'language.reference_fallback'
+    code = Code.normalize(lang)
+    I18n.t(key, locale: I18n.exists?(key, code&.to_sym) ? code : :en)
   end
 
 end

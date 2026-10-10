@@ -1,6 +1,5 @@
 module Audiobook
   class Runner
-    VOICE_REFERENCE_TEXT  = Language::REF_FALLBACK
     VOICE_REFERENCE_WORDS = 12..24
     VOICE_REFERENCE_MAX_CHARS = 240
 

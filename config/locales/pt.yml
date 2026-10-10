@@ -19,3 +19,5 @@ pt:
         Babas_Grace_Fillers: Textos Complementares da Graça de Bábá
         Gurukul_Song: Canção do Gurukul
         Babas_Grace: A Graça de Bábá [uma compilação]
+  language:
+    reference_fallback: "Esta voz narra o audiolivro com calma, clareza e ritmo natural, mantendo o mesmo tom em todas as frases."

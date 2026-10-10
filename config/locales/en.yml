@@ -21,3 +21,5 @@ en:
         languages:
           en: English
           pt: Portuguese
+  language:
+    reference_fallback: "This narrator voice reads the audiobook with calm, clear, natural pacing and keeps a steady tone across sentences."

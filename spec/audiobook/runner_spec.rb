@@ -24,7 +24,7 @@ RSpec.describe Audiobook::Runner do
     book = instance_double(Audiobook::Book, metadata: {}, pages: [page], translation_needed?: false, author_gender: 'female')
     runner = described_class.new(book)
 
-    allow(Language).to receive(:voice_reference_text).with('en').and_return(described_class::VOICE_REFERENCE_TEXT)
+    allow(Language).to receive(:voice_reference_text).with('en').and_return(Language.reference_fallback('en'))
     allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'female')
     allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
       File.write(out_path, 'reference')
