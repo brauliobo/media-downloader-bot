@@ -5,13 +5,13 @@ module Audiobook
   class Image < Paragraph
     attr_reader :path
 
-    def initialize(path, stl: nil, page_context: nil, text: nil, opts: nil)
+    # Sentences already read from it skip the OCR, as when the book is loaded back from YAML.
+    def initialize(path, sentences: nil, stl: nil, page_context: nil, text: nil, opts: nil)
       @path = path
-      @sentences = []
       @stl = stl
       @opts = opts
       @page_context = page_context
-      build_sentences(text.presence || ocr_text)
+      @sentences = sentences || Sentence.from_text(text.presence || ocr_text)
     end
 
     def to_h
@@ -41,10 +41,6 @@ module Audiobook
 
     def ocr_action
       path.to_s.match?(PDF_PAGE) ? 'rasterizing and running OCR' : 'running OCR'
-    end
-
-    def build_sentences(text)
-      @sentences = Sentence.from_text(text)
     end
   end
 end

@@ -65,58 +65,47 @@ module Audiobook
       end
     end
 
+    # One item of a page: a hash with a single key naming its kind, or the legacy shape with a type field.
     def self.parse_item(item)
       item = SymMash.wrap(item)
-      # Item is a hash with single key indicating type
-      if item.heading
-        heading = Heading.new(item.heading.text, language: item.heading.language) if Sentence.speakable_text?(item.heading.text)
-        apply_style(heading, item.heading)
-      elsif item.section
-        section = item.section
-        parsed = Section.new(section.text, level: section.level || 1, language: section.language) if Sentence.speakable_text?(section.text)
-        apply_style(parsed, section)
-      elsif item.reference
-        ref_info = item.reference
-        sentences = Sentence.build_all(ref_info.sentences)
-        Reference.new(ref_info.id, sentences)
-      elsif item.image
-        img = Image.allocate
-        img.instance_variable_set(:@path, item.image.path || '')
-        sentences = Sentence.build_all(item.image.sentences)
-        img.instance_variable_set(:@sentences, sentences)
-        img
-      elsif item.paragraph
-        sentences = (item.paragraph.sentences || []).map do |s|
-          s = SymMash.wrap(s)
-          sent = Sentence.build(s)
-          next unless sent
-          if s.references
-            sent.references = s.references.map do |r|
-              ref_info = r.reference || r
-              ref_info = SymMash.wrap(ref_info)
-              ref_sents = Sentence.build_all(ref_info.sentences)
-              Reference.new(ref_info.id, ref_sents)
-            end
-          end
-          sent
-        end.compact
-        Paragraph.new(sentences) unless sentences.empty?
-      else
-        # Legacy format fallback with 'type' field
-        type = item.type
-        case type
-        when 'Heading'
-          Heading.new(item.text, language: item.language)
-        when 'Image'
-          img = Image.allocate
-          img.instance_variable_set(:@path, item.path || '')
-          sentences = Sentence.build_all(item.sentences)
-          img.instance_variable_set(:@sentences, sentences)
-          img
-        else
-          sentences = Sentence.build_all(item.sentences)
-          Paragraph.new(sentences) unless sentences.empty?
+      if item.heading      then heading(item.heading)
+      elsif item.section   then section(item.section)
+      elsif item.reference then reference(item.reference)
+      elsif item.image     then Image.new(item.image.path || '', sentences: Sentence.build_all(item.image.sentences))
+      elsif item.paragraph then paragraph(item.paragraph)
+      else legacy_item(item)
+      end
+    end
+
+    def self.heading(data)
+      apply_style(Heading.new(data.text, language: data.language), data) if Sentence.speakable_text?(data.text)
+    end
+
+    def self.section(data)
+      return unless Sentence.speakable_text?(data.text)
+
+      apply_style(Section.new(data.text, level: data.level || 1, language: data.language), data)
+    end
+
+    def self.reference(data) = Reference.new(data.id, Sentence.build_all(data.sentences))
+
+    def self.paragraph(data)
+      sentences = (data.sentences || []).filter_map do |sentence|
+        sentence = SymMash.wrap(sentence)
+        Sentence.build(sentence)&.tap do |built|
+          built.references = sentence.references.map { |ref| reference(SymMash.wrap(ref.reference || ref)) } if sentence.references
         end
+      end
+      Paragraph.new(sentences) unless sentences.empty?
+    end
+
+    def self.legacy_item(item)
+      case item.type
+      when 'Heading' then Heading.new(item.text, language: item.language)
+      when 'Image'   then Image.new(item.path || '', sentences: Sentence.build_all(item.sentences))
+      else
+        sentences = Sentence.build_all(item.sentences)
+        Paragraph.new(sentences) unless sentences.empty?
       end
     end
 
