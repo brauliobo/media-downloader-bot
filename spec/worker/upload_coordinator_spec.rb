@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe UploadCoordinator do
+RSpec.describe Worker::UploadCoordinator do
   let(:dir)    { Dir.mktmpdir('upload-coordinator-') }
   let(:worker) { instance_double(Worker, opts: opts, msg: msg, caption_limit: 1024) }
   let(:opts)   { SymMash.new(album: 1) }
