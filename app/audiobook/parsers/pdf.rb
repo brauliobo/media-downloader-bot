@@ -7,36 +7,10 @@ module Audiobook
       XML_CHAR  = /[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/
 
       def self.extract_data(pdf_path, stl: nil, opts: nil, **_kwargs)
-        all_lines = []
-        image_pages = []
-
         info           = extract_pdfinfo(pdf_path)
-        page_count     = info.pages
         selected_pages = PageSelection.parse(opts&.pages)
-        if selected_pages
-          raise ArgumentError, "too many selected pages (maximum #{MAX_PAGES})" if selected_pages.size > MAX_PAGES
-
-          missing = selected_pages.reject { |page| page <= page_count }
-          raise ArgumentError, "pages not found: #{missing.join(', ')}" if missing.any?
-
-          document = extract_document(pdf_path, page_limit: MAX_PAGES + 1, page_numbers: selected_pages, lang: opts&.alang)
-        else
-          document   = extract_document(pdf_path, page_limit: MAX_PAGES + 1, lang: opts&.alang)
-          page_count = document.pages.size
-          raise ArgumentError, "PDF has too many pages (maximum #{MAX_PAGES})" if page_count > MAX_PAGES
-        end
-
-        document.pages.each do |page|
-          stl&.update "Analyzing document: page #{page.number}/#{page_count}" if stl
-          res = process_page(page, pdf_path)
-          if res.lines
-            all_lines.concat(res.lines)
-          end
-          # Add image if page has images (can coexist with text)
-          if res.image
-            image_pages << res.image
-          end
-        end
+        document, page_count = load_document(pdf_path, info.pages, selected_pages, opts)
+        all_lines, image_pages = read_pages(document, pdf_path, page_count, stl)
 
         first = document.pages.first
         cover = Cover.from_page(pdf_path, first) if first
@@ -57,6 +31,36 @@ module Audiobook
           content: SymMash.new(lines: all_lines, images: image_pages),
           opts: opts
         )
+      end
+
+      # The document and how many pages it has: the pages asked for, or else the whole of it.
+      def self.load_document(pdf_path, page_count, selected_pages, opts)
+        unless selected_pages
+          document = extract_document(pdf_path, page_limit: MAX_PAGES + 1, lang: opts&.alang)
+          raise ArgumentError, "PDF has too many pages (maximum #{MAX_PAGES})" if document.pages.size > MAX_PAGES
+
+          return [document, document.pages.size]
+        end
+
+        raise ArgumentError, "too many selected pages (maximum #{MAX_PAGES})" if selected_pages.size > MAX_PAGES
+
+        missing = selected_pages.reject { |page| page <= page_count }
+        raise ArgumentError, "pages not found: #{missing.join(', ')}" if missing.any?
+
+        [extract_document(pdf_path, page_limit: MAX_PAGES + 1, page_numbers: selected_pages, lang: opts&.alang), page_count]
+      end
+
+      # Text lines and, for a page with images, the image; a page can have both.
+      def self.read_pages(document, pdf_path, page_count, stl)
+        lines  = []
+        images = []
+        document.pages.each do |page|
+          stl&.update "Analyzing document: page #{page.number}/#{page_count}"
+          result = process_page(page, pdf_path)
+          lines.concat(result.lines) if result.lines
+          images << result.image if result.image
+        end
+        [lines, images]
       end
 
       def self.process_page(page, pdf_path)
