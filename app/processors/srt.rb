@@ -14,7 +14,7 @@ module Processors
       raise 'no input provided' unless i
       @stl&.update 'translating'
 
-      to_lang = Subtitler.normalize_lang(i.opts.slang)
+      to_lang = Language::Code.normalize(i.opts.slang)
       raise "unsupported target language: #{i.opts.slang}" unless to_lang
 
       srt_content = ::File.read(i.fn_in)

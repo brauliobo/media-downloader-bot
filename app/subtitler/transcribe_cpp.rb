@@ -51,7 +51,7 @@ class Subtitler
 
     def normalize_result(raw, merge_words:)
       subtitle = Subtitle.from_transcribe_cpp_json(raw)
-      subtitle.replace_language!(Subtitler.normalize_lang(subtitle.language))
+      subtitle.replace_language!(Language::Code.normalize(subtitle.language))
       if merge_words
         subtitle.entries.each { |entry| mark_transcribe_word_boundaries!(entry) }
         subtitle.merge_split_words!

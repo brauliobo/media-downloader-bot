@@ -70,7 +70,7 @@ class Zipper
 
       srt_path = Output.filename(info, dir: dir, ext: 'srt')
 
-      if (target_lang = Subtitler.normalize_lang(opts.slang)) && subtitle.language.to_s != target_lang.to_s
+      if (target_lang = Language::Code.normalize(opts.slang)) && subtitle.language.to_s != target_lang.to_s
         subtitle = subtitle.translated(
           from:           subtitle.language.presence,
           to:             target_lang,
@@ -147,7 +147,7 @@ class Zipper
       body  = Utils::HTTP.get_public(entry.url)
       vtt   = Subtitler::VTT.to_vtt body, entry.ext, ffmpeg: zipper.send(:ffmpeg_builder)
       zipper.stl&.update "subs:scraped:#{lang}"
-      Subtitler::Subtitle.from_vtt(vtt).replace_language!(Subtitler.normalize_lang(lang) || lang.to_s)
+      Subtitler::Subtitle.from_vtt(vtt).replace_language!(Language::Code.normalize(lang) || lang.to_s)
     end
 
     def fetch_embedded(zipper)
@@ -169,8 +169,8 @@ class Zipper
       requested = zipper.opts.sub_lang.presence || zipper.opts.slang
       keys      = subtitles.keys
       exact     = keys.find { |code| requested.present? && code.to_s.casecmp?(requested.to_s) }
-      requested = Subtitler.normalize_lang(requested)
-      locale    = keys.find { |code| requested && Subtitler.normalize_lang(code) == requested }
+      requested = Language::Code.normalize(requested)
+      locale    = keys.find { |code| requested && Language::Code.normalize(code) == requested }
       exact || locale || keys.find { |code| code.to_s.downcase == 'en' } || keys.first
     end
 
@@ -179,13 +179,13 @@ class Zipper
     end
 
     def normalize_language!(subtitle)
-      language = Subtitler.normalize_lang(subtitle.language) || subtitle.language
+      language = Language::Code.normalize(subtitle.language) || subtitle.language
       subtitle.replace_language!(language)
     end
 
     def translate_if_needed(zipper, subtitle, target_language)
-      from = Subtitler.normalize_lang(subtitle.language)
-      to   = Subtitler.normalize_lang(target_language)
+      from = Language::Code.normalize(subtitle.language)
+      to   = Language::Code.normalize(target_language)
       return subtitle unless to
       return subtitle if from && from == to
 

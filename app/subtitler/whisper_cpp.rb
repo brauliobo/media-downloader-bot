@@ -39,7 +39,7 @@ class Subtitler
       end
 
       subtitle = Subtitle.from_whisper_verbose_json(out)
-      subtitle.replace_language!(Subtitler.normalize_lang(subtitle.language))
+      subtitle.replace_language!(Language::Code.normalize(subtitle.language))
       merge_split_words!(subtitle) if merge_words
       subtitle
     end

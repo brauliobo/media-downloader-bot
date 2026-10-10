@@ -1,5 +1,3 @@
-require 'iso-639'
-
 class Subtitler
   STATUS_DETECTING    = 'detecting voice'
   STATUS_TRANSCRIBING = 'transcribing'
@@ -23,14 +21,6 @@ class Subtitler
   # Isolated vocals (after Demucs): Whisper only.
   def self.transcribe_vocals(path, **options)
     transcribe_with_backend(path, **options)
-  end
-
-  def self.normalize_lang(lang)
-    return nil if lang.nil?
-    raw = lang.to_s.strip.downcase
-    base = raw.split(/[-_]/, 2).first
-    entry = ISO_639.find_by_code(raw) || ISO_639.find_by_code(base) || ISO_639.find_by_english_name(raw.capitalize)
-    entry&.alpha2
   end
 
   def self.transcribe_with_backend(path, **options)

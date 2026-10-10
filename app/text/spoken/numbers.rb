@@ -24,18 +24,16 @@ module Text
 
       class << self
         def call(text, lang)
-          locale = locale_for(lang)
+          code   = Language::Code.normalize(lang)
+          locale = locale_for(code)
           return text.to_s unless locale
 
-          text.to_s.gsub(NUMBER) { spell(Regexp.last_match, lang_code(lang), locale) || Regexp.last_match[0] }
+          text.to_s.gsub(NUMBER) { spell(Regexp.last_match, code, locale) || Regexp.last_match[0] }
         end
 
         private
 
-        def lang_code(lang) = lang.to_s.downcase[/\A[a-z]+/]
-
-        def locale_for(lang)
-          code = lang_code(lang)
+        def locale_for(code)
           return if code.nil? || NATIVE.include?(code)
 
           locale = LOCALES.fetch(code, code.to_sym)
