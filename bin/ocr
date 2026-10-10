@@ -13,12 +13,6 @@ Dir.chdir File.expand_path "#{File.realpath __dir__}/.." do
   require_relative '../config/environment'
 end
 
-class MockStatus
-  def update(msg)
-    puts "  #{msg}"
-  end
-end
-
 # Parse options like page=1
 opts = SymMash.new
 while ARGV[-1] && !File.exist?(ARGV[-1])
@@ -63,7 +57,7 @@ else
   exit 1
 end
 
-stl = MockStatus.new
+stl = Object.new.tap { |status| status.define_singleton_method(:update) { |msg| puts "  #{msg}" } }
 
 puts "Creating Image object for #{input_ref}..."
 puts

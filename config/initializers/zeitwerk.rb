@@ -2,6 +2,7 @@ Rails.autoloaders.each do |autoloader|
   autoloader.inflector.inflect(
     'ai'               => 'AI',
     'bs_roformer'      => 'BSRoformer',
+    'cli'              => 'CLI',
     'coqui_tts'        => 'CoquiTTS',
     'drb_service'      => 'DRbService',
     'f5_tts'           => 'F5TTS',
