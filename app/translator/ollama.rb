@@ -6,11 +6,50 @@ class Translator
     MARKER = '|||---SUBTITLEBLOCK---|||'
 
     def translate text, from:, to:
-      to_iso      = to.to_s.downcase
-      from_iso    = from.to_s.downcase if from
-      segments    = text.is_a?(String) ? text.split(MARKER) : Array(text)
+      to_iso   = to.to_s.downcase
+      from_iso = from.to_s.downcase if from
+      segments = text.is_a?(String) ? text.split(MARKER) : Array(text)
 
-      prompt = <<~PROMPT
+      translations = batch_translations(segments, from_iso: from_iso, to_iso: to_iso, to: to)
+      # Fall back to one request per segment to keep the count and the order
+      translations = segments.map { |segment| translate_alone(segment, to) } if translations.size != segments.size
+
+      return translations.join(MARKER) if text.is_a?(String) && segments.size > 1
+      return translations.first if text.is_a? String
+      translations
+    end
+
+    private
+
+    def batch_translations(segments, from_iso:, to_iso:, to:)
+      content = chat(
+        [
+          { role: :system, content: system_prompt(to_iso, to) },
+          { role: :user, content: { marker: MARKER, segments: segments, source_language_iso: from_iso, target_language_iso: to_iso }.to_json }
+        ],
+        format: 'json'
+      )
+      SymMash.new(JSON.parse(content)).translations
+    rescue JSON::ParserError
+      content.include?(MARKER) ? content.split(MARKER) : [content]
+    end
+
+    def translate_alone(segment, to)
+      chat([
+        { role: :system, content: "Translate the user's subtitle text into #{to}. Return ONLY the translated text with no extra words." },
+        { role: :user, content: segment }
+      ])
+    end
+
+    def chat(messages, **options)
+      body = Utils::HTTP.post("#{API}/api/chat", { model: MODEL, temperature: 0, stream: false, messages: messages, **options }.to_json).body.to_s
+      SymMash.new(JSON.parse(body)).dig(:message, :content).to_s.strip
+    rescue JSON::ParserError
+      body.to_s.strip
+    end
+
+    def system_prompt(to_iso, to)
+      <<~PROMPT
         You are a professional translator specializing in documentary and TV series subtitles, specifically focusing on the series "The Curse of Oak Island". Your task is to translate the provided English text, block by block, into the TARGET LANGUAGE ISO: #{to_iso}.
 
         ABSOLUTE RULES:
@@ -26,63 +65,6 @@ class Translator
         9.  RESPONSE FORMAT: Return a JSON object with a single key "translations" whose value is an array of strings. Each array entry must be EXACTLY the translation of the corresponding input segment, preserving order and count. Do not include any other keys or metadata.
         10. TRANSLATE FEET TO METERS: Example 1: 11 feet = 3.3 meters / Example 2: 179 feet = 54.5 meters. When the phrase "How deep are we?" appears, if the following text contains numbers, it refers to the excavation depth in feet, even if the word "feet" is omitted. You must identify these phrases and apply the feet-to-meters conversion in the translated subtitle. Example: - How deep are we? - We're at 78. (example translation: - How deep are we? - We are at 23,8 meters). Use a comma (,) as the decimal separator for meters in the output.
       PROMPT
-
-      opts = {
-        model: MODEL,
-        temperature: 0,
-        format: 'json',
-        stream: false,
-        messages: [
-          { role: :system, content: prompt },
-          { role: :user, content: { marker: MARKER, segments: segments, source_language_iso: from_iso, target_language_iso: to_iso }.to_json }
-        ]
-      }
-      res = Utils::HTTP.post "#{API}/api/chat", opts.to_json
-      body = res.body.to_s
-      content = begin
-        parsed = SymMash.new JSON.parse(body)
-        parsed.dig(:message, :content).to_s.strip
-      rescue JSON::ParserError
-        body.to_s.strip
-      end
-      translations = begin
-        parsed = JSON.parse(content)
-        SymMash.new(parsed).translations
-      rescue JSON::ParserError
-        if content.include?(MARKER)
-          content.split(MARKER)
-        else
-          [content]
-        end
-      end
-
-      if translations.size != segments.size
-        # Fallback: translate each segment independently to ensure count/ordering
-        translations = segments.map do |seg|
-          f_opts = {
-            model: MODEL,
-            temperature: 0,
-            stream: false,
-            messages: [
-              { role: :system, content: "Translate the user's subtitle text into #{to}. Return ONLY the translated text with no extra words." },
-              { role: :user, content: seg }
-            ]
-          }
-          fres   = Utils::HTTP.post "#{API}/api/chat", f_opts.to_json
-          f_body = fres.body.to_s
-          begin
-            f_parsed = SymMash.new JSON.parse(f_body)
-            f_parsed.dig(:message, :content).to_s.strip
-          rescue JSON::ParserError
-            f_body.to_s.strip
-          end
-        end
-      end
-
-      return translations.join(MARKER) if text.is_a?(String) && segments.size > 1
-      return translations.first if text.is_a? String
-      translations
     end
-
   end
 end
