@@ -12,7 +12,7 @@ module Audiobook
 
       # Read as: this sentence is wrong because…
       SENTENCE = {
-        lower_start:    ->(text, _at) { text =~ /\A\p{Ll}/ },
+        lower_start:    ->(text, _at) { Text.lowercase?(text) },
         glued_words:    ->(text, _at) { text =~ /\p{L}{30,}/ },
         unfinished_mid: ->(text, at)  { !at.closes && text !~ TERMINAL },
         initial_split:  ->(text, _at) { text =~ /\s\p{Lu}\.\z/ },
@@ -29,7 +29,7 @@ module Audiobook
         list_num_tail:  ->(text, _at) { text =~ /\s\d{1,2}[.)]\z/ || text =~ /\s\p{Lu}[.)]\z/ },
         # Leaders that survived; a spaced ellipsis in prose stays under the same bar as production.
         toc_leader:     ->(text, _at) { text =~ Contents::LEADERS },
-        dropcap:        ->(text, at)  { at.opens && at.prev_letter && text =~ /\A\p{Ll}/ },
+        dropcap:        ->(text, at)  { at.opens && at.prev_letter && Text.lowercase?(text) },
         colon_end:      ->(text, at)  { at.closes && text =~ /:\z/ },
         hyphen_end:     ->(text, _at) { text =~ /-\z/ },
         # A straight quote opens as often as it closes; only an unambiguous closer is a split.
@@ -49,7 +49,7 @@ module Audiobook
         numeric_heading:  ->(text) { text =~ /\A[\d\s.,ivxlcIVXLC-]+\z/ },
         long_heading:     ->(text) { text.split.size > 12 },
         sentence_heading: ->(text) { text =~ /[.!?]\z/ && text.split.size > 5 && text != text.upcase },
-        lower_heading:    ->(text) { text =~ /\A\p{Ll}/ },
+        lower_heading:    ->(text) { Text.lowercase?(text) },
         letter_heading:   ->(text) { text =~ /\A\p{Lu}\z/ },
       }.freeze
 
@@ -100,7 +100,7 @@ module Audiobook
         following = items[idx + 1]&.last
         preceding = idx.positive? ? items[idx - 1].last : nil
         SymMash.new(
-          next_lower:  following.is_a?(Paragraph) && following.sentences.first&.text.to_s.match?(/\A\p{Ll}/),
+          next_lower:  following.is_a?(Paragraph) && Text.lowercase?(following.sentences.first&.text),
           prev_letter: preceding.is_a?(Heading) && preceding.text.match?(/\A\p{Lu}\z/)
         )
       end

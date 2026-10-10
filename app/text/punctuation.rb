@@ -3,8 +3,12 @@ module Text
     CLOSING  = /[\.!?¡¿；。？！]"?\s*\z/
     # An ellipsis is a pause; whether it closes the sentence depends on what follows.
     ELLIPSIS = /(?:\.{3}|…)["”’)\]»]*\s*\z/u
-    TERMINAL = /[.!?…]["”’)\]»]*\z/u
-    CLAUSE   = /[.!?…,;:]["”’)\]»]*\z/u
+    STOPS    = '.!?…'
+    CLOSERS  = '"”’)\]»'
+    TERMINAL = /[#{STOPS}][#{CLOSERS}]*\z/u
+    CLAUSE   = /[#{STOPS},;:][#{CLOSERS}]*\z/u
+    # A word that ends on the stop itself; the closing quote after it arrives as a word of its own.
+    STOP     = /[#{STOPS}]\z/u
     ONLY     = /\A[\p{P}\p{S}\s]+\z/u
 
     module_function
@@ -17,6 +21,7 @@ module Text
       !SentenceSplitter.abbreviation?(stripped.sub(CLOSING, ''))
     end
 
+    def stop?(word) = word.to_s.match?(STOP)
     def ellipsis?(text) = text.to_s.match?(ELLIPSIS)
     def terminal?(text) = text.to_s.match?(TERMINAL)
     def clause_end?(text) = text.to_s.match?(CLAUSE)

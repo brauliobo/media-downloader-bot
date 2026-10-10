@@ -17,7 +17,7 @@ module Audiobook
 
       words = text.split(/\s+/)
       return false if words.empty? || words.size > MAX_WORDS
-      return true if words.size <= 3 && text.match?(/\A\p{Lu}/u) && !text.match?(/[.!?…,;:]\z/)
+      return true if words.size <= 3 && Text.capital?(text) && !text.match?(/[.!?…,;:]\z/)
       return true if words.count { |word| word == word.upcase && word.length > 1 }.fdiv(words.size) > CAPS_RATIO
 
       words.all? { |word| word.match?(/\A[A-Z]/) } && !text.match?(/[.!?]\z/)

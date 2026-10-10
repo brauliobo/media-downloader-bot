@@ -1,7 +1,6 @@
 class Subtitler
   # Subtitle entries carry words; speech is read by sentence, so their words are regrouped at sentence ends.
   module Sentences
-    EOS_PUNCT          = /[.!?…]$/
     CLOSERS_ONLY       = /\A["')\]]+\z/
     TITLE_ABBREVIATION = /\A(?:Mr|Mrs|Ms|Dr|Prof|Sr|Sra|St)\.\z/i
 
@@ -54,7 +53,7 @@ class Subtitler
       cur_words.clear
     end
 
-    def eos_punct?(raw) = raw.strip.match?(EOS_PUNCT)
+    def eos_punct?(raw) = Text::Punctuation.stop?(raw.strip)
     def title_abbreviation?(raw) = raw.strip.match?(TITLE_ABBREVIATION)
     def closer_only?(raw) = raw.match?(CLOSERS_ONLY)
   end

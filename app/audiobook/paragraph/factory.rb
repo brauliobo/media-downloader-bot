@@ -82,7 +82,7 @@ module Audiobook
 
       def verse_line?(line)
         width = line.page_width.to_f
-        line.text.match?(/\A\p{Lu}/) && width.positive? && line.x_max.to_f < width * VERSE_MEASURE
+        Text.capital?(line.text) && width.positive? && line.x_max.to_f < width * VERSE_MEASURE
       end
 
       def verse_sentences(group)

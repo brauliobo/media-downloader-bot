@@ -185,7 +185,7 @@ module Ewprs
           translated = "#{translated_leading} #{translated_remainder}" if translated_remainder != remainder
         end
         translated = translated.sub(/[.!?]\z/, '') unless source.match?(/[.!?]\z/)
-        if index.positive? && to.to_s.downcase == 'de' && source.match?(/\A\p{Ll}/u)
+        if index.positive? && to.to_s.downcase == 'de' && Text.lowercase?(source)
           translated = translated.sub(/\A(?:Das|Der|Die|Ein|Eine|Er|Es)\b/) { |word| word.downcase }
         end
         parts[indexes[index]] = parts[indexes[index]].sub(parts[indexes[index]].strip, translated)

@@ -41,7 +41,7 @@ module Audiobook
       rows.group_by(&:page).select do |_, page_rows|
         lines = page_rows.reject { |row| row.text.to_s.split.size < 2 }
         lines.size >= VERSE_LINES &&
-          lines.count { |row| row.text.to_s.match?(/\A\p{Lu}/) } >= lines.size * VERSE_SHARE
+          lines.count { |row| Text.capital?(row.text) } >= lines.size * VERSE_SHARE
       end.keys.to_set
     end
 

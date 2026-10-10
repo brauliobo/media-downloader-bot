@@ -30,4 +30,9 @@ RSpec.describe Text::Punctuation do
     expect(described_class.ellipsis?('Wait...')).to be(true)
     expect(described_class.ellipsis?('Wait.')).to be(false)
   end
+
+  it 'tells a word that ends on the stop itself, not on the quote after it' do
+    expect(described_class.stop?('end.')).to be(true)
+    expect(described_class.stop?('end."')).to be(false)
+  end
 end

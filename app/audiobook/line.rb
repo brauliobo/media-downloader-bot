@@ -80,7 +80,7 @@ module Audiobook
     end
 
     def starts_with_capital?
-      @text.match?(/\A\p{Lu}/u)
+      Text.capital?(@text)
     end
 
     TRAILING_HYPHEN = /\s*[-\u00AD\u2010\u2011]\z/
@@ -92,7 +92,7 @@ module Audiobook
     def dehyphenate(text) = @text.sub(TRAILING_HYPHEN, '') + text
 
     def starts_with_lowercase?
-      @text.match?(/\A\p{Ll}/u)
+      Text.lowercase?(@text)
     end
 
     # A closing quote ends the sentence before it, wherever the text layer put it on the page.

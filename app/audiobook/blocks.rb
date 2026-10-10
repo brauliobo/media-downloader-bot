@@ -48,7 +48,7 @@ module Audiobook
         last:         last,
         first:        first,
         unfinished:   !Text::Punctuation.closes?(last),
-        continuation: first.match?(/\A[[:lower:]]/) && !ListMark.enumerated?(first),
+        continuation: Text.lowercase?(first) && !ListMark.enumerated?(first),
         # A list entry opens its own block, and a lead-in or a numbered label names the block
         # that follows rather than running into it. A page break undoes none of that.
         separate:     ListMark.enumerated?(first) || ListMark.bulleted?(first) ||

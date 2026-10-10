@@ -19,4 +19,14 @@ RSpec.describe Text do
         .to eq('Appl Environ Microbiol 60 (7): 2650-2656. PMC 201698.')
     end
   end
+
+  describe '.capital? and .lowercase?' do
+    it 'read the first letter, accents and all' do
+      expect(described_class.capital?('Ágora')).to be(true)
+      expect(described_class.capital?('ágora')).to be(false)
+      expect(described_class.lowercase?('ágora')).to be(true)
+      expect(described_class.lowercase?('1 casa')).to be(false)
+      expect(described_class.lowercase?(nil)).to be(false)
+    end
+  end
 end

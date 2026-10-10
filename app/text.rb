@@ -13,6 +13,9 @@ module Text
     clean.strip
   end
 
+  def capital?(text) = text.to_s.match?(/\A\p{Lu}/u)
+  def lowercase?(text) = text.to_s.match?(/\A\p{Ll}/u)
+
   # Two lines say the same thing when they read the same; a folio differs only in its digits.
   def comparable(text) = text.to_s.downcase.gsub(/\s+/, ' ').strip
   def comparable_key(text) = comparable(text).gsub(/\d+/, '<d>')
@@ -26,7 +29,7 @@ module Text
         # A hyphen between digits is a range; before a lowercase continuation it splits a word; else a dash.
         next "#{text}#{line}" if text.match?(/\d-\z/) && line.match?(/\A\d/)
 
-        line.match?(/\A\p{Ll}/u) ? "#{text.chomp('-').rstrip}#{line}" : "#{text} #{line}"
+        lowercase?(line) ? "#{text.chomp('-').rstrip}#{line}" : "#{text} #{line}"
       else
         overlap = overlapping_word_count(text, line)
         words = line.split(/\s+/).drop(overlap)

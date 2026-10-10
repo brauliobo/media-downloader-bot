@@ -7,7 +7,7 @@ module Text
     # "Chapter XIV. Title" names a part; the numeral does not close a sentence.
     NUMERAL_ABBREVIATION = /(?:\A|[^\p{L}])[IVX]{2,4}\z/
     # "1. Heading" and "a. item" open an enumerated entry; the label closes nothing.
-    ENUMERATOR = /(?:\A|[.!?…]["”’)\]»]*\s+)(?:\d{1,3}|\p{Ll})\z/u
+    ENUMERATOR = /(?:\A|[#{Punctuation::STOPS}][#{Punctuation::CLOSERS}]*\s+)(?:\d{1,3}|\p{Ll})\z/u
     ENUMERATED_START = '(?:\d{1,3}|\p{Ll})[.)]\s'
     NO_BOUNDARY_TOKENS = /(?!)\z/
     MARKER_RUN = '\d{1,3}(?:,\d{1,3})*'
