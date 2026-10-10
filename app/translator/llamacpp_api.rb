@@ -53,7 +53,7 @@ class Translator
 
     def translation_prompt(text, to:)
       <<~PROMPT.strip
-        Translate the following text into #{target_language_name(to)} by meaning and context, not word-for-word. Use the natural target-language sense and avoid false cognates or unrelated meanings. Output only the translated text itself; do not add a label, acknowledgement, quotation, or explanation:
+        Translate the following text into #{Language::Name.target(to)} by meaning and context, not word-for-word. Use the natural target-language sense and avoid false cognates or unrelated meanings. Output only the translated text itself; do not add a label, acknowledgement, quotation, or explanation:
 
         #{text}
       PROMPT
@@ -61,7 +61,7 @@ class Translator
 
     def dubbing_translation_prompt(text, to:)
       <<~PROMPT.strip
-        Translate all of the following dialogue faithfully and completely into natural spoken #{target_language_name(to)} for dubbing by meaning and context, not word-for-word. Avoid false cognates or unrelated meanings.
+        Translate all of the following dialogue faithfully and completely into natural spoken #{Language::Name.target(to)} for dubbing by meaning and context, not word-for-word. Avoid false cognates or unrelated meanings.
         Do not summarize, condense, shorten, or omit any information. Preserve every distinct statement, qualifier, repetition, name, and number.
         Output only the translated dialogue itself; do not add a label, acknowledgement, quotation, or explanation:
 
@@ -70,13 +70,6 @@ class Translator
       PROMPT
     end
 
-    def target_language_name(code)
-      code = code.to_s.downcase
-      return 'Brazilian Portuguese' if code == 'pt'
-      return 'Simplified Chinese' if code == 'zh'
-
-      ISO_639.find_by_code(code)&.english_name&.split(';')&.first || code
-    end
 
     def llama_api_host
       ENV['LLAMA_CPP_HOST'] || ENV.fetch('LLAMA_CPP_MADLAD400_HOST')

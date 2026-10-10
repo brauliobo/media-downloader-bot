@@ -374,7 +374,7 @@ module Ewprs
 
     def prompt(text, from:, to:)
       instructions = [
-        "Translate the #{language_name(from)} prose in the following text into #{target_language_name(to)}.",
+        "Translate the #{Language::Name.english(from)} prose in the following text into #{Language::Name.target(to)}.",
         'Preserve every sentence and line break; do not omit or repeat text.',
         'Choose one direct translation; do not output alternatives, annotations, or parenthetical variants.',
         QUOTED_PROSE_INSTRUCTION,
@@ -401,9 +401,9 @@ module Ewprs
         "#{placeholder} = #{plain.empty? ? 'protected markup' : plain}"
       end
       <<~PROMPT.strip
-        Correct the invalid #{target_language_name(to)} translation below.
+        Correct the invalid #{Language::Name.target(to)} translation below.
         Validation failure: #{issue}
-        Translate every #{language_name(from)} prose word outside placeholders; do not copy source-language prose.
+        Translate every #{Language::Name.english(from)} prose word outside placeholders; do not copy source-language prose.
         Preserve every sentence and line break; do not omit or repeat text.
         Choose one direct translation; do not output alternatives, annotations, or parenthetical variants.
         #{QUOTED_PROSE_INSTRUCTION}
@@ -415,7 +415,7 @@ module Ewprs
         Copy every placeholder literally; never replace it with its meaning.
         Only output the translation without any additional explanation.
 
-        #{language_name(from)} source:
+        #{Language::Name.english(from)} source:
         #{source}
 
         Invalid translation to correct:
@@ -425,8 +425,8 @@ module Ewprs
 
     def untranslated_repair_prompt(source, from:, to:)
       instructions = [
-        "Translate this #{language_name(from)} sentence completely into #{target_language_name(to)}.",
-        "Do not output any #{language_name(from)} words.",
+        "Translate this #{Language::Name.english(from)} sentence completely into #{Language::Name.target(to)}.",
+        "Do not output any #{Language::Name.english(from)} words.",
         'Preserve every sentence and line break; do not omit or repeat text.',
         'Choose one direct translation; do not output alternatives, annotations, or parenthetical variants.',
         QUOTED_PROSE_INSTRUCTION,
@@ -447,13 +447,6 @@ module Ewprs
       end
     end
 
-    def target_language_name(code)
-      code = code.to_s.downcase
-      return 'Brazilian Portuguese' if code == 'pt'
-      return 'Simplified Chinese' if code == 'zh'
-
-      language_name(code)
-    end
 
     def delimiter_instruction(source)
       counts = %w[( ) [ ] { }].map { |delimiter| %Q{"#{delimiter}"=#{source.count(delimiter)}} }
@@ -476,10 +469,6 @@ module Ewprs
         "renumbering them: #{placeholders.join(', ')}. Do not append this list to the translation."
     end
 
-    def language_name(code)
-      code = code.to_s.downcase
-      ISO_639.find_by_code(code)&.english_name&.split(';')&.first || code
-    end
 
     def host
       ENV.fetch('HYMT2_HOST', 'http://127.0.0.1:12002')

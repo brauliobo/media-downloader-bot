@@ -10,13 +10,7 @@ module Audiobook::Ewprs
     ].join(',').freeze
     UNAVAILABLE_BOOK = /unpublished in English|not yet published in any language|as yet unpublished in any language/i
     ONLINE_PLACEHOLDER = /\A\[To see if this discourse is now available online,/i
-    LANGUAGE_NAMES = {
-      'ar' => 'Arabic', 'de' => 'German', 'en' => 'English', 'es' => 'Spanish', 'fr' => 'French',
-      'ja' => 'Japanese', 'pt' => 'Portuguese', 'zh' => 'Chinese'
-    }.freeze
-    VOICE_ACCENTS  = {
-      'ja' => 'japanese accent', 'pt' => 'portuguese accent', 'zh' => 'chinese accent'
-    }.freeze
+    ACCENTED_LANGUAGES = %w[ja pt zh].freeze
 
     Entry = Struct.new(:kind, :title, :path, :info, :sources, :book_refs, :chapters, keyword_init: true) do
       def slug = File.basename(path, File.extname(path))
@@ -30,8 +24,13 @@ module Audiobook::Ewprs
       raise ArgumentError, "EWPRS directory not found: #{root}" unless File.directory?(@root)
     end
 
+    # Cloned voices of these languages speak English with the accent of the language.
+    def accent
+      "#{language_name.downcase} accent" if ACCENTED_LANGUAGES.include?(language)
+    end
+
     def language_name
-      LANGUAGE_NAMES.fetch(language, language)
+      Language::Name.english(language)
     end
 
     def discourses
@@ -97,7 +96,7 @@ module Audiobook::Ewprs
         html_language:         language,
         html_block_comments:   !entry.slug.match?(/Sarkars?_English_Grammar/),
         instruct:              [
-           'male', 'middle-aged', 'moderate pitch', VOICE_ACCENTS[language]
+           'male', 'middle-aged', 'moderate pitch', accent
          ].compact.join(', ')
       )
       if ENV['EWPRS_VOICE_REFERENCE'].present?
