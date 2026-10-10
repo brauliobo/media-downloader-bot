@@ -98,7 +98,7 @@ module Audiobook
 
     def attach_call(page, id, ref)
       last = @last_para[page]&.sentences&.last
-      return ref.tap { @deferred[page] << ref } unless Punctuation.closes?(last&.text)
+      return ref.tap { @deferred[page] << ref } unless Text::Punctuation.closes?(last&.text)
 
       @refs[page][id] = last.add_reference(ref) || ref
     end

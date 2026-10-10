@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe SpokenText::Numbers do
+RSpec.describe Text::Spoken::Numbers do
   def say(text, lang = 'pt') = described_class.call(text, lang)
 
   it 'spells grouped and plain integers' do

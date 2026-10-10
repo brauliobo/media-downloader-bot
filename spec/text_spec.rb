@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe Audiobook::Text do
+RSpec.describe Text do
   describe '.join_lines' do
     it 'rejoins a word split by a soft hyphen' do
       expect(described_class.join_lines(["Su respuesta fue sim­", 'ple, me dijo'])).to eq('Su respuesta fue simple, me dijo')

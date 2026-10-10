@@ -4,8 +4,6 @@ module Audiobook
       MAX_SENTENCE_CHARS = 800
       ISOLATED_MAX_WORDS = 12
       VERSE_MEASURE      = 0.75
-      TERMINAL_PUNCTUATION = /[.!?…]["”’)\]»]*\z/u
-      CLAUSE_PUNCTUATION   = /[.!?…,;:]["”’)\]»]*\z/u
 
       def self.create_items_from_lines(lines, start_page, max_sentence_chars: MAX_SENTENCE_CHARS, isolated: false)
         new(lines, start_page, max_sentence_chars: max_sentence_chars, isolated: isolated).create
@@ -71,7 +69,7 @@ module Audiobook
       def normalize_group_text(group)
         normalized = Text.join_lines(group.map { |line| Contents.strip_leaders(line.text) })
         normalized = ListMark.strip_bullet(normalized).gsub(/\bN\s*\.\s*T\./i, 'N.T.')
-        SpokenText::Urls.call(normalized)
+        Text::Spoken::Urls.call(normalized)
       end
 
       # Run together, a stanza puts a capital in the middle of a sentence and reads as prose
@@ -134,16 +132,16 @@ module Audiobook
         return false if !larger_than_body?(first_line) && group.any?(&:runs_measure?)
         # A lowercase opening is prose, an attribution or a caption unless the type outsizes the body.
         if first_line.starts_with_lowercase?
-          return false if !larger_than_body?(first_line) || joined.match?(TERMINAL_PUNCTUATION)
+          return false if !larger_than_body?(first_line) || Text::Punctuation.terminal?(joined)
         end
         # A label is a complete phrase; text that breaks off mid-sentence is body copy.
-        return false if sentence_count > 1 && !joined.match?(TERMINAL_PUNCTUATION)
-        return true if @isolated && words <= ISOLATED_MAX_WORDS && !joined.match?(CLAUSE_PUNCTUATION)
+        return false if sentence_count > 1 && !Text::Punctuation.terminal?(joined)
+        return true if @isolated && words <= ISOLATED_MAX_WORDS && !Text::Punctuation.clause_end?(joined)
 
         font_heading = level.to_i.positive? || (FontRoles.current && FontRoles.heading_item?(first_line))
         return sentence_count == 1 && heading_like?(group, joined) unless font_heading
         # Emphasis at body size marks a lead-in, not a heading, once it reads as a full sentence.
-        return words <= 4 || !joined.match?(TERMINAL_PUNCTUATION) unless larger_than_body?(first_line)
+        return words <= 4 || !Text::Punctuation.terminal?(joined) unless larger_than_body?(first_line)
 
         heading_like?(group, joined) || words <= 20
       end

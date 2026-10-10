@@ -42,7 +42,7 @@ module Dubbing
     def jobs_for(indices)
       indices.map do |idx|
         {
-          text:     SpokenText::Numbers.call(@sentences.fetch(idx).text, @target_lang),
+          text:     Text::Spoken::Numbers.call(@sentences.fetch(idx).text, @target_lang),
           lang:     @target_lang,
           out_path: File.join(@workdir, format('sentence-%04d.raw.wav', idx + 1))
         }

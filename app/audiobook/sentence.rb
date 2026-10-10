@@ -3,7 +3,6 @@ module Audiobook
   class Sentence < Speech
 
     PAUSE = Pauses::SENTENCE
-    PUNCTUATION_ONLY = /\A[\p{P}\p{S}\s]+\z/u
 
     attr_accessor :text, :source_sentence, :font_size, :alignment, :language, :bold, :italic, :color, :font_name
     attr_writer :references, :reference_ids
@@ -36,7 +35,7 @@ module Audiobook
     end
 
     def spoken_text(lang = language)
-      speakable? ? SpokenText::Numbers.call(text, lang) : ''
+      speakable? ? Text::Spoken::Numbers.call(text, lang) : ''
     end
 
     def speakable?
@@ -98,12 +97,12 @@ module Audiobook
     end
 
     def self.split(text, **options)
-      ::Ewprs::SentenceSplitter.sentences(text, boundary_tokens: Markers::TOKEN, **options)
+      Text::SentenceSplitter.sentences(text, boundary_tokens: Markers::TOKEN, **options)
     end
 
     def self.speakable_text?(text)
       normalized = text.to_s.strip
-      normalized.present? && !normalized.match?(PUNCTUATION_ONLY)
+      normalized.present? && !Text::Punctuation.only?(normalized)
     end
 
     def self.build(text)

@@ -85,7 +85,7 @@ module Audiobook
 
     def contents_entry?(text) = Contents.entry?(text) || text.match?(CHAPTER_LABEL)
     def contents_title?(text) = text.match?(CONTENTS_TITLE) && text.split.size <= TITLE_WORDS
-    def entry_line?(text) = text.split.size.between?(1, ENTRY_WORDS) && !Punctuation.closes?(text)
+    def entry_line?(text) = text.split.size.between?(1, ENTRY_WORDS) && !Text::Punctuation.closes?(text)
 
     # ---------- index and reference lists ----------
 

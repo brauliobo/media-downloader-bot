@@ -30,7 +30,7 @@ module Audiobook
 
       # The same questions the detector asked itself, named as the report names them.
       def self.reasons(previous, line, buf, grid)
-        finished = Punctuation.closes?(buf.map(&:text).join(' ').strip)
+        finished = Text::Punctuation.closes?(buf.map(&:text).join(' ').strip)
 
         structural(previous, line) + layout(previous, line, grid, finished) +
           [(:block if previous.new_block?(line)), (:page if line.page_number != previous.page_number),

@@ -76,14 +76,14 @@ module Audiobook
     end
 
     def ends_with_punctuation?
-      Punctuation.closes?(@text)
+      Text::Punctuation.closes?(@text)
     end
 
     def starts_with_capital?
       @text.match?(/\A\p{Lu}/u)
     end
 
-    TRAILING_HYPHEN = /\s*[-­‐‑]\z/
+    TRAILING_HYPHEN = /\s*[-\u00AD\u2010\u2011]\z/
 
     def ends_with_hyphen?
       @text.match?(TRAILING_HYPHEN)
@@ -105,7 +105,7 @@ module Audiobook
     def continues?(text)
       return false unless starts_with_lowercase? && !ListMark.enumerated?(@text)
 
-      !Punctuation.closes?(text) || Punctuation.ellipsis?(text)
+      !Text::Punctuation.closes?(text) || Text::Punctuation.ellipsis?(text)
     end
 
     # The source numbered the two lines as separate blocks, so it drew the boundary itself. A

@@ -10,7 +10,7 @@ module Audiobook
         # A footnote marker sits on its own line above the note it introduces.
         return false if Markers.line?(buffer_text)
 
-        finished     = Punctuation.closes?(buffer_text)
+        finished     = Text::Punctuation.closes?(buffer_text)
         continuation = FontRoles.heading_continuation?(prev_line, line)
         # Emphasis that carries a sentence on in mid-flow is a run inside the paragraph, not a new block.
         emphasis_run = line.continues?(buffer_text) && !line.font_changed?(prev_line)
