@@ -6,8 +6,6 @@ class Subtitler
       module_function
 
       def parse(input, format:)
-        raise TypeError, "#{format} must be a String" unless input.is_a?(String)
-
         newline        = input.include?("\r\n") ? "\r\n" : "\n"
         normalized     = input.gsub(/\r\n?|\r/, "\n")
         validate_cue_document!(normalized, format)

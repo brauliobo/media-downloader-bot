@@ -31,15 +31,6 @@ RSpec.describe Dubbing::SpeechSynthesizer do
     FileUtils.remove_entry(dir) if Dir.exist?(dir)
   end
 
-  it 'rejects subtitle hashes' do
-    expect do
-      described_class.new(
-        sentences: [{text: 'Sim.'}], references: {}, opts: SymMash.new,
-        target_lang: 'pt', workdir: dir, video_duration: 1.0
-      )
-    end.to raise_error(TypeError, /Subtitle::Entry/)
-  end
-
   it 'warms each speaker with target-language audio before synthesizing jobs' do
     calls = []
     allow(TTS).to receive(:synthesize_batch) do |items:, **options|

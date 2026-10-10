@@ -198,8 +198,6 @@ class Subtitler
     end
 
     def document_for(subtitle, portrait: false, mode: :instagram, preset: 'default')
-      Subtitler::Subtitle.assert!(subtitle, 'subtitle')
-
       preset = preset.to_s
       preset = 'default' unless PRESETS.key?(preset)
       style  = style_for(preset, portrait)

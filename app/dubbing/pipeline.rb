@@ -208,8 +208,6 @@ module Dubbing
     end
 
     def replace_sentences!(sentences)
-      Subtitler::Subtitle::Entry.assert_all!(sentences, 'sentences')
-
       @sentences = sentences
     end
 

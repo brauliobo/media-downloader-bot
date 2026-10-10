@@ -3,10 +3,6 @@ require 'json'
 class Diarizer
   Result = Data.define(:segments) do
     def initialize(segments:)
-      unless segments.is_a?(Array) && segments.all? { |segment| segment.is_a?(Segment) }
-        raise TypeError, 'segments must be an Array of Diarizer::Segment objects'
-      end
-
       super(segments: segments.dup.freeze)
     end
 

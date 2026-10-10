@@ -16,10 +16,5 @@ RSpec.describe Subtitler::Sentences do
       expect(sentences.map { |sentence| [sentence.start, sentence.finish] }).to eq([[0.0, 0.6], [1.0, 2.0]])
       expect(entry.words.map(&:text)).to eq(['Hello', '.', 'Again.'])
     end
-
-    it 'rejects hash-shaped subtitle data' do
-      expect { described_class.from_entries([{words: []}]) }
-        .to raise_error(TypeError, /Subtitle::Entry/)
-    end
   end
 end

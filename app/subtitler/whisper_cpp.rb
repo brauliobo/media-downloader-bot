@@ -47,8 +47,6 @@ class Subtitler
     private
 
     def merge_split_words!(subtitle)
-      Subtitle.assert!(subtitle, 'subtitle')
-
       subtitle.merge_split_words!
     end
   end

@@ -61,7 +61,6 @@ class Hashtags
 
   def transcription_text(transcription)
     return transcription.to_s if transcription.is_a?(String)
-    raise TypeError, 'transcription must be a Subtitler::Subtitle or String' unless transcription.is_a?(Subtitler::Subtitle)
 
     text = transcription.text
     return text unless text.strip.empty?

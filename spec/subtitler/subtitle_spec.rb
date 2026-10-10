@@ -50,9 +50,7 @@ RSpec.describe Subtitler::Subtitle do
       expect(entry.words.first.metadata).to eq('probability' => 0.91, 'backend_token' => 41)
     end
 
-    it 'rejects non-JSON key types and missing segment collections' do
-      expect { described_class.from_whisper_verbose_json(language: 'en') }
-        .to raise_error(ArgumentError, 'subtitle keys must be strings')
+    it 'rejects a document without segments' do
       expect { described_class.from_whisper_verbose_json('language' => 'en') }
         .to raise_error(KeyError, /segments/)
     end

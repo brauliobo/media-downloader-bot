@@ -33,9 +33,4 @@ RSpec.describe Hashtags do
 
     expect(described_class.new(backend: backend).call('   ')).to eq('')
   end
-
-  it 'rejects generic structured values' do
-    expect { described_class.new(backend: double).call({text: 'Transcript'}) }
-      .to raise_error(TypeError, 'transcription must be a Subtitler::Subtitle or String')
-  end
 end

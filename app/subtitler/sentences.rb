@@ -7,10 +7,6 @@ class Subtitler
     module_function
 
     def from_entries(entries)
-      unless entries.is_a?(Array) && entries.all? { |entry| entry.is_a?(Subtitle::Entry) }
-        raise TypeError, 'entries must contain only Subtitler::Subtitle::Entry objects'
-      end
-
       sentences, cur_words, eos_pending = [], [], false
       each_word(entries) do |word|
         raw = word.text

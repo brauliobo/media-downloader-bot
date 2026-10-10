@@ -31,12 +31,6 @@ RSpec.describe VoiceClone::TranscriptScore do
     expect(result[:word_error_rate]).to be > 0
   end
 
-  it 'requires a typed subtitle' do
-    expect do
-      described_class.new.call(expected: 'Text.', transcript: {language: 'en', segments: []})
-    end.to raise_error(TypeError, 'transcript must be a Subtitler::Subtitle')
-  end
-
   it 'uses avg_logprob confidence for each lexical word when words have no confidence' do
     entry = Subtitler::Subtitle::Entry.new(
       start: 0, finish: 1, text: 'Two words.', metadata: {'avg_logprob' => Math.log(0.8)}

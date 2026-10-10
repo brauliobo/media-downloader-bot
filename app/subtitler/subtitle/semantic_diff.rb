@@ -15,15 +15,6 @@ class Subtitler
       end
 
       def initialize(before, after, time_tolerance:, max_details:)
-        validate_subtitle!(before, 'before')
-        validate_subtitle!(after, 'after')
-        unless time_tolerance.is_a?(Numeric) && time_tolerance.finite? && time_tolerance >= 0
-          raise ArgumentError, 'time_tolerance must be a finite non-negative number'
-        end
-        unless max_details.is_a?(Integer) && max_details >= 0
-          raise ArgumentError, 'max_details must be a non-negative integer'
-        end
-
         @before         = before
         @after          = after
         @time_tolerance = time_tolerance.to_f
@@ -150,10 +141,6 @@ class Subtitler
       end
 
       private
-
-      def validate_subtitle!(value, field)
-        Subtitler::Subtitle.assert!(value, field)
-      end
 
       def align_cues(before_entries, after_entries, before_texts, after_texts)
         return {

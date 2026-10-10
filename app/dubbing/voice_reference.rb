@@ -15,8 +15,6 @@ module Dubbing
     module_function
 
     def extract_by_speaker(input_path, segments, sentences:, dir:, min_duration: MIN_DURATION, max_duration: MAX_DURATION, filter: :raw, pad_duration: nil, transcriber: nil)
-      Subtitler::Subtitle::Entry.assert_all!(sentences, 'sentences')
-
       segments_by_speaker = Array(segments).group_by(&:speaker_id)
       Array(sentences).group_by(&:speaker_id).each_with_index.filter_map do |(speaker_id, speaker_sentences), index|
         speaker_dir = File.join(dir, format('speaker-%04d', index))
@@ -108,8 +106,6 @@ module Dubbing
       return selections.map(&:text).reject(&:empty?).join(' ') unless transcriber
 
       transcript = transcriber.call_vocals(path)
-      Subtitler::Subtitle.assert!(transcript, 'transcript')
-
       transcript.entries.map { |entry| entry.text.strip }
         .reject(&:empty?).join(' ')
     end

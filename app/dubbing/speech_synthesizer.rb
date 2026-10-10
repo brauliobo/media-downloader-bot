@@ -3,8 +3,6 @@ require 'thread'
 module Dubbing
   class SpeechSynthesizer
     def initialize(sentences:, references:, opts:, target_lang:, workdir:, video_duration:, stl: nil)
-      Subtitler::Subtitle::Entry.assert_all!(sentences, 'sentences')
-
       @sentences       = sentences
       @references      = references
       @opts            = opts

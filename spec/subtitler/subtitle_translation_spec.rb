@@ -18,7 +18,7 @@ RSpec.describe Subtitler::Subtitle, 'translation' do
     subtitle.sentence_entries
   end
 
-  it 'accepts only typed subtitles and leaves the source graph unchanged' do
+  it 'leaves the source graph unchanged' do
     source = subtitle(
       language: 'en', text: 'Hello.',
       segments: [{start: 0, end: 1, text: 'Hello.', words: [word('Hello.', 0, 1)]}]
@@ -32,8 +32,6 @@ RSpec.describe Subtitler::Subtitle, 'translation' do
     expect(translated).to have_attributes(language: 'pt', text: 'Olá.')
     expect(translated.entries.first).to have_attributes(source_text: 'Hello.')
     expect(translated.entries.first.source_words.map(&:text)).to eq(['Hello.'])
-    expect { described_class.new(entries: [{}]) }
-      .to raise_error(TypeError, /Subtitle::Entry/)
   end
 
   it 'renders translated VTT text in ASS instead of the authored source text' do

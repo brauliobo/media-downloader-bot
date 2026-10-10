@@ -27,8 +27,6 @@ class VoiceReference
       source_files = source_files ? Array(source_files) : audio_files
       recordings = audio_files.zip(source_files).map do |audio, source|
         transcript = transcripts.fetch(source) { transcribe(audio, cache_key: source, vocals: vocals) }
-        Subtitler::Subtitle.assert!(transcript, 'transcript')
-
         transcript = transcript.deep_copy.replace_language!(language) if transcript.language.blank?
         {audio: audio, transcript: transcript}
       end
@@ -94,8 +92,6 @@ class VoiceReference
     end
 
     def validation_report(expected, transcript, audio, reference_filter: :clone)
-      Subtitler::Subtitle.assert!(transcript, 'transcript')
-
       probabilities = transcript.entries.flat_map { |entry| TranscriptQuality.word_confidences(entry) }
       average       = Utils::Stats.mean(probabilities)
       p10           = TranscriptQuality.p10(probabilities)

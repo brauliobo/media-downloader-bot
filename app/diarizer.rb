@@ -6,13 +6,8 @@ class Diarizer
   end
 
   def self.assign_speakers!(subtitle, speaker_segments, sentence_level: false)
-    Subtitler::Subtitle.assert!(subtitle, 'subtitle')
-
     segments = Array(speaker_segments)
     raise 'diarization returned no speaker segments' if segments.empty?
-    unless segments.all? { |segment| segment.is_a?(Segment) }
-      raise TypeError, 'speaker_segments must contain only Diarizer::Segment objects'
-    end
 
     entries = if sentence_level
       subtitle.sentence_entries.map do |entry|

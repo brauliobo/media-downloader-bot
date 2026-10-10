@@ -33,12 +33,6 @@ RSpec.describe VoiceReference::Selector do
     expect(selected).to be_nil
   end
 
-  it 'requires typed transcripts' do
-    expect do
-      described_class.new(analyzer: analyzer).rank([{audio: 'legacy.wav', transcript: {language: 'en'}}])
-    end.to raise_error(TypeError, 'transcript must be a Subtitler::Subtitle')
-  end
-
   it 'uses entry avg_logprob when word confidence is unavailable' do
     text = 'Clear amber voices carry distinct phrases across quiet mountain valleys.'
     entry = Subtitler::Subtitle::Entry.new(

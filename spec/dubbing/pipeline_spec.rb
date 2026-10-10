@@ -88,13 +88,6 @@ RSpec.describe Dubbing::Pipeline do
     expect(opts.subtitle.to_vtt).to include('00:00:00.500 --> 00:00:01.500', 'Boa tarde.')
   end
 
-  it 'rejects non-model sentence collections' do
-    pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), probe: probe)
-
-    expect { pipeline.send(:replace_sentences!, [{text: 'Boa tarde.'}]) }
-      .to raise_error(TypeError, /Subtitle::Entry/)
-  end
-
   it 'preserves scheduled word highlighting unless nowords is requested' do
     allow(::Translator).to receive(:translate_for_dubbing).and_return(['Muito bom dia, amigo.'])
     source = Subtitler::Subtitle.from_whisper_verbose_json(

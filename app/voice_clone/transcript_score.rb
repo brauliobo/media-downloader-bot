@@ -6,8 +6,6 @@ class VoiceClone
     end
 
     def call(expected:, transcript:)
-      Subtitler::Subtitle.assert!(transcript, 'transcript')
-
       observed = transcript.entries.map { |entry| entry.text.strip }.reject(&:empty?).join(' ')
       expected_words = VoiceReference::TranscriptQuality.words(expected)
       observed_words = VoiceReference::TranscriptQuality.words(observed)

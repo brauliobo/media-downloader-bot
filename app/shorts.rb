@@ -92,6 +92,5 @@ module Shorts
   end
 
   def require_subtitle!(subtitle)
-    Subtitler::Subtitle.assert!(subtitle, 'subtitle')
   end
 end

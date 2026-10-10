@@ -119,7 +119,6 @@ class Zipper
 
     def provided_subtitle(zipper)
       if (provided = zipper.opts.subtitle)
-        Subtitler::Subtitle.assert!(provided, 'opts.subtitle')
         subtitle = provided
       elsif (provided = zipper.opts.sub_vtt).present?
         subtitle = Subtitler::Subtitle.from_vtt(Subtitler::VTT.clean(provided.to_s))

@@ -149,9 +149,4 @@ RSpec.describe Diarizer do
     expect { described_class.assign_speakers!(subtitle, []) }
       .to raise_error(/no speaker segments/)
   end
-
-  it 'rejects entry arrays instead of accepting an untyped document' do
-    expect { described_class.assign_speakers!([entry(text: 'No.', start: 0.0, finish: 1.0)], []) }
-      .to raise_error(TypeError, /Subtitler::Subtitle/)
-  end
 end

@@ -16,34 +16,26 @@ class Subtitler
 
     attr_reader :language, :text, :entries, :metadata
 
-    # The same contract is asserted wherever a subtitle crosses a module boundary; the message
-    # names the argument so the caller can tell which one it was.
-    def self.assert!(value, name)
-      raise TypeError, "#{name} must be a Subtitler::Subtitle" unless value.is_a?(self)
-
-      value
-    end
-
     def self.from_whisper_verbose_json(input)
-      data = Types.parse_json_object(input)
-      metadata = Types.metadata_from(data, %w[language text segments]).merge('timing_source' => 'whisper')
+      data = Values.parse_json_object(input)
+      metadata = Values.metadata_from(data, %w[language text segments]).merge('timing_source' => 'whisper')
 
       new(
         language: data['language'],
         text:     data['text'],
-        entries:  Types.fetch_array(data, 'segments').map { |entry| Entry.from_whisper(entry) },
+        entries:  data.fetch('segments').map { |entry| Entry.from_whisper(entry) },
         metadata: metadata
       )
     end
 
     def self.from_transcribe_cpp_json(input)
-      data = Types.parse_json_object(input)
+      data = Values.parse_json_object(input)
 
       new(
         language: data['language'],
         text:     data['text'],
-        entries:  Types.fetch_array(data, 'segments').map { |entry| Entry.from_transcribe_cpp(entry) },
-        metadata: Types.metadata_from(data, %w[language text segments])
+        entries:  data.fetch('segments').map { |entry| Entry.from_transcribe_cpp(entry) },
+        metadata: Values.metadata_from(data, %w[language text segments])
       )
     end
 
@@ -62,7 +54,7 @@ class Subtitler
     TOKEN        = /[^\s#{CLAUSE_MARKS}]*[#{CLAUSE_MARKS}]+|[^\s#{CLAUSE_MARKS}]+/
 
     def self.tokenize(text)
-      raw = Types.optional_text(text, 'text').scan(TOKEN)
+      raw = Values.text(text).scan(TOKEN)
       raw.each_with_object([]) do |token, tokens|
         if token.match?(/\A[^\p{L}\d\s]+\z/) && tokens.any?
           tokens[-1] = "#{tokens.last}#{token}"
@@ -73,28 +65,28 @@ class Subtitler
     end
 
     def self.clean_translation(text)
-      Types.optional_text(text, 'translation').strip.sub(TRANSLATION_PREFIX, '').strip
+      Values.text(text).strip.sub(TRANSLATION_PREFIX, '').strip
     end
 
     def initialize(language: nil, text: nil, entries: [], metadata: {})
-      @language = Types.optional_string(language, 'language')
-      @text     = Types.optional_text(text, 'text')
-      @entries  = Types.typed_array(entries, Entry, 'entries')
-      @metadata = Types.immutable_hash(metadata, 'metadata')
+      @language = Values.string_or_nil(language)
+      @text     = Values.text(text)
+      @entries  = Values.list(entries)
+      @metadata = Values.immutable_copy(metadata)
     end
 
     def replace_language!(language)
-      @language = Types.optional_string(language, 'language')
+      @language = Values.string_or_nil(language)
       self
     end
 
     def replace_text!(text)
-      @text = Types.optional_text(text, 'text')
+      @text = Values.text(text)
       self
     end
 
     def replace_entries!(entries)
-      @entries = Types.typed_array(entries, Entry, 'entries')
+      @entries = Values.list(entries)
       self
     end
 
@@ -110,7 +102,7 @@ class Subtitler
     end
 
     def scale_timing!(factor)
-      factor = Types.number(factor, 'factor')
+      factor = Values.number(factor, 'factor')
       raise ArgumentError, 'factor must not be negative' if factor.negative?
 
       @entries.each { |entry| entry.scale_timing!(factor) }
@@ -243,7 +235,7 @@ class Subtitler
         text.to_s.gsub(marker_pattern) { |marker| values.fetch(marker) }
       end
 
-      source_blocks = Types.mutable_copy(@metadata.fetch('source_blocks'))
+      source_blocks = Values.mutable_copy(@metadata.fetch('source_blocks'))
       cursor        = 0
       @entries.each do |entry|
         content_lines = translated_lines.slice(cursor, entry.metadata.fetch('content_lines').length)
@@ -253,7 +245,7 @@ class Subtitler
         entry.replace_text!(translated_text)
           .replace_words!(words)
           .replace_source!(text: translated_text, words: words.map(&:deep_copy))
-        entry.replace_metadata!(Types.mutable_copy(entry.metadata).merge(
+        entry.replace_metadata!(Values.mutable_copy(entry.metadata).merge(
           'content_lines' => content_lines,
           'ass_text'      => CGI.unescapeHTML(content_lines.join("\n")).gsub(Subtitler::Timestamps::INLINE_TIMESTAMP, ''),
           'source_text'   => translated_text
@@ -262,10 +254,7 @@ class Subtitler
         block_end   = source_blocks.fetch(block_index)[/(?:\r?\n)+\z/].to_s
         source_blocks[block_index] = original_srt_lines(entry).join(@metadata.fetch('line_ending')) + block_end
       end
-      @metadata = Types.immutable_hash(
-        Types.mutable_copy(@metadata).merge('source_blocks' => source_blocks),
-        'metadata'
-      )
+      @metadata = Values.immutable_copy(Values.mutable_copy(@metadata).merge('source_blocks' => source_blocks))
       replace_language!(to)
       rebuild_text_from_entries!
     end
@@ -280,16 +269,13 @@ class Subtitler
         lines = Array(entry.metadata['content_lines'])
         lines.any? { |line| line.strip.match?(NOISE_DOTS_LINE) }
       end
-      @metadata = Types.immutable_hash(
-        Types.mutable_copy(@metadata).merge('rejected_block_indices' => rejected_blocks),
-        'metadata'
-      )
+      @metadata = Values.immutable_copy(Values.mutable_copy(@metadata).merge('rejected_block_indices' => rejected_blocks))
       rebuild_text_from_entries!
     end
 
     def slice(from:, to:, rebase: true)
-      range_start  = Types.time_value(from, 'from')
-      range_finish = Types.time_value(to, 'to')
+      range_start  = Values.time_value(from, 'from')
+      range_finish = Values.time_value(to, 'to')
       raise ArgumentError, 'to must be greater than from' unless range_finish > range_start
 
       sliced = @entries.filter_map do |entry|
@@ -302,7 +288,7 @@ class Subtitler
         language: @language,
         text:     sliced.map(&:text).join(' '),
         entries:  sliced,
-        metadata: Types.mutable_copy(@metadata).merge('numbered_cues' => true)
+        metadata: Values.mutable_copy(@metadata).merge('numbered_cues' => true)
       )
     end
 
@@ -324,7 +310,7 @@ class Subtitler
         language: @language,
         text:     @text,
         entries:  @entries.map(&:deep_copy),
-        metadata: Types.mutable_copy(@metadata)
+        metadata: Values.mutable_copy(@metadata)
       )
     end
 
@@ -515,7 +501,7 @@ class Subtitler
     end
 
     def derived_metadata(metadata)
-      Types.mutable_copy(metadata).reject do |key, _|
+      Values.mutable_copy(metadata).reject do |key, _|
         RAW_CUE_METADATA_KEYS.include?(key.to_s)
       end
     end

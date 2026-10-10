@@ -41,12 +41,6 @@ RSpec.describe Dubbing::VoiceReference do
     end
   end
 
-  it 'rejects subtitle hashes' do
-    expect do
-      described_class.extract_by_speaker(input, [segment(0, 1)], sentences: [{text: 'Hello.'}], dir: dir)
-    end.to raise_error(TypeError, /Subtitle::Entry/)
-  end
-
   it 'builds an independent reference for every detected speaker turn' do
     segments = [
       segment(0, 2, speaker_id: 0),

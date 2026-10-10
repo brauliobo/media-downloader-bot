@@ -32,8 +32,6 @@ class VoiceReference
       end
 
       subtitle = yield
-      Subtitler::Subtitle.assert!(subtitle, 'transcription')
-
       File.write(cache, JSON.pretty_generate(cache_payload(subtitle))) if cache
       subtitle
     end

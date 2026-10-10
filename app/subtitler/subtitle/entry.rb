@@ -5,17 +5,8 @@ class Subtitler
 
       attr_reader :start, :finish, :text, :words, :speaker_id, :cue_id, :source_text, :source_words, :metadata
 
-      def self.assert_all!(values, name)
-        unless values.is_a?(Array) && values.all? { |value| value.is_a?(self) }
-          raise TypeError, "#{name} must contain only Subtitler::Subtitle::Entry objects"
-        end
-
-        values
-      end
-
       def self.from_whisper(data)
-        data  = Types.json_object(data, 'segment')
-        words = Types.optional_array(data['words'], 'words').map { |word| Word.from_whisper(word) }
+        words = Array(data['words']).map { |word| Word.from_whisper(word) }
 
         new(
           start:      data.fetch('start'),
@@ -24,43 +15,42 @@ class Subtitler
           words:      words,
           speaker_id: data['speaker_id'],
           cue_id:     data['cue_id'],
-          metadata:   Types.metadata_from(data, %w[start end text words speaker_id cue_id])
+          metadata:   Values.metadata_from(data, %w[start end text words speaker_id cue_id])
         )
       end
 
       def self.from_transcribe_cpp(data)
-        data  = Types.json_object(data, 'segment')
-        words = Types.optional_array(data['words'], 'words').map { |word| Word.from_transcribe_cpp(word) }
+        words = Array(data['words']).map { |word| Word.from_transcribe_cpp(word) }
 
         new(
-          start:      Types.milliseconds(data.fetch('t0_ms'), 't0_ms'),
-          finish:     Types.milliseconds(data.fetch('t1_ms'), 't1_ms'),
+          start:      Values.milliseconds(data.fetch('t0_ms'), 't0_ms'),
+          finish:     Values.milliseconds(data.fetch('t1_ms'), 't1_ms'),
           text:       data['text'],
           words:      words,
           speaker_id: data['speaker_id'],
           cue_id:     data['cue_id'],
-          metadata:   Types.metadata_from(data, %w[t0_ms t1_ms text words speaker_id cue_id])
+          metadata:   Values.metadata_from(data, %w[t0_ms t1_ms text words speaker_id cue_id])
         )
       end
 
       def initialize(start:, finish:, text: nil, words: nil, speaker_id: nil, cue_id: nil,
         source_text: UNSPECIFIED, source_words: UNSPECIFIED, metadata: {})
-        @start  = Types.number(start, 'start')
-        @finish = Types.number(finish, 'finish')
+        @start  = Values.number(start, 'start')
+        @finish = Values.number(finish, 'finish')
         validate_timing!(@start, @finish)
 
-        @text       = Types.optional_text(text, 'text')
-        @words      = Types.typed_array(words || [], Word, 'words')
+        @text       = Values.text(text)
+        @words      = Values.list(words || [])
         @speaker_id = speaker_id
         @cue_id     = cue_id
-        @source_text  = source_text.equal?(UNSPECIFIED) ? @text : Types.optional_text(source_text, 'source_text')
+        @source_text  = source_text.equal?(UNSPECIFIED) ? @text : Values.text(source_text)
         source_words = @words.map(&:deep_copy) if source_words.equal?(UNSPECIFIED)
-        @source_words = Types.typed_array(source_words || [], Word, 'source_words')
-        @metadata     = Types.immutable_hash(metadata, 'metadata')
+        @source_words = Values.list(source_words || [])
+        @metadata     = Values.immutable_copy(metadata)
       end
 
       def replace_text!(text)
-        new_text = Types.optional_text(text, 'text')
+        new_text = Values.text(text)
         changed = @text != new_text
         @text = new_text
         invalidate_format_text! if changed
@@ -68,18 +58,18 @@ class Subtitler
       end
 
       def replace_words!(words)
-        @words = Types.typed_array(words || [], Word, 'words')
+        @words = Values.list(words || [])
         self
       end
 
       def replace_metadata!(metadata)
-        @metadata = Types.immutable_hash(metadata, 'metadata')
+        @metadata = Values.immutable_copy(metadata)
         self
       end
 
       def replace_source!(text:, words:)
-        @source_text  = Types.optional_text(text, 'source_text')
-        @source_words = Types.typed_array(words || [], Word, 'source_words')
+        @source_text  = Values.text(text)
+        @source_words = Values.list(words || [])
         self
       end
 
@@ -92,8 +82,8 @@ class Subtitler
       end
 
       def replace_timing!(start:, finish:)
-        new_start  = Types.number(start, 'start')
-        new_finish = Types.number(finish, 'finish')
+        new_start  = Values.number(start, 'start')
+        new_finish = Values.number(finish, 'finish')
         validate_timing!(new_start, new_finish)
         @start  = new_start
         @finish = new_finish
@@ -101,8 +91,8 @@ class Subtitler
       end
 
       def retime!(start:, finish:)
-        new_start  = Types.number(start, 'start')
-        new_finish = Types.number(finish, 'finish')
+        new_start  = Values.number(start, 'start')
+        new_finish = Values.number(finish, 'finish')
         validate_timing!(new_start, new_finish)
 
         duration       = @finish - @start
@@ -120,7 +110,7 @@ class Subtitler
       end
 
       def scale_timing!(factor)
-        factor = Types.number(factor, 'factor')
+        factor = Values.number(factor, 'factor')
         raise ArgumentError, 'factor must not be negative' if factor.negative?
 
         @start  *= factor
@@ -161,7 +151,7 @@ class Subtitler
 
       def project_tokens!(tokens)
         source = @words.select { |word| word.finish > word.start }
-        tokens = Types.typed_array(tokens, String, 'tokens')
+        tokens = Values.list(tokens)
         return replace_words!([]) if source.empty? || tokens.empty?
 
         projected = if tokens.size == source.size
@@ -175,8 +165,6 @@ class Subtitler
       end
 
       def merge!(other)
-        raise TypeError, 'other must be a Subtitle::Entry' unless other.is_a?(self.class)
-
         @start        = [@start, other.start].min
         @finish       = [@finish, other.finish].max
         @text         = join_text(@text, other.text)
@@ -184,11 +172,11 @@ class Subtitler
         @source_text  = join_text(@source_text, other.source_text)
         @source_words = (@source_words + other.source_words.map(&:deep_copy)).freeze
         @speaker_id   = other.speaker_id if @speaker_id.nil?
-        metadata = Types.mutable_copy(@metadata).merge(
-          Types.mutable_copy(other.metadata)
+        metadata = Values.mutable_copy(@metadata).merge(
+          Values.mutable_copy(other.metadata)
         )
         metadata.reject! { |key, _| Subtitle::RAW_CUE_METADATA_KEYS.include?(key.to_s) }
-        @metadata = Types.immutable_hash(metadata, 'metadata')
+        @metadata = Values.immutable_copy(metadata)
         self
       end
 
@@ -202,7 +190,7 @@ class Subtitler
           cue_id:       @cue_id,
           source_text:  @source_text,
           source_words: @source_words.map(&:deep_copy),
-          metadata:     Types.mutable_copy(@metadata)
+          metadata:     Values.mutable_copy(@metadata)
         )
       end
 
@@ -210,7 +198,7 @@ class Subtitler
       private
 
       def invalidate_format_text!
-        metadata = Types.mutable_copy(@metadata)
+        metadata = Values.mutable_copy(@metadata)
         metadata.reject! { |key, _| Subtitle::FORMAT_TEXT_METADATA_KEYS.include?(key.to_s) }
         replace_metadata!(metadata)
       end

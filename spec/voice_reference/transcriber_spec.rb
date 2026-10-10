@@ -99,11 +99,4 @@ RSpec.describe VoiceReference::Transcriber do
         .to raise_error(ArgumentError, 'unsupported voice reference transcript cache version: 2')
     end
   end
-
-  it 'rejects legacy transcription envelopes' do
-    backend = double(transcribe: SymMash.new(lang: 'en', output: {segments: []}))
-
-    expect { described_class.new(backend: backend).call('/tmp/source.wav') }
-      .to raise_error(TypeError, 'transcription must be a Subtitler::Subtitle')
-  end
 end

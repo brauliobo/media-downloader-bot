@@ -22,7 +22,6 @@ class VoiceActivity
   end
 
   def self.restore_timing!(subtitle, ranges)
-    Subtitler::Subtitle.assert!(subtitle, 'subtitle')
     return subtitle if ranges.nil? || ranges.empty?
 
     intervals = ranges.intervals

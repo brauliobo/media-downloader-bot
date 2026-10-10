@@ -6,41 +6,39 @@ class Subtitler
       attr_reader :text, :start, :finish, :confidence, :metadata
 
       def self.from_whisper(data)
-        data = Types.json_object(data, 'word')
 
         new(
           text:       data.fetch('word'),
           start:      data.fetch('start'),
           finish:     data.fetch('end'),
           confidence: confidence_from(data),
-          metadata:   Types.metadata_from(data, %w[word start end])
+          metadata:   Values.metadata_from(data, %w[word start end])
         )
       end
 
       def self.from_transcribe_cpp(data)
-        data = Types.json_object(data, 'word')
 
         new(
           text:       data.fetch('text'),
-          start:      Types.milliseconds(data.fetch('t0_ms'), 't0_ms'),
-          finish:     Types.milliseconds(data.fetch('t1_ms'), 't1_ms'),
+          start:      Values.milliseconds(data.fetch('t0_ms'), 't0_ms'),
+          finish:     Values.milliseconds(data.fetch('t1_ms'), 't1_ms'),
           confidence: confidence_from(data),
-          metadata:   Types.metadata_from(data, %w[text t0_ms t1_ms])
+          metadata:   Values.metadata_from(data, %w[text t0_ms t1_ms])
         )
       end
 
       def initialize(text:, start:, finish:, confidence: nil, metadata: {})
-        @text   = Types.string(text, 'text')
-        @start  = Types.number(start, 'start')
-        @finish = Types.number(finish, 'finish')
+        @text   = Values.text(text)
+        @start  = Values.number(start, 'start')
+        @finish = Values.number(finish, 'finish')
         raise ArgumentError, 'finish must not precede start' if @finish < @start
 
-        @confidence = confidence.nil? ? nil : Types.number(confidence, 'confidence')
-        @metadata   = Types.immutable_hash(metadata, 'metadata')
+        @confidence = confidence.nil? ? nil : Values.number(confidence, 'confidence')
+        @metadata   = Values.immutable_copy(metadata)
       end
 
       def replace_text!(text)
-        @text = Types.string(text, 'text')
+        @text = Values.text(text)
         self
       end
 
@@ -49,8 +47,8 @@ class Subtitler
       end
 
       def retime!(start:, finish:)
-        new_start  = Types.number(start, 'start')
-        new_finish = Types.number(finish, 'finish')
+        new_start  = Values.number(start, 'start')
+        new_finish = Values.number(finish, 'finish')
         raise ArgumentError, 'finish must not precede start' if new_finish < new_start
 
         @start  = new_start
@@ -59,7 +57,7 @@ class Subtitler
       end
 
       def scale_timing!(factor)
-        factor = Types.number(factor, 'factor')
+        factor = Values.number(factor, 'factor')
         raise ArgumentError, 'factor must not be negative' if factor.negative?
 
         @start  *= factor
@@ -73,20 +71,16 @@ class Subtitler
           start:      @start,
           finish:     @finish,
           confidence: @confidence,
-          metadata:   Types.mutable_copy(@metadata)
+          metadata:   Values.mutable_copy(@metadata)
         )
       end
 
       def merge!(other)
-        raise TypeError, 'other must be a Subtitle::Word' unless other.is_a?(self.class)
-
         @text       = "#{@text}#{other.text}".freeze
         @start      = [@start, other.start].min
         @finish     = [@finish, other.finish].max
         @confidence = [@confidence, other.confidence].compact.min
-        @metadata   = Types.immutable_hash(Types.mutable_copy(@metadata).merge(
-          Types.mutable_copy(other.metadata)
-        ), 'metadata')
+        @metadata   = Values.immutable_copy(Values.mutable_copy(@metadata).merge(Values.mutable_copy(other.metadata)))
         self
       end
 
