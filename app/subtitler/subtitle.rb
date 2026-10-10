@@ -25,34 +25,34 @@ class Subtitler
     end
 
     def self.from_whisper_verbose_json(input)
-      data = parse_json_object(input)
-      metadata = metadata_from(data, %w[language text segments]).merge('timing_source' => 'whisper')
+      data = Types.parse_json_object(input)
+      metadata = Types.metadata_from(data, %w[language text segments]).merge('timing_source' => 'whisper')
 
       new(
         language: data['language'],
         text:     data['text'],
-        entries:  fetch_array(data, 'segments').map { |entry| Entry.from_whisper(entry) },
+        entries:  Types.fetch_array(data, 'segments').map { |entry| Entry.from_whisper(entry) },
         metadata: metadata
       )
     end
 
     def self.from_transcribe_cpp_json(input)
-      data = parse_json_object(input)
+      data = Types.parse_json_object(input)
 
       new(
         language: data['language'],
         text:     data['text'],
-        entries:  fetch_array(data, 'segments').map { |entry| Entry.from_transcribe_cpp(entry) },
-        metadata: metadata_from(data, %w[language text segments])
+        entries:  Types.fetch_array(data, 'segments').map { |entry| Entry.from_transcribe_cpp(entry) },
+        metadata: Types.metadata_from(data, %w[language text segments])
       )
     end
 
     def self.from_vtt(vtt)
-      parse_cues(vtt, format: :vtt)
+      Cues.parse(vtt, format: :vtt)
     end
 
     def self.from_srt(srt)
-      parse_cues(srt, format: :srt)
+      Cues.parse(srt, format: :srt)
     end
 
     # Tokens are the words as written: the text is rejoined with spaces, so splitting inside a word
@@ -62,7 +62,7 @@ class Subtitler
     TOKEN        = /[^\s#{CLAUSE_MARKS}]*[#{CLAUSE_MARKS}]+|[^\s#{CLAUSE_MARKS}]+/
 
     def self.tokenize(text)
-      raw = optional_text(text, 'text').scan(TOKEN)
+      raw = Types.optional_text(text, 'text').scan(TOKEN)
       raw.each_with_object([]) do |token, tokens|
         if token.match?(/\A[^\p{L}\d\s]+\z/) && tokens.any?
           tokens[-1] = "#{tokens.last}#{token}"
@@ -73,28 +73,28 @@ class Subtitler
     end
 
     def self.clean_translation(text)
-      optional_text(text, 'translation').strip.sub(TRANSLATION_PREFIX, '').strip
+      Types.optional_text(text, 'translation').strip.sub(TRANSLATION_PREFIX, '').strip
     end
 
     def initialize(language: nil, text: nil, entries: [], metadata: {})
-      @language = self.class.send(:optional_string, language, 'language')
-      @text     = self.class.send(:optional_text, text, 'text')
-      @entries  = self.class.send(:typed_array, entries, Entry, 'entries')
-      @metadata = self.class.send(:immutable_hash, metadata, 'metadata')
+      @language = Types.optional_string(language, 'language')
+      @text     = Types.optional_text(text, 'text')
+      @entries  = Types.typed_array(entries, Entry, 'entries')
+      @metadata = Types.immutable_hash(metadata, 'metadata')
     end
 
     def replace_language!(language)
-      @language = self.class.send(:optional_string, language, 'language')
+      @language = Types.optional_string(language, 'language')
       self
     end
 
     def replace_text!(text)
-      @text = self.class.send(:optional_text, text, 'text')
+      @text = Types.optional_text(text, 'text')
       self
     end
 
     def replace_entries!(entries)
-      @entries = self.class.send(:typed_array, entries, Entry, 'entries')
+      @entries = Types.typed_array(entries, Entry, 'entries')
       self
     end
 
@@ -110,7 +110,7 @@ class Subtitler
     end
 
     def scale_timing!(factor)
-      factor = self.class.send(:number, factor, 'factor')
+      factor = Types.number(factor, 'factor')
       raise ArgumentError, 'factor must not be negative' if factor.negative?
 
       @entries.each { |entry| entry.scale_timing!(factor) }
@@ -185,7 +185,7 @@ class Subtitler
         end
       end.select { |entry| entry.finish > entry.start }
 
-      normalize_whisper_sentence_timings!(sentences) if @metadata['timing_source'] == 'whisper'
+      WhisperTimings.normalize!(sentences, duration: @metadata['duration']) if @metadata['timing_source'] == 'whisper'
       sentences
     end
 
@@ -243,19 +243,17 @@ class Subtitler
         text.to_s.gsub(marker_pattern) { |marker| values.fetch(marker) }
       end
 
-      source_blocks = self.class.send(:mutable_copy, @metadata.fetch('source_blocks'))
+      source_blocks = Types.mutable_copy(@metadata.fetch('source_blocks'))
       cursor        = 0
       @entries.each do |entry|
         content_lines = translated_lines.slice(cursor, entry.metadata.fetch('content_lines').length)
         cursor += content_lines.length
-        translated_text = self.class.send(:semantic_text, content_lines.join("\n"))
-        words = self.class.send(
-          :inline_timed_words, content_lines.join("\n"), entry.start, entry.finish, entry.cue_id
-        )
+        translated_text = Cues.semantic_text(content_lines.join("\n"))
+        words = Cues.inline_timed_words(content_lines.join("\n"), entry.start, entry.finish, entry.cue_id)
         entry.replace_text!(translated_text)
           .replace_words!(words)
           .replace_source!(text: translated_text, words: words.map(&:deep_copy))
-        entry.replace_metadata!(self.class.send(:mutable_copy, entry.metadata).merge(
+        entry.replace_metadata!(Types.mutable_copy(entry.metadata).merge(
           'content_lines' => content_lines,
           'ass_text'      => CGI.unescapeHTML(content_lines.join("\n")).gsub(Subtitler::Timestamps::INLINE_TIMESTAMP, ''),
           'source_text'   => translated_text
@@ -264,9 +262,8 @@ class Subtitler
         block_end   = source_blocks.fetch(block_index)[/(?:\r?\n)+\z/].to_s
         source_blocks[block_index] = original_srt_lines(entry).join(@metadata.fetch('line_ending')) + block_end
       end
-      @metadata = self.class.send(
-        :immutable_hash,
-        self.class.send(:mutable_copy, @metadata).merge('source_blocks' => source_blocks),
+      @metadata = Types.immutable_hash(
+        Types.mutable_copy(@metadata).merge('source_blocks' => source_blocks),
         'metadata'
       )
       replace_language!(to)
@@ -283,17 +280,16 @@ class Subtitler
         lines = Array(entry.metadata['content_lines'])
         lines.any? { |line| line.strip.match?(NOISE_DOTS_LINE) }
       end
-      @metadata = self.class.send(
-        :immutable_hash,
-        self.class.send(:mutable_copy, @metadata).merge('rejected_block_indices' => rejected_blocks),
+      @metadata = Types.immutable_hash(
+        Types.mutable_copy(@metadata).merge('rejected_block_indices' => rejected_blocks),
         'metadata'
       )
       rebuild_text_from_entries!
     end
 
     def slice(from:, to:, rebase: true)
-      range_start  = self.class.send(:time_value, from, 'from')
-      range_finish = self.class.send(:time_value, to, 'to')
+      range_start  = Types.time_value(from, 'from')
+      range_finish = Types.time_value(to, 'to')
       raise ArgumentError, 'to must be greater than from' unless range_finish > range_start
 
       sliced = @entries.filter_map do |entry|
@@ -306,7 +302,7 @@ class Subtitler
         language: @language,
         text:     sliced.map(&:text).join(' '),
         entries:  sliced,
-        metadata: self.class.send(:mutable_copy, @metadata).merge('numbered_cues' => true)
+        metadata: Types.mutable_copy(@metadata).merge('numbered_cues' => true)
       )
     end
 
@@ -328,126 +324,11 @@ class Subtitler
         language: @language,
         text:     @text,
         entries:  @entries.map(&:deep_copy),
-        metadata: self.class.send(:mutable_copy, @metadata)
+        metadata: Types.mutable_copy(@metadata)
       )
     end
 
     private
-
-    WHISPER_COLLAPSED_TICK = 0.011
-    WHISPER_EXTREME_RATE   = 2.0
-    WHISPER_MIN_RATE_PARTS = 2
-    private_constant :WHISPER_COLLAPSED_TICK, :WHISPER_EXTREME_RATE, :WHISPER_MIN_RATE_PARTS
-
-    def normalize_whisper_sentence_timings!(sentences)
-      reliable      = sentences.reject { |sentence| collapsed_whisper_timing?(sentence) }
-      document_rate = speech_rate(reliable)
-      return unless document_rate
-
-      speaker_rates = reliable.group_by(&:speaker_id).filter_map do |speaker_id, parts|
-        next if speaker_id.nil? || parts.size < WHISPER_MIN_RATE_PARTS
-
-        rate = speech_rate(parts)
-        [speaker_id, rate] if rate
-      end.to_h
-      rates      = sentences.map { |sentence| speaker_rates.fetch(sentence.speaker_id, document_rate) }
-      candidates = sentences.zip(rates).map do |sentence, rate|
-        pathological_whisper_timing?(sentence, rate)
-      end
-      return unless candidates.any?
-
-      repair_pathological_runs!(sentences, candidates, rates)
-    end
-
-    def speech_rate(sentences)
-      words    = sentences.sum { |sentence| spoken_word_count(sentence) }
-      duration = sentences.sum { |sentence| sentence.finish - sentence.start }
-      return unless words.positive? && duration.positive?
-
-      words.to_f / duration
-    end
-
-    def pathological_whisper_timing?(sentence, average)
-      count    = spoken_word_count(sentence)
-      duration = sentence.finish - sentence.start
-      return false unless count.positive? && duration.positive?
-
-      collapsed_whisper_timing?(sentence) && count / duration > average * WHISPER_EXTREME_RATE
-    end
-
-    def collapsed_whisper_timing?(sentence)
-      words = spoken_words(sentence)
-      return false if words.empty?
-
-      collapsed = words.count { |word| word.finish - word.start <= WHISPER_COLLAPSED_TICK }
-      collapsed * 2 >= words.size
-    end
-
-    def spoken_word_count(sentence)
-      spoken_words(sentence).size
-    end
-
-    def spoken_words(sentence)
-      sentence.words.select { |word| word.text.match?(/[\p{L}\d]/) }
-    end
-
-    def repair_pathological_runs!(sentences, candidates, rates)
-      index = 0
-      while index < sentences.size
-        unless candidates.fetch(index)
-          index += 1
-          next
-        end
-
-        run_start  = index
-        speaker_id = sentences.fetch(index).speaker_id
-        index += 1 while index < sentences.size && candidates.fetch(index) &&
-          sentences.fetch(index).speaker_id == speaker_id
-        repair_pathological_run!(sentences, run_start...index, rates.fetch(run_start))
-      end
-    end
-
-    def repair_pathological_run!(sentences, range, average)
-      left       = range.begin.zero? ? 0.0 : sentences.fetch(range.begin - 1).finish
-      right      = range.end == sentences.size ? whisper_document_finish(sentences) : sentences.fetch(range.end).start
-      available  = right - left
-      run         = sentences[range]
-      word_counts = run.map { |sentence| spoken_word_count(sentence) }
-      desired     = word_counts.sum / average
-      return unless available.positive? && desired.positive?
-
-      duration    = [desired, available].min
-      midpoint    = (run.first.start + run.last.finish) / 2.0
-      start_time  = [[midpoint - duration / 2.0, left].max, right - duration].min
-      finish_time = start_time + duration
-      cursor       = start_time
-      total_words  = word_counts.sum.to_f
-
-      run.zip(word_counts).each_with_index do |(sentence, word_count), run_index|
-        finish = run_index == run.size - 1 ? finish_time : cursor + duration * word_count / total_words
-        redistribute_sentence_timing!(sentence, cursor, finish)
-        cursor = finish
-      end
-    end
-
-    def whisper_document_finish(sentences)
-      [@metadata['duration'].to_f, sentences.last.finish].max
-    end
-
-    def redistribute_sentence_timing!(sentence, start_time, finish_time)
-      words   = sentence.words
-      weights = words.map { |word| [word.text.strip.length, 1].max }
-      total   = weights.sum.to_f
-      cursor  = start_time
-
-      words.zip(weights).each_with_index do |(word, weight), index|
-        finish = index == words.size - 1 ? finish_time : cursor + (finish_time - start_time) * weight / total
-        word.replace_timing!(start: cursor, finish: finish)
-        sentence.source_words.fetch(index).replace_timing!(start: cursor, finish: finish)
-        cursor = finish
-      end
-      sentence.replace_timing!(start: start_time, finish: finish_time)
-    end
 
     def protect_srt_timestamps(lines)
       prefix = nil
@@ -605,7 +486,7 @@ class Subtitler
 
     def original_vtt_entry?(entry)
       @metadata['source_format'] == 'vtt' &&
-        entry.metadata['source_signature'] == self.class.send(:source_signature,
+        entry.metadata['source_signature'] == Cues.source_signature(
           start: entry.start, finish: entry.finish, text: entry.text,
           cue_id: entry.cue_id, words: entry.words)
     end
@@ -634,7 +515,7 @@ class Subtitler
     end
 
     def derived_metadata(metadata)
-      self.class.send(:mutable_copy, metadata).reject do |key, _|
+      Types.mutable_copy(metadata).reject do |key, _|
         RAW_CUE_METADATA_KEYS.include?(key.to_s)
       end
     end
@@ -814,625 +695,6 @@ class Subtitler
       batch_size ||= defined?(::Translator::BATCH_SIZE) ? ::Translator::BATCH_SIZE : 50
       texts.each_slice(batch_size).flat_map do |slice|
         Array(service.translate(slice, from: from, to: to))
-      end
-    end
-
-    class Entry
-      UNSPECIFIED = Object.new.freeze
-
-      attr_reader :start, :finish, :text, :words, :speaker_id, :cue_id, :source_text, :source_words, :metadata
-
-      def self.assert_all!(values, name)
-        unless values.is_a?(Array) && values.all? { |value| value.is_a?(self) }
-          raise TypeError, "#{name} must contain only Subtitler::Subtitle::Entry objects"
-        end
-
-        values
-      end
-
-      def self.from_whisper(data)
-        data  = Subtitle.send(:json_object, data, 'segment')
-        words = Subtitle.send(:optional_array, data['words'], 'words').map { |word| Word.from_whisper(word) }
-
-        new(
-          start:      data.fetch('start'),
-          finish:     data.fetch('end'),
-          text:       data['text'],
-          words:      words,
-          speaker_id: data['speaker_id'],
-          cue_id:     data['cue_id'],
-          metadata:   Subtitle.send(:metadata_from, data, %w[start end text words speaker_id cue_id])
-        )
-      end
-
-      def self.from_transcribe_cpp(data)
-        data  = Subtitle.send(:json_object, data, 'segment')
-        words = Subtitle.send(:optional_array, data['words'], 'words').map { |word| Word.from_transcribe_cpp(word) }
-
-        new(
-          start:      milliseconds(data.fetch('t0_ms'), 't0_ms'),
-          finish:     milliseconds(data.fetch('t1_ms'), 't1_ms'),
-          text:       data['text'],
-          words:      words,
-          speaker_id: data['speaker_id'],
-          cue_id:     data['cue_id'],
-          metadata:   Subtitle.send(:metadata_from, data, %w[t0_ms t1_ms text words speaker_id cue_id])
-        )
-      end
-
-      def initialize(start:, finish:, text: nil, words: nil, speaker_id: nil, cue_id: nil,
-        source_text: UNSPECIFIED, source_words: UNSPECIFIED, metadata: {})
-        @start  = Subtitle.send(:number, start, 'start')
-        @finish = Subtitle.send(:number, finish, 'finish')
-        validate_timing!(@start, @finish)
-
-        @text       = Subtitle.send(:optional_text, text, 'text')
-        @words      = Subtitle.send(:typed_array, words || [], Word, 'words')
-        @speaker_id = speaker_id
-        @cue_id     = cue_id
-        @source_text  = source_text.equal?(UNSPECIFIED) ? @text : Subtitle.send(:optional_text, source_text, 'source_text')
-        source_words = @words.map(&:deep_copy) if source_words.equal?(UNSPECIFIED)
-        @source_words = Subtitle.send(:typed_array, source_words || [], Word, 'source_words')
-        @metadata     = Subtitle.send(:immutable_hash, metadata, 'metadata')
-      end
-
-      def replace_text!(text)
-        new_text = Subtitle.send(:optional_text, text, 'text')
-        changed = @text != new_text
-        @text = new_text
-        invalidate_format_text! if changed
-        self
-      end
-
-      def replace_words!(words)
-        @words = Subtitle.send(:typed_array, words || [], Word, 'words')
-        self
-      end
-
-      def replace_metadata!(metadata)
-        @metadata = Subtitle.send(:immutable_hash, metadata, 'metadata')
-        self
-      end
-
-      def replace_source!(text:, words:)
-        @source_text  = Subtitle.send(:optional_text, text, 'source_text')
-        @source_words = Subtitle.send(:typed_array, words || [], Word, 'source_words')
-        self
-      end
-
-      def rebuild_text_from_words!
-        new_text = @words.map { |word| word.text.strip }.reject(&:empty?).join(' ').freeze
-        changed = @text != new_text
-        @text = new_text
-        invalidate_format_text! if changed
-        self
-      end
-
-      def replace_timing!(start:, finish:)
-        new_start  = Subtitle.send(:number, start, 'start')
-        new_finish = Subtitle.send(:number, finish, 'finish')
-        validate_timing!(new_start, new_finish)
-        @start  = new_start
-        @finish = new_finish
-        self
-      end
-
-      def retime!(start:, finish:)
-        new_start  = Subtitle.send(:number, start, 'start')
-        new_finish = Subtitle.send(:number, finish, 'finish')
-        validate_timing!(new_start, new_finish)
-
-        duration       = @finish - @start
-        scale          = duration.zero? ? 0.0 : (new_finish - new_start) / duration
-        original_start = @start
-        (@words + @source_words).uniq(&:object_id).each do |word|
-          word.retime!(
-            start:  new_start + ((word.start - original_start) * scale),
-            finish: new_start + ((word.finish - original_start) * scale)
-          )
-        end
-        @start  = new_start
-        @finish = new_finish
-        self
-      end
-
-      def scale_timing!(factor)
-        factor = Subtitle.send(:number, factor, 'factor')
-        raise ArgumentError, 'factor must not be negative' if factor.negative?
-
-        @start  *= factor
-        @finish *= factor
-        (@words + @source_words).uniq(&:object_id).each { |word| word.scale_timing!(factor) }
-        self
-      end
-
-      def assign_speaker!(speaker_id)
-        @speaker_id = speaker_id
-        self
-      end
-
-      def assign_cue!(cue_id)
-        @cue_id = cue_id
-        self
-      end
-
-      def merge_split_words!
-        merged = []
-        @words.each do |word|
-          if merged.empty? || word.text.start_with?(' ') || merged.last.text.strip.match?(/[.!?]$/)
-            merged << word
-          else
-            merged.last.merge!(word)
-          end
-        end
-        replace_words!(merged)
-        rebuild_text_from_words! unless @words.empty?
-      end
-
-      def project_text!(text)
-        replace_text!(text)
-        project_tokens!(Subtitle.tokenize(@text)) unless @words.empty?
-        rebuild_text_from_words! unless @words.empty?
-        self
-      end
-
-      def project_tokens!(tokens)
-        source = @words.select { |word| word.finish > word.start }
-        tokens = Subtitle.send(:typed_array, tokens, String, 'tokens')
-        return replace_words!([]) if source.empty? || tokens.empty?
-
-        projected = if tokens.size == source.size
-          source.zip(tokens).map { |word, token| word.deep_copy.replace_text!(token) }
-        elsif tokens.size > source.size
-          project_more_tokens(source, tokens)
-        else
-          project_fewer_tokens(source, tokens)
-        end
-        replace_words!(projected)
-      end
-
-      def merge!(other)
-        raise TypeError, 'other must be a Subtitle::Entry' unless other.is_a?(self.class)
-
-        @start        = [@start, other.start].min
-        @finish       = [@finish, other.finish].max
-        @text         = join_text(@text, other.text)
-        @words        = (@words + other.words.map(&:deep_copy)).freeze
-        @source_text  = join_text(@source_text, other.source_text)
-        @source_words = (@source_words + other.source_words.map(&:deep_copy)).freeze
-        @speaker_id   = other.speaker_id if @speaker_id.nil?
-        metadata = Subtitle.send(:mutable_copy, @metadata).merge(
-          Subtitle.send(:mutable_copy, other.metadata)
-        )
-        metadata.reject! { |key, _| Subtitle::RAW_CUE_METADATA_KEYS.include?(key.to_s) }
-        @metadata = Subtitle.send(:immutable_hash, metadata, 'metadata')
-        self
-      end
-
-      def deep_copy
-        self.class.new(
-          start:        @start,
-          finish:       @finish,
-          text:         @text,
-          words:        @words.map(&:deep_copy),
-          speaker_id:   @speaker_id,
-          cue_id:       @cue_id,
-          source_text:  @source_text,
-          source_words: @source_words.map(&:deep_copy),
-          metadata:     Subtitle.send(:mutable_copy, @metadata)
-        )
-      end
-
-      def self.milliseconds(value, field)
-        Subtitle.send(:number, value, field) / 1000.0
-      end
-      private_class_method :milliseconds
-
-      private
-
-      def invalidate_format_text!
-        metadata = Subtitle.send(:mutable_copy, @metadata)
-        metadata.reject! { |key, _| Subtitle::FORMAT_TEXT_METADATA_KEYS.include?(key.to_s) }
-        replace_metadata!(metadata)
-      end
-
-      def validate_timing!(start, finish)
-        raise ArgumentError, 'finish must not precede start' if finish < start
-      end
-
-      def join_text(left, right)
-        [left.strip, right.strip].reject(&:empty?).join(' ').freeze
-      end
-
-      def project_more_tokens(source, tokens)
-        base, extra = tokens.size.divmod(source.size)
-        cursor      = 0
-        source.flat_map.with_index do |word, index|
-          count    = base + (index < extra ? 1 : 0)
-          duration = word.finish - word.start
-          items    = tokens[cursor, count].map.with_index do |token, token_index|
-            start_time  = word.start + duration * token_index / count
-            finish_time = token_index == count - 1 ? word.finish : word.start + duration * (token_index + 1) / count
-            word.deep_copy.replace_text!(token).retime!(start: start_time, finish: finish_time)
-          end
-          cursor += count
-          items
-        end
-      end
-
-      def project_fewer_tokens(source, tokens)
-        base, extra = source.size.divmod(tokens.size)
-        cursor      = 0
-        tokens.map.with_index do |token, index|
-          count = base + (index < extra ? 1 : 0)
-          words = source[cursor, count]
-          cursor += count
-          words.first.deep_copy.replace_text!(token).replace_timing!(start: words.first.start, finish: words.last.finish)
-        end
-      end
-    end
-
-    class Word
-      CONFIDENCE_KEYS = %w[confidence probability prob p].freeze
-
-      attr_reader :text, :start, :finish, :confidence, :metadata
-
-      def self.from_whisper(data)
-        data = Subtitle.send(:json_object, data, 'word')
-
-        new(
-          text:       data.fetch('word'),
-          start:      data.fetch('start'),
-          finish:     data.fetch('end'),
-          confidence: confidence_from(data),
-          metadata:   Subtitle.send(:metadata_from, data, %w[word start end])
-        )
-      end
-
-      def self.from_transcribe_cpp(data)
-        data = Subtitle.send(:json_object, data, 'word')
-
-        new(
-          text:       data.fetch('text'),
-          start:      Entry.send(:milliseconds, data.fetch('t0_ms'), 't0_ms'),
-          finish:     Entry.send(:milliseconds, data.fetch('t1_ms'), 't1_ms'),
-          confidence: confidence_from(data),
-          metadata:   Subtitle.send(:metadata_from, data, %w[text t0_ms t1_ms])
-        )
-      end
-
-      def initialize(text:, start:, finish:, confidence: nil, metadata: {})
-        @text   = Subtitle.send(:string, text, 'text')
-        @start  = Subtitle.send(:number, start, 'start')
-        @finish = Subtitle.send(:number, finish, 'finish')
-        raise ArgumentError, 'finish must not precede start' if @finish < @start
-
-        @confidence = confidence.nil? ? nil : Subtitle.send(:number, confidence, 'confidence')
-        @metadata   = Subtitle.send(:immutable_hash, metadata, 'metadata')
-      end
-
-      def replace_text!(text)
-        @text = Subtitle.send(:string, text, 'text')
-        self
-      end
-
-      def replace_timing!(start:, finish:)
-        retime!(start: start, finish: finish)
-      end
-
-      def retime!(start:, finish:)
-        new_start  = Subtitle.send(:number, start, 'start')
-        new_finish = Subtitle.send(:number, finish, 'finish')
-        raise ArgumentError, 'finish must not precede start' if new_finish < new_start
-
-        @start  = new_start
-        @finish = new_finish
-        self
-      end
-
-      def scale_timing!(factor)
-        factor = Subtitle.send(:number, factor, 'factor')
-        raise ArgumentError, 'factor must not be negative' if factor.negative?
-
-        @start  *= factor
-        @finish *= factor
-        self
-      end
-
-      def deep_copy
-        self.class.new(
-          text:       @text,
-          start:      @start,
-          finish:     @finish,
-          confidence: @confidence,
-          metadata:   Subtitle.send(:mutable_copy, @metadata)
-        )
-      end
-
-      def merge!(other)
-        raise TypeError, 'other must be a Subtitle::Word' unless other.is_a?(self.class)
-
-        @text       = "#{@text}#{other.text}".freeze
-        @start      = [@start, other.start].min
-        @finish     = [@finish, other.finish].max
-        @confidence = [@confidence, other.confidence].compact.min
-        @metadata   = Subtitle.send(:immutable_hash, Subtitle.send(:mutable_copy, @metadata).merge(
-          Subtitle.send(:mutable_copy, other.metadata)
-        ), 'metadata')
-        self
-      end
-
-      def self.confidence_from(data)
-        key = CONFIDENCE_KEYS.find { |candidate| data.key?(candidate) }
-        key && data[key]
-      end
-      private_class_method :confidence_from
-
-    end
-
-    class << self
-      private
-
-      def parse_json_object(input)
-        input = JSON.parse(input) if input.is_a?(String)
-        json_object(input, 'subtitle')
-      rescue JSON::ParserError => error
-        raise ArgumentError, "invalid subtitle JSON: #{error.message}"
-      end
-
-      def parse_cues(input, format:)
-        raise TypeError, "#{format} must be a String" unless input.is_a?(String)
-
-        newline        = input.include?("\r\n") ? "\r\n" : "\n"
-        normalized     = input.gsub(/\r\n?|\r/, "\n")
-        validate_cue_document!(normalized, format)
-        final_newlines = normalized[/\n*\z/].to_s.length
-        blocks         = normalized.split(/\n\n+/)
-        entries        = blocks.filter_map.with_index do |block, block_index|
-          cue_from_block(block, block_index, format)
-        end
-        metadata = {
-          'source_format'  => format.to_s,
-          'line_ending'    => newline,
-          'final_newlines' => final_newlines,
-        }
-        if format == :srt
-          source_blocks = input.split(/\r?\n\r?\n+/)
-          metadata.merge!(
-            'source_blocks'      => source_blocks,
-            'cue_block_indices'  => entries.map { |entry| entry.metadata.fetch('block_index') },
-          )
-        end
-        new(
-          text: entries.map(&:text).join(' '),
-          entries: entries,
-          metadata: metadata
-        )
-      end
-
-      def cue_from_block(block, block_index, format)
-        lines        = block.lines(chomp: true)
-        timing_index = lines.index { |line| line.include?('-->') }
-        return unless timing_index
-
-        timestamps = lines.fetch(timing_index).scan(Subtitler::Timestamps::TIMESTAMP_VALUE)
-        start_time = Subtitler.parse_timestamp(timestamps[0])
-        finish_time = Subtitler.parse_timestamp(timestamps[1])
-        return unless start_time && finish_time
-
-        content_lines = lines[(timing_index + 1)..] || []
-        raw_text      = content_lines.join("\n")
-        text          = semantic_text(raw_text)
-        return if text.empty?
-
-        cue_id = lines[0...timing_index].reverse.find { |line| !line.strip.empty? }
-        cue_id = block_index if format == :vtt && cue_id.nil?
-        words  = inline_timed_words(raw_text, start_time, finish_time, cue_id)
-        metadata = {
-          'content_lines' => content_lines,
-          'ass_text'      => CGI.unescapeHTML(raw_text).gsub(Subtitler::Timestamps::INLINE_TIMESTAMP, ''),
-          'source_start'  => start_time,
-          'source_finish' => finish_time,
-          'source_text'   => text,
-          'timing_line'   => lines.fetch(timing_index),
-          'prefix_lines'  => lines[0...timing_index],
-          'block_index'   => block_index,
-        }
-        metadata['source_signature'] = source_signature(
-          start: start_time, finish: finish_time, text: text, cue_id: cue_id, words: words
-        ) if format == :vtt
-        Entry.new(
-          start:  start_time,
-          finish: finish_time,
-          text:   text,
-          words:  words,
-          cue_id: cue_id,
-          metadata: metadata
-        )
-      end
-
-      def source_signature(start:, finish:, text:, cue_id:, words:)
-        [
-          start,
-          finish,
-          cue_id,
-          text,
-          words.map { |word| [word.text, word.start, word.finish] },
-        ]
-      end
-
-      def inline_timed_words(text, cue_start, cue_finish, cue_id)
-        matches = text.to_enum(:scan, /<([^>]*)>/).map { Regexp.last_match }
-        malformed = matches.any? do |match|
-          match[1].match?(/\A\d{1,2}:\d{2}/) && Subtitler.parse_timestamp(match[1]).nil?
-        end
-        timed = text.to_enum(:scan, Subtitler::Timestamps::INLINE_TIMESTAMP).filter_map do
-          match = Regexp.last_match
-          time  = Subtitler.parse_timestamp(match[1])
-          [match, time] if time
-        end
-        return [] if malformed || timed.empty?
-
-        times = timed.map(&:last)
-        return [] unless times.all? { |time| time >= cue_start && time <= cue_finish }
-        return [] unless times.each_cons(2).all? { |left, right| right > left }
-
-        chunks = []
-        cursor = 0
-        timed.each do |match, _time|
-          chunks << text[cursor...match.begin(0)]
-          cursor = match.end(0)
-        end
-        chunks << text[cursor..]
-
-        boundaries = [cue_start, *times, cue_finish]
-        chunks.flat_map.with_index do |chunk, index|
-          tokens = semantic_text(chunk).split
-          next [] if tokens.empty?
-
-          start_time  = boundaries.fetch(index)
-          finish_time = boundaries.fetch(index + 1)
-          return [] unless finish_time > start_time
-
-          duration = finish_time - start_time
-          tokens.map.with_index do |token, token_index|
-            token_start  = start_time + duration * token_index / tokens.size
-            token_finish = token_index == tokens.size - 1 ? finish_time : start_time + duration * (token_index + 1) / tokens.size
-            Word.new(
-              text: token,
-              start: token_start,
-              finish: token_finish,
-              metadata: {'cue_id' => cue_id, 'marker' => index.positive? && token_index.zero?, 'marker_group' => index}
-            )
-          end
-        end
-      end
-
-      def validate_cue_document!(input, format)
-        if format == :vtt
-          header = input.each_line.first&.strip
-          raise ArgumentError, 'invalid WEBVTT header' unless header&.match?(/\A\uFEFF?WEBVTT(?:[ \t].*)?\z/)
-        end
-
-        timing_lines = input.each_line.select do |line|
-          if format == :vtt
-            line.include?('-->')
-          else
-            line.match?(/\A\s*#{Subtitler::Timestamps::TIMESTAMP_VALUE}\s+-->/)
-          end
-        end
-        timing_lines.each do |line|
-          label = format == :vtt ? 'WEBVTT' : 'SRT'
-          raise ArgumentError, "invalid #{label} cue timing" unless line.match?(Subtitler::Timestamps::CUE_TIMING)
-
-          start_text, finish_text = line.scan(Subtitler::Timestamps::TIMESTAMP_VALUE).first(2)
-          start_time  = Subtitler.parse_timestamp(start_text)
-          finish_time = Subtitler.parse_timestamp(finish_text)
-          unless start_time && finish_time && finish_time > start_time
-            raise ArgumentError, "invalid #{label} cue range"
-          end
-        end
-      end
-
-      def semantic_text(text)
-        plain = text.to_s.gsub(/<br\s*\/?\s*>/i, ' ').gsub(/<[^>]*>/, '')
-        Nokogiri::HTML5.fragment(plain).text.split.join(' ')
-      end
-
-      def time_value(value, field)
-        return number(value, field) if value.is_a?(Numeric)
-
-        parsed = Subtitler.parse_timestamp(value)
-        raise ArgumentError, "invalid #{field} timestamp" unless parsed
-
-        parsed
-      end
-
-      def json_object(value, field)
-        raise TypeError, "#{field} must be a Hash" unless value.is_a?(Hash)
-        raise ArgumentError, "#{field} keys must be strings" unless value.keys.all? { |key| key.is_a?(String) }
-
-        value
-      end
-
-      def fetch_array(data, field)
-        value = data.fetch(field)
-        raise TypeError, "#{field} must be an Array" unless value.is_a?(Array)
-
-        value
-      end
-
-      def optional_array(value, field)
-        return [] if value.nil?
-        raise TypeError, "#{field} must be an Array" unless value.is_a?(Array)
-
-        value
-      end
-
-      def metadata_from(data, known_keys)
-        data.reject { |key, _| known_keys.include?(key) }
-      end
-
-      def optional_string(value, field)
-        return if value.nil?
-
-        string(value, field)
-      end
-
-      def optional_text(value, field)
-        value.nil? ? ''.freeze : string(value, field)
-      end
-
-      def string(value, field)
-        raise TypeError, "#{field} must be a String" unless value.is_a?(String)
-
-        value.dup.freeze
-      end
-
-      def number(value, field)
-        raise TypeError, "#{field} must be Numeric" unless value.is_a?(Numeric)
-        raise ArgumentError, "#{field} must be finite" unless value.finite?
-
-        value.to_f
-      end
-
-      def typed_array(value, type, field)
-        raise TypeError, "#{field} must be an Array" unless value.is_a?(Array)
-        raise TypeError, "#{field} must contain only #{type}" unless value.all? { |item| item.is_a?(type) }
-
-        value.dup.freeze
-      end
-
-      def immutable_hash(value, field)
-        raise TypeError, "#{field} must be a Hash" unless value.is_a?(Hash)
-
-        immutable_copy(value)
-      end
-
-      def immutable_copy(value)
-        case value
-        when Hash
-          value.to_h { |key, item| [immutable_copy(key), immutable_copy(item)] }.freeze
-        when Array
-          value.map { |item| immutable_copy(item) }.freeze
-        when String
-          value.dup.freeze
-        else
-          value.freeze
-        end
-      end
-
-      def mutable_copy(value)
-        case value
-        when Hash
-          value.to_h { |key, item| [mutable_copy(key), mutable_copy(item)] }
-        when Array
-          value.map { |item| mutable_copy(item) }
-        when String
-          value.dup
-        else
-          value
-        end
       end
     end
   end
