@@ -57,48 +57,14 @@ class Zipper
     @ffmpeg_factory = ffmpeg_factory
     @probe = probe || Prober.for(infile, ffmpeg: ffmpeg_builder)
     @stl = stl
-
-    format_opts = opts.format&.opts || {}
-    @dopts = format_opts.dup
     @opts = opts
     @iopts = ''
     @oopts = ''
-    @dopts.width = Formats.default_width Zipper.size_mb_limit if @dopts.width
-    if Formats.cuda_encode?(opts) && opts.format.in?([Types.video.h264, Types.video.h265])
-      @dopts.quality = 33
-    end
-    @opts.reverse_merge! @dopts
 
-    @fgraph = []
-    @audio_filters = []
-    @audio_reencode_required = false
-    @fgraph << Utils::Safety.safe_filter(opts.vf) if opts.vf.present?
-    @input_seek = nil
-    @output_end = nil
-    @output_duration = nil
-    @output_frame_rate = nil
-    @audio_sample_rate = nil
-    @audio_channels = nil
-    @subtitle_input_path = nil
-    @subtitle_language = nil
-    @subtitle_burn_filter = nil
-    @subtitle_burn_index = nil
-    @maps = []
-
-    @cuts = Utils::TimeRanges.parse opts.cuts, option: :cuts
-    @silences = Utils::TimeRanges.parse opts.silences, option: :silences
-    source_duration = @probe.format.duration.to_f
-    cuts.validate! source_duration, allow_entire: false
-    silences.validate! source_duration
-
-    opts.speed = opts.speed&.to_f || 1
-    opts.width = opts.width&.to_i
-    opts.quality = opts.quality&.to_i if opts.quality
-    opts.abrate = opts.abrate&.to_i if opts.abrate
-    @duration = (source_duration - cuts.total_duration) / opts.speed
-    opts.cudaenc = Formats.cuda_encode? opts
-    opts.cudadec = Formats.cuda_decode? opts
-    opts.cuda = opts.cudaenc || opts.cudadec
+    apply_format_defaults!
+    reset_graph!
+    read_time_ranges!
+    normalize_options!
   end
 
   def format_name
@@ -250,6 +216,46 @@ class Zipper
   protected
 
   attr_reader :audio_filters
+
+  # The format's own options fill in what the request left out.
+  def apply_format_defaults!
+    @dopts = (@opts.format&.opts || {}).dup
+    @dopts.width = Formats.default_width Zipper.size_mb_limit if @dopts.width
+    if Formats.cuda_encode?(@opts) && @opts.format.in?([Types.video.h264, Types.video.h265])
+      @dopts.quality = 33
+    end
+    @opts.reverse_merge! @dopts
+  end
+
+  def reset_graph!
+    @fgraph = []
+    @audio_filters = []
+    @audio_reencode_required = false
+    @fgraph << Utils::Safety.safe_filter(@opts.vf) if @opts.vf.present?
+    @input_seek = @output_end = @output_duration = @output_frame_rate = nil
+    @audio_sample_rate = @audio_channels = nil
+    @subtitle_input_path = @subtitle_language = @subtitle_burn_filter = @subtitle_burn_index = nil
+    @maps = []
+  end
+
+  def read_time_ranges!
+    @cuts = Utils::TimeRanges.parse @opts.cuts, option: :cuts
+    @silences = Utils::TimeRanges.parse @opts.silences, option: :silences
+    @source_duration = @probe.format.duration.to_f
+    cuts.validate! @source_duration, allow_entire: false
+    silences.validate! @source_duration
+  end
+
+  def normalize_options!
+    opts.speed = opts.speed&.to_f || 1
+    opts.width = opts.width&.to_i
+    opts.quality = opts.quality&.to_i if opts.quality
+    opts.abrate = opts.abrate&.to_i if opts.abrate
+    @duration = (@source_duration - cuts.total_duration) / opts.speed
+    opts.cudaenc = Formats.cuda_encode? opts
+    opts.cudadec = Formats.cuda_decode? opts
+    opts.cuda = opts.cudaenc || opts.cudadec
+  end
 
   def ffmpeg_builder
     @ffmpeg ||= @ffmpeg_factory&.call || self.class.default_ffmpeg
