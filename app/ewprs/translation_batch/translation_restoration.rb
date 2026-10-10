@@ -60,142 +60,102 @@ module Ewprs
       end
 
       def restore_tokens_with_retries(unit, output)
-        attempted_projections = {}
+        attempted = Set.new
         allow_moved_editorial = output.to_s.scan(EDITORIAL_TAG) == unit.prepared.scan(EDITORIAL_TAG)
         attempt = 0
         Utils::Retry.call(tries: TOKEN_RETRIES + 1, sleep: false, on: [ProtectedTokenError, TranslationValidator::Error]) do
           attempt += 1
           begin
-            output = normalize_target_language(output.to_s)
-            output = strip_introduced_foreign_scripts(unit.prepared, output)
-            output = project_broken_quotes(output)
-            output = project_cjk_work_titles(unit, output)
-            output = strip_echoed_protected_ascii(unit, output)
+            output = normalize_output(unit, output)
             validator.validate!(source: unit.prepared, translated: output)
             restore_tokens(unit, output, allow_moved_editorial: allow_moved_editorial)
           rescue ProtectedTokenError, TranslationValidator::Error => error
-          projected = nil
-          if error.code == :quotes
-            tagged = project_mistaken_quoted_letter_tags(output)
-            if tagged != output
-              output = tagged
+            repaired = repair(unit, output, error, attempted)
+            if repaired != output
+              output = repaired
               retry
             end
-          end
-          projected = remove_duplicated_placeholders(unit, output) if error.message.match?(/unexpected:/)
-          if projected && projected != output
-            output = projected
-            retry
-          end
-          projected = project_missing_token_values(unit, output)
-          if projected != output
-            output = projected
-            retry
-          end
-          projected = project_missing_transliterated_tokens(unit, output) if error.message.match?(/missing:/)
-          if projected && projected != output
-            output = projected
-            retry
-          end
-          projected = project_introduced_delimiters(unit.prepared, output) if error.code == :delimiters
-          if projected && projected != output
-            output = projected
-            retry
-          end
-          project_editorial = editorial_projection?(unit, error)
-          if (project_editorial || untranslated_editorial?(unit, error)) &&
-             !attempted_projections[:editorial_segments] &&
-             TranslationValidator::CJK_TARGET.key?(target)
-            attempted_projections[:editorial_segments] = true
-            projected = translator.translate_preserving_editorial_tags(
-              unit.prepared, from: source_language, to: target
-            )
-          elsif project_editorial && !attempted_projections[:editorial]
-            attempted_projections[:editorial] = true
-            projected = project_missing_editorial_tags(unit, output)
-            projected ||= translator.translate_preserving_editorial_tags(
-              unit.prepared, from: source_language, to: target
-            )
-          end
-          if projected && projected != output
-            output = projected
-            retry
-          end
-          if smart_quote_projection?(unit, error) && !attempted_projections[:smart_quotes]
-            attempted_projections[:smart_quotes] = true
-            projected = translator.translate_preserving_smart_quotes(
-              unit.prepared, from: source_language, to: target
-            )
-            if projected != output
-              output = projected
-              retry
+            if attempt > TOKEN_RETRIES
+              report_failure(unit, output, error)
+              raise
             end
-          end
-          if character_reference_projection?(unit, error) && !attempted_projections[:character_references]
-            attempted_projections[:character_references] = true
-            projected = translator.translate_preserving_character_references(
-              unit.prepared, from: source_language, to: target
-            )
-            if projected != output
-              output = projected
-              retry
-            end
-          end
-          if clause_projection?(unit, error) && !attempted_projections[:clauses]
-            attempted_projections[:clauses] = true
-            projected = translator.translate_by_clauses(
-              unit.prepared, from: source_language, to: target
-            )
-            if projected != output
-              output = projected
-              retry
-            end
-          end
-          project_order  = placeholder_order_projection?(unit, error)
-          projection_key = project_order ? :placeholder_order : :placeholders
-          if placeholder_projection?(unit, error) && !attempted_projections[projection_key]
-            attempted_projections[projection_key] = true
-            projected = if project_order
-              translator.translate_preserving_placeholder_order(
-                unit.prepared, from: source_language, to: target
-              )
-            else
-              translator.translate_preserving_placeholders(
-                unit.prepared, values: placeholder_projection_values(unit.tokens), from: source_language, to: target
-              )
-            end
-            if projected != output
-              output = projected
-              retry
-            end
-          end
-          if placeholder_smart_quote_projection?(unit, error) && !attempted_projections[:smart_quotes]
-            attempted_projections[:smart_quotes] = true
-            projected = translator.translate_preserving_smart_quotes(
-              unit.prepared, from: source_language, to: target
-            )
-            if projected != output
-              output = projected
-              retry
-            end
-          end
-          if attempt > TOKEN_RETRIES
-            stdout.puts "failed invalid translation #{unit.key}: #{error.message}"
-            stdout.puts "source: #{unit.source.inspect}"
-            stdout.puts "prepared: #{unit.prepared.inspect}"
-            stdout.puts "tokens: #{unit.tokens.inspect}"
-            stdout.puts "output: #{output.inspect}"
-            raise
-          end
 
-          stdout.puts "retrying invalid translation #{unit.key} (#{attempt}/#{TOKEN_RETRIES}): #{error.message}"
-          output = translator.repair_markup(
-            unit.prepared, invalid: output, issue: error.message,
-            tokens: repair_token_values(unit.tokens), from: source_language, to: target
-          )
-          raise error
+            stdout.puts "retrying invalid translation #{unit.key} (#{attempt}/#{TOKEN_RETRIES}): #{error.message}"
+            output = translator.repair_markup(
+              unit.prepared, invalid: output, issue: error.message,
+              tokens: repair_token_values(unit.tokens), from: source_language, to: target
+            )
+            raise error
           end
         end
+      end
+
+      def normalize_output(unit, output)
+        output = normalize_target_language(output.to_s)
+        output = strip_introduced_foreign_scripts(unit.prepared, output)
+        output = project_broken_quotes(output)
+        output = project_cjk_work_titles(unit, output)
+        strip_echoed_protected_ascii(unit, output)
+      end
+
+      # The first repair that changes the output, cheapest first: local rewrites of the text, then
+      # asking the translator again with a constraint, each constraint at most once per unit.
+      def repair(unit, output, error, attempted)
+        steps = [
+          -> { project_mistaken_quoted_letter_tags(output) if error.code == :quotes },
+          -> { remove_duplicated_placeholders(unit, output) if error.message.match?(/unexpected:/) },
+          -> { project_missing_token_values(unit, output) },
+          -> { project_missing_transliterated_tokens(unit, output) if error.message.match?(/missing:/) },
+          -> { project_introduced_delimiters(unit.prepared, output) if error.code == :delimiters },
+          -> { repair_editorial(unit, output, error, attempted) },
+          -> { retranslate_once(attempted, :smart_quotes, smart_quote_projection?(unit, error), :translate_preserving_smart_quotes, unit) },
+          -> { retranslate_once(attempted, :character_references, character_reference_projection?(unit, error), :translate_preserving_character_references, unit) },
+          -> { retranslate_once(attempted, :clauses, clause_projection?(unit, error), :translate_by_clauses, unit) },
+          -> { repair_placeholders(unit, error, attempted) },
+          -> { retranslate_once(attempted, :smart_quotes, placeholder_smart_quote_projection?(unit, error), :translate_preserving_smart_quotes, unit) },
+        ]
+        steps.each do |step|
+          projected = step.call
+          return projected if projected && projected != output
+        end
+        output
+      end
+
+      def repair_editorial(unit, output, error, attempted)
+        project_editorial = editorial_projection?(unit, error)
+        if (project_editorial || untranslated_editorial?(unit, error)) && TranslationValidator::CJK_TARGET.key?(target) &&
+           attempted.add?(:editorial_segments)
+          retranslate(:translate_preserving_editorial_tags, unit)
+        elsif project_editorial && attempted.add?(:editorial)
+          project_missing_editorial_tags(unit, output) || retranslate(:translate_preserving_editorial_tags, unit)
+        end
+      end
+
+      def repair_placeholders(unit, error, attempted)
+        keep_order = placeholder_order_projection?(unit, error)
+        return unless placeholder_projection?(unit, error) && attempted.add?(keep_order ? :placeholder_order : :placeholders)
+
+        if keep_order
+          retranslate(:translate_preserving_placeholder_order, unit)
+        else
+          retranslate(:translate_preserving_placeholders, unit, values: placeholder_projection_values(unit.tokens))
+        end
+      end
+
+      def retranslate_once(attempted, key, applies, method, unit)
+        retranslate(method, unit) if applies && attempted.add?(key)
+      end
+
+      def retranslate(method, unit, **options)
+        translator.public_send(method, unit.prepared, **options, from: source_language, to: target)
+      end
+
+      def report_failure(unit, output, error)
+        stdout.puts "failed invalid translation #{unit.key}: #{error.message}"
+        stdout.puts "source: #{unit.source.inspect}"
+        stdout.puts "prepared: #{unit.prepared.inspect}"
+        stdout.puts "tokens: #{unit.tokens.inspect}"
+        stdout.puts "output: #{output.inspect}"
       end
 
       def project_mistaken_quoted_letter_tags(output)

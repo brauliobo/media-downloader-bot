@@ -11,6 +11,19 @@ module Ewprs
         (?<word>descended|respectively|those)(?![A-Za-z])
       }ix
 
+      CITED_TITLES = [
+        PARTED_PUBLICATION_TITLE, DATED_PUBLICATION_TITLE, QUOTED_CITED_TITLE, QUOTED_NUMBERED_CITED_TITLE,
+        NUMBERED_PUBLICATION_CITATION_TITLE, UNDATED_NUMBERED_PUBLICATION_TITLE, RELATIVE_DATED_PUBLICATION_TITLE,
+        STANDALONE_NUMBERED_TITLE
+      ].freeze
+      PUBLICATION_TITLES = [
+        NUMBERED_SERIES_TITLE, ITALIC_PART_TITLE, ITALIC_CITATION_TITLE, ITALIC_EDITION_TITLE, BOOK_TITLE,
+        SEE_PARENTHETICAL_TITLE, EDITIONED_TITLE, PRINTED_EDITION_TITLE, VOLUME_CITATION_TITLE, PUBLICATION_LIST,
+        MAGAZINE_LIST
+      ].freeze
+      BIBLIOGRAPHIC_TITLES = [BIBLIOGRAPHIC_TITLE, AUTHORED_CITATION_TITLE, UNQUOTED_PUBLICATION_TITLE].freeze
+      STRUCTURAL_VALUES    = [EDITORIAL_BRACKET, PAIRED_DELIMITER, MARKED_WORD, TECHNICAL_VALUE, INDIC_SCRIPT].freeze
+
       private
 
       def english_function_word?(word)
@@ -26,65 +39,9 @@ module Ewprs
         trailing = source[/\s*\z/m]
         core = source[leading.length, source.length - leading.length - trailing.length]
         tokens = {}
-        prepared = separate_attached_source_words(core)
-        prepared = mask_parenthetical_foreign_equivalents(prepared)
-        prepared = mask_dense_parentheticals(prepared)
-        prepared = mask_sanskrit_glosses(prepared)
-        prepared = mask_parenthetical_clauses(prepared)
-        prepared = tag_editorial_content(prepared, tokens)
-        prepared = prepared.gsub(PROTECTED_MARKER) do |protected_marker|
-          marker = format('__P%04d__', tokens.size + 1)
-          tokens[marker] = resolve_document_protected(protected_marker)
-          marker
-        end
-        prepared = mask(prepared, PARTED_PUBLICATION_TITLE, tokens)
-        prepared = mask(prepared, DATED_PUBLICATION_TITLE, tokens)
-        prepared = mask(prepared, QUOTED_CITED_TITLE, tokens)
-        prepared = mask(prepared, QUOTED_NUMBERED_CITED_TITLE, tokens)
-        prepared = mask(prepared, NUMBERED_PUBLICATION_CITATION_TITLE, tokens)
-        prepared = mask(prepared, UNDATED_NUMBERED_PUBLICATION_TITLE, tokens)
-        prepared = mask(prepared, RELATIVE_DATED_PUBLICATION_TITLE, tokens)
-        prepared = mask(prepared, STANDALONE_NUMBERED_TITLE, tokens)
-        prepared = mask_in_dated_citation_titles(prepared, tokens)
-        prepared = mask(prepared, NUMBERED_SERIES_TITLE, tokens)
-        prepared = mask(prepared, ITALIC_PART_TITLE, tokens)
-        prepared = mask(prepared, ITALIC_CITATION_TITLE, tokens)
-        prepared = mask(prepared, ITALIC_EDITION_TITLE, tokens)
-        prepared = mask(prepared, BOOK_TITLE, tokens)
-        prepared = mask(prepared, SEE_PARENTHETICAL_TITLE, tokens)
-        prepared = mask(prepared, EDITIONED_TITLE, tokens)
-        prepared = mask(prepared, PRINTED_EDITION_TITLE, tokens)
-        prepared = mask(prepared, VOLUME_CITATION_TITLE, tokens)
-        prepared = mask(prepared, PUBLICATION_LIST, tokens)
-        prepared = mask(prepared, MAGAZINE_LIST, tokens)
-        prepared = mask_foreign_inline(prepared, tokens)
-        prepared = @lexicon.mask_inline(prepared, tokens)
-        prepared = mask_named_marked_groups(prepared, tokens)
-        prepared = mask(prepared, BIBLIOGRAPHIC_TITLE, tokens)
-        prepared = mask(prepared, AUTHORED_CITATION_TITLE, tokens)
-        prepared = mask(prepared, UNQUOTED_PUBLICATION_TITLE, tokens)
-        prepared = mask_chapter_source_publications(prepared, tokens)
-        prepared = mask_translation_publications(prepared, tokens)
-        prepared = mask_quoted_publication_titles(prepared, tokens)
-        prepared = mask_quoted_publication_aliases(prepared, tokens)
-        prepared = mask_quoted_language_examples(prepared, tokens)
-        prepared = mask_title_case_quotes(prepared, tokens)
-        prepared = mask(prepared, MARKUP, tokens)
-        prepared = expose_editorial_tags(prepared)
-        prepared = mask(prepared, EDITORIAL_BRACKET, tokens)
-        prepared = mask(prepared, PAIRED_DELIMITER, tokens)
-        prepared = mask(prepared, MARKED_WORD, tokens)
-        prepared = mask(prepared, TECHNICAL_VALUE, tokens)
-        prepared = mask(prepared, INDIC_SCRIPT, tokens)
-        prepared = @lexicon.mask(prepared, tokens)
-        prepared = coalesce_inline_punctuation(prepared, tokens)
-        prepared = coalesce_adjacent_terms(prepared, tokens)
-        prepared = prepared.gsub(COORDINATED_PLACEHOLDER) do
-          match = Regexp.last_match
-          "#{match[:first]} #{match[:term]} and #{match[:second]} ones"
-        end
-        prepared = nest_coordinated_term_definitions(prepared, tokens)
-        prepared = nest_repeated_term_modifiers(prepared, tokens)
+        prepared = mask_titles_and_terms(rewrite_attached_words(core), tokens)
+        prepared = mask_markup(prepared, tokens)
+        prepared = coalesce_terms(prepared, tokens)
         tokens.transform_values! do |value|
           restore_token_editorial_markers(resolve_document_protected_value(value))
         end
@@ -98,6 +55,56 @@ module Ewprs
           key: key, source: resolve_unit_source(source), prepared: prepared, tokens: tokens,
           leading: leading, trailing: trailing
         )
+      end
+
+      def rewrite_attached_words(text)
+        mask_parenthetical_clauses(mask_sanskrit_glosses(mask_dense_parentheticals(
+          mask_parenthetical_foreign_equivalents(separate_attached_source_words(text))
+        )))
+      end
+
+      # Titles are masked from the most specific shape to the loosest, so a title that fits two
+      # patterns is taken by the first; the order below is the order they are tried in.
+      def mask_titles_and_terms(text, tokens)
+        prepared = tag_editorial_content(text, tokens)
+        prepared = prepared.gsub(PROTECTED_MARKER) do |protected_marker|
+          marker = format('__P%04d__', tokens.size + 1)
+          tokens[marker] = resolve_document_protected(protected_marker)
+          marker
+        end
+        prepared = mask_each(prepared, tokens, CITED_TITLES)
+        prepared = mask_in_dated_citation_titles(prepared, tokens)
+        prepared = mask_each(prepared, tokens, PUBLICATION_TITLES)
+        prepared = mask_foreign_inline(prepared, tokens)
+        prepared = @lexicon.mask_inline(prepared, tokens)
+        prepared = mask_named_marked_groups(prepared, tokens)
+        prepared = mask_each(prepared, tokens, BIBLIOGRAPHIC_TITLES)
+        prepared = mask_chapter_source_publications(prepared, tokens)
+        prepared = mask_translation_publications(prepared, tokens)
+        prepared = mask_quoted_publication_titles(prepared, tokens)
+        prepared = mask_quoted_publication_aliases(prepared, tokens)
+        prepared = mask_quoted_language_examples(prepared, tokens)
+        mask_title_case_quotes(prepared, tokens)
+      end
+
+      def mask_markup(text, tokens)
+        prepared = mask(text, MARKUP, tokens)
+        prepared = expose_editorial_tags(prepared)
+        prepared = mask_each(prepared, tokens, STRUCTURAL_VALUES)
+        @lexicon.mask(prepared, tokens)
+      end
+
+      def coalesce_terms(text, tokens)
+        prepared = coalesce_adjacent_terms(coalesce_inline_punctuation(text, tokens), tokens)
+        prepared = prepared.gsub(COORDINATED_PLACEHOLDER) do
+          match = Regexp.last_match
+          "#{match[:first]} #{match[:term]} and #{match[:second]} ones"
+        end
+        nest_repeated_term_modifiers(nest_coordinated_term_definitions(prepared, tokens), tokens)
+      end
+
+      def mask_each(text, tokens, patterns)
+        patterns.reduce(text) { |masked, pattern| mask(masked, pattern, tokens) }
       end
 
       def resolve_unit_source(source)
