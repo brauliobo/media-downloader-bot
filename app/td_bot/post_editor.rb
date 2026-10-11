@@ -4,6 +4,7 @@ module TDBot
     include MediaContent
     include Summaries
     include UploadWait
+    include ChatOperations
 
     def initialize(bot)
       @bot = bot
@@ -82,31 +83,6 @@ module TDBot
       chat_summary(ChatIdentifier.resolve(td, identifier))
     end
 
-    def chat_messages(chat_id:, limit: 20, query: nil, filter: nil, from_message_id: 0)
-      result = if query.to_s.empty? && filter.to_s.empty?
-        td.get_chat_history(
-          chat_id:         chat_id,
-          from_message_id: from_message_id,
-          offset:          0,
-          limit:           limit,
-          only_local:      false
-        ).value(20)
-      else
-        td.search_chat_messages(
-          chat_id:         chat_id,
-          topic_id:        nil,
-          query:           query.to_s,
-          sender_id:       nil,
-          from_message_id: from_message_id,
-          offset:          0,
-          limit:           limit,
-          filter:          search_messages_filter(filter)
-        ).value(20)
-      end
-
-      Array(result&.messages).map { |message| message_summary(message) }
-    end
-
     def chat_message(chat_id:, message_id:)
       message = td.get_message(chat_id: chat_id, message_id: message_id).value(20)
       message_summary(message) if message
@@ -131,10 +107,9 @@ module TDBot
 
     def send_message_content(chat_id, forum_topic_id, content)
       content = td_payload(content)
-      topic   = TD::Types::MessageTopic::Forum.new(forum_topic_id: forum_topic_id) if forum_topic_id.positive?
       td.send_message(
         chat_id:               chat_id,
-        topic_id:              topic,
+        topic_id:              message_topic(forum_topic_id),
         reply_to:              nil,
         options:               nil,
         reply_markup:          nil,
