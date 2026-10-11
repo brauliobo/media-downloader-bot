@@ -1,0 +1,8 @@
+#!/usr/bin/env ruby
+
+require 'drb/drb'
+require_relative '../config/environment'
+
+manager = DRbObject.new_with_uri(ENV['BOT_DRB'] || 'druby://127.0.0.1:1188')
+state   = Replay::CLI.new(ARGV, manager: manager).run
+exit(state[:errors].empty? ? 0 : 1)
