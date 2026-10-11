@@ -169,7 +169,7 @@ RSpec.describe Audiobook::TextPdf do
     book = Audiobook::Book.new(data: book_data, opts: SymMash.new(includeall: true), translate: false)
     stl  = instance_double('StatusLine', update: nil)
     pdf  = described_class.new(book, stl: stl)
-    allow(pdf).to receive(:convert_html_to_pdf)
+    allow(Audiobook::HtmlToPdf).to receive(:call)
 
     Dir.mktmpdir do |dir|
       path = File.join(dir, 'book.pt.pdf')
@@ -178,19 +178,6 @@ RSpec.describe Audiobook::TextPdf do
     end
 
     expect(stl).to have_received(:update).with('Generating translated PDF')
-  end
-
-  it 'prefers chromium over pandoc' do
-    book = Audiobook::Book.new(data: book_data, opts: SymMash.new(includeall: true), translate: false)
-    pdf  = described_class.new(book)
-    allow(pdf).to receive(:chromium_bin).and_return('chromium')
-    allow(pdf).to receive(:chromium_convert)
-    allow(pdf).to receive(:pandoc_convert)
-
-    pdf.send(:convert_html_to_pdf, '/tmp/book.html', '/tmp/book.pdf')
-
-    expect(pdf).to have_received(:chromium_convert)
-    expect(pdf).not_to have_received(:pandoc_convert)
   end
 
   it 'generates a PDF with unusable parent XDG directories' do

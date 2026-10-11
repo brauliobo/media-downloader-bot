@@ -2,8 +2,7 @@ require 'cgi'
 
 module Audiobook
   class TextPdf
-    MIN_FIGURE_AREA   = 0.002
-    CHROMIUM_BINS     = %w[chromium google-chrome-stable google-chrome chromium-browser].freeze
+    MIN_FIGURE_AREA = 0.002
 
     def self.generate(book, pdf_path, stl: nil, source_pdf: nil)
       new(book, stl: stl, source_pdf: source_pdf).generate(pdf_path)
@@ -22,7 +21,7 @@ module Audiobook
         @assets   = dir
         html_path = File.join(dir, 'book.html')
         File.write(html_path, build_html)
-        convert_html_to_pdf(html_path, pdf_path)
+        HtmlToPdf.call(html_path, pdf_path)
       end
       raise 'Failed to generate PDF' unless File.exist?(pdf_path)
       pdf_path
@@ -242,70 +241,6 @@ module Audiobook
     def style_attr(item, alignment: :keep)
       rules = FontRoles.css_rules(item, alignment: alignment)
       rules.empty? ? '' : %( style="#{rules.join('; ')}")
-    end
-
-    def convert_html_to_pdf(html_path, pdf_path)
-      if (chrome = chromium_bin)
-        chromium_convert(chrome, html_path, pdf_path)
-      elsif wkhtmltopdf_available?
-        wkhtmltopdf_convert(html_path, pdf_path)
-      elsif pandoc_available?
-        pandoc_convert(html_path, pdf_path)
-      else
-        raise 'No PDF generation tool available (chromium, wkhtmltopdf or pandoc required)'
-      end
-    end
-
-    def chromium_bin
-      CHROMIUM_BINS.find { Sh.which?(_1) }
-    end
-
-    def wkhtmltopdf_available?
-      Sh.which?('wkhtmltopdf')
-    end
-
-    def pandoc_available?
-      Sh.which?('pandoc')
-    end
-
-    def chromium_convert(chrome, html_path, pdf_path)
-      Utils::Tmp.dir('chrome-pdf-') do |dir|
-        run_pdf!(
-          [
-            chrome, '--headless', '--disable-gpu', '--no-pdf-header-footer',
-            "--user-data-dir=#{dir}", "--print-to-pdf=#{pdf_path}",
-            "file://#{File.expand_path(html_path)}"
-          ],
-          'chromium pdf',
-          pdf_path,
-          env: {
-            'XDG_CONFIG_HOME' => dir,
-            'XDG_CACHE_HOME'  => dir,
-          }
-        )
-      end
-    end
-
-    def wkhtmltopdf_convert(html_path, pdf_path)
-      run_pdf!(
-        [
-          'wkhtmltopdf', '--page-size', 'A4',
-          '--margin-top', '20mm', '--margin-bottom', '20mm',
-          '--margin-left', '20mm', '--margin-right', '20mm',
-          html_path, pdf_path
-        ],
-        'wkhtmltopdf',
-        pdf_path
-      )
-    end
-
-    def pandoc_convert(html_path, pdf_path)
-      run_pdf!(['pandoc', '-f', 'html', '-t', 'pdf', '-o', pdf_path, html_path], 'pandoc pdf', pdf_path)
-    end
-
-    def run_pdf!(cmd, label, pdf_path, **options)
-      _out, err, status = Sh.run(cmd, **options)
-      Sh.assert_success!(label, err, status: status, output: pdf_path)
     end
   end
 end
