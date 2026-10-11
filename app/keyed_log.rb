@@ -16,6 +16,13 @@ class KeyedLog
     end
   end
 
+  def remove(record)
+    @mutex.synchronize do
+      keys.delete(record.values_at(*fields))
+      @store.rewrite(@store.reject { |stored| stored.values_at(*fields) == record.values_at(*fields) })
+    end
+  end
+
   def records = @store.to_a
 
   private

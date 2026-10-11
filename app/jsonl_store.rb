@@ -20,6 +20,10 @@ class JsonlStore
     end
   end
 
+  def rewrite(records)
+    File.write(path, records.map { |record| "#{JSON.generate(record)}\n" }.join)
+  end
+
   def append(record)
     File.open(path, 'a') do |file|
       file.puts JSON.generate(record)
