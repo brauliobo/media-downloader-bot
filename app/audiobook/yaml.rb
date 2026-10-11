@@ -18,7 +18,7 @@ module Audiobook
         SymMash.new(
           fn_out: final_audio,
           type: SymMash.new(name: :audio),
-          info: SymMash.new(title: base, uploader: ''),
+          info: SymMash.new(title: base, uploader: '', hashtags: Audiobook.hashtags(book, opts)),
           mime: 'audio/ogg',
           opts: SymMash.new(format: SymMash.new(mime: 'audio/ogg')),
           oprobe: Prober.for(final_audio)

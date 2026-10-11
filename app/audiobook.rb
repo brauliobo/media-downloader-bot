@@ -32,13 +32,27 @@ module Audiobook
     result = relocate_translated_outputs(result, title) if result.book.is_a?(Book) && result.book.translated
     thumb  = result.book.thumb(dir: dir, base: base) if result.book.respond_to?(:thumb)
     uploads = [document_upload(result.yaml, title, 'application/x-yaml', thumb: thumb)]
-    return uploads if opts.onlyyml
-
-    uploads << document_upload(result.translation_pdf, title, 'application/pdf', thumb: thumb) if result.translation_pdf
-    uploads << audio_upload(result, audio_format, title: title, thumb: thumb)
-    uploads
+    unless opts.onlyyml
+      uploads << document_upload(result.translation_pdf, title, 'application/pdf', thumb: thumb) if result.translation_pdf
+      uploads << audio_upload(result, audio_format, title: title, thumb: thumb)
+    end
+    tag_uploads(uploads, hashtags(result.book, opts))
   ensure
     cleanup_kindle_capture(result&.pdf)
+  end
+
+  HASHTAG_EXCERPT_CHARS = 4_000
+
+  # Hashtags (opts.hashtags) from the opening pages of the book, in the language it is spoken in.
+  def self.hashtags(book, opts)
+    return unless opts&.hashtags
+
+    Hashtags.generate(Publication.sample_from_pages(book.pages).first(HASHTAG_EXCERPT_CHARS),
+                      lang: Processors::LanguageOpts.from(opts, book_language(book)))
+  end
+
+  def self.tag_uploads(uploads, hashtags)
+    uploads.each { |upload| upload.info.hashtags = hashtags }
   end
 
   def self.document_upload(path, title, mime, thumb: nil)
