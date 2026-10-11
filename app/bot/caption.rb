@@ -4,15 +4,11 @@ module Bot
 
     MEDIA_LIMIT = MsgHelpers::MEDIA_CAPTION_LIMIT
 
-    def normalize(text, parse_mode:)
-      return text.to_s unless parse_mode.to_s == 'MarkdownV2'
-
-      MsgHelpers::MARKDOWN_NON_FORMAT.reduce(text.to_s) { |caption, char| caption.gsub("\\#{char}", char) }
-    end
+    def visible_size(text) = text.gsub(/\\(.)/m, '\1').size
 
     def prepare(text, parse_mode:)
-      text = normalize(text, parse_mode: parse_mode)
-      return text if text.size <= MEDIA_LIMIT
+      text = text.to_s
+      return text if visible_size(text) <= MEDIA_LIMIT
 
       yield text if block_given?
       truncate(text)

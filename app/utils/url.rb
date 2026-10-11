@@ -32,7 +32,7 @@ module Utils
     end
 
     def self.trailing_display_urls(text)
-      text.to_s[%r{(?:\n\n(?:https?://)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:[/?#][^\s]*)?)+\z}i]
+      text.to_s[%r{(?:\n\n(?:https?:\\?/\\?/)?(?:(?:[a-z0-9]|\\?-)+\\?\.)+[a-z]{2,}(?::\d+)?(?:\\?[/?#]\S*)?)+\z}i]
     end
 
     def self.token?(value)

@@ -1,26 +1,18 @@
 require 'rails_helper'
 
 RSpec.describe Bot::Caption do
-  it 'normalizes escaped Markdown URLs without dropping the protocol' do
-    caption = 'https:\/\/example\.com\/photo?id=1'
-
-    expect(described_class.normalize(caption, parse_mode: 'MarkdownV2')).to eq('https://example.com/photo?id=1')
-  end
-
   it 'keeps captions within the media limit' do
     expect(described_class.prepare('ok', parse_mode: 'MarkdownV2')).to eq('ok')
   end
 
-  it 'removes Bot API punctuation escapes for TDLib' do
-    caption = '_Novembro de 2025\. \-19 – 20 mg\/day  Ivermectin\/I\? \"ok\"_'
+  it 'keeps every escape so TDLib can parse the caption' do
+    caption = '_Com que frequência\? \(EXPERIMENTO\)_' + "\n\nyoutu\\.be\\/wI2WVevL\\_lk"
 
-    expect(described_class.prepare(caption, parse_mode: 'MarkdownV2')).to eq(
-      '_Novembro de 2025. -19 – 20 mg/day  Ivermectin/I? "ok"_'
-    )
+    expect(described_class.prepare(caption, parse_mode: 'MarkdownV2')).to eq(caption)
   end
 
-  it 'keeps escaped formatting markers' do
-    caption = '_A \_literal\_ marker and \*stars\*_'
+  it 'counts escaped characters once against the media limit' do
+    caption = '\.' * described_class::MEDIA_LIMIT
 
     expect(described_class.prepare(caption, parse_mode: 'MarkdownV2')).to eq(caption)
   end
@@ -49,9 +41,9 @@ RSpec.describe Bot::Caption do
     overflow  = nil
     truncated = described_class.prepare(caption, parse_mode: 'MarkdownV2') { |full| overflow = full }
 
-    expect(overflow).to eq("_#{'a' * described_class::MEDIA_LIMIT}_\n\nx.com/i/status/2073169414275350804")
+    expect(overflow).to eq(caption)
     expect(truncated.size).to be <= described_class::MEDIA_LIMIT
-    expect(truncated).to end_with('x.com/i/status/2073169414275350804')
+    expect(truncated).to end_with(url)
     expect(truncated.scan(/(?<!\\)_/).size).to be_even
   end
 end
