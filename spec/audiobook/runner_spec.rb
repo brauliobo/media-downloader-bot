@@ -24,10 +24,7 @@ RSpec.describe Audiobook::Runner do
 
   it 'pipelines sentence translation into batch synthesis in the speech language' do
     tts = fake_tts
-    allow(Translator).to receive(:translate) do |text, from:, to:|
-      mapped = Array(text).map { |line| "PT(#{from}->#{to}):#{line}" }
-      text.is_a?(Array) ? mapped : mapped.first
-    end
+    fake_translator
     lines = ['Hello world.', 'Another sentence.'].map { |text| { text: text, font_size: 12, page: 1 } }
     data  = SymMash.new(metadata: { page_count: 1, language: 'en' }, opts: { includeall: true }, content: { lines: lines, images: [] })
     opts  = SymMash.new(lang: 'pt', includeall: true)

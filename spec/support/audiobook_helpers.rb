@@ -59,10 +59,45 @@ module AudiobookHelpers
   end
 
   # What the model answers when asked about a book (language, title, author, gender) or for a narrator reference.
+  # Answers the inputs the book questions were asked with.
   def fake_llm(lang: '', title: '', author: '', gender: 'male', reference: '')
-    allow(AI::JSONSchema).to receive(:ask) do |task:, **|
-      task == Language::BOOK_PROMPT ? { 'lang' => lang, 'title' => title, 'author' => author, 'gender' => gender } : { 'text' => reference }
+    asked = []
+    allow(AI::JSONSchema).to receive(:ask) do |task:, input:, **|
+      next { 'text' => reference } unless task == Language::BOOK_PROMPT
+
+      asked << input
+      { 'lang' => lang, 'title' => title, 'author' => author, 'gender' => gender }
     end
+    asked
+  end
+
+  # Translates by marking the text with the languages, or by the given names.
+  def fake_translator(names = {})
+    allow(Translator).to receive(:translate) do |text, from:, to:|
+      mapped = Array(text).map { |line| names.fetch(line) { "#{to.upcase}(#{from}->#{to}):#{line}" } }
+      text.is_a?(Array) ? mapped : mapped.first
+    end
+  end
+
+  # Printing the translated book to PDF is left to chromium, wkhtmltopdf or pandoc.
+  def fake_html_to_pdf = allow(Audiobook::HtmlToPdf).to receive(:call) { |_html, pdf| File.write(pdf, '%PDF-') }
+
+  # A one-page PDF with the text on it, the smallest real document there is to parse, print and take a cover from.
+  def write_pdf(path, text)
+    stream  = "BT /F1 12 Tf 72 700 Td (#{text}) Tj ET"
+    objects = [
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+      "<< /Length #{stream.bytesize} >>\nstream\n#{stream}\nendstream",
+      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
+    ]
+    pdf     = +"%PDF-1.4\n"
+    offsets = objects.each_with_index.map { |object, idx| pdf.bytesize.tap { pdf << "#{idx + 1} 0 obj\n#{object}\nendobj\n" } }
+    xref    = pdf.bytesize
+    pdf << "xref\n0 #{objects.size + 1}\n0000000000 65535 f \n" << offsets.map { |offset| format("%010d 00000 n \n", offset) }.join
+    File.binwrite(path, pdf << "trailer\n<< /Size #{objects.size + 1} /Root 1 0 R >>\nstartxref\n#{xref}\n%%EOF\n")
+    path
   end
 
   def book_of(*items, metadata: {}, opts: nil)

@@ -1,6 +1,16 @@
 require 'rails_helper'
 
 RSpec.describe 'Audiobook OCR language detection' do
+  let(:dir) { Dir.mktmpdir('uploads-') }
+
+  after { FileUtils.remove_entry dir }
+
+  def source(name = 'book', ext: 'pdf')
+    path = File.join(dir, "#{name}.#{ext}")
+    ext == 'pdf' ? write_pdf(path, 'Hello world.') : File.write(path, 'Hello world.')
+    path
+  end
+
   def image_data(page)
     SymMash.new(image: true, page: page, path: "book.pdf#page=#{page}")
   end
@@ -14,14 +24,11 @@ RSpec.describe 'Audiobook OCR language detection' do
 
   it 'detects language from sampled image OCR text' do
     allow(Audiobook::OcrText).to receive(:transcribe).and_return('Texto em portugues da pagina escaneada.')
-
-    allow(Language).to receive(:book_metadata) do |input|
-      expect(input).to include('portugues')
-      { 'lang' => 'pt', 'title' => '', 'author' => '', 'gender' => 'male' }
-    end
+    asked = fake_llm(lang: 'pt')
 
     book = Audiobook::Book.new(data: image_book_data(1))
 
+    expect(asked.sole).to include('portugues')
     expect(book.metadata.language).to eq('pt')
   end
 
@@ -33,16 +40,12 @@ RSpec.describe 'Audiobook OCR language detection' do
       calls << SymMash.new(path: path, lang: opts&.dig(:lang))
       "Texto portugues #{path}"
     end
-
-    allow(Language).to receive(:book_metadata) do |input|
-      expect(input).to include('book.pdf#page=1')
-      expect(input).to include('book.pdf#page=2')
-      expect(input).not_to include('book.pdf#page=3')
-      { 'lang' => 'pt', 'title' => '', 'author' => '', 'gender' => 'male' }
-    end
+    asked = fake_llm(lang: 'pt')
 
     Audiobook::Book.new(data: image_book_data(1, 2, 3))
 
+    expect(asked.sole).to include('book.pdf#page=1', 'book.pdf#page=2')
+    expect(asked.sole).not_to include('book.pdf#page=3')
     expect(calls.map(&:path).first(2)).to eq(['book.pdf#page=1', 'book.pdf#page=2'])
     expect(calls.first(2).map(&:lang)).to eq([nil, nil])
     expect(calls.drop(2).map(&:path)).to eq(['book.pdf#page=1', 'book.pdf#page=2', 'book.pdf#page=3'])
@@ -58,7 +61,7 @@ RSpec.describe 'Audiobook OCR language detection' do
       seen_opts << opts
       'Texto portugues'
     end
-    allow(Language).to receive(:book_metadata).and_return('lang' => 'pt', 'title' => '', 'author' => '', 'gender' => 'male')
+    fake_llm(lang: 'pt')
 
     Audiobook::Book.new(data: image_book_data(1, 2), opts: opts)
 
@@ -67,159 +70,99 @@ RSpec.describe 'Audiobook OCR language detection' do
     expect(opts[:lang]).to be_nil
   end
 
-  it 'returns only the yaml upload for onlyyml generation' do
-    opts = SymMash.new(onlyyml: 1)
-    allow(Audiobook).to receive(:generate).and_return(SymMash.new(yaml: 'book.yml'))
+  describe '.generate_uploads' do
+    def uploads_of(source, **opts) = Audiobook.generate_uploads(source, dir: dir, stl: nil, opts: SymMash.new(opts))
 
-    uploads = Audiobook.generate_uploads('book.pdf', dir: 'tmp', stl: nil, opts: opts)
+    def names(uploads) = uploads.map { |upload| File.basename(upload.fn_out) }
 
-    expect(uploads.size).to eq(1)
-    expect(uploads.first.fn_out).to eq('book.yml')
-    expect(uploads.first.mime).to eq('application/x-yaml')
-  end
+    it 'returns only the yaml upload for onlyyml generation' do
+      uploads = uploads_of(source(ext: 'txt'), onlyyml: 1)
 
-  it 'attaches the cover thumb to onlyyml uploads' do
-    book = instance_double(Audiobook::Book)
-    allow(book).to receive(:thumb).with(dir: 'tmp', base: 'book').and_return('/tmp/book-cover.jpg')
-    allow(book).to receive(:metadata).and_return(SymMash.new(title: 'Book'))
-    allow(Audiobook).to receive(:base_from_source).and_return('book')
-    allow(Audiobook).to receive(:generate).and_return(SymMash.new(yaml: 'book.yml', book: book))
+      expect(names(uploads)).to eq(['book.yml'])
+      expect(uploads.first.mime).to eq('application/x-yaml')
+      expect(File).to exist(uploads.first.fn_out)
+    end
 
-    uploads = Audiobook.generate_uploads('book.pdf', dir: 'tmp', stl: nil, opts: SymMash.new(onlyyml: 1))
+    it 'attaches the cover thumb to onlyyml uploads' do
+      uploads = uploads_of(source, onlyyml: 1)
 
-    expect(uploads.size).to eq(1)
-    expect(uploads.first.thumb).to eq('/tmp/book-cover.jpg')
-  end
+      expect(uploads.size).to eq(1)
+      expect(File).to exist(uploads.first.thumb)
+    end
 
-  it 'uses the book cover as the audio thumbnail' do
-    book = instance_double(Audiobook::Book)
-    allow(book).to receive(:thumb).with(dir: 'tmp', base: 'book').and_return('/tmp/book-cover.jpg')
-    allow(book).to receive(:metadata).and_return(SymMash.new(title: 'Book Title', author: 'Jane Austen'))
-    allow(Audiobook).to receive(:base_from_source).and_return('book')
-    allow(Audiobook).to receive(:generate).and_return(
-      SymMash.new(yaml: 'book.yml', audio: 'book.m4a', book: book)
-    )
-    allow(Prober).to receive(:for)
+    it 'uses the book cover as the audio thumbnail and the detected title and author as its info' do
+      fake_tts
+      fake_llm(lang: 'pt', title: 'Book Title', author: 'Jane Austen')
 
-    uploads = Audiobook.generate_uploads('book.pdf', dir: 'tmp', stl: nil)
+      uploads = uploads_of(source)
 
-    expect(uploads.map(&:thumb).uniq).to eq(['/tmp/book-cover.jpg'])
-    expect(uploads.last.mime).to eq('audio/aac')
-    expect(uploads.last.fn_out).to eq('book.m4a')
-    expect(uploads.map { |upload| upload.info.title }.uniq).to eq(['Book Title'])
-    expect(uploads.last.info.uploader).to eq('Jane Austen')
-    expect(uploads.first.info.uploader).to eq('')
-  end
+      expect(names(uploads)).to eq(['book.yml', 'book.m4a'])
+      expect(uploads.map(&:thumb).uniq.sole).to satisfy { |thumb| File.exist?(thumb) }
+      expect(uploads.last.mime).to eq('audio/aac')
+      expect(uploads.map { |upload| upload.info.title }.uniq).to eq(['Book Title'])
+      expect(uploads.map { |upload| upload.info.uploader }).to eq(['', 'Jane Austen'])
+      expect(uploads.last.oprobe.format.duration.to_f).to be_positive
+    end
 
-  it 'uploads a translation PDF with the yaml and audiobook' do
-    book = instance_double(Audiobook::Book)
-    allow(book).to receive(:thumb).with(dir: 'tmp', base: 'book').and_return('/tmp/book-cover.jpg')
-    allow(book).to receive(:metadata).and_return(SymMash.new)
-    allow(Audiobook).to receive(:base_from_source).and_return('book')
-    allow(Audiobook).to receive(:generate).and_return(
-      SymMash.new(yaml: 'book.yml', audio: 'book.m4a', translation_pdf: 'book.pt.pdf', book: book)
-    )
-    allow(Prober).to receive(:for)
+    context 'when the book is translated' do
+      before do
+        fake_tts
+        fake_html_to_pdf
+        fake_llm(lang: 'es', title: '32 motives', author: 'Mark Grenon')
+        fake_translator('32 motives' => '32 motivos', 'Mark Grenon' => 'Mark Grenon')
+      end
 
-    uploads = Audiobook.generate_uploads('book.pdf', dir: 'tmp', stl: nil)
+      it 'uploads the translation PDF with the yaml and the audiobook' do
+        uploads = uploads_of(source('Reasons'), lang: 'pt')
 
-    expect(uploads.map { |upload| [upload.fn_out, upload.mime, upload.thumb] }).to eq([
-      ['book.yml', 'application/x-yaml', '/tmp/book-cover.jpg'],
-      ['book.pt.pdf', 'application/pdf', '/tmp/book-cover.jpg'],
-      ['book.m4a', 'audio/aac', '/tmp/book-cover.jpg'],
-    ])
-  end
+        expect(uploads.map(&:mime)).to eq(%w[application/x-yaml application/pdf audio/aac])
+        expect(uploads.map { |upload| File.exist?(upload.fn_out) }).to all(be(true))
+        expect(uploads.map(&:thumb).uniq.size).to eq(1)
+      end
 
-  it 'renames uploads to the translated filename' do
-    Dir.mktmpdir do |dir|
-      yaml  = File.join(dir, 'Adios.yml')
-      pdf   = File.join(dir, 'Adios.pt.pdf')
-      audio = File.join(dir, 'Adios.m4a')
-      File.write(yaml, 'x')
-      File.write(pdf, 'x')
-      File.write(audio, 'x')
-      book = Audiobook::Book.allocate
-      book.instance_variable_set(:@translated, true)
-      book.instance_variable_set(:@translated_base, 'Adeus a inflamacao')
-      book.instance_variable_set(:@metadata, SymMash.new(title: 'Adeus a inflamacao', language: 'pt'))
-      allow(book).to receive(:thumb).with(dir: dir, base: 'Adios').and_return(nil)
-      allow(Audiobook).to receive(:base_from_source).and_return('Adios')
-      allow(Audiobook).to receive(:generate).and_return(
-        SymMash.new(yaml: yaml, audio: audio, translation_pdf: pdf, book: book)
-      )
-      allow(Prober).to receive(:for)
+      it 'names the uploads after the translated title and the author' do
+        uploads = uploads_of(source('Reasons'), lang: 'pt')
 
-      uploads = Audiobook.generate_uploads('Adios.pdf', dir: dir, stl: nil)
+        expect(names(uploads)).to eq(['32 motivos - Mark Grenon.yml', '32 motivos - Mark Grenon.pt.pdf', '32 motivos - Mark Grenon.m4a'])
+        expect(uploads.map { |upload| upload.info.title }.uniq).to eq(['32 motivos'])
+      end
 
-      expect(uploads.map { |upload| [File.basename(upload.fn_out), upload.info.title] }).to eq([
-        ['Adeus a inflamacao.yml', 'Adeus a inflamacao'],
-        ['Adeus a inflamacao.pt.pdf', 'Adeus a inflamacao'],
-        ['Adeus a inflamacao.m4a', 'Adeus a inflamacao'],
-      ])
+      it 'names the uploads after the translated file name when the book has no title of its own' do
+        fake_llm(lang: 'es')
+        fake_translator('Adios' => 'Adeus a inflamacao')
+
+        uploads = uploads_of(source('Adios'), lang: 'pt')
+
+        expect(names(uploads)).to eq(['Adeus a inflamacao.yml', 'Adeus a inflamacao.pt.pdf', 'Adeus a inflamacao.m4a'])
+        expect(uploads.map { |upload| upload.info.title }.uniq).to eq(['Adeus a inflamacao'])
+      end
     end
   end
 
-  it 'names translated uploads after the title and the author' do
-    Dir.mktmpdir do |dir|
-      yaml  = File.join(dir, 'Reasons.yml')
-      pdf   = File.join(dir, 'Reasons.pt.pdf')
-      audio = File.join(dir, 'Reasons.m4a')
-      [yaml, pdf, audio].each { |path| File.write(path, 'x') }
-      book = Audiobook::Book.allocate
-      book.instance_variable_set(:@translated, true)
-      book.instance_variable_set(:@metadata, SymMash.new(title: '32 motivos', author: 'Mark Grenon', language: 'pt'))
-      allow(book).to receive(:thumb).and_return(nil)
-      allow(Audiobook).to receive(:base_from_source).and_return('Reasons')
-      allow(Audiobook).to receive(:generate).and_return(
-        SymMash.new(yaml: yaml, audio: audio, translation_pdf: pdf, book: book)
-      )
-      allow(Prober).to receive(:for)
+  describe '.generate' do
+    before { fake_tts }
 
-      uploads = Audiobook.generate_uploads('Reasons.pdf', dir: dir, stl: nil)
+    def generate(path, **opts) = Audiobook.generate(path, File.join(dir, 'book.aac'), opts: SymMash.new(opts))
 
-      expect(uploads.map { |upload| File.basename(upload.fn_out) }).to eq([
-        '32 motivos - Mark Grenon.yml',
-        '32 motivos - Mark Grenon.pt.pdf',
-        '32 motivos - Mark Grenon.m4a',
-      ])
-    end
-  end
+    it 'writes a translation PDF next to the yaml for a translated PDF' do
+      fake_html_to_pdf
+      fake_translator
+      fake_llm(lang: 'en')
 
-  it 'writes a translation PDF next to the yaml for a translated PDF' do
-    Dir.mktmpdir do |dir|
-      path  = File.join(dir, 'book.pdf')
-      audio = File.join(dir, 'book.aac')
-      File.write(path, '%PDF-1.4')
-      book = instance_double(Audiobook::Book, translated: true, metadata: {'language' => 'pt'})
-      allow(Audiobook::Book).to receive(:from_input).and_return(book)
-      allow(book).to receive(:write)
-      allow(Audiobook::TextPdf).to receive(:generate).and_return(File.join(dir, 'book.pt.pdf'))
-      allow(Audiobook::Runner).to receive(:new)
-        .and_return(instance_double(Audiobook::Runner, process_to_audio: audio))
+      result = generate(source, lang: 'pt')
 
-      result = Audiobook.generate(path, audio, opts: SymMash.new(lang: 'pt'))
-
-      expect(Audiobook::TextPdf).to have_received(:generate).with(book, File.join(dir, 'book.pt.pdf'), stl: nil, source_pdf: path)
       expect(result.translation_pdf).to eq(File.join(dir, 'book.pt.pdf'))
+      expect(File).to exist(result.translation_pdf)
     end
-  end
 
-  it 'does not write a translation PDF for a translated text file' do
-    Dir.mktmpdir do |dir|
-      path  = File.join(dir, 'book.txt')
-      audio = File.join(dir, 'book.aac')
-      File.write(path, 'Hello.')
-      book = instance_double(Audiobook::Book, translated: true, metadata: {'language' => 'pt'})
-      allow(Audiobook::Book).to receive(:from_input).and_return(book)
-      allow(book).to receive(:write)
-      allow(Audiobook::TextPdf).to receive(:generate)
-      allow(Audiobook::Runner).to receive(:new)
-        .and_return(instance_double(Audiobook::Runner, process_to_audio: audio))
+    it 'does not write a translation PDF for a translated text file' do
+      fake_translator
+      fake_llm(lang: 'en')
 
-      result = Audiobook.generate(path, audio, opts: SymMash.new(lang: 'pt'))
+      result = generate(source(ext: 'txt'), lang: 'pt')
 
-      expect(Audiobook::TextPdf).not_to have_received(:generate)
       expect(result.translation_pdf).to be_nil
+      expect(result.book.translated).to be(true)
     end
   end
 
