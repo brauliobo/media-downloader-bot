@@ -1,7 +1,7 @@
 module Replay
   # Feeds stored messages to the bot as if just received, keeping at most `parallel` of them in flight.
   class Runner
-    def initialize(manager, log: Log.new, parallel: 6)
+    def initialize(manager, log: Log.new, parallel: 8)
       @manager  = manager
       @log      = log
       @parallel = parallel

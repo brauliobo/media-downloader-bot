@@ -1,7 +1,7 @@
 module Replay
   # Replays, as freshly received, the messages forwarded into a chat; the runner of each job is kept apart so snapshots stay JSON-safe.
   class Jobs < BackgroundJobs
-    PARALLEL = 6
+    PARALLEL = 8
 
     def initialize(manager, log: Log.new, forwarded: Forwarding::Log.new)
       super()

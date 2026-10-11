@@ -4,7 +4,7 @@ import { api, type Replay } from './api'
 import ChatPicker from './ChatPicker.vue'
 
 const group = ref({ chatId: null as number | null, topicId: null as number | null })
-const parallel = ref(6)
+const parallel = ref(8)
 const plan = ref(false)
 const recover = ref(true)
 const jobs = ref<Replay[]>([])
