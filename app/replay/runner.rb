@@ -26,17 +26,11 @@ module Replay
     attr_reader :manager, :log
 
     def replay_all(pending)
-      queue = Queue.new
-      pending.each { |message| queue << message }
-      queue.close
-      Array.new([@parallel, pending.size].min) { Thread.new { work(queue) } }.each(&:join)
-    end
+      return if pending.empty?
 
-    def work(queue)
-      until @stopped
-        message = queue.pop or break
-        replay(message)
-      end
+      stream = WorkerStream.new([@parallel, pending.size].min) { |message| replay(message) unless @stopped }
+      pending.each { |message| break if @stopped; stream << message }
+      stream.close
     end
 
     # Logged on submission: a failure or restart never converts the same book twice.
