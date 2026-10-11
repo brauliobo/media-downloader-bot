@@ -155,6 +155,23 @@ RSpec.describe Ewprs::Translator do
     expect(maximum).to eq(2)
   end
 
+  it 'shares the request limit between translators, as books converted in parallel would otherwise queue past the router timeout' do
+    active = 0
+    maximum = 0
+    mutex = Mutex.new
+    allow(Utils::HTTP).to receive(:post) do
+      mutex.synchronize { maximum = [maximum, active += 1].max }
+      sleep 0.05
+      Struct.new(:body).new({choices: [{message: {content: 'Übersetzt'}}]}.to_json)
+    ensure
+      mutex.synchronize { active -= 1 }
+    end
+
+    3.times.map { Thread.new { described_class.new(jobs: 2).translate_markup(%w[First Second Third], to: 'de') } }.each(&:value)
+
+    expect(maximum).to eq(2)
+  end
+
   it 'retries brief transport interruptions' do
     calls = 0
     agent = stub_http_client

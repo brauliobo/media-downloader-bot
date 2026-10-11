@@ -28,13 +28,16 @@ module Ewprs
     SMART_QUOTE          = /(?:&(?:l|r)[sd]quo;|[“”«»])/i
     NATURAL_SMART_QUOTE  = /[“”„‟«»‘’‚‛‹›]/
     TRANSLATION_BOUNDARY = /(#{SMART_QUOTE}|<span data-ewprs="[12][12]">|<\/span>)/i
+    # The model serves a few requests at a time and the router in front of it drops the ones that wait longer than its
+    # read timeout, so the limit is shared by every translator of the process: books converted in parallel queue here.
+    REQUEST_LIMITS = Concurrent::Map.new
     attr_reader :jobs
 
     def initialize(jobs: nil)
       @jobs = Integer(jobs || ENV.fetch('HYMT2_CONCURRENCY', 4))
       raise ArgumentError, 'jobs must be positive' unless @jobs.positive?
 
-      @request_semaphore = Concurrent::Semaphore.new(@jobs)
+      @request_semaphore = REQUEST_LIMITS.compute_if_absent([host, @jobs]) { Concurrent::Semaphore.new(@jobs) }
     end
 
     def translate_markup(text, from: 'en', to:)
