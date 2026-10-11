@@ -64,7 +64,7 @@ EOS
   def react msg
     msg.bot = bot
     msg.bot_type = bot.class.name
-    return if msg.respond_to?(:is_outgoing) && msg.is_outgoing
+    return if msg.is_outgoing
     return if msg.text.blank? && msg.video.blank? && msg.audio.blank? && msg.document.blank?
     return send_help msg if msg.text&.starts_with?('/start', '/help')
     return if msg.from.id.in? BLOCKED_USERS
