@@ -18,13 +18,45 @@ RSpec.describe Manager do
     expect(error.cause).to be_nil
   end
 
+  describe '#replay_message' do
+    it 'reacts to the stored message and waits for its job to end' do
+      manager = described_class.new
+      bot     = double
+      msg     = SymMash.new(from: {id: 123}, chat: {id: 456}, text: 'https://example.com/video')
+      allow(manager).to receive(:bot).and_return(bot)
+      allow(bot).to receive(:incoming_message).with(chat_id: 456, message_id: 7).and_return(msg)
+      job = manager.jobs.register(msg)
+      allow(manager).to receive(:react).with(msg).and_return(job)
+      Thread.new { sleep 0.2; manager.jobs.finish(job[:id]) }
+
+      expect(manager.replay_message(chat_id: 456, message_id: 7)).to be(true)
+      expect(manager.jobs.active?(job[:id])).to be(false)
+    end
+  end
+
   describe '#react' do
     let(:manager) { described_class.new }
     let(:bot)     { double }
 
+    around do |example|
+      ChatSetting.db.transaction(rollback: :always, auto_savepoint: true) do
+        [-456, 456].each { |chat_id| ChatSetting.set_respond(chat_id, true) }
+        example.run
+      end
+    end
+
     before do
       manager.instance_variable_set(:@bot, bot)
       allow(bot).to receive(:reply_job_id).and_return(nil)
+    end
+
+    it 'relays every message, even the ones the bot ignores' do
+      msg = SymMash.new(from: {id: 123}, chat: {id: -789}, text: '', document: SymMash.new(file_name: 'file.pdf'))
+      expect(manager.instance_variable_get(:@relay)).to receive(:dispatch).with(msg)
+
+      manager.react(msg)
+
+      expect(manager.queue_size).to eq(0)
     end
 
     it 'enqueues unsupported private text' do
@@ -39,19 +71,28 @@ RSpec.describe Manager do
       expect(manager.queue_size).to eq(0)
     end
 
-    it 'enqueues group URLs' do
-      manager.react(SymMash.new(from: {id: 123}, chat: {id: -456}, text: 'https://example.com/video'))
+    it 'ignores everything in a group that was not enabled' do
+      manager.react(SymMash.new(from: {id: 123}, chat: {id: -789}, text: 'https://example.com/video'))
+      manager.react(SymMash.new(from: {id: 123}, chat: {id: -789}, text: '', document: SymMash.new(file_name: 'file.pdf')))
 
-      expect(manager.queue_size).to eq(1)
+      expect(manager.queue_size).to eq(0)
     end
 
-    it 'enqueues group media' do
-      media = {video: Object.new, audio: Object.new, document: SymMash.new(file_name: 'file.pdf')}
-      media.each do |type, value|
-        manager.react(SymMash.new(from: {id: 123}, chat: {id: -456}, text: '', type => value))
+    context 'with the group enabled' do
+      it 'enqueues group URLs' do
+        manager.react(SymMash.new(from: {id: 123}, chat: {id: -456}, text: 'https://example.com/video'))
+
+        expect(manager.queue_size).to eq(1)
       end
 
-      expect(manager.queue_size).to eq(3)
+      it 'enqueues group media' do
+        media = {video: Object.new, audio: Object.new, document: SymMash.new(file_name: 'file.pdf')}
+        media.each do |type, value|
+          manager.react(SymMash.new(from: {id: 123}, chat: {id: -456}, text: '', type => value))
+        end
+
+        expect(manager.queue_size).to eq(3)
+      end
     end
 
     it 'handles /stop without enqueueing it as a job' do
@@ -99,8 +140,9 @@ RSpec.describe Manager do
         allow(runner).to receive(:run)
         runner
       end
-      manager.enqueue_message(SymMash.new(from: {id: 123}, chat: {id: 456}, text: 'https://example.com/video'))
+      job = manager.enqueue_message(SymMash.new(from: {id: 123}, chat: {id: 456}, text: 'https://example.com/video'))
       msg = SymMash.new(from: {id: 123}, chat: {id: 456}, text: '/stop')
+      expect(job).to include(id: be_a(String), chat_id: 456)
 
       expect(bot).to receive(:send_message).with(msg, Bot::MsgHelpers.me('Stopping 1 job...'))
 

@@ -30,6 +30,9 @@ EOS
   def initialize
     @jobs = Bot::Jobs.new
     @edit_posts_jobs = EditPosts::JobManager.new(self) if ENV['TD_BOT']
+    @forwarding = Forwarding::Jobs.new(-> { bot })
+    @replays = Replay::Jobs.new(self)
+    @relay = Relay::Dispatcher.new(-> { bot })
   end
 
   def self.http
@@ -43,7 +46,9 @@ EOS
   def start
     start_td_bot if ENV['TD_BOT']
     start_tg_bot if ENV['TG_BOT']
+    @relay.recover!
     start_bot_service
+    start_frontend
     sleep 1.year while true
   end
 
@@ -62,12 +67,14 @@ EOS
   BLOCKED_USERS = ENV['BLOCKED_USERS'].to_s.split(/[\s,]+/).reject(&:empty?).map(&:to_i)
 
   def react msg
+    @relay.dispatch(msg)
     msg.bot = bot
     msg.bot_type = bot.class.name
     return if msg.is_outgoing
     return if msg.text.blank? && msg.video.blank? && msg.audio.blank? && msg.document.blank?
     return send_help msg if msg.text&.starts_with?('/start', '/help')
     return if msg.from.id.in? BLOCKED_USERS
+    return if Bot::MsgHelpers.in_group?(msg) && !ChatSetting.respond?(msg.chat.id)
 
     cmd_text = Utils::InputParser.message_text(msg).presence
     return stop_jobs(msg) if Bot::Jobs.stop_command?(cmd_text)
@@ -86,12 +93,14 @@ EOS
 
     job    = jobs.register(msg)
     forked = bot.fork_workers?
-    Bot::JobRunner.new(cancelled: jobs.method(:cancelled?), interrupted: ->(_) {}, finished: jobs.method(:finish)).run(job[:id], fork: forked) do
+    runner = Bot::JobRunner.new(cancelled: jobs.method(:cancelled?), interrupted: ->(_) {}, finished: jobs.method(:finish))
+    runner.run(job[:id], fork: forked) do
       Sequel::Model.db.disconnect if forked
       Process.setproctitle 'media-downloader-tgbot worker' if forked
       service = forked && bot_service_uri.present? ? Bot::Worker::Client.new(bot_service_uri) : bot
       Worker.new(msg, service: service, job_id: job[:id]).process
     end
+    job
   end
 
   def stop_jobs(msg)

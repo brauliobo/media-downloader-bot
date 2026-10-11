@@ -1,7 +1,7 @@
 class Manager
   # What the manager answers to workers and other processes over DRb and HTTP: keyword arguments throughout.
   module Service
-    delegate :max_caption, :find_chats, :resolve_chat_identifier, :chat_messages, :chat_message, :ensure_forum_topic, to: :bot
+    delegate :max_caption, :find_chats, :resolve_chat_identifier, :chat_message, :ensure_forum_topic, *Bot::Base::CHAT_OPERATIONS, to: :bot
     delegate :dequeue, to: :jobs
     delegate :size, to: :jobs, prefix: :queue
 
@@ -13,7 +13,30 @@ class Manager
     def edit_posts_jobs = @edit_posts_jobs.list
     def edit_posts_job_log(id, lines: 100) = @edit_posts_jobs.log(id, lines: lines)
 
+    def start_forwarding(params) = @forwarding.start(params)
+    def forwarding_job(id) = @forwarding.fetch(id)
+    def forwarding_jobs = @forwarding.list
+
+    def start_replay(params) = @replays.start(params)
+    def replay_job(id) = @replays.fetch(id)
+    def replay_jobs = @replays.list
+    def stop_replay(id) = @replays.stop(id)
+
+    # Feeds a stored message to the bot as if just received and blocks until its job ends.
+    def replay_message(chat_id:, message_id:)
+      job = react(bot.incoming_message(chat_id: chat_id, message_id: message_id))
+      sleep 0.5 while job && jobs.active?(job[:id])
+      true
+    end
+
+    def retry_relay(id) = @relay.retry(id)
+    def retry_failed_relays = @relay.retry_failed
+
+    def stop_job(id:) = jobs.cancel(id, user_id: 0, chat_id: 0, admin: true)
+
     def bot_service_uri = ENV['BOT_DRB'].presence || ENV['BOT_HTTP'].presence
+
+    def start_frontend = (WebServer.start(self, ENV.fetch('FRONTEND_PORT').to_i) if ENV['FRONTEND_PORT'])
 
     def start_bot_service
       Bot::Worker::HTTPService.start(self, http_port, host: http_host) if ENV['BOT_HTTP']
