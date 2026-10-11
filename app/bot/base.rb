@@ -42,6 +42,9 @@ module Bot
     def answer_callback(callback, text: nil)
     end
 
+    def reply_job_id(_msg)
+    end
+
     def fork_workers?
       false
     end

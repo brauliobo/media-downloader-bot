@@ -24,6 +24,7 @@ RSpec.describe Manager do
 
     before do
       manager.instance_variable_set(:@bot, bot)
+      allow(bot).to receive(:reply_job_id).and_return(nil)
     end
 
     it 'enqueues unsupported private text' do
@@ -65,6 +66,20 @@ RSpec.describe Manager do
       expect(manager.jobs.cancelled?(job[:id])).to be(true)
       expect(manager.jobs.cancelled?(other_job[:id])).to be(false)
       expect(manager.queue_size).to eq(2)
+    end
+
+    it 'cancels only the job of the status message a /stop replies to' do
+      msg       = SymMash.new(from: {id: 123}, chat: {id: 456}, text: '/stop', reply_to_message_id: 9)
+      job       = manager.jobs.submit(SymMash.new(from: {id: 123}, chat: {id: 456}, text: 'url'))
+      other_job = manager.jobs.submit(SymMash.new(from: {id: 123}, chat: {id: 456}, text: 'url'))
+      allow(bot).to receive(:reply_job_id).with(msg).and_return(job[:id])
+
+      expect(bot).to receive(:send_message).with(msg, Bot::MsgHelpers.me('Cancelling...'))
+
+      manager.react(msg)
+
+      expect(manager.jobs.cancelled?(job[:id])).to be(true)
+      expect(manager.jobs.cancelled?(other_job[:id])).to be(false)
     end
 
     it 'reports when /stop has no active jobs' do

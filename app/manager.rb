@@ -5,7 +5,7 @@ class Manager
   START_MSG = <<-EOS
 Download and convert videos/audios from Youtube, Facebook, Instagram, etc.
 Options:
-- Use `/stop` to cancel all your active jobs in this chat
+- Use `/stop` to cancel all your active jobs in this chat, or reply `/stop` to a status message to cancel only that job
 - Use `audio` keyword after link to extract audio
 - Use `caption` to put title and uploader
 - Use `hashtags`, `#`, or `hts` to generate Instagram-style hashtags from transcription
@@ -95,8 +95,16 @@ EOS
   end
 
   def stop_jobs(msg)
+    id = bot.reply_job_id(msg)
+    return stop_replied_job(msg, id) if id
+
     count = jobs.cancel_all(user_id: msg.from.id, chat_id: msg.chat.id, admin: admin?(msg.from.id))
     bot.send_message(msg, Bot::MsgHelpers.me(I18n.t('bot.stop.result', count: count)))
+  end
+
+  def stop_replied_job(msg, id)
+    result = jobs.cancel(id, user_id: msg.from.id, chat_id: msg.chat.id, admin: admin?(msg.from.id))
+    bot.send_message(msg, Bot::MsgHelpers.me(cancel_job_message(result)))
   end
 
   def cancel_job(callback)

@@ -14,13 +14,14 @@ module Bot
     SendOutcome = Struct.new(:message_id, :error, keyword_init: true)
 
     class_attribute :td
-    class_attribute :message_handler, :message_sender, :file_manager, :message_send_outcomes
+    class_attribute :message_handler, :message_sender, :file_manager, :message_send_outcomes, :status_jobs
     TD::Client.configure_for_bot
     self.td = TD::Client.new timeout: nil
     self.message_handler = TD::MessageHandler.new(td)
     self.message_sender  = TD::MessageSender.new(td)
     self.file_manager    = TD::FileManager.new(td)
     self.message_send_outcomes = Concurrent::Map.new
+    self.status_jobs = Concurrent::Map.new
     record_send_outcome = lambda do |message_id, outcome|
       message_send_outcomes.delete(message_send_outcomes.keys.first) if message_send_outcomes.size >= SEND_OUTCOME_LIMIT
       message_send_outcomes[message_id] = outcome
@@ -122,7 +123,16 @@ module Bot
         end
         finalize_sent_message(msg, SymMash.new(result), delete: delete, delete_both: delete_both)
       end
-      ret || SymMash.new(message_id: 0, text: text)
+      ret ||= SymMash.new(message_id: 0, text: text)
+      status_jobs[[msg.chat.id, ret.message_id]] = cancel_job if cancel_job && ret.message_id.to_i.positive?
+      ret
+    end
+
+    # Buttons are unavailable on TD, so a "/stop" reply to a job's status message cancels only that job.
+    # The reply targets the final message id, while the status was tracked under the id returned on send.
+    def reply_job_id(msg)
+      reply_id = msg.reply_to_message_id
+      status_jobs.each_pair.find { |(chat_id, id), _| chat_id == msg.chat.id && [id, message_send_outcomes[id]&.message_id].include?(reply_id) }&.last
     end
 
     def send_album(msg, text, uploads:, parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **_params)
@@ -171,6 +181,7 @@ module Bot
 
     def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', force: false, cancel_job: nil, **params)
       reply_markup = job_reply_markup(cancel_job)
+      status_jobs.delete([msg.chat.id, id]) if cancel_job == false
       throttle_edit(msg.chat.id, id, force: force) do
         with_rate_limit('edit_message') do
           message_sender.edit_message(msg.chat.id, id, text, parse_mode: parse_mode, reply_markup: reply_markup)

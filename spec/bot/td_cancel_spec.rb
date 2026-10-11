@@ -23,6 +23,28 @@ else
       allow(bot).to receive(:throttle!)
       allow(bot).to receive(:throttle_edit).and_yield
       described_class.message_send_outcomes.clear
+      described_class.status_jobs.clear
+    end
+
+    it 'resolves a /stop reply to the job of its status message, by sent or final id' do
+      allow(sender).to receive(:send_text).and_return(message_id: 789)
+      bot.send_message(msg, 'working', cancel_job: 'job-id')
+      described_class.message_send_outcomes[789] = described_class::SendOutcome.new(message_id: 800)
+
+      expect(bot.reply_job_id(SymMash.new(chat: {id: 123}, reply_to_message_id: 789))).to eq('job-id')
+      expect(bot.reply_job_id(SymMash.new(chat: {id: 123}, reply_to_message_id: 800))).to eq('job-id')
+      expect(bot.reply_job_id(SymMash.new(chat: {id: 999}, reply_to_message_id: 800))).to be_nil
+      expect(bot.reply_job_id(SymMash.new(chat: {id: 123}))).to be_nil
+    end
+
+    it 'forgets the status job once its controls are cleared' do
+      allow(sender).to receive(:send_text).and_return(message_id: 789)
+      allow(sender).to receive(:edit_message).and_return(true)
+      bot.send_message(msg, 'working', cancel_job: 'job-id')
+
+      bot.edit_message(msg, 789, text: 'done', cancel_job: false)
+
+      expect(bot.reply_job_id(SymMash.new(chat: {id: 123}, reply_to_message_id: 789))).to be_nil
     end
 
     it 'sends status text without bot-API cancel keyboards' do
