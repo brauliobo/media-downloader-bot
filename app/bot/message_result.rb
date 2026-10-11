@@ -3,13 +3,8 @@ module Bot
     module_function
 
     def dump(message)
-      return message unless message.respond_to?(:id) || message.respond_to?(:message_id)
-
-      {
-        message_id:     message.respond_to?(:message_id) ? message.message_id : nil,
-        id:             message.respond_to?(:id) ? message.id : nil,
-        media_group_id: message.respond_to?(:media_group_id) ? message.media_group_id : nil,
-      }.compact
+      fields = %i[message_id id media_group_id].index_with { |field| message.try(field) }.compact
+      fields.slice(:message_id, :id).empty? ? message : fields
     end
   end
 end
