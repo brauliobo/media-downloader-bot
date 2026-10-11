@@ -39,6 +39,8 @@ Environment=THREADS=10
 Environment=DB=1
 Environment=TDLOG=1
 Environment=TD_BOT=1
+# Forwarding UI/API on loopback; needs BOT_HTTP_TOKEN in the private environment file.
+Environment=FRONTEND_PORT=3100
 # Set BLOCKED_USERS in a private environment file.
 
 Restart=always
