@@ -14,36 +14,9 @@ module Processors
 
     def generate_and_upload_shorts(i)
       @stl&.update 'generating shorts plan'
-      source = if i.opts.genshorts.is_a?(String) && local_genshorts_path?(i.opts.genshorts)
-        ::File.read(i.opts.genshorts)
-      else
-        ::File.read Zipper.generate_srt(i.fn_in, dir: dir, info: i.info, probe: i.probe, stl: @stl, opts: i.opts)
-      end
-      subtitle = parse_subtitle(source)
-      lang = i.opts.slang || i.info.language
-
-      cuts = begin
-        ::Shorts.generate_cuts(subtitle, language: lang)
-      rescue => e
-        @stl&.update "codex failed: #{e.message}"; []
-      end
-
-      if cuts.blank?
-        total = (i.durat || i.probe.format.duration.to_i).to_i
-        t = 0
-        cuts = []
-        while t < total
-          cuts << ::Shorts::Cut.new(
-            start:  Time.at(t).utc.strftime('%H:%M:%S'),
-            finish: Time.at([t + 60, total].min).utc.strftime('%H:%M:%S'),
-            title:  "Short #{cuts.size + 1}"
-          )
-          t += 60
-        end
-        @stl&.update "fallback plan: #{cuts.size} cuts"
-      else
-        @stl&.update "cuts planned: #{cuts.size}"
-      end
+      subtitle = parse_subtitle(subtitle_source(i))
+      lang     = i.opts.slang || i.info.language
+      cuts     = plan_cuts(i, subtitle, lang)
 
       slices  = []
       uploads = cuts.each_with_index.filter_map do |cut, idx|
@@ -59,6 +32,34 @@ module Processors
     end
 
     private
+
+    def subtitle_source(i)
+      return ::File.read(i.opts.genshorts) if i.opts.genshorts.is_a?(String) && local_genshorts_path?(i.opts.genshorts)
+
+      ::File.read Zipper.generate_srt(i.fn_in, dir: dir, info: i.info, probe: i.probe, stl: @stl, opts: i.opts)
+    end
+
+    def plan_cuts(i, subtitle, lang)
+      cuts = generate_cuts(subtitle, lang)
+      return cuts.tap { @stl&.update "cuts planned: #{cuts.size}" } if cuts.present?
+
+      fallback_cuts((i.durat || i.probe.format.duration.to_i).to_i).tap { |plan| @stl&.update "fallback plan: #{plan.size} cuts" }
+    end
+
+    def generate_cuts(subtitle, lang)
+      ::Shorts.generate_cuts(subtitle, language: lang)
+    rescue => e
+      @stl&.update "codex failed: #{e.message}"
+      []
+    end
+
+    def fallback_cuts(total)
+      (0...total).step(60).each_with_index.map do |start, index|
+        ::Shorts::Cut.new(start: clock(start), finish: clock([start + 60, total].min), title: "Short #{index + 1}")
+      end
+    end
+
+    def clock(seconds) = Time.at(seconds).utc.strftime('%H:%M:%S')
 
     def local_genshorts_path?(path)
       Utils::Safety.real_file_inside?(path, dir)

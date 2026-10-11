@@ -50,36 +50,43 @@ module Processors
 
       generate_hashtags(i) if i.opts.hashtags
 
-      if i.opts.genshorts
-        Processors::Shorts.new(dir: dir, msg: msg, st: st, stline: i.stl).generate_and_upload_shorts(i)
-        return i
-      end
+      return i.tap { generate_shorts(_1) } if i.opts.genshorts
 
       stream = streamable?(i)
       warn_compromised_quality(i) unless stream || i.opts.onlysrt
 
       binding.pry if ENV['PRY_BEFORE_CONVERT']
 
-      if i.opts.onlysrt
-        generate_srt_only(i)
-        return i
-      end
+      return i.tap { generate_srt_only(_1) } if i.opts.onlysrt
 
-      i.thumb = i.opts.thumb = Timeout.timeout(15) do
-        Utils::Thumb.process(i.info, base_filename: i.info._filename, on_error: -> e { service.report_error(msg, e) })
-      end rescue nil
+      i.thumb = i.opts.thumb = fetch_thumb(i)
       i.fn_out = stream ? passthrough(i, pos: pos) : convert(i, pos: pos)
       return if i.stl.error?
-
-      if Zipper.size_mb_limit
-        mbsize = ::File.size(i.fn_out) / 2**20
-        return i.stl.error VID_TOO_BIG[] if i.type == Types.video and mbsize >= Zipper.size_mb_limit
-        return i.stl.error TOO_BIG[] if mbsize >= Zipper.size_mb_limit
-      end
+      error = size_error(i)
+      return i.stl.error error if error
 
       tag i
 
       i
+    end
+
+    def generate_shorts(i)
+      Processors::Shorts.new(dir: dir, msg: msg, st: st, stline: i.stl).generate_and_upload_shorts(i)
+    end
+
+    # The thumbnail is optional: a slow or failing fetch leaves the upload without one.
+    def fetch_thumb(i)
+      Timeout.timeout(15) do
+        Utils::Thumb.process(i.info, base_filename: i.info._filename, on_error: -> e { service.report_error(msg, e) })
+      end
+    rescue StandardError
+      nil
+    end
+
+    def size_error(i)
+      return unless Zipper.size_mb_limit && ::File.size(i.fn_out) / 2**20 >= Zipper.size_mb_limit
+
+      i.type == Types.video ? VID_TOO_BIG[] : TOO_BIG[]
     end
 
     def generate_srt_only i
