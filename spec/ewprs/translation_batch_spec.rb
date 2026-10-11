@@ -95,13 +95,15 @@ RSpec.describe Ewprs::TranslationBatch do
     html = "<p class=para_copyright><div class=copyright>&copy; Copyright 2009\r\n" \
            "A&#x301;nanda Ma&#x301;rga Praca&#x301;raka Sam&#x301;gha (Central)\r\n" \
            'All Rights Reserved</div></p>'
-    template = batch.send(:unitize, html)
-    sources = batch.instance_variable_get(:@units).values.map(&:source)
+    portuguese = FakeMarkupTranslator.new do |text|
+      text.sub('Copyright', 'Direitos autorais').sub('All Rights Reserved', 'Todos os direitos reservados')
+    end
+    rendered = translate_discourse(described_class.new(root: root, cache: cache, translator: portuguese, stdout: StringIO.new),
+                                   html: html)
 
-    expect(sources).to include('&copy; Copyright 2009')
-    expect(sources).to include('All Rights Reserved')
-    expect(template).to include('A&#x301;nanda Ma&#x301;rga Praca&#x301;raka Sam&#x301;gha (Central)')
-    expect(template).not_to include('All Rights Reserved')
+    expect(portuguese.calls).to include('&copy; Copyright 2009', 'All Rights Reserved')
+    expect(portuguese.calls.join).not_to include('Sam&#x301;gha')
+    expect(rendered).to include('A&#x301;nanda Ma&#x301;rga Praca&#x301;raka Sam&#x301;gha (Central)')
   end
 
   it 'unitizes book navigation title and alt attributes and reuses chapter titles' do
@@ -110,35 +112,28 @@ RSpec.describe Ewprs::TranslationBatch do
            '<img src="n.gif" Alt="Next chapter: Preface" /></a>' \
            '<a href="#top" title="Beginning of book">' \
            '<img src="t.gif" Alt="Beginning of book" /></a>'
-    template = batch.send(:unitize, html)
-    sources = batch.instance_variable_get(:@units).values.map(&:source)
-
-    expect(template).not_to include('Next chapter:')
-    expect(template).not_to include('Beginning of book')
-    expect(sources).to include('Next chapter: ')
-    expect(sources).to include('Beginning of book')
-    expect(sources).to include('Preface')
-    expect(sources.count('Preface')).to eq(1)
-
-    translations = batch.instance_variable_get(:@units).to_h do |key, unit|
-      [key, unit.source.gsub('Next chapter: ', 'Próximo capítulo: ').gsub('Beginning of book', 'Início do livro')]
+    portuguese = FakeMarkupTranslator.new do |text|
+      text.gsub('Next chapter:', 'Próximo capítulo:').gsub('Beginning of book', 'Início do livro').gsub('Preface', 'Prefácio')
     end
-    rendered = batch.send(:render, described_class::Document.new(template: template), translations)
+    rendered = translate_discourse(described_class.new(root: root, cache: cache, translator: portuguese, stdout: StringIO.new),
+                                   html: html)
 
-    expect { batch.send(:validate_structure!, html, rendered) }.not_to raise_error
-    expect(rendered).to include('title="Próximo capítulo: Preface"')
+    expect(portuguese.calls).to include('Next chapter:', 'Beginning of book', 'Preface')
+    expect(portuguese.calls.count('Preface')).to eq(1)
+    expect(rendered).to include('title="Próximo capítulo: Prefácio"')
     expect(rendered).to include('title="Início do livro"')
   end
 
   it 'unitizes English chapter chrome even when the chapter title is a marked foreign fragment' do
     html = '<a href="#ch1" title="Previous chapter: Ta&#x301;ttvika Diipika&#x301; (Dvitiiya Parva)">' \
            '<img Alt="Previous chapter: Ta&#x301;ttvika Diipika&#x301; (Dvitiiya Parva)" /></a>'
-    template = batch.send(:unitize, html)
-    sources = batch.instance_variable_get(:@units).values.map(&:source)
+    portuguese = FakeMarkupTranslator.new { |text| text.sub('Previous chapter:', 'Capítulo anterior:') }
+    rendered = translate_discourse(described_class.new(root: root, cache: cache, translator: portuguese, stdout: StringIO.new),
+                                   html: html)
 
-    expect(template).not_to include('Previous chapter:')
-    expect(sources).to include('Previous chapter: ')
-    expect(template).to include('Ta&#x301;ttvika Diipika&#x301; (Dvitiiya Parva)')
+    expect(portuguese.calls).to include('Previous chapter:')
+    expect(portuguese.calls.join).not_to include('Dvitiiya')
+    expect(rendered).to include('Ta&#x301;ttvika Diipika&#x301; (Dvitiiya Parva)')
   end
 
   it 'unitizes English discourse openers attached to marked linguistic formulas' do
@@ -170,9 +165,10 @@ RSpec.describe Ewprs::TranslationBatch do
   end
 
   it 'unitizes documents without protected content' do
-    template = batch.send(:unitize, '<html><body><p>English sentence.</p></body></html>')
+    rendered = translate_discourse(html: '<html><body><p>English sentence.</p></body></html>')
 
-    expect(template).to match(/⟦U[0-9a-f]{64}⟧/)
+    expect(translator.calls).to eq(['English sentence.'])
+    expect(rendered).to eq('<html><body><p>Português sentence.</p></body></html>')
   end
 
   it 'normalizes duplicate dashes after nested units are composed' do
@@ -186,9 +182,7 @@ RSpec.describe Ewprs::TranslationBatch do
     title = 'Abhedajin&#x32D;a&#x301;na and Daeshika Vyavadha&#x301;na Vilopa'
     source = '<div class=discourse_box_title_ref><!-- block a=title type=title -->' \
              "#{title}<!-- /block --></div><div class=discourse_title>#{title}</div>"
-    template = batch.send(:unitize, source)
-    translations = batch.send(:translate_units)
-    rendered = batch.send(:render, described_class::Document.new(template: template), translations)
+    rendered = translate_discourse(html: source)
 
     expect(rendered.scan('Abhedajin&#x32D;a&#x301;na e Daeshika Vyavadha&#x301;na Vilopa').size).to eq(2)
   end
@@ -282,10 +276,8 @@ RSpec.describe Ewprs::TranslationBatch do
   end
 
   it 'translates prose while preserving structure, slokas, scripts, markup, and Sanskrit bytes' do
-    document, translations = prepare_translation(batch)
-    rendered = batch.send(:render, document, translations)
+    rendered = translate_discourse
 
-    expect { batch.send(:validate_structure!, source, rendered) }.not_to raise_error
     expect(rendered).to include('Português &ndash; title', 'Traduza-me')
     expect(rendered).not_to include('&amp;ndash;')
     expect(rendered).to include('A&#x301;nanda', '<b>Português markup</b>', '<i>Brahma</i>', 'Prakrti')
@@ -307,7 +299,7 @@ RSpec.describe Ewprs::TranslationBatch do
   end
 
   it 'uses the EWPRS sentence splitter for independent translation units' do
-    prepare_translation(batch)
+    translate_discourse
 
     expect(translator.calls).to include('English plain sentence.')
     expect(translator.calls).to include(a_string_matching(/\A__P\d{4}__English next sentence\.__P\d{4}__\z/))
@@ -322,13 +314,12 @@ RSpec.describe Ewprs::TranslationBatch do
   end
 
   it 'splits structural content while preserving non-English original verses' do
-    document, translations = prepare_translation(batch)
-    rendered = batch.send(:render, document, translations)
+    rendered = translate_discourse
 
     expect(translator.calls).to include('English first cell.', 'English second cell.')
     expect(translator.calls).to include('English poetic rendering first line.')
     expect(translator.calls).to include('English poetic rendering second line.')
-    expect(batch.instance_variable_get(:@units).values.map(&:source).join).not_to include('Toma')
+    expect(translator.calls.join).not_to include('Toma')
     expect(rendered).to include(
       'Toma&#x301;r tare ma&#x301;latii ma&#x301;la&#x301;<br>Toma&#x301;r tare sura sa&#x301;dha&#x301;.'
     )
@@ -346,9 +337,7 @@ RSpec.describe Ewprs::TranslationBatch do
       <table><tr><td>English contents entry</td></tr></table>
       </body></html>
     HTML
-    template = batch.send(:unitize, grammar)
-    translations = batch.send(:translate_units)
-    rendered = batch.send(:render, described_class::Document.new(template: template), translations)
+    rendered = translate_discourse(html: grammar)
 
     expect(translator.calls).to include('SINGULAR', 'PLURAL', 'English contents entry')
     expect(translator.calls).not_to include('life', 'lives', 'In, into, unto:')
@@ -359,8 +348,7 @@ RSpec.describe Ewprs::TranslationBatch do
   end
 
   it 'preserves an inline non-English original before its translated rendering' do
-    document, translations = prepare_translation(batch)
-    rendered = batch.send(:render, document, translations)
+    rendered = translate_discourse
 
     expect(translator.calls.join).not_to include('Eso A&#x301;y bet&#x301;a&#x301; toke dekhe noba')
     expect(translator.calls).to include(
@@ -475,8 +463,7 @@ RSpec.describe Ewprs::TranslationBatch do
   end
 
   it 'translates a marked Sanskrit gloss as a nested unit' do
-    document, translations = prepare_translation(batch)
-    rendered = batch.send(:render, document, translations)
+    rendered = translate_discourse
 
     expect(translator.calls).to include('English bliss', 'English middle')
     expect(rendered).to include(
@@ -674,11 +661,16 @@ RSpec.describe Ewprs::TranslationBatch do
            'Subsequently they gave it an interpretation. ' \
            'Liun&#x32D;gate gamyate yasma&#x301;d [&ldquo;All things move toward it&rdquo;].</p>'
 
-    batch.send(:unitize, html)
-    sources = batch.instance_variable_get(:@units).values.map(&:source)
+    portuguese = FakeMarkupTranslator.new do |text|
+      text.sub('They accepted,', 'Eles aceitaram,').sub('became common', 'tornou-se comum')
+          .sub('Subsequently they gave it an interpretation.', 'Depois deram-lhe uma interpretação.')
+          .sub('All things move toward it', 'Todas as coisas se movem em direção a isso')
+    end
+    translate_discourse(described_class.new(root: root, cache: cache, translator: portuguese, stdout: StringIO.new),
+                        html: html)
 
-    expect(sources.join(' ')).to include('Subsequently they gave it an interpretation.')
-    expect(sources.join).not_to match(described_class::PROTECTED_MARKER)
+    expect(portuguese.calls.join(' ')).to include('Subsequently they gave it an interpretation.')
+    expect(portuguese.calls.join).not_to match(described_class::PROTECTED_MARKER)
   end
 
   it 'does not absorb English prose between marked Sanskrit terms into a gloss token' do
@@ -1675,8 +1667,7 @@ RSpec.describe Ewprs::TranslationBatch do
   end
 
   it 'rejects translations that alter editorial brackets' do
-    document, translations = prepare_translation(batch)
-    rendered = batch.send(:render, document, translations).sub('[&ldquo;', '&ldquo;')
+    rendered = translate_discourse.sub('[&ldquo;', '&ldquo;')
 
     expect { batch.send(:validate_structure!, source, rendered) }.to raise_error(/editorial brackets changed/)
   end
@@ -1928,8 +1919,7 @@ RSpec.describe Ewprs::TranslationBatch do
   end
 
   it 'keeps complete footnotes out of model input' do
-    document, translations = prepare_translation(batch)
-    rendered = batch.send(:render, document, translations)
+    rendered = translate_discourse
 
     expect(translator.calls.join).not_to include('Ref.fn2')
     expect(rendered).to include(
@@ -1946,51 +1936,49 @@ RSpec.describe Ewprs::TranslationBatch do
   end
 
   it 'translates prose around a protected element' do
-    prepare_translation(batch)
+    translate_discourse
     call = translator.calls.find { |text| text.include?('English before') && text.include?('English after') }
 
     expect(call).to match(/English before __P\d{4}__ English after\./)
   end
 
   it 'resumes from the persistent unit cache' do
-    prepare_translation(batch)
+    translate_discourse
     resumed_translator = FakeMarkupTranslator.new { raise 'cache miss' }
     resumed = described_class.new(
       root: root, cache: cache, translator: resumed_translator, stdout: StringIO.new
     )
 
-    prepare_translation(resumed)
+    translate_discourse(resumed)
 
     expect(resumed_translator.calls).to be_empty
   end
 
   it 'discards and replaces an invalid cached translation' do
-    prepare_translation(batch)
-    unit = batch.instance_variable_get(:@units).values.find { |value| value.source == 'English plain sentence.' }
-    JsonlStore.new(cache).append(key: unit.key, translation: unit.source, at: Time.now.utc.iso8601)
+    translate_discourse
+    JsonlStore.new(cache).append(key: cached_key, translation: 'English plain sentence.', at: Time.now.utc.iso8601)
     resumed_translator = FakeMarkupTranslator.new
     resumed = described_class.new(
       root: root, cache: cache, translator: resumed_translator, stdout: StringIO.new
     )
 
-    prepare_translation(resumed)
+    translate_discourse(resumed)
 
     expect(resumed_translator.calls).to eq(['English plain sentence.'])
   end
 
   it 'discards a cached translation with stale nested unit markers' do
-    prepare_translation(batch)
-    unit = batch.instance_variable_get(:@units).values.find { |value| value.source == 'English plain sentence.' }
+    translate_discourse
     stale_marker = "⟦U#{'0' * 64}⟧"
     JsonlStore.new(cache).append(
-      key: unit.key, translation: "Português #{stale_marker}.", at: Time.now.utc.iso8601
+      key: cached_key, translation: "Português #{stale_marker}.", at: Time.now.utc.iso8601
     )
     resumed_translator = FakeMarkupTranslator.new
     resumed = described_class.new(
       root: root, cache: cache, translator: resumed_translator, stdout: StringIO.new
     )
 
-    prepare_translation(resumed)
+    translate_discourse(resumed)
 
     expect(resumed_translator.calls).to eq(['English plain sentence.'])
   end
@@ -2040,31 +2028,21 @@ RSpec.describe Ewprs::TranslationBatch do
   end
 
   it 'preserves the source file mode when writing a translated document' do
-    path = File.join(root, 'HTML/Discourses/Mode.html')
-    File.binwrite(path, 'source')
-    document = described_class::Document.new(
-      entry: described_class::Entry.new(kind: :discourse, path: path),
-      encoding: Encoding::UTF_8,
-      mode: 0o755
-    )
+    File.chmod(0o755, complete)
 
-    batch.send(:write_document, document, 'translated')
+    translate_discourse
 
-    expect(File.stat(path).mode & 0o7777).to eq(0o755)
+    expect(File.stat(complete).mode & 0o7777).to eq(0o755)
   end
 
   it 'promotes legacy output encoding when target text is not representable' do
-    path = File.join(root, 'HTML/Discourses/Chinese.html')
-    File.binwrite(path, 'source')
-    document = described_class::Document.new(
-      entry: described_class::Entry.new(kind: :discourse, path: path),
-      encoding: Encoding::Windows_1252,
-      mode: 0o644
-    )
+    File.binwrite(complete, "<p>Caf\xE9 sentence.</p>".b)
+    chinese = FakeMarkupTranslator.new { |text| text.sub('Café sentence.', '中文') }
+    chinese = described_class.new(root: root, target: 'zh', cache: cache, translator: chinese, stdout: StringIO.new)
 
-    batch.send(:write_document, document, '<p>中文</p>')
+    translate_discourse(chinese)
 
-    output = File.binread(path).force_encoding(Encoding::UTF_8)
+    output = File.binread(complete).force_encoding(Encoding::UTF_8)
     expect(output.valid_encoding?).to be(true)
     expect(output).to include('中文')
   end
@@ -2090,10 +2068,8 @@ RSpec.describe Ewprs::TranslationBatch do
     end
     output = StringIO.new
     invalid = described_class.new(root: root, cache: cache, translator: broken, stdout: output)
-    entry = described_class::Entry.new(kind: :discourse, path: File.join(root, 'HTML/Discourses/Complete.html'))
-    invalid.send(:prepare_documents, [entry])
 
-    expect { invalid.send(:translate_units) }.to raise_error(/changed protected tokens.*missing:/)
+    expect { translate_discourse(invalid) }.to raise_error(/changed protected tokens.*missing:/)
     expect(output.string).to include(
       'failed invalid translation', 'source: ', 'prepared: ', 'output: '
     )
@@ -2863,7 +2839,7 @@ RSpec.describe Ewprs::TranslationBatch do
     end
     retried = described_class.new(root: root, cache: cache, translator: flaky, stdout: StringIO.new)
 
-    expect { prepare_translation(retried) }.not_to raise_error
+    expect { translate_discourse(retried) }.not_to raise_error
     expect(corruptions).to eq(3)
   end
 
@@ -3301,9 +3277,27 @@ RSpec.describe Ewprs::TranslationBatch do
     expect(unit.tokens).to eq('__P0001__' => ']]')
   end
 
-  def prepare_translation(instance)
-    entry = described_class::Entry.new(kind: :discourse, path: File.join(root, 'HTML/Discourses/Complete.html'))
-    documents = instance.send(:prepare_documents, [entry])
-    [documents.first, instance.send(:translate_units)]
+  def cached_key = JsonlStore.new(cache).find { |record| record[:translation] == 'Português plain sentence.' }.fetch(:key)
+
+  def complete = File.join(root, 'HTML/Discourses/Complete.html')
+
+  def git(*args) = system('git', '-c', 'user.name=spec', '-c', 'user.email=spec@example.com', *args, chdir: root, exception: true)
+
+  # The batch reads its documents from the source ref of a git worktree and writes them on a branch of it.
+  def init_source
+    return if File.exist?(File.join(root, '.git'))
+
+    File.write(File.join(root, '.gitignore'), "cache.jsonl\n*.tmp\n")
+    git('init', '-q', '-b', '7.5')
+    git('add', 'HTML', '.gitignore')
+    git('commit', '-q', '-m', 'source')
+  end
+
+  # Translates Complete.html (or the html written in its place) through the public run and reads it back.
+  def translate_discourse(instance = batch, html: nil)
+    File.binwrite(complete, html) if html
+    init_source
+    instance.run(only: 'Complete')
+    File.binread(complete).force_encoding(Encoding::UTF_8)
   end
 end
