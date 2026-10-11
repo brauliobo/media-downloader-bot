@@ -4,25 +4,10 @@ class Worker
 
   ALBUM_CAPTION_SEPARATOR = "\n\n".freeze
 
-  class_attribute :service
+  class_attribute :service, :workdir_path, :skip_cleanup
+  class_attribute :tmpdir, default: Utils::Tmp.root
 
-  attr_reader :msg
-  attr_reader :st
-  attr_reader :dir
-  attr_reader :opts
-  attr_reader :session
-  attr_reader :service
-  attr_reader :job_id
-
-  class_attribute :tmpdir
-  self.tmpdir = Utils::Tmp.root
-
-  class_attribute :workdir_path
-  class_attribute :skip_cleanup
-
-  attr_reader :tmpdir
-  attr_reader :workdir_path
-  attr_reader :skip_cleanup
+  attr_reader :msg, :st, :dir, :opts, :session, :job_id, :service, :tmpdir, :workdir_path, :skip_cleanup
 
   def initialize(msg, service: self.class.service, job_id: nil, tmpdir: self.class.tmpdir, workdir_path: self.class.workdir_path, skip_cleanup: self.class.skip_cleanup)
     @msg          = msg
