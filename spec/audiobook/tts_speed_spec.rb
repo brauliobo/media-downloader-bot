@@ -1,415 +1,192 @@
 require 'rails_helper'
 
 RSpec.describe 'Audiobook TTS speed' do
+  let(:clone_text) { 'Esta frase de referência é longa o bastante para fixar a voz narradora durante todo o audiolivro.' }
+
+  def duration_of(page, **options)
+    Dir.mktmpdir { |dir| Prober.for(page.to_wav(dir, '0001', **options)).format.duration.to_f }
+  end
+
   [TTS::OmniVoice, TTS::MossTTS].each do |backend|
     it "builds and reuses stable speech options for #{backend.name}" do
-      stub_const('TTS::BACKEND', backend)
-      book = instance_double(Audiobook::Book, metadata: {}, pages: [], author_gender: 'female')
-      runner = Audiobook::Runner.new(book, nil, SymMash.new(speed: '1.25'))
+      tts = fake_tts(backend)
+      fake_llm(gender: 'female')
 
-      Dir.mktmpdir do |dir|
-        syntheses = []
-        allow(Language).to receive(:voice_reference_text).with('en').and_return(Language.reference_fallback('en'))
-        allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'female')
-        allow(TTS).to receive(:synthesize) do |out_path:, **kwargs|
-          syntheses << kwargs
-          File.write(out_path, 'wav')
-        end
+      expect(narrate(sentence_book('Hello world.', 'Another one.'), SymMash.new(speed: '1.25'))).to be_positive
 
-        options = runner.send(:tts_options, dir)
-        reused_options = runner.send(:tts_options, dir)
-
-        expect(backend.supports_stable_voice_reference?).to eq(true)
-        expect(options).not_to have_key(:speed)
-        expect(options[:audio_speed]).to eq(1.25)
-        if backend == TTS::MossTTS
-          expect(options[:temperature]).to eq(0)
-        else
-          expect(options).not_to have_key(:temperature)
-        end
-        expect(options[:instruct]).to eq('female, middle-aged, moderate pitch')
-        expect(options[:speaker_wav]).to end_with('audiobook_voice_reference.wav')
-        expect(options[:ref_text]).to eq(Language.reference_fallback('en'))
-        expect(reused_options[:speaker_wav]).to eq(options[:speaker_wav])
-        expect(syntheses.one?).to eq(true)
-      end
+      reference = tts.reference
+      expect(tts.calls.count { |call| call.equal?(reference) }).to eq(1)
+      expect(reference).to include(instruct: 'female, middle-aged, moderate pitch', lang: 'en')
+      expect(tts.narration.map { |call| call[:speaker_wav] }.uniq).to eq([reference[:out_path]])
+      expect(tts.narration).to all(include(ref_text: reference[:text], instruct: 'female, middle-aged, moderate pitch'))
+      expect(tts.narration).to all(satisfy { |call| !call.key?(:speed) && !call.key?(:audio_speed) })
+      expect(tts.narration.map { |call| call[:temperature] }.uniq).to eq(backend == TTS::MossTTS ? [0] : [nil])
     end
   end
 
-  it 'uses book text instead of synthetic narration for the MOSS-TTS reference' do
-    stub_const('TTS::BACKEND', TTS::MossTTS)
-    short_text = 'Esta frase possui palavras suficientes para servir como uma referência de voz.'
+  it 'speeds the narration up once, not again when encoding the final audiobook' do
+    book = sentence_book('Hello world.')
+    fake_tts(seconds: 1)
+    normal = narrate(book)
+    fast   = narrate(book, SymMash.new(speed: '2'))
+
+    expect(normal - fast).to be_within(0.15).of(0.5)
+  end
+
+  it 'uses book text instead of synthetic narration for the voice reference' do
+    short_text  = 'Esta frase possui palavras suficientes para servir como uma referência de voz.'
     source_text = 'Esta frase mais longa preserva uma voz consistente durante toda a leitura do livro.'
-    page = Audiobook::Page.new(1, [
-      Audiobook::Heading.new(short_text),
-      Audiobook::Heading.new(source_text),
-    ])
-    book = instance_double(Audiobook::Book, metadata: { 'language' => 'pt' }, pages: [page], author_gender: 'female')
-    runner = Audiobook::Runner.new(book, nil, SymMash.new)
+    tts = fake_tts(TTS::MossTTS)
+    fake_llm(reference: clone_text)
 
-    allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'female')
-    expect(Language).not_to receive(:voice_reference_text)
-    expect(TTS).to receive(:synthesize).with(hash_including(text: source_text)) do |out_path:, **_kwargs|
-      File.write(out_path, 'wav')
-    end
+    narrate(book_of(Audiobook::Heading.new(short_text), Audiobook::Heading.new(source_text), metadata: { language: 'pt' }))
 
-    Dir.mktmpdir do |dir|
-      options = runner.send(:tts_options, dir)
-      expect(options[:ref_text]).to eq(source_text)
-      expect(options[:speaker_wav]).to end_with('audiobook_voice_reference.wav')
-    end
+    expect(tts.reference).to include(text: source_text, lang: 'pt')
+    expect(tts.narration).to all(include(ref_text: source_text))
   end
 
   it 'rejects oversized whitespace-light source text for voice references' do
     short_text = Array.new(16, '中文').join(' ')
     long_text  = Array.new(20, '这是一段明显过长的中文参考文本').join(' ')
-    page = Audiobook::Page.new(1, [
-      Audiobook::Heading.new(short_text),
-      Audiobook::Heading.new(long_text),
-    ])
-    book = instance_double(Audiobook::Book, metadata: {'language' => 'zh'}, pages: [page])
-    runner = Audiobook::Runner.new(book, nil, SymMash.new)
+    tts = fake_tts(TTS::OmniVoice)
 
-    expect(runner.send(:source_voice_reference_text)).to eq(short_text)
+    narrate(book_of(Audiobook::Heading.new(short_text), Audiobook::Heading.new(long_text), metadata: { language: 'zh' }))
+
+    expect(tts.reference[:text]).to eq(short_text)
   end
 
-  it 'uses language-specific reference text for non-English audiobooks' do
-    stub_const('TTS::BACKEND', TTS::OmniVoice)
-    book = instance_double(Audiobook::Book, metadata: { 'language' => 'pt' }, pages: [], author_gender: 'male')
-    runner = Audiobook::Runner.new(book, nil, SymMash.new)
+  { 'pt' => 'male', 'en' => 'female' }.each do |language, gender|
+    it "asks for a #{language} reference text and narrates #{language} audiobooks with it" do
+      tts = fake_tts(TTS::OmniVoice)
+      fake_llm(gender: gender, reference: clone_text)
 
-    Dir.mktmpdir do |dir|
-      captured = nil
-      allow(Language).to receive(:voice_reference_text).with('pt').and_return('Esta frase fixa a voz narradora do audiolivro.')
-      allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'male')
-      allow(TTS).to receive(:synthesize) do |**kwargs|
-        captured = kwargs
-        File.write(kwargs[:out_path], 'wav')
-      end
+      narrate(sentence_book('Olá.', metadata: { language: language }))
 
-      options = runner.send(:tts_options, dir)
-
-      expect(captured[:text]).to eq('Esta frase fixa a voz narradora do audiolivro.')
-      expect(captured[:lang]).to eq('pt')
-      expect(captured[:instruct]).to eq('male, middle-aged, moderate pitch')
-      expect(options[:ref_text]).to eq('Esta frase fixa a voz narradora do audiolivro.')
+      expect(tts.reference).to include(text: clone_text, lang: language, instruct: "#{gender}, middle-aged, moderate pitch")
+      expect(tts.narration).to all(include(ref_text: clone_text, lang: language))
     end
   end
 
-  it 'keeps explicitly configured voice instructions for Portuguese audiobooks' do
-    book = instance_double(Audiobook::Book, metadata: { 'language' => 'pt' }, pages: [])
-    runner = Audiobook::Runner.new(book, nil, SymMash.new(voice: 'male,calm,portuguese_accent'))
+  it 'falls back to a stable reference sentence when the model gives a short one' do
+    tts = fake_tts(TTS::OmniVoice)
+    fake_llm(reference: 'Curta.')
 
-    expect(runner.send(:voice_instruct)).to eq('male, calm, portuguese accent')
+    narrate(sentence_book('Olá.', metadata: { language: 'pt' }))
+
+    expect(tts.reference[:text]).to eq(Language.reference_fallback('pt'))
   end
 
-  it 'uses language-specific voice reference text for English audiobooks too' do
-    stub_const('TTS::BACKEND', TTS::OmniVoice)
-    book = instance_double(Audiobook::Book, metadata: { language: 'en' }, pages: [], author_gender: 'male')
-    runner = Audiobook::Runner.new(book, nil, SymMash.new)
+  it 'passes the configured voice instructions, normalized, to the reference and the narration' do
+    tts = fake_tts(TTS::OmniVoice)
+    fake_llm(gender: 'female')
 
-    Dir.mktmpdir do |dir|
-      allow(Language).to receive(:voice_reference_text).with('en').and_return('This sentence anchors the narrator voice.')
-      allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'male')
-      allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
-        File.write(out_path, 'wav')
-      end
+    narrate(sentence_book('Hello world.'), SymMash.new(voice: 'male,young_adult,medium_pitch,american_accent'))
 
-      expect(runner.send(:tts_options, dir)[:ref_text]).to eq('This sentence anchors the narrator voice.')
-    end
+    expected = 'male, young adult, moderate pitch, american accent'
+    expect(tts.reference).to include(instruct: expected)
+    expect(tts.narration).to all(include(instruct: expected))
   end
 
   it 'uses an explicit recorded voice reference without synthesizing one' do
-    stub_const('TTS::BACKEND', TTS::OmniVoice)
-    book = instance_double(Audiobook::Book, metadata: { language: 'en' }, pages: [], author_gender: 'male')
+    tts = fake_tts(TTS::OmniVoice)
 
     Dir.mktmpdir do |dir|
       reference = File.join(dir, 'speaker.wav')
       File.write(reference, 'wav')
-      runner = Audiobook::Runner.new(
-        book, nil, SymMash.new(
-          speaker_wav: reference,
-          ref_text: 'Recorded reference text.',
-          position_temperature: 0
-        )
-      )
-      expect(TTS).not_to receive(:synthesize)
+      opts = SymMash.new(speaker_wav: reference, ref_text: 'Recorded reference text.', position_temperature: 0, instruct: 'female, calm')
 
-      options = runner.send(:tts_options, dir)
+      narrate(sentence_book('Hello world.'), opts)
 
-      expect(options[:speaker_wav]).to eq(reference)
-      expect(options[:ref_text]).to eq('Recorded reference text.')
-      expect(options[:position_temperature]).to eq(0.0)
+      expect(tts.reference).to be_nil
+      expect(tts.narration).to all(include(speaker_wav: reference, ref_text: 'Recorded reference text.',
+                                           position_temperature: 0.0, instruct: 'female, calm'))
     end
   end
 
-  it 'downloads and extracts a clear reference from a voice link' do
-    stub_const('TTS::BACKEND', TTS::OmniVoice)
-    book = instance_double(Audiobook::Book, metadata: { language: 'pt' }, pages: [])
-    runner = Audiobook::Runner.new(
-      book, nil, SymMash.new(voice: 'https://example.com/narrator')
-    )
+  describe 'with a voice link' do
+    let(:reference) { VoiceReference::Candidate.new(text: 'Uma passagem clara da narradora.') }
+    let(:voice)     { 'https://example.com/narrator' }
 
-    Dir.mktmpdir do |dir|
-      reference = VoiceReference::Candidate.new(text: 'Uma passagem clara da narradora.')
-      expect(VoiceReference).to receive(:from_url).with(
-        url: 'https://example.com/narrator',
-        output: File.join(dir, 'audiobook_voice_reference.wav'),
-        language: 'pt',
-        reference_filter: :clone
-      ).and_return(reference)
-      allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'female')
-      expect(TTS).not_to receive(:synthesize)
+    it 'downloads and extracts a clear reference from the link' do
+      tts = fake_tts(TTS::OmniVoice)
+      requested = nil
+      allow(VoiceReference).to receive(:from_url) { |**args| requested = args; reference }
 
-      options = runner.send(:tts_options, dir)
+      narrate(sentence_book('Olá.', metadata: { language: 'pt' }), SymMash.new(voice: voice))
 
-      expect(options[:speaker_wav]).to eq(File.join(dir, 'audiobook_voice_reference.wav'))
-      expect(options[:ref_text]).to eq('Uma passagem clara da narradora.')
-      expect(options).not_to have_key(:instruct)
+      expect(requested).to include(url: voice, language: 'pt', reference_filter: :clone)
+      expect(tts.reference).to be_nil
+      expect(tts.narration).to all(include(speaker_wav: requested[:output], ref_text: 'Uma passagem clara da narradora.'))
+      expect(tts.narration).to all(satisfy { |call| !call.key?(:instruct) })
     end
-  end
 
-  it 'forwards voice link extraction progress to the audiobook status' do
-    stub_const('TTS::BACKEND', TTS::OmniVoice)
-    book = instance_double(Audiobook::Book, metadata: {language: 'pt'}, pages: [])
-    status = double(update: nil)
-    runner = Audiobook::Runner.new(
-      book, status, SymMash.new(voice: 'https://example.com/narrator')
-    )
-
-    Dir.mktmpdir do |dir|
-      reference = VoiceReference::Candidate.new(text: 'Uma passagem clara da narradora.')
-      expect(VoiceReference).to receive(:from_url) do |**options|
-        expect(options.except(:on_status)).to eq(
-          url: 'https://example.com/narrator',
-          output: File.join(dir, 'audiobook_voice_reference.wav'),
-          language: 'pt',
-          reference_filter: :clone
-        )
-        options.fetch(:on_status).call('Transcribing voice reference')
+    it 'forwards the extraction progress to the audiobook status' do
+      fake_tts(TTS::OmniVoice)
+      status = AudiobookHelpers::StatusLog.new
+      allow(VoiceReference).to receive(:from_url) do |on_status:, **|
+        on_status.call('Transcribing voice reference')
         reference
       end
 
-      runner.send(:tts_options, dir)
+      narrate(sentence_book('Olá.', metadata: { language: 'pt' }), SymMash.new(voice: voice), stl: status)
 
-      expect(status).to have_received(:update).with('Transcribing voice reference')
-    end
-  end
-
-  it 'preserves explicit voice instructions for a recorded reference' do
-    stub_const('TTS::BACKEND', TTS::OmniVoice)
-    book = instance_double(Audiobook::Book, metadata: {language: 'en'}, pages: [])
-
-    Dir.mktmpdir do |dir|
-      reference = File.join(dir, 'speaker.wav')
-      File.write(reference, 'wav')
-      runner = Audiobook::Runner.new(
-        book, nil, SymMash.new(
-          speaker_wav: reference,
-          ref_text: 'Recorded reference text.',
-          instruct: 'female, calm'
-        )
-      )
-
-      options = runner.send(:tts_options, dir)
-
-      expect(options[:instruct]).to eq('female, calm')
+      expect(status.lines).to include('Transcribing voice reference')
     end
   end
 
   it 'ignores temperature when the backend does not support it' do
-    book = instance_double(Audiobook::Book, metadata: {}, pages: [], author_gender: 'male')
-    runner = Audiobook::Runner.new(book, nil, SymMash.new(temp: '0.35'))
+    tts = fake_tts(TTS::OmniVoice)
 
-    allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
-      File.write(out_path, 'wav')
-    end
+    narrate(sentence_book('Hello world.'), SymMash.new(temp: '0.35'))
 
-    Dir.mktmpdir do |dir|
-      allow(Language).to receive(:voice_reference_text).with('en').and_return(Language.reference_fallback('en'))
-      allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'male')
-
-      expect(runner.send(:tts_options, dir)).not_to have_key(:temperature)
-    end
+    expect(tts.calls).to all(satisfy { |call| !call.key?(:temperature) })
   end
 
-  it 'uses the book author gender for narrator instructions' do
-    stub_const('TTS::BACKEND', TTS::OmniVoice)
-    book = instance_double(Audiobook::Book, metadata: { 'title' => 'Frankenstein' }, pages: [], author_gender: 'female')
-    runner = Audiobook::Runner.new(book, nil, SymMash.new)
+  it 'keeps explicit voice instructions instead of the detected gender' do
+    tts = fake_tts(TTS::OmniVoice)
+    fake_llm(gender: 'female')
 
-    allow(Language).to receive(:voice_reference_text).with('en').and_return(Language.reference_fallback('en'))
-    allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
-      File.write(out_path, 'wav')
-    end
+    narrate(sentence_book('Hello world.'), SymMash.new(voice: 'male,high_pitch'))
 
-    Dir.mktmpdir do |dir|
-      expect(runner.send(:tts_options, dir)[:instruct]).to eq('female, middle-aged, moderate pitch')
-    end
+    expect(tts.calls).to all(include(instruct: 'male, high pitch'))
   end
 
-  it 'keeps explicit voice instructions instead of detected gender defaults' do
-    book = instance_double(Audiobook::Book, metadata: {}, pages: [])
-    runner = Audiobook::Runner.new(book, nil, SymMash.new(voice: 'male,high_pitch'))
+  it 'passes the voice instruction but not the speed to spoken page items, and speeds them up afterwards' do
+    page = Audiobook::Page.new(1, [Audiobook::Paragraph.new([Audiobook::Sentence.new('Hello world.')])])
+    tts = fake_tts(seconds: 1)
 
-    allow(Language).to receive(:voice_reference_text).with('en').and_return(Language.reference_fallback('en'))
-    allow(Language).to receive(:book_metadata).and_raise('should not detect')
-    allow(TTS).to receive(:synthesize) do |out_path:, **_kwargs|
-      File.write(out_path, 'wav')
-    end
+    tts_options = { instruct: 'female, middle-aged, moderate pitch, american accent' }
+    normal = duration_of(page, lang: 'en', tts_options: tts_options)
+    fast   = duration_of(page, lang: 'en', tts_options: tts_options.merge(audio_speed: 2))
 
-    Dir.mktmpdir do |dir|
-      expect(runner.send(:tts_options, dir)[:instruct]).to eq('male, high pitch')
-    end
-  end
-
-  it 'does not reapply conversion speed to the final audiobook encode' do
-    book = instance_double(Audiobook::Book, metadata: {}, pages: [])
-    runner = Audiobook::Runner.new(book, nil, SymMash.new(speed: '1.25'))
-    captured_opts = nil
-
-    allow(Zipper).to receive(:zip_audio) do |_input, _output, opts:, **_kwargs|
-      captured_opts = opts
-    end
-
-    runner.send(:encode_audio_file, '/tmp/in.wav', '/tmp/out.opus')
-
-    expect(captured_opts.speed).to be_nil
-    expect(captured_opts.speech_cleanup).to eq(true)
-  end
-
-  it 'does not advertise TTS speech speed for audiobooks' do
-    book = instance_double(Audiobook::Book, metadata: {}, pages: [])
-    runner = Audiobook::Runner.new(book)
-
-    expect(runner.send(:backend_supports?, :speech_speed)).to eq(false)
-  end
-
-  it 'normalizes configured voice option values' do
-    book = instance_double(Audiobook::Book, metadata: {}, pages: [])
-    runner = Audiobook::Runner.new(
-      book, nil,
-      SymMash.new(voice: 'male,young_adult,moderate_pitch,american_accent')
-    )
-
-    expect(runner.send(:voice_instruct)).to eq(
-      'male, young adult, moderate pitch, american accent'
-    )
-  end
-
-  it 'maps medium pitch to OmniVoice moderate pitch' do
-    book = instance_double(Audiobook::Book, metadata: {}, pages: [])
-    runner = Audiobook::Runner.new(book, nil, SymMash.new(voice: 'male,medium_pitch'))
-
-    expect(runner.send(:voice_instruct)).to eq('male, moderate pitch')
-  end
-
-  it 'passes voice instruction but not speed to spoken page items' do
-    page = Audiobook::Page.new(1, [
-      Audiobook::Paragraph.new([
-        Audiobook::Sentence.new('Hello world.')
-      ])
-    ])
-
-    Dir.mktmpdir do |dir|
-      expect(Zipper::Silence).to receive(:pause).with(
-        Audiobook::Pauses::PARAGRAPH,
-        dir,
-        sample_rate: TTS.output_sample_rate
-      ).and_return(nil)
-      allow(Zipper::AudioOps).to receive(:concat) do |_inputs, outfile, **_kwargs|
-        File.write(outfile, 'combined')
-        outfile
-      end
-
-      expect(TTS).to receive(:synthesize).with(
-        text:     'Hello world.',
-        lang:     'en',
-        out_path: kind_of(String),
-        instruct: 'female, middle-aged, moderate pitch, american accent'
-      ) do |out_path:, **_kwargs|
-        File.write(out_path, 'wav')
-      end
-      expect(Audiobook::AudioFiles).to receive(:speed!).with(kind_of(String), 1.25)
-
-      page.to_wav(
-        dir, '0001',
-        lang: 'en',
-        tts_options: {
-          audio_speed: 1.25,
-          instruct: 'female, middle-aged, moderate pitch, american accent',
-        }
-      )
-    end
+    expect(tts.calls).to all(include(text: 'Hello world.', lang: 'en', **tts_options))
+    expect(tts.calls).to all(satisfy { |call| !call.key?(:audio_speed) })
+    expect(normal - fast).to be_within(0.15).of(0.5)
   end
 
   it 'uses a sentence language instead of the book language for synthesis' do
-    page = Audiobook::Page.new(1, [
-      Audiobook::Paragraph.new([
-        Audiobook::Sentence.new('Svabhávameka kavayo vadanti.', language: 'sa')
-      ])
-    ])
+    page = Audiobook::Page.new(1, [Audiobook::Paragraph.new([Audiobook::Sentence.new('Svabhávameka kavayo vadanti.', language: 'sa')])])
+    tts = fake_tts
 
-    Dir.mktmpdir do |dir|
-      allow(Zipper::Silence).to receive(:pause).and_return(nil)
-      allow(Zipper::AudioOps).to receive(:concat) do |_inputs, outfile, **_kwargs|
-        File.write(outfile, 'combined')
-        outfile
-      end
-      expect(TTS).to receive(:synthesize).with(
-        text: 'Svabhávameka kavayo vadanti.',
-        lang: 'sa',
-        out_path: kind_of(String)
-      ) do |out_path:, **_kwargs|
-        File.write(out_path, 'wav')
-      end
+    Dir.mktmpdir { |dir| page.to_wav(dir, '0001', lang: 'en') }
 
-      page.to_wav(dir, '0001', lang: 'en')
-    end
+    expect(tts.calls.map { |call| call.slice(:text, :lang) }).to eq([{ text: 'Svabhávameka kavayo vadanti.', lang: 'sa' }])
   end
 
   it 'pre-synthesizes audiobook sentences through the concurrent batch path' do
-    page = Audiobook::Page.new(1, [
+    tts    = fake_tts(TTS::OmniVoice)
+    status = AudiobookHelpers::StatusLog.new
+    book   = book_of(
       Audiobook::Heading.new('Chapter One.'),
-      Audiobook::Paragraph.new([
-        Audiobook::Sentence.new('Hello world.'),
-        Audiobook::Sentence.new('Second sentence!', language: 'sa')
-      ])
-    ])
-    book = instance_double(Audiobook::Book, metadata: {}, pages: [page], author_gender: 'female')
-    status = double
-    allow(status).to receive(:update)
-    runner = Audiobook::Runner.new(book, status)
+      Audiobook::Paragraph.new([Audiobook::Sentence.new('Hello world.'), Audiobook::Sentence.new('Second sentence!', language: 'sa')])
+    )
 
-    Dir.mktmpdir do |dir|
-      page.prepare_speech_items(dir, '0001', lang: 'en')
+    narrate(book, SymMash.new(speed: '1.25', voice: 'female narrator'), stl: status)
 
-      expect(TTS).to receive(:synthesize_batch) do |items:, on_batch:, **options|
-        expect(options).to eq(instruct: 'female narrator')
-        expect(items.map { |item| item[:text] }).to eq([
-          'Chapter One.',
-          'Hello world.',
-          'Second sentence!',
-        ])
-        expect(items.map { |item| item[:lang] }).to eq(['en', 'en', 'sa'])
-        on_batch.call(items.first(2))
-        on_batch.call(items.last(1))
-      end
-      expect(Audiobook::AudioFiles).to receive(:speed_all).with(
-        all(end_with('.wav')),
-        1.25
-      )
-
-      runner.send(
-        :process_speech_jobs,
-        [page],
-        dir,
-        { audio_speed: 1.25, instruct: 'female narrator' }
-      )
-      expect(status).to have_received(:update).with(
-        'Processing page 1/1, item 2/2, paragraph 1/1, sentence 2/2, audio 3/3'
-      )
-    end
+    expect(tts.narration.map { |call| call.slice(:text, :lang) }).to contain_exactly(
+      { text: 'Chapter One.', lang: 'en' }, { text: 'Hello world.', lang: 'en' }, { text: 'Second sentence!', lang: 'sa' }
+    )
+    expect(tts.batches).to all(include(instruct: 'female narrator'))
+    expect(status.lines).to include('Processing page 1/1, item 2/2, paragraph 1/1, sentence 2/2, audio 3/3')
   end
-
 end
