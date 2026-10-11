@@ -32,6 +32,18 @@ RSpec.describe Replay::Jobs do
     expect(manager.replayed).to be_empty
   end
 
+  it 'recovers the books that only failed before replaying' do
+    manager = ReplayingManager.new(messages: [{ id: 99, type: 'Text', text: 'failed: EOFError', reply_to_message_id: 12 }])
+    log.record(-200, 11)
+    log.record(-200, 12)
+    job = described_class.new(manager, log: log, forwarded: forwarded).tap { |j| @jobs = j }.start(chat_id: -200, recover: '1')
+
+    done = Timeout.timeout(2) { sleep 0.01 until @jobs.fetch(job[:id])[:state] == 'completed' }.then { @jobs.fetch(job[:id]) }
+    expect(done).to include(recovered: 1, deleted: 1, replayed: 2, skipped: 1)
+    expect(manager.deleted).to eq([99])
+    expect(manager.replayed.map { |m| m[:id] }).to contain_exactly(12, 13)
+  end
+
   it 'fails the job when a message cannot be replayed' do
     manager = ReplayingManager.new(failing: [12])
     job     = described_class.new(manager, log: log, forwarded: forwarded).tap { |j| @jobs = j }.start(chat_id: -200)
