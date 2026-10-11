@@ -12,4 +12,18 @@ RSpec.describe Bot::MessageResult do
   it 'passes through values that are not message objects' do
     expect(described_class.dump('sent')).to eq('sent')
   end
+
+  describe '.id' do
+    it 'reads the id of an object, a mash or a plain hash' do
+      expect(described_class.id(Struct.new(:id).new(1))).to eq(1)
+      expect(described_class.id(SymMash.new(message_id: 2))).to eq(2)
+      expect(described_class.id({ message_id: 3 })).to eq(3)
+      expect(described_class.id({ id: 4 })).to eq(4)
+    end
+
+    it 'is none for what carries no id' do
+      expect(described_class.id(nil)).to be_nil
+      expect(described_class.id({})).to be_nil
+    end
+  end
 end

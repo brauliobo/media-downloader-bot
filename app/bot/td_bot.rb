@@ -7,6 +7,7 @@ module Bot
   class TDBot < Base
     include TD::Logging
     include RateLimiter
+    include AlbumSending
 
     self.max_caption = 4096
     MEDIA_SEND_TIMEOUT = 1_800
@@ -73,14 +74,9 @@ module Bot
         file_id_or_info, priority: priority, offset: offset, limit: limit,
         synchronous: synchronous, dir: dir
       )
-      if result.is_a?(Hash) && result[:error]
-        raise "Failed to download file: #{result[:error]}"
-      end
-      local_path = result.is_a?(Hash) ? result[:local_path] : nil
-      unless local_path && !local_path.empty?
-        raise "Failed to download file: no local path available (got: #{result.inspect})"
-      end
-      local_path
+      raise "Failed to download file: #{result[:error]}" if result[:error]
+
+      result[:local_path].presence or raise "Failed to download file: no local path available (got: #{result.inspect})"
     end
 
     def normalize_params(params, type:)
@@ -135,28 +131,18 @@ module Bot
       status_jobs.each_pair.find { |(chat_id, id), _| chat_id == msg.chat.id && [id, message_send_outcomes[id]&.message_id].include?(reply_id) }&.last
     end
 
-    def send_album(msg, text, uploads:, parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **_params)
-      sent  = []
-      album = Album.new(uploads, media_caption(msg, text, parse_mode))
+    def album_caption(msg, text, parse_mode) = media_caption(msg, text, parse_mode)
 
-      album.batches.each do |batch|
-        result = with_rate_limit('send_album') do
-          throttle!
-          message_sender.send_media_album(msg.chat.id, batch.uploads, caption: batch.caption, parse_mode: parse_mode, timeout: 1_800)
-        end
-        unless result
-          sent.concat send_album_items(msg, batch, parse_mode)
-          next
-        end
-        sent.concat(result.respond_to?(:messages) ? result.messages : Array(result))
-      rescue TD::Error => e
-        raise unless e.message.to_s.include?('InputFile is not specified')
-
-        sent.concat send_album_items(msg, batch, parse_mode)
+    def send_album_batch(msg, batch, parse_mode)
+      result = with_rate_limit('send_album') do
+        throttle!
+        message_sender.send_media_album(msg.chat.id, batch.uploads, caption: batch.caption, parse_mode: parse_mode, timeout: 1_800)
       end
+      result ? Array(result.try(:messages) || result) : send_album_items(msg, batch, parse_mode)
+    rescue TD::Error => e
+      raise unless e.message.to_s.include?('InputFile is not specified')
 
-      finalize_sent_message(msg, td_message_response(sent.first), delete: delete, delete_both: delete_both)
-      sent
+      send_album_items(msg, batch, parse_mode)
     end
 
     def media_caption(msg, text, parse_mode)
@@ -190,40 +176,8 @@ module Bot
       end
     end
 
-    def td_message_response(message)
-      id = message[:message_id] || message[:id] if message.is_a?(Hash)
-      id ||= message.message_id if message.respond_to?(:message_id)
-      id ||= message.id if message.respond_to?(:id)
-      SymMash.new(message_id: id || 0, id: id)
-    end
-
-    def edit_generated_message(chat_id:, message_id:, text: nil, type: nil, parse_mode: 'MarkdownV2', **params)
-      post_editor.edit_generated_message(chat_id: chat_id, message_id: message_id, text: text, type: type, parse_mode: parse_mode, **params)
-    end
-
-    def upload_generated_media(chat_id:, text: nil, type:, parse_mode: 'MarkdownV2', **params)
-      post_editor.upload_generated_media(chat_id: chat_id, text: text, type: type, parse_mode: parse_mode, **params)
-    end
-
-    def ensure_forum_topic(chat_id:, name:)
-      post_editor.ensure_forum_topic(chat_id: chat_id, name: name)
-    end
-
-    def find_chats(query, limit: 20, public: false)
-      post_editor.find_chats(query, limit: limit, public: public)
-    end
-
-    def resolve_chat_identifier(identifier)
-      post_editor.resolve_chat_identifier(identifier)
-    end
-
-    def chat_messages(chat_id:, limit: 20, query: nil, filter: nil, from_message_id: 0)
-      post_editor.chat_messages(chat_id: chat_id, limit: limit, query: query, filter: filter, from_message_id: from_message_id)
-    end
-
-    def chat_message(chat_id:, message_id:)
-      post_editor.chat_message(chat_id: chat_id, message_id: message_id)
-    end
+    delegate :edit_generated_message, :upload_generated_media, :ensure_forum_topic, :find_chats,
+             :resolve_chat_identifier, :chat_messages, :chat_message, to: :post_editor
 
     def post_editor
       @post_editor ||= ::TDBot::PostEditor.new(self)

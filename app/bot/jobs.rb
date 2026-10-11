@@ -21,7 +21,7 @@ module Bot
 
     def register(msg)
       id   = SecureRandom.urlsafe_base64(12)
-      data = msg.respond_to?(:to_h) ? msg.to_h.except(:bot, :resp) : msg
+      data = msg.to_h.except(:bot, :resp)
       job = {
         id:       id,
         owner_id: msg.from.id,

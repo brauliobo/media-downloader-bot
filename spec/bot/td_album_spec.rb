@@ -168,7 +168,7 @@ else
         def each_pair = raise('unexpected each_pair')
       end
 
-      expect(bot.send(:td_message_response, message_class.new(123))).to eq(message_id: 123, id: 123)
+      expect(bot.send(:message_response, message_class.new(123))).to eq(message_id: 123, id: 123)
     end
   end
 end

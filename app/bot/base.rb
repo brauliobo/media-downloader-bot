@@ -60,10 +60,13 @@ module Bot
       response
     end
 
+    def message_response(message)
+      id = MessageResult.id(message)
+      SymMash.new(message_id: id || 0, id: id)
+    end
+
     def incoming_message_id(msg, *keys)
-      keys = %i[message_id id] if keys.empty?
-      key  = keys.find { |k| msg.respond_to?(k) }
-      msg.public_send(key) if key
+      (keys.presence || %i[message_id id]).filter_map { |key| msg[key] }.first
     end
 
     def delete_wait_seconds(wait)

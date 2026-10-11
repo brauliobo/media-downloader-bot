@@ -73,7 +73,7 @@ module Bot
 
     def admin_report(msg, _error, status: 'error')
       return unless ADMIN_CHAT_ID
-      msg_ct = msg.respond_to?(:text) ? msg.text : msg.data
+      msg_ct = msg.try(:text) || msg.try(:data)
       error = "<b>msg</b>: #{he(redact_sensitive(msg_ct.to_s))}"
       error << "\n\n<b>#{status}</b>: <pre>#{he(_error)}</pre>\n"
       send_message(admin_msg, error, parse_mode: 'HTML')

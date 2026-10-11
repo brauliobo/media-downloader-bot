@@ -122,11 +122,12 @@ module Bot
       retry_after = e.message.to_s[/retry after (\d+(?:\.\d+)?)/i, 1]
       return retry_after.to_f.ceil if retry_after
 
-      body   = e.respond_to?(:response) && e.response.respond_to?(:body) ? e.response.body : nil
-      parsed = JSON.parse(body.to_s) rescue {}
+      parsed = JSON.parse(response_body(e).to_s) rescue {}
       ra     = (parsed.dig('parameters', 'retry_after') || parsed.dig('error', 'retry_after')).to_i
       ra.positive? ? ra : 60
     end
+
+    def response_body(error) = error.try(:response).try(:body)
 
     def log_rate_limit(tag, seconds)
       msg = "[RATE_LIMIT] sleeping #{seconds}s (#{tag})"

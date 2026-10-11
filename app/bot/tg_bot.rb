@@ -5,6 +5,7 @@ require 'roda'
 module Bot
   class TgBot < Base
     include RateLimiter
+    include AlbumSending
 
     self.error_delete_time = 3.hours
 
@@ -94,27 +95,25 @@ module Bot
       end
     end
 
-    def send_album(msg, text, uploads:, parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, **_params)
-      sent  = []
-      album = Album.new(uploads, text)
-
-      album.batches.each do |batch|
-        with_rate_limit('send_album') do
-          throttle!
-          payload = {
-            chat_id:             msg.chat.id,
-            reply_to_message_id: incoming_message_id(msg),
-            media:               album_media(batch.uploads, batch.caption, parse_mode)
-          }
-          batch.uploads.each_with_index { |up, i| payload["file#{i}".to_sym] = build_upload_io(up.fn_out, up.mime) }
-          sent.concat Array(tg.send(:send_media_group, **payload).map { |m| SymMash.new(m.to_h) })
-        end
-      end
-
-      finalize_sent_message(msg, sent.first || SymMash.new(message_id: 0), delete: delete, delete_both: delete_both)
-      sent
+    def send_album(*, **)
+      super
     rescue => e
       raise RuntimeError, telegram_response_error_message(e)
+    end
+
+    def album_caption(_msg, text, _parse_mode) = text
+
+    def send_album_batch(msg, batch, parse_mode)
+      with_rate_limit('send_album') do
+        throttle!
+        payload = {
+          chat_id:             msg.chat.id,
+          reply_to_message_id: incoming_message_id(msg),
+          media:               album_media(batch.uploads, batch.caption, parse_mode)
+        }
+        batch.uploads.each_with_index { |up, i| payload["file#{i}".to_sym] = build_upload_io(up.fn_out, up.mime) }
+        tg.send(:send_media_group, **payload).map { |m| SymMash.new(m.to_h) }
+      end
     end
 
     def wrap_upload_params(p)
@@ -159,8 +158,7 @@ module Bot
     end
 
     def telegram_response_error_message(error)
-      body = error.respond_to?(:response) && error.response.respond_to?(:body) ? error.response.body : nil
-      body.present? ? "#{error.class}: #{error.message}: #{body}" : "#{error.class}: #{error.message}"
+      [error.class, error.message, response_body(error).presence].compact.join(': ')
     end
 
     def answer_callback(callback, text: nil)
@@ -190,15 +188,14 @@ module Bot
 
 
     def download_file(info, priority: 32, offset: 0, limit: 0, synchronous: true, dir: Dir.pwd)
-      info    = SymMash.new(info) if info.is_a?(Hash)
-      file_id = info.respond_to?(:file_id) ? info.file_id : info.to_s
+      file_id = Bot::FileId.call(info)
       tg_path = tg.get_file(file_id: file_id).file_path or raise 'no file_path returned'
-      name    = info.respond_to?(:file_name) && info.file_name.present? ? info.file_name : File.basename(tg_path)
+      name    = Bot::FileId.name(info) || File.basename(tg_path)
       local   = Utils::Safety.contained_path(dir, name, fallback: File.basename(tg_path))
 
       base_url = "https://api.telegram.org/file/bot#{ENV['TG_BOT_TOKEN']}/"
       agent    = Mechanize.new
-      agent.redirect_ok = false if agent.respond_to?(:redirect_ok=)
+      agent.redirect_ok = false
       Utils::Safety.write_exclusive(local, agent.get(base_url + tg_path).body)
       local
     end

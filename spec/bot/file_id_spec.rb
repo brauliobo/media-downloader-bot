@@ -18,4 +18,18 @@ RSpec.describe Bot::FileId do
   it 'leaves a Bot API file id as it is' do
     expect(described_class.call('AgACAgIAAxkBAAI')).to eq('AgACAgIAAxkBAAI')
   end
+
+  describe '.name' do
+    it 'reads the file name of a hash or of an object' do
+      expect(described_class.name({ 'file_name' => 'a.pdf' })).to eq('a.pdf')
+      expect(described_class.name(SymMash.new(file_name: 'b.pdf'))).to eq('b.pdf')
+      expect(described_class.name(double(file_name: 'c.pdf'))).to eq('c.pdf')
+    end
+
+    it 'has none for a bare id or a blank name' do
+      expect(described_class.name('AgACAgIAAxkBAAI')).to be_nil
+      expect(described_class.name({ file_name: '' })).to be_nil
+      expect(described_class.name(nil)).to be_nil
+    end
+  end
 end
