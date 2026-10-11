@@ -1,5 +1,14 @@
 class FFmpeg
   module Analysis
+    # The filter that measures each kind, and what to say when it fails.
+    AUDIO_ANALYSES = {
+      signal:       ['astats=metadata=0:reset=0', 'audio signal analysis failed'],
+      frame_signal: ['astats=metadata=1:reset=1,ametadata=print:key=lavfi.astats.Overall.RMS_level:file=-',
+                     'audio frame signal analysis failed'],
+      loudness:     ['ebur128=peak=true', 'audio loudness analysis failed'],
+      silence:      ['silencedetect=noise=%<db>sdB:d=0.08', 'audio silence analysis failed']
+    }.freeze
+
     def probe path
       one_shot do
         label = "ffprobe failed for #{File.basename path}"
@@ -22,7 +31,8 @@ class FFmpeg
 
     def analyze_audio path, kind:, silence_threshold_db: nil
       one_shot do
-        expression, label = audio_analysis kind, silence_threshold_db
+        expression, label = AUDIO_ANALYSES.fetch(kind)
+        expression %= { db: silence_threshold_db }
         builder = fresh profile: :analysis
         builder.input path
         builder.set_filter expression, stream: :audio
