@@ -183,9 +183,10 @@ RSpec.describe Audiobook::Ewprs::Batch do
     write_html(File.join(root, 'HTML/Discourses/first.html'),
                "<div class=discourse_title>First</div>#{paragraph('Subheading', 'Para_Minor_Heading')}#{paragraph('First body.')}")
 
-    chapter = batch.send(:audiobook_chapter, first)
+    generate(first)
 
-    expect(chapter.title).to eq('First')
-    expect(chapter.sections.map(&:text)).to eq(['Subheading'])
+    items = YAML.load_file(File.join(output, 'first.yml')).dig('pages', 0, 'page', 'items')
+    expect(items.map { |item| item.keys.first }).to eq(%w[heading section paragraph])
+    expect(items.map { |item| item.values.first['text'] }.compact).to eq(%w[First Subheading])
   end
 end
