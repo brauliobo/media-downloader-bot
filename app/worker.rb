@@ -1,7 +1,8 @@
 
 class Worker
-
-  ALBUM_CAPTION_SEPARATOR = "\n\n".freeze
+  include Workdir
+  include Captions
+  include StatusMessage
 
   class_attribute :service
 
@@ -42,25 +43,6 @@ class Worker
     @session.daylog << {sent_at: Time.now}
     @session.msg_count += 1
     @session.save
-  end
-
-  def workdir &block
-    cancelled = false
-    @dir = workdir_path || Utils::Tmp.dir('mdb-', tmpdir)
-    yield @dir
-  rescue Bot::JobCancelled
-    cancelled = true
-    FileUtils.rm_rf(@dir) unless skip_cleanup
-    raise
-  ensure
-    cleanup_workdir(@dir) unless skip_cleanup || cancelled
-  end
-
-  def cleanup_workdir(dir)
-    return unless dir && Dir.exist?(dir)
-    # Detached subprocess survives parent fork exit; delay lets uploaders release file handles
-    pid = Process.spawn('sh', '-c', "sleep 30 && rm -rf #{dir.shellescape}", out: File::NULL, err: File::NULL)
-    Process.detach pid
   end
 
   def process
@@ -157,93 +139,6 @@ class Worker
     UploadCoordinator.new(self).upload(i)
   end
 
-  def cleanup_input(input)
-    return if skip_cleanup || !dir
-
-    Array(input.uploads).each { |upload| cleanup_input(upload) }
-
-    root = "#{File.expand_path(dir)}/"
-    %i[fn_in fn_out thumb thumbnail_path].filter_map { |name| input.public_send(name) }.uniq.each do |path|
-      path = File.expand_path(path)
-      FileUtils.rm_f(path) if path.start_with?(root)
-    end
-  end
-
-  def caption_limit
-    service.try(:max_caption) || Bot::MsgHelpers::MEDIA_CAPTION_LIMIT
-  end
-
-  def caption_for(input, max: caption_limit)
-    caption = Caption.new(opts)
-    caption.render(input, max: max, info: caption.translate_info(input.info, input.opts))
-  end
-
-  # One caption per item (title, source link, ...) sharing the album caption limit.
-  def album_caption(inputs)
-    budget = (caption_limit - ALBUM_CAPTION_SEPARATOR.size * (inputs.size - 1)) / inputs.size
-    inputs.map { |input| caption_for(input, max: budget) }.reject(&:blank?).join(ALBUM_CAPTION_SEPARATOR)
-  end
-
-  private
-
-  def peach_threads
-    Enumerable.admin_threads(Bot::MsgHelpers.from_admin?(msg), opts.threads)
-  end
-
-  def process_lines(lines, ctx)
-    processors = Processors::Router.for_message(ctx, lines)
-    if processors
-      processors
-    else
-      @st&.error('No URL or media provided')
-      []
-    end
-  end
-
-  def init_status
-    return if @st
-    @st = Bot::Status.new(on_empty: -> { delete_status_message }) do |text, *args, **params|
-      params[:cancel_job] = job_id if job_id && !params.key?(:cancel_job)
-      @status_update = [text, args, params]
-      raw = text
-      text = Bot::MsgHelpers.me(text) unless params[:parse_mode]
-      force = params[:cancel_job] == false
-      begin
-        edit_message msg, msg.resp.message_id, *args, text: text, force: force, **params
-      rescue
-        # Fallback: retry without MarkdownV2 so error messages with special chars still display
-        edit_message(msg, msg.resp.message_id, text: raw, force: force, parse_mode: nil, cancel_job: params[:cancel_job]) rescue nil
-      end
-    end
-    initial_params = job_id ? {cancel_job: job_id} : {}
-    initial_text   = 'Downloading metadata...'
-    @status_update = [initial_text, [], initial_params]
-    if msg.resp&.message_id
-      edit_message msg, msg.resp.message_id, text: Bot::MsgHelpers.me(initial_text), **initial_params
-    else
-      msg.resp = send_message msg, Bot::MsgHelpers.me(initial_text), **initial_params
-    end
-  end
-
-  def delete_status_message
-    delete_message(msg, msg.resp.message_id, wait: 0) if msg.resp&.message_id
-    @status_deleted = true
-  end
-
-  def clear_cancel_button
-    return unless job_id && !@status_deleted && @status_update && msg.resp&.message_id
-
-    text, args, params = @status_update
-    params = params.merge(cancel_job: false)
-    raw    = text
-    text   = Bot::MsgHelpers.me(text) unless params[:parse_mode]
-    edit_message(msg, msg.resp.message_id, *args, text: text, force: true, **params)
-  rescue
-    edit_message(msg, msg.resp.message_id, text: raw, force: true, parse_mode: nil, cancel_job: false) rescue nil
-  end
-
-  public
-
   def upload_item i
     # Treat documents (e.g., SRT-only) via standard path using fn_out/type
     media_type = Utils::MimeTypes.telegram_type(i)
@@ -281,5 +176,21 @@ class Worker
     pp ret_msg if ENV['DEBUG']
     caption = 'paid' if paid
     send_message msg, caption, **ret_msg
+  end
+
+  private
+
+  def peach_threads
+    Enumerable.admin_threads(Bot::MsgHelpers.from_admin?(msg), opts.threads)
+  end
+
+  def process_lines(lines, ctx)
+    processors = Processors::Router.for_message(ctx, lines)
+    if processors
+      processors
+    else
+      @st&.error('No URL or media provided')
+      []
+    end
   end
 end
