@@ -16,7 +16,7 @@ module Processors
     end
 
     def self.probe i
-      return i unless i&.fn_in.to_s.present?
+      return i unless i && i.respond_to?(:fn_in) && i.fn_in.to_s.present?
       mtype  = Rack::Mime.mime_type ::File.extname(i.fn_in.to_s)
 
       i.probe  = Prober.for i.fn_in
@@ -43,7 +43,7 @@ module Processors
       return i.merge!(fn_out: 'fake') if i.opts.simulate
 
       # If a downloader already produced uploads, skip further processing
-      return i if i.uploads.present?
+      return i if i.respond_to?(:uploads) && i.uploads.present?
 
       self.class.probe i
       return i.stl.error "Unknown type for #{i.fn_in}" unless i.type
