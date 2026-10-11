@@ -67,6 +67,8 @@ module Bot
       end
     end
 
+    def active?(id) = @mutex.synchronize { @jobs.key?(id.to_s) }
+
     def cancelled?(id)
       @mutex.synchronize { @jobs.dig(id.to_s, :cancelled) == true }
     end

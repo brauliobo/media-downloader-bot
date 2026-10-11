@@ -26,6 +26,15 @@ RSpec.describe Bot::Jobs do
     expect(jobs.cancel(job[:id], user_id: 123, chat_id: 123)).to eq(:cancelled)
   end
 
+  it 'is active from registration until finished' do
+    jobs = described_class.new
+    job  = jobs.register(msg)
+
+    expect(jobs.active?(job[:id])).to be(true)
+    jobs.finish(job[:id])
+    expect(jobs.active?(job[:id])).to be(false)
+  end
+
   it 'only lets the owner or an admin cancel a job' do
     jobs = described_class.new
     job  = jobs.submit(msg)
