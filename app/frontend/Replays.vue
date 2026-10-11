@@ -47,7 +47,7 @@ section
   h3 Replay jobs
   ul
     li(v-for="job in jobs" :key="job.id")
-      | {{ job.id }} · {{ job.state }} · {{ job.replayed ?? 0 }} / {{ job.total ?? '?' }} · running {{ job.running ?? 0 }} · skipped {{ job.skipped ?? 0 }}
+      | {{ job.id }} · {{ job.state }} · {{ (job.replayed ?? 0) + (job.skipped ?? 0) }} / {{ job.total ?? '?' }} done ({{ job.replayed ?? 0 }} now, {{ job.skipped ?? 0 }} before) · running {{ job.running ?? 0 }}
       span(v-if="job.recover")  · recovered {{ job.recovered ?? 0 }} (deleted {{ job.deleted ?? 0 }} error replies)
       span.error(v-if="job.errors?.length")  · {{ job.errors.length }} errors: {{ job.errors[0].error }}
       button(v-if="job.state === 'running'" @click="stop(job)") Stop
