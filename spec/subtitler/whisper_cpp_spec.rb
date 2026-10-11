@@ -35,7 +35,7 @@ RSpec.describe Subtitler::WhisperCpp do
   end
 
   it 'loads verbose JSON into a normalized subtitle' do
-    response = instance_double(Net::HTTPResponse, code: '200', body: JSON.generate(
+    response = http_response(JSON.generate(
       language: 'Portuguese',
       text: ' Olá mundo',
       segments: [
@@ -69,7 +69,7 @@ RSpec.describe Subtitler::WhisperCpp do
   end
 
   it 'merges split tokens within a segment and extends the first token timing' do
-    response = instance_double(Net::HTTPResponse, code: '200', body: JSON.generate(
+    response = http_response(JSON.generate(
       language: 'pt',
       segments: [
         {
@@ -97,7 +97,7 @@ RSpec.describe Subtitler::WhisperCpp do
   end
 
   it 'merges a leading split token across segments and removes the emptied following segment' do
-    response = instance_double(Net::HTTPResponse, code: '200', body: JSON.generate(
+    response = http_response(JSON.generate(
       language: 'pt',
       segments: [
         {
@@ -127,7 +127,7 @@ RSpec.describe Subtitler::WhisperCpp do
   end
 
   it 'does not merge a cross-segment token after sentence punctuation' do
-    response = instance_double(Net::HTTPResponse, code: '200', body: JSON.generate(
+    response = http_response(JSON.generate(
       language: 'en',
       segments: [
         {
@@ -153,7 +153,7 @@ RSpec.describe Subtitler::WhisperCpp do
   end
 
   it 'preserves split tokens and original segment text when merging is disabled' do
-    response = instance_double(Net::HTTPResponse, code: '200', body: JSON.generate(
+    response = http_response(JSON.generate(
       language: 'pt',
       segments: [
         {
@@ -179,7 +179,7 @@ RSpec.describe Subtitler::WhisperCpp do
   end
 
   it 'repairs collapsed extreme-rate sentences from the reliable document speech rate' do
-    response = instance_double(Net::HTTPResponse, code: '200', body: JSON.generate(
+    response = http_response(JSON.generate(
       language: 'en', duration: 8.0,
       segments: [
         segment(' One two three four.', start: 0.0, finish: 2.0,
@@ -211,7 +211,7 @@ RSpec.describe Subtitler::WhisperCpp do
   end
 
   it 'caps a repaired sentence to its neighboring reliable slot' do
-    response = instance_double(Net::HTTPResponse, code: '200', body: JSON.generate(
+    response = http_response(JSON.generate(
       language: 'en', duration: 5.0,
       segments: [
         segment(' One two three four.', start: 0.0, finish: 2.0,
@@ -237,7 +237,7 @@ RSpec.describe Subtitler::WhisperCpp do
     collapsed = lambda do |texts, at|
       texts.map { |text| {word: text, start: at, end: at + 0.01} }
     end
-    response = instance_double(Net::HTTPResponse, code: '200', body: JSON.generate(
+    response = http_response(JSON.generate(
       language: 'en', duration: 10.0,
       segments: [
         segment(' One two three four.', start: 0.0, finish: 2.0,
@@ -262,7 +262,7 @@ RSpec.describe Subtitler::WhisperCpp do
   end
 
   it 'leaves fast sentences unchanged when their word timings are not collapsed' do
-    response = instance_double(Net::HTTPResponse, code: '200', body: JSON.generate(
+    response = http_response(JSON.generate(
       language: 'en', duration: 4.0,
       segments: [
         segment(' One two three four.', start: 0.0, finish: 2.0,
@@ -282,7 +282,7 @@ RSpec.describe Subtitler::WhisperCpp do
   end
 
   it 'estimates collapsed timing from the reliable speech rate of its speaker' do
-    response = instance_double(Net::HTTPResponse, code: '200', body: JSON.generate(
+    response = http_response(JSON.generate(
       language: 'en', duration: 12.0,
       segments: [
         segment(' Slow one.', start: 0.0, finish: 2.0,
@@ -315,7 +315,7 @@ RSpec.describe Subtitler::WhisperCpp do
   end
 
   it 'falls back to the document rate when a speaker lacks reliable parts' do
-    response = instance_double(Net::HTTPResponse, code: '200', body: JSON.generate(
+    response = http_response(JSON.generate(
       language: 'en', duration: 10.0,
       segments: [
         segment(' Slow one.', start: 0.0, finish: 2.0,

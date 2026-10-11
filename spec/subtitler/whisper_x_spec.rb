@@ -20,7 +20,7 @@ RSpec.describe Subtitler::WhisperX do
   end
 
   it 'preserves WhisperX request parameters and returns a normalized subtitle' do
-    response = instance_double(Net::HTTPResponse, code: '200', body: JSON.generate(
+    response = http_response(JSON.generate(
       language: 'pt-BR', text: ' Olá',
       segments: [{start: 0.0, end: 1.0, text: ' Olá', words: [{word: ' Olá', start: 0.0, end: 1.0}]}]
     ))
@@ -39,7 +39,7 @@ RSpec.describe Subtitler::WhisperX do
   end
 
   it 'honors merge_words through the shared structured ingress' do
-    response = instance_double(Net::HTTPResponse, code: '200', body: JSON.generate(
+    response = http_response(JSON.generate(
       language: 'en',
       segments: [{
         start: 0.0, end: 1.0, text: 'testing',
