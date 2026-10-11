@@ -14,11 +14,9 @@ class TTS
       true
     end
 
-    def synthesize(text:, lang:, out_path:, **kwargs)
-      if !kwargs.key?(:temperature) || kwargs[:temperature].to_f <= 0
-        kwargs[:temperature] = ENV['MOSS_TTS_TEMPERATURE']&.to_f || 1.7
-      end
-      super(text: text, lang: lang, out_path: out_path, **kwargs)
+    def synthesize(**kwargs)
+      kwargs[:temperature] = ENV['MOSS_TTS_TEMPERATURE']&.to_f || 1.7 if kwargs[:temperature].to_f <= 0
+      super
     end
 
     extend self
