@@ -193,9 +193,7 @@ module Ewprs
             depths[opening] = [depths[opening] - match.length, 0].max
             match
           elsif depths.values.any?(&:positive?)
-            marker = format('__P%04d__', tags.size + 1)
-            tags[marker] = match
-            marker
+            register_token(tags, match)
           else
             match
           end

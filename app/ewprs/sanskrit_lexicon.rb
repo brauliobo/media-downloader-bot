@@ -57,17 +57,13 @@ module Ewprs
 
     def mask(value, tokens)
       value.gsub(@pattern) do |match|
-        marker = format('__P%04d__', tokens.size + 1)
-        tokens[marker] = match
-        marker
+        register_token(tokens, match)
       end
     end
 
     def mask_inline(value, tokens)
       value.gsub(@inline_pattern) do |match|
-        marker = format('__P%04d__', tokens.size + 1)
-        tokens[marker] = match
-        marker
+        register_token(tokens, match)
       end
     end
 

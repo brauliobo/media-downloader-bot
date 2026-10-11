@@ -25,9 +25,7 @@ module Ewprs
           content = Regexp.last_match[:content]
           next match unless validator.protected_inline_fragment?(content)
 
-          marker = format('__P%04d__', tokens.size + 1)
-          tokens[marker] = match
-          marker
+          register_token(tokens, match)
         end
       end
 
@@ -38,35 +36,27 @@ module Ewprs
           group    = CGI.unescapeHTML(captures[:group]).unicode_normalize(:nfd).gsub(/\p{M}/, '')
           next match unless group.end_with?('s')
 
-          marker = format('__P%04d__', tokens.size + 1)
-          tokens[marker] = match.delete_prefix(prefix)
-          "#{prefix}#{marker}"
+          "#{prefix}#{register_token(tokens, match.delete_prefix(prefix))}"
         end
       end
 
       def mask_quoted_publication_titles(source, tokens)
         source.gsub(QUOTED_PUBLICATION_TITLE) do
           prefix, title = Regexp.last_match.values_at(:prefix, :title)
-          marker = format('__P%04d__', tokens.size + 1)
-          tokens[marker] = title
-          "#{prefix}#{marker}"
+          "#{prefix}#{register_token(tokens, title)}"
         end
       end
 
       def mask_translation_publications(source, tokens)
         masked = source.gsub(PAIRED_TRANSLATION_PUBLICATIONS) do
           prefix, first, connector, second = Regexp.last_match.values_at(:prefix, :first, :connector, :second)
-          first_marker = format('__P%04d__', tokens.size + 1)
-          tokens[first_marker] = first
-          second_marker = format('__P%04d__', tokens.size + 1)
-          tokens[second_marker] = second
+          first_marker = register_token(tokens, first)
+          second_marker = register_token(tokens, second)
           "#{prefix}#{first_marker}#{connector}#{second_marker}"
         end
         masked.gsub(LATER_TRANSLATION_PUBLICATION) do
           prefix, title = Regexp.last_match.values_at(:prefix, :title)
-          marker = format('__P%04d__', tokens.size + 1)
-          tokens[marker] = title
-          "#{prefix}#{marker}"
+          "#{prefix}#{register_token(tokens, title)}"
         end
       end
 
@@ -77,19 +67,15 @@ module Ewprs
                             Regexp.last_match.pre_match.match?(/\bchapters?\b[^.;]{0,80}\z/i)
           next Regexp.last_match[0] unless chapter_context
 
-          marker = format('__P%04d__', tokens.size + 1)
-          tokens[marker] = title
-          "#{prefix}#{marker}"
+          "#{prefix}#{register_token(tokens, title)}"
         end
       end
 
       def mask_quoted_publication_aliases(source, tokens)
         source.gsub(QUOTED_PUBLICATION_ALIAS) do
           original, connector, title = Regexp.last_match.values_at(:original, :connector, :title)
-          original_marker = format('__P%04d__', tokens.size + 1)
-          tokens[original_marker] = original
-          title_marker = format('__P%04d__', tokens.size + 1)
-          tokens[title_marker] = title
+          original_marker = register_token(tokens, original)
+          title_marker = register_token(tokens, title)
           "#{original_marker}#{connector}#{title_marker}"
         end
       end
@@ -105,9 +91,7 @@ module Ewprs
             next match[0] unless linguistic_context
           end
 
-          marker = format('__P%04d__', tokens.size + 1)
-          tokens[marker] = example
-          "#{prefix}#{marker}"
+          "#{prefix}#{register_token(tokens, example)}"
         end
       end
 
@@ -131,9 +115,7 @@ module Ewprs
           end
           next match unless capitalized >= 3 && title_case
 
-          marker = format('__P%04d__', tokens.size + 1)
-          tokens[marker] = match
-          marker
+          register_token(tokens, match)
         end
       end
 
@@ -141,9 +123,7 @@ module Ewprs
         source.gsub(IN_DATED_CITATION_TITLE) do |match|
           next match unless Regexp.last_match.pre_match.match?(/__P\d{4}__,?\s+in\s+\z/)
 
-          marker = format('__P%04d__', tokens.size + 1)
-          tokens[marker] = match
-          marker
+          register_token(tokens, match)
         end
       end
     end

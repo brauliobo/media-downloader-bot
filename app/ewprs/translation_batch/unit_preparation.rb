@@ -46,9 +46,7 @@ module Ewprs
       def mask_titles_and_terms(text, tokens)
         prepared = tag_editorial_content(text, tokens)
         prepared = prepared.gsub(PROTECTED_MARKER) do |protected_marker|
-          marker = format('__P%04d__', tokens.size + 1)
-          tokens[marker] = resolve_document_protected(protected_marker)
-          marker
+          register_token(tokens, resolve_document_protected(protected_marker))
         end
         prepared = mask_each(prepared, tokens, CITED_TITLES)
         prepared = mask_in_dated_citation_titles(prepared, tokens)
@@ -87,50 +85,53 @@ module Ewprs
 
       def tag_editorial_content(source, tokens)
         editorial_counts = source.scan(EDITORIAL_CONTENT).tally
-        source = source.gsub(HYPHENATED_EDITORIAL) do |match|
-          prefix, editorial = Regexp.last_match.values_at(:prefix, :editorial)
-          opening, content, closing = editorial_parts(editorial)
-          next match unless translatable?(content)
-
-          depth = "#{opening.length}#{closing.length}"
-          "⟦E#{depth}⟧#{prefix}-#{content}⟦/E#{depth}⟧"
-        end
-        source = source.gsub(ATTACHED_EDITORIAL) do |match|
-          prefix, editorial = Regexp.last_match.values_at(:prefix, :editorial)
-          opening, content, closing = editorial_parts(editorial)
-          next match unless translatable?(content)
-
-          depth = "#{opening.length}#{closing.length}"
-          "⟦E#{depth}⟧#{prefix}#{content}⟦/E#{depth}⟧"
-        end
+        source = tag_attached_editorial(source, HYPHENATED_EDITORIAL, '-')
+        source = tag_attached_editorial(source, ATTACHED_EDITORIAL, '')
         source.gsub(EDITORIAL_CONTENT) do
           editorial = Regexp.last_match[0]
-          pre_match = Regexp.last_match.pre_match
-          opening, content, closing = editorial_parts(editorial)
-          if translatable?(content)
-            quoted = content.match?(/\A&(?:ldquo|quot);.*&(?:rdquo|quot);\z/i)
-            sentence_bearing = content.match?(/[.!?]\s+[A-Z]/) && !quoted
-            plain_content = CGI.unescapeHTML(content)
-            WINDOWS_CONTROLS.each { |from, to| plain_content.gsub!(from, to) }
-            possessive_phrase = plain_content.match?(/[A-Za-z]+['’]s\s+[A-Za-z]/i)
-            lexical_completion = content.match?(/\A[A-Za-z]+(?:['’-][A-Za-z]+)*\z/) &&
-                                 pre_match.match?(/\b[a-z][A-Za-z'’-]*\s+\z/)
-            if opening.length == 2 || closing.length == 2 ||
-               content.length > MAX_INLINE_EDITORIAL_CHARS ||
-               sentence_bearing || possessive_phrase || lexical_completion ||
-               editorial_counts.fetch(editorial, 0) > 1 ||
-               content.match?(/\b[A-Za-z]+-[A-Za-z]+\b/)
-              next protect_content("#{opening}#{register_sentences(content)}#{closing}")
-            end
-
-            depth = "#{opening.length}#{closing.length}"
-            next "⟦E#{depth}⟧#{content}⟦/E#{depth}⟧"
-          end
-
-          marker = format('__P%04d__', tokens.size + 1)
-          tokens[marker] = "#{opening}#{content}#{closing}"
-          marker
+          tag_editorial(editorial, Regexp.last_match.pre_match, editorial_counts, tokens)
         end
+      end
+
+      # An editorial insertion glued to the word before it, with or without a hyphen.
+      def tag_attached_editorial(source, pattern, joiner)
+        source.gsub(pattern) do |match|
+          prefix, editorial = Regexp.last_match.values_at(:prefix, :editorial)
+          opening, content, closing = editorial_parts(editorial)
+          next match unless translatable?(content)
+
+          editorial_span(opening, closing, "#{prefix}#{joiner}#{content}")
+        end
+      end
+
+      def tag_editorial(editorial, pre_match, editorial_counts, tokens)
+        opening, content, closing = editorial_parts(editorial)
+        return register_token(tokens, editorial) unless translatable?(content)
+        return editorial_span(opening, closing, content) unless protected_editorial?(editorial, pre_match, editorial_counts)
+
+        protect_content("#{opening}#{register_sentences(content)}#{closing}")
+      end
+
+      def editorial_span(opening, closing, text)
+        depth = "#{opening.length}#{closing.length}"
+        "⟦E#{depth}⟧#{text}⟦/E#{depth}⟧"
+      end
+
+      # Insertions that read as text of their own, not as a gloss on the words around them.
+      def protected_editorial?(editorial, pre_match, editorial_counts)
+        opening, content, closing = editorial_parts(editorial)
+        quoted           = content.match?(/\A&(?:ldquo|quot);.*&(?:rdquo|quot);\z/i)
+        sentence_bearing = content.match?(/[.!?]\s+[A-Z]/) && !quoted
+        plain_content    = CGI.unescapeHTML(content)
+        WINDOWS_CONTROLS.each { |from, to| plain_content.gsub!(from, to) }
+        possessive_phrase  = plain_content.match?(/[A-Za-z]+['’]s\s+[A-Za-z]/i)
+        lexical_completion = content.match?(/\A[A-Za-z]+(?:['’-][A-Za-z]+)*\z/) &&
+                             pre_match.match?(/\b[a-z][A-Za-z'’-]*\s+\z/)
+        opening.length == 2 || closing.length == 2 ||
+          content.length > MAX_INLINE_EDITORIAL_CHARS ||
+          sentence_bearing || possessive_phrase || lexical_completion ||
+          editorial_counts.fetch(editorial, 0) > 1 ||
+          content.match?(/\b[A-Za-z]+-[A-Za-z]+\b/)
       end
 
       def expose_editorial_tags(source)
@@ -146,9 +147,7 @@ module Ewprs
 
       def mask(value, pattern, tokens)
         value.gsub(pattern) do |match|
-          marker = format('__P%04d__', tokens.size + 1)
-          tokens[marker] = match
-          marker
+          register_token(tokens, match)
         end
       end
     end

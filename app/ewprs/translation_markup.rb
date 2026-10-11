@@ -2,6 +2,11 @@ module Ewprs
   module TranslationMarkup
     include Patterns
 
+    # Hides a fragment behind the next numbered placeholder and answers the placeholder.
+    def register_token(tokens, value)
+      format('__P%04d__', tokens.size + 1).tap { |marker| tokens[marker] = value }
+    end
+
     def html_structure_compatible?(source, translated, allow_moved_inline_nesting: false)
       source_structure = html_structure(source)
       translated_structure = html_structure(translated)
@@ -51,7 +56,7 @@ module Ewprs
     def inline_tag_shape(tags)
       tags.map { |tag| tag.match?(%r{\A</}) ? :close : :open }
     end
-    private :html_structure_compatible?, :html_structure, :blank_navigation_attributes, :inline_tags_balanced?,
-            :inline_tag_shape
+    private :register_token, :html_structure_compatible?, :html_structure, :blank_navigation_attributes,
+            :inline_tags_balanced?, :inline_tag_shape
   end
 end
