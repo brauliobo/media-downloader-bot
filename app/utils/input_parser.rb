@@ -114,7 +114,7 @@ module Utils
     # A photo and a voice note carry no file name at all, so ask before reading one.
     def self.media_file_name(msg)
       media = attached_media(msg)
-      media.file_name if media.respond_to?(:file_name)
+      media.try(:file_name)
     end
 
     def self.strip_filename(msg, text)

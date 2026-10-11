@@ -24,7 +24,7 @@ module Processors
       return [Srt.new(ctx)] if Srt.can_handle?(ctx)
 
       file = ctx.msg.video || ctx.msg.audio || ctx.msg.document
-      return [LocalFile.new(ctx)] if file&.respond_to?(:local_path) && ::File.exist?(file.local_path)
+      return [LocalFile.new(ctx)] if ::File.exist?(file&.local_path.to_s)
       return [Video.new(ctx)] if ctx.msg.video.present?
       return [Audio.new(ctx)] if ctx.msg.audio.present?
 

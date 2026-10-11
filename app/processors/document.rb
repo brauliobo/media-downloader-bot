@@ -16,8 +16,7 @@ module Processors
 
     def download
       info = msg.document
-      size = info.file_size if info&.respond_to?(:file_size)
-      raise ArgumentError, 'document is too large' if size.to_i > MAX_BYTES
+      raise ArgumentError, 'document is too large' if info&.file_size.to_i > MAX_BYTES
 
       input = super
       raise ArgumentError, 'document is too large' if input&.fn_in && ::File.size(input.fn_in) > MAX_BYTES

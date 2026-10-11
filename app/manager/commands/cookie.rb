@@ -29,8 +29,7 @@ class Manager
 
       def extract_cookie_content
         if msg.document.present?
-          size = msg.document.file_size if msg.document.respond_to?(:file_size)
-          raise ArgumentError, 'cookie file is too large' if size.to_i > MAX_COOKIE_BYTES
+          raise ArgumentError, 'cookie file is too large' if msg.document.file_size.to_i > MAX_COOKIE_BYTES
 
           return Utils::Tmp.dir('cookies-') do |dir|
             local_path = bot.download_file(msg.document, dir: dir)

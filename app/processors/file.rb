@@ -6,18 +6,10 @@ module Processors
       info = msg.send attr
       return st.error("No #{attr}") unless info
 
-      local_path = if info.respond_to?(:local_path) && ::File.exist?(info.local_path)
-        info.local_path
-      else
-        service.download_file(info, dir: tmp)
-      end
+      local_path = ::File.exist?(info.local_path.to_s) ? info.local_path : service.download_file(info, dir: tmp)
 
       file_opts = SymMash.new(self.opts.deep_dup.presence || {})
-      title = if info.respond_to?(:file_name)
-        info.file_name
-      else
-        ::File.basename(local_path, ::File.extname(local_path))
-      end
+      title = info.file_name || ::File.basename(local_path, ::File.extname(local_path))
 
       SymMash.new(fn_in: local_path, opts: file_opts, info: { title: title })
     end
