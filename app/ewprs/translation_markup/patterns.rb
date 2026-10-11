@@ -44,48 +44,42 @@ module Ewprs
       LEADING_ENGLISH_GLUE = /\A(?:(?:The|An|This|That|These|Those|In|On|At|From|To|Of|For|With|By|A|the|an|a|this|that|these|those|in|on|at|from|to|of|for|with|by)\s+)/
       ENGLISH_GLUE_BEFORE_MARKED = /(?<![A-Za-z])(?:The|An|This|That|These|Those|In|On|At|From|To|Of|For|With|By|A|the|an|a|this|that|these|those|in|on|at|from|to|of|for|with|by)\s+(?=#{MARKED_WORD.source}|<i\b|<em\b|[+=→])/i
       ASCII_TRANSLITERATED_WORD = /(?<![A-Za-z])[A-Za-z]*(?:aa|ii|uu)[A-Za-z]*(?![A-Za-z])/i
+      # What follows a glossed term: the spacing and the gloss in [brackets] or (parentheses).
+      BRACKETED_GLOSS = /(?<spacing>\s*)(?<opening>\[\[?)(?<gloss>[^\[\]\r\n]+)(?<closing>\]\]?)/
+      PARENTHESIZED_GLOSS = /(?<spacing>\s*)(?<opening>\()(?<gloss>[^()\r\n]+)(?<closing>\))/
       PROPER_NOUN_GLOSS = %r{
         (?<prefix>\b(?i:at|from|in|near|of)\s+)
-        (?<term>(?<![A-Za-z])[A-Z][a-z][A-Za-z'’-]*(?![A-Za-z]))(?<spacing>\s*)
-        (?<opening>\[\[?)(?<gloss>[^\[\]\r\n]+)(?<closing>\]\]?)
+        (?<term>(?<![A-Za-z])[A-Z][a-z][A-Za-z'’-]*(?![A-Za-z]))#{BRACKETED_GLOSS}
       }x
       MARKED_INLINE    = %r{<(?<tag>i|em)\b[^>]*>\s*#{MARKED_WORD}[;,]?\s*</\k<tag>\s*>}i
       FOREIGN_INLINE   = %r{<(?<tag>i|em)\b[^>]*>(?<content>.*?)</\k<tag>\s*>}mi
       MARKED_INLINE_GLOSS = %r{
-        (?<term><(?<tag>i|em)\b[^>]*>(?=[^<]*[A-Za-z])[^<]*</\k<tag>>)(?<spacing>\s*)
-        (?<opening>\[\[?)(?<gloss>[^\[\]\r\n]+)(?<closing>\]\]?)
+        (?<term><(?<tag>i|em)\b[^>]*>(?=[^<]*[A-Za-z])[^<]*</\k<tag>>)#{BRACKETED_GLOSS}
       }ix
       MARKED_PARENTHETICAL_GLOSS = %r{
-        (?<term>#{MARKED_WORD})(?<spacing>\s*)
-        (?<opening>\()(?<gloss>[^()\r\n]+)(?<closing>\))
+        (?<term>#{MARKED_WORD})#{PARENTHESIZED_GLOSS}
       }ix
       INLINE_PARENTHETICAL_GLOSS = %r{
         (?<term><(?<tag>i|em)\b[^>]*>(?<content>[^<]+)</\k<tag>>)(?<spacing>\s*)
         \((?<gloss>[^()\r\n]+)\)
       }ix
       MARKED_PHRASE_GLOSS = %r{
-        (?<term>#{MARKED_WORD}(?:\s+(?:#{MARKED_WORD}|[A-Za-z][A-Za-z'’-]*)){1,6})(?<spacing>\s*)
-        (?<opening>\[\[?)(?<gloss>[^\[\]\r\n]+)(?<closing>\]\]?)
+        (?<term>#{MARKED_WORD}(?:\s+(?:#{MARKED_WORD}|[A-Za-z][A-Za-z'’-]*)){1,6})#{BRACKETED_GLOSS}
       }ix
       CONSONANT_TERM_GLOSS = %r{
-        (?<term>(?<![A-Za-z])(?=[a-z]{2,4}(?![A-Za-z]))[b-df-hj-np-tv-z]+)(?<spacing>\s*)
-        (?<opening>\[\[?)(?<gloss>[^\[\]\r\n]+)(?<closing>\]\]?)
+        (?<term>(?<![A-Za-z])(?=[a-z]{2,4}(?![A-Za-z]))[b-df-hj-np-tv-z]+)#{BRACKETED_GLOSS}
       }x
       DEFINED_TERM_GLOSS = %r{
-        (?<term>(?<=\bmeans\s)[a-z][a-z'’-]*)(?<spacing>\s*)
-        (?<opening>\[\[?)(?<gloss>[^\[\]\r\n]+)(?<closing>\]\]?)
+        (?<term>(?<=\bmeans\s)[a-z][a-z'’-]*)#{BRACKETED_GLOSS}
       }ix
       HYPHENATED_TERM_GLOSS = %r{
-        (?<term>(?<![A-Za-z])[A-Za-z][A-Za-z'’]*(?:-[A-Za-z][A-Za-z'’]*)+)(?<spacing>\s*)
-        (?<opening>\[\[?)(?<gloss>[^\[\]\r\n]+)(?<closing>\]\]?)
+        (?<term>(?<![A-Za-z])[A-Za-z][A-Za-z'’]*(?:-[A-Za-z][A-Za-z'’]*)+)#{BRACKETED_GLOSS}
       }x
       ASCII_PHRASE_PARENTHETICAL_GLOSS = %r{
-        (?<term>#{ASCII_TRANSLITERATED_WORD}(?:\s+[A-Za-z][A-Za-z'’-]*){1,6})(?<spacing>\s*)
-        (?<opening>\()(?<gloss>[^()\r\n]+)(?<closing>\))
+        (?<term>#{ASCII_TRANSLITERATED_WORD}(?:\s+[A-Za-z][A-Za-z'’-]*){1,6})#{PARENTHESIZED_GLOSS}
       }ix
       QUOTED_GLOSS = %r{
-        (?<term>&(?:rdquo|quot);)(?<spacing>\s*)
-        (?<opening>\[\[?)(?<gloss>[^\[\]\r\n]+)(?<closing>\]\]?)
+        (?<term>&(?:rdquo|quot);)#{BRACKETED_GLOSS}
       }ix
       NAMED_MARKED_GROUP = %r{
         (?<prefix>\b(?i:of)\s+)
