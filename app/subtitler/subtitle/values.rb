@@ -31,27 +31,19 @@ class Subtitler
 
       def immutable_copy(value)
         case value
-        when Hash
-          value.to_h { |key, item| [immutable_copy(key), immutable_copy(item)] }.freeze
-        when Array
-          value.map { |item| immutable_copy(item) }.freeze
-        when String
-          value.dup.freeze
-        else
-          value.freeze
+        when Hash then value.to_h { |key, item| [immutable_copy(key), immutable_copy(item)] }.freeze
+        when Array then value.map { |item| immutable_copy(item) }.freeze
+        when String then value.dup.freeze
+        else value.freeze
         end
       end
 
       def mutable_copy(value)
         case value
-        when Hash
-          value.to_h { |key, item| [mutable_copy(key), mutable_copy(item)] }
-        when Array
-          value.map { |item| mutable_copy(item) }
-        when String
-          value.dup
-        else
-          value
+        when Hash then value.to_h { |key, item| [mutable_copy(key), mutable_copy(item)] }
+        when Array then value.map { |item| mutable_copy(item) }
+        when String then value.dup
+        else value
         end
       end
     end
