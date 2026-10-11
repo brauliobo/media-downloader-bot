@@ -93,7 +93,7 @@ module Bot
 
       def require_allowed_directory!(path)
         real_path = File.realpath(path)
-        allowed   = allowed_roots.filter_map { |root| File.realpath(root) rescue nil }
+        allowed   = allowed_roots.select { |root| File.exist?(root) }.map { |root| File.realpath(root) }
         raise ArgumentError, "directory outside allowed roots: #{path}" unless File.directory?(real_path) && Utils::Safety.inside_any?(real_path, allowed)
         raise ArgumentError, "symlinked directory is not allowed: #{path}" if File.symlink?(path)
       rescue Errno::ENOENT, Errno::EACCES

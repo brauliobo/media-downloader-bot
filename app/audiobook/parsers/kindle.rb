@@ -20,31 +20,31 @@ module Audiobook
         domain = Utils::Url.parse(target_url).host
         parent = parent_host_for(domain)
         primary_header = fetch_cookie_header_for(domain)
-        parent_header  = fetch_cookie_header_for(parent) rescue nil
+        parent_header  = cookie_header_for(parent)
         primary = parse_cookies(primary_header, domain)
         parentc = parent_header.to_s.strip.empty? ? primary.map { |c| c.merge(domain: parent) } : parse_cookies(parent_header, parent)
         cookies = primary + parentc
         super(target_url, stl: stl, opts: SymMash.new(opts.to_h.merge(cookies: cookies)))
       end
 
-      def self.fetch_cookie_header_for(domain)
+      def self.cookie_header_for(domain)
         session_uid = ENV['SESSION_UID']
         session_uid = session_uid.to_i if session_uid.is_a?(String) && session_uid =~ /\A\d+\z/
-        cookie_header = nil
-        if session_uid
-          s = Session.find uid: session_uid
-          cookie_header = s&.cookies&.[](domain)
-        end
-        if cookie_header.to_s.strip.empty?
-          raise "Missing session cookie for #{domain}. Please set it with /cookie #{domain} <cookie>"
-        end
-        cookie_header
+        Session.find(uid: session_uid)&.cookies&.[](domain).presence if session_uid
+      end
+
+      def self.fetch_cookie_header_for(domain)
+        cookie_header_for(domain) || raise("Missing session cookie for #{domain}. Please set it with /cookie #{domain} <cookie>")
       end
 
       def self.parse_cookies(cookie_header, domain)
         return [] if cookie_header.to_s.strip.empty?
         if cookie_header.strip.start_with?('[')
-          JSON.parse(cookie_header) rescue []
+          begin
+            JSON.parse(cookie_header)
+          rescue JSON::ParserError
+            []
+          end
         else
           cookie_header.split(/;\s*/).filter_map do |pair|
             name, value = pair.split('=', 2)

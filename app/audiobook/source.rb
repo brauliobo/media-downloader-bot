@@ -12,8 +12,7 @@ module Audiobook
       s = input_path.to_s
       return false unless s.start_with?('http')
 
-      host = URI.parse(s).host rescue nil
-      Parsers::Kindle::READ_HOSTS.include?(host)
+      Parsers::Kindle::READ_HOSTS.include?(Utils::Url.parse(s)&.host)
     end
 
     # The reader is captured as a PDF, and that PDF is what is parsed; its path travels in the
