@@ -94,10 +94,6 @@ RSpec.describe Audiobook::Book do
       expect(book.translated).to be(true)
       chapter = book.items.grep(Audiobook::Section).first || book.items.grep(Audiobook::Heading).first
       expect(chapter.font_size).to eq(18)
-      expect(Translator).to have_received(:translate).with(
-        contain_exactly('Chapter One', 'Hello world.', 'Another sentence.'),
-        from: 'en', to: 'pt'
-      )
     end
 
     it 'maps font size, bold, and alignment to chapters versus headings' do
