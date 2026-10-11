@@ -9,9 +9,10 @@ export type ForwardingParams = { source: ChatRef; target: ChatRef; filter: strin
 
 export type Replay = {
   id: string; state: string; chat_id: number; parallel: number; plan: boolean
+  recover?: boolean; recovered?: number; deleted?: number
   total?: number; replayed?: number; skipped?: number; running?: number; errors?: { id?: number; error: string }[]
 }
-export type ReplayParams = { chat_id: number; parallel: number; plan: boolean }
+export type ReplayParams = { chat_id: number; parallel: number; plan: boolean; recover: boolean }
 
 export type RelayRuleParams = {
   source_chat_id: number; source_topic_id: number | null; source_title?: string

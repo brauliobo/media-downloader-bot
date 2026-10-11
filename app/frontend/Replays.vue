@@ -6,6 +6,7 @@ import ChatPicker from './ChatPicker.vue'
 const group = ref({ chatId: null as number | null, topicId: null as number | null })
 const parallel = ref(6)
 const plan = ref(false)
+const recover = ref(true)
 const jobs = ref<Replay[]>([])
 const error = ref('')
 let timer: ReturnType<typeof setInterval>
@@ -22,7 +23,7 @@ async function attempt(action: () => Promise<unknown>) {
   }
 }
 
-const start = () => group.value.chatId && attempt(() => api.replay({ chat_id: group.value.chatId!, parallel: parallel.value, plan: plan.value }))
+const start = () => group.value.chatId && attempt(() => api.replay({ chat_id: group.value.chatId!, parallel: parallel.value, plan: plan.value, recover: recover.value }))
 const stop = (job: Replay) => attempt(() => api.stopReplay(job.id))
 
 onMounted(() => { refresh(); timer = setInterval(refresh, 3000) })
@@ -36,6 +37,9 @@ section
   label Books in flight
     input(type="number" min="1" v-model.number="parallel")
   label.row
+    input(type="checkbox" v-model="recover")
+    span Recover failed books first (delete their error replies and convert them again)
+  label.row
     input(type="checkbox" v-model="plan")
     span Plan only
   button(@click="start") Start
@@ -44,6 +48,7 @@ section
   ul
     li(v-for="job in jobs" :key="job.id")
       | {{ job.id }} · {{ job.state }} · {{ job.replayed ?? 0 }} / {{ job.total ?? '?' }} · running {{ job.running ?? 0 }} · skipped {{ job.skipped ?? 0 }}
+      span(v-if="job.recover")  · recovered {{ job.recovered ?? 0 }} (deleted {{ job.deleted ?? 0 }} error replies)
       span.error(v-if="job.errors?.length")  · {{ job.errors.length }} errors: {{ job.errors[0].error }}
       button(v-if="job.state === 'running'" @click="stop(job)") Stop
 </template>

@@ -19,6 +19,6 @@ module Api
 
     private
 
-    def replay_params = params.require(:replay).permit(:chat_id, :parallel, :plan).to_h
+    def replay_params = params.require(:replay).permit(:chat_id, :parallel, :plan, :recover).to_h
   end
 end
