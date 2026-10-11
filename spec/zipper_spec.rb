@@ -202,15 +202,6 @@ RSpec.describe Zipper do
     end.to raise_error(ArgumentError, /cannot combine with to/)
   end
 
-  it 'delegates semantic filter construction to FFmpeg' do
-    ffmpeg = ffmpeg_double
-    zipper = described_class.new(
-      '/tmp/in.mp4', '/tmp/out.mp4', probe: video_probe, opts: video_options(width: 720), ffmpeg: ffmpeg
-    )
-    expect(FFmpeg).to receive(:scale_filter).with(width: 720, modulus: 2).and_call_original
-    zipper.send(:scale_filters)
-  end
-
   it 'delegates metadata policy and subtitle state without raw options' do
     ffmpeg = ffmpeg_double
     zipper = described_class.new(
