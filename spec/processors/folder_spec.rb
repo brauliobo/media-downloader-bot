@@ -1,15 +1,12 @@
 require 'rails_helper'
-require_relative '../support/integration_helper'
+require_relative '../support/media_files'
 require 'tmpdir'
 require 'fileutils'
 
 RSpec.describe Processors::Folder do
-  let(:media_fixture) { IntegrationHelper.ensure_fixtures[:mp4] }
+  include MediaFiles
 
-  def write_media(path)
-    FileUtils.mkdir_p(File.dirname(path))
-    FileUtils.cp(media_fixture, path)
-  end
+  alias_method :write_media, :media_file
 
   def write_replacement_media(path)
     write_media(path)
@@ -157,7 +154,6 @@ RSpec.describe Processors::Folder do
         )
 
         allow_any_instance_of(Worker).to receive(:process) { write_media(other) }
-        allow(Prober).to receive(:for).with(other).and_return(SymMash.new(format: SymMash.new(duration: 1)))
 
         processor.run
 
@@ -168,29 +164,31 @@ RSpec.describe Processors::Folder do
     it 'uses jobs as folder processing concurrency' do
       Dir.mktmpdir do |dir|
         folder = File.join(dir, 'Camera')
-        FileUtils.mkdir_p folder
-        write_media(File.join(folder, 'a.mp4'))
-        write_media(File.join(folder, 'b.mp4'))
-
-        opts = SymMash.new(jobs: '2', metadata: {})
+        %w[a b c].each { |name| write_media(File.join(folder, "#{name}.mp4")) }
         processor = described_class.new(
           paths: [folder],
-          opts: opts,
+          opts: SymMash.new(jobs: '2', metadata: {}),
           option_args: %w[jobs=2],
           bot: Bot::Mock.new,
         )
-
-        allow_any_instance_of(Worker).to receive(:process)
-        expect_any_instance_of(Array).to receive(:peach).with(threads: 2).and_call_original
+        running = peak = 0
+        lock = Mutex.new
+        allow_any_instance_of(Worker).to receive(:process) do
+          lock.synchronize { peak = [peak, running += 1].max }
+          sleep 0.2
+          lock.synchronize { running -= 1 }
+        end
 
         processor.run
+
+        expect(peak).to eq(2)
       end
     end
 
     it 'skips camera files already converted by the archive preset' do
       Dir.mktmpdir do |dir|
         source = File.join(dir, 'camera-20260101_000000.mp4')
-        write_media(source)
+        media_file(source, as: :silent_mp4)
 
         processor = described_class.new(
           paths: [dir],
@@ -199,9 +197,6 @@ RSpec.describe Processors::Folder do
           bot: Bot::Mock.new,
         )
 
-        allow(Prober).to receive(:for).with(source).and_return(
-          SymMash.new(streams: [SymMash.new(codec_type: 'video')])
-        )
         allow(Processors::LocalFile).to receive(:attach_to_message)
 
         processor.run
@@ -233,14 +228,12 @@ RSpec.describe Processors::Folder do
           write_replacement_media(output)
           FileUtils.touch(output, mtime: Time.now + 1)
         end
-        allow(Prober).to receive(:for).with(File.join(folder, '.mediazip-replace', 'clip.mp4')).and_return(
-          SymMash.new(format: SymMash.new(duration: 1))
-        )
 
         processor.run
 
         expect(File.binread(source)).to include('replacement-marker')
         expect(File.exist?(File.join(folder, 'converted'))).to be false
+        expect(Dir.exist?(File.join(folder, '.mediazip-replace'))).to be false
       end
     end
 
@@ -261,7 +254,6 @@ RSpec.describe Processors::Folder do
           write_replacement_media(output)
           FileUtils.touch(output, mtime: Time.now + 1)
         end
-        allow(Prober).to receive(:for).and_return(SymMash.new(format: SymMash.new(duration: 1)))
         allow(processor).to receive(:system)
 
         processor.run
@@ -274,25 +266,22 @@ RSpec.describe Processors::Folder do
     it 'does not remove another replacement in progress' do
       Dir.mktmpdir do |dir|
         replace_dir = File.join(dir, '.mediazip-replace')
-        FileUtils.mkdir_p replace_dir
-        pending = File.join(replace_dir, 'pending.mp4')
-        completed = File.join(replace_dir, 'completed.mp4')
-        write_media(pending)
-        write_media(completed)
+        source  = write_media(File.join(dir, 'clip.mp4'))
+        pending = write_media(File.join(replace_dir, 'pending.mp4'))
 
         processor = described_class.new(
-          paths: [dir],
+          paths: [source],
           opts: SymMash.new(replace: 1, metadata: {}),
           option_args: %w[replace],
           bot: Bot::Mock.new,
         )
-        entry = SymMash.new(path: File.join(dir, 'completed.mp4'), out_dir: replace_dir)
+        allow_any_instance_of(Worker).to receive(:process) { write_replacement_media(File.join(replace_dir, 'clip.mp4')) }
 
-        processor.send(:cleanup_replace, entry)
+        processor.run
 
-        expect(File.exist?(completed)).to be(false)
+        expect(File.binread(source)).to include('replacement-marker')
+        expect(File.exist?(File.join(replace_dir, 'clip.mp4'))).to be(false)
         expect(File.exist?(pending)).to be(true)
-        expect(Dir.exist?(replace_dir)).to be(true)
       end
     end
 
@@ -362,7 +351,6 @@ RSpec.describe Processors::Folder do
           write_media(output)
           FileUtils.touch(output, mtime: Time.now + 1)
         end
-        allow(Prober).to receive(:for).with(output).and_return(SymMash.new(format: SymMash.new(duration: 1)))
         allow_any_instance_of(described_class).to receive(:system).with('sudo', '-n', 'rm', '--', source).and_return(false)
 
         expect { processor.run }.to output(include('delete original failed:')).to_stdout
