@@ -38,7 +38,7 @@ class Zipper
 
       builder.map_stream :video
       builder.map_stream :audio if audio_stream? && !opts.noaudio && !opts.no_audio
-      builder.map_stream :subtitle, input: 1 if subtitle_input_path
+      builder.map_stream :subtitle, input: 1
     end
 
     def apply_video_size builder, size
@@ -83,9 +83,25 @@ class Zipper
       [codec, opts.abrate]
     end
 
-    def apply_output_bounds(builder)
+    def add_audio_input_options builder
+      builder.seek input_seek if input_seek
+      builder.sample_rate audio_sample_rate if audio_sample_rate
+      builder.channels audio_channels if audio_channels
+    end
+
+    def add_subtitle_stream builder
+      return unless subtitle_input_path
+
+      %i[language title].each { |key| builder.metadata key, subtitle_language, stream: :subtitle } if subtitle_language
+      builder.subtitle_codec
+    end
+
+    def finish_command builder
+      apply_metadata builder
       builder.end_at output_end if output_end
       builder.duration output_duration if output_duration
+      builder.output outfile
+      builder.capture
     end
   end
 end

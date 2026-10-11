@@ -17,15 +17,6 @@ RSpec.describe Zipper do
     SymMash.new({format: Zipper::Types.video.h264, metadata: {}}.merge(extra))
   end
 
-  it 'preserves the historical input and output option readers' do
-    zipper = described_class.new(
-      '/tmp/in.mp4', '/tmp/out.mp4', probe: video_probe, opts: video_options
-    )
-
-    expect(zipper.iopts).to eq ''
-    expect(zipper.oopts).to eq ''
-  end
-
   it 'returns raw FFmpeg capture tuples and expresses CUDA decisions semantically' do
     ffmpeg = ffmpeg_double result: ['stdout', 'stderr', :status]
     opts = video_options cuda: true, acodec: 'aac'

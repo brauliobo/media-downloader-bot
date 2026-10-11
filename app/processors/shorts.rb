@@ -36,7 +36,7 @@ module Processors
     def subtitle_source(i)
       return ::File.read(i.opts.genshorts) if i.opts.genshorts.is_a?(String) && local_genshorts_path?(i.opts.genshorts)
 
-      ::File.read Zipper.generate_srt(i.fn_in, dir: dir, info: i.info, probe: i.probe, stl: @stl, opts: i.opts)
+      ::File.read Zipper::Subtitle.generate_srt(i.fn_in, dir: dir, info: i.info, probe: i.probe, stl: @stl, opts: i.opts)
     end
 
     def plan_cuts(i, subtitle, lang)

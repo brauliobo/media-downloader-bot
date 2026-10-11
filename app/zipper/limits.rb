@@ -39,13 +39,13 @@ class Zipper
       kbit_seconds(percent, size_mb_limit) / kbit
     end
 
-    def vid_duration_thld size_mb_limit
+    def vid_duration_thld size_mb_limit = Zipper.size_mb_limit
       return Float::INFINITY unless size_mb_limit
 
       (size_mb_limit * 20.0 / 50).ceil
     end
 
-    def aud_duration_thld size_mb_limit
+    def aud_duration_thld size_mb_limit = Zipper.size_mb_limit
       return Float::INFINITY unless size_mb_limit
 
       max_audio_duration Zipper::Formats::TYPES.audio.opus.opts.bitrate, size_mb_limit
@@ -67,7 +67,7 @@ class Zipper
       return unless zipper.duration.finite? && zipper.duration.positive?
 
       minutes = (zipper.duration / 60).ceil
-      threshold = vid_duration_thld Zipper.size_mb_limit
+      threshold = vid_duration_thld
 
       min_width  = min_video_width zipper.dopts.width
       min_abrate = min_video_abrate zipper.dopts.abrate

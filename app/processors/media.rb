@@ -90,7 +90,7 @@ module Processors
     end
 
     def generate_srt_only i
-      srt_path = Zipper.generate_srt(i.fn_in, dir: dir, info: i.info, probe: i.probe, stl: i.stl, opts: i.opts)
+      srt_path = Zipper::Subtitle.generate_srt(i.fn_in, dir: dir, info: i.info, probe: i.probe, stl: i.stl, opts: i.opts)
       i.fn_out = srt_path
       i.type   = SymMash.new(name: :document)
       i.mime   = 'application/x-subrip'
@@ -112,8 +112,8 @@ module Processors
     def warn_compromised_quality(i)
       return unless Zipper.size_mb_limit
 
-      i.stl.update VID_TOO_LONG[] if i.type == Types.video && i.durat > Zipper.vid_duration_thld.minutes.to_i
-      i.stl.update AUD_TOO_LONG[] if i.type == Types.audio && i.durat > Zipper.aud_duration_thld.minutes.to_i
+      i.stl.update VID_TOO_LONG[] if i.type == Types.video && i.durat > Zipper::Limits.vid_duration_thld.minutes.to_i
+      i.stl.update AUD_TOO_LONG[] if i.type == Types.audio && i.durat > Zipper::Limits.aud_duration_thld.minutes.to_i
     end
 
     # The downloader already fetched a Telegram-playable file that fits the limit, so upload it untouched.

@@ -16,16 +16,8 @@ class Zipper
   FORMAT_NAMES = {video: %i[h264 h265 av1 vp9], audio: %i[opus aac mp3]}
     .flat_map { |kind, names| names.map { |name| [Types.public_send(kind)[name], name] } }.to_h
 
-  def self.max_audio_duration br
-    Limits.max_audio_duration br, size_mb_limit
-  end
-
-  def self.vid_duration_thld
-    Limits.vid_duration_thld size_mb_limit
-  end
-
-  def self.aud_duration_thld
-    Limits.aud_duration_thld size_mb_limit
+  class << self
+    delegate :choose_format, to: Formats
   end
 
   def self.default_ffmpeg
@@ -40,19 +32,13 @@ class Zipper
     new(*args, **params).zip_audio
   end
 
-  def self.choose_format(*args)
-    Zipper::Formats.choose_format(*args)
-  end
-
   def self.extract_vtt infile, language, ffmpeg: nil, ffmpeg_factory: nil
     ffmpeg = FFmpeg.resolve(ffmpeg, ffmpeg_factory)
     new(infile, nil, opts: SymMash.new(format: Types.audio.opus), ffmpeg: ffmpeg,
         ffmpeg_factory: ffmpeg_factory).extract_vtt language, ffmpeg: ffmpeg
   end
 
-  attr_reader :infile, :outfile, :probe, :stl, :info
-  attr_reader :iopts, :oopts, :dopts, :opts, :fgraph, :maps
-  attr_reader :duration, :cuts, :silences, :type
+  attr_reader :infile, :outfile, :probe, :stl, :info, :dopts, :opts, :fgraph, :maps, :duration, :cuts, :silences, :type
 
   def initialize infile, outfile, info: nil, probe: nil, stl: nil, opts: SymMash.new,
                  ffmpeg: nil, ffmpeg_factory: nil
@@ -64,8 +50,6 @@ class Zipper
     @probe = probe || Prober.for(infile, ffmpeg: ffmpeg_builder)
     @stl = stl
     @opts = opts
-    @iopts = ''
-    @oopts = ''
 
     apply_format_defaults!
     reset_graph!
@@ -100,9 +84,7 @@ class Zipper
     input_options = video_input_opts
     builder.input infile, **input_options
     builder.input subtitle_input_path if subtitle_input_path
-    builder.seek input_seek if input_seek
-    builder.sample_rate audio_sample_rate if audio_sample_rate
-    builder.channels audio_channels if audio_channels
+    add_audio_input_options builder
     builder.frame_rate output_frame_rate if output_frame_rate
     add_video_scale builder
     video_filters_before_subtitle.each { |filter| builder.add_filter filter, stream: :video }
@@ -111,16 +93,11 @@ class Zipper
     audio_filters.each { |filter| builder.add_filter filter, stream: :audio }
     builder.frame_rate_mode :vfr
     add_maps builder
-    builder.metadata :language, subtitle_language, stream: :subtitle if subtitle_input_path && subtitle_language
-    builder.metadata :title, subtitle_language, stream: :subtitle if subtitle_input_path && subtitle_language
-    builder.subtitle_codec if subtitle_input_path
+    add_subtitle_stream builder
     builder.encode_video format_name, cuda: opts.cudaenc, quality: opts.quality
     apply_video_size builder, size
     apply_video_audio builder
-    apply_metadata builder
-    apply_output_bounds builder
-    builder.output outfile
-    builder.capture
+    finish_command builder
   end
 
   def zip_audio
@@ -137,15 +114,10 @@ class Zipper
     builder = ffmpeg_builder
     builder.disable :video
     builder.input infile
-    builder.seek input_seek if input_seek
-    builder.sample_rate audio_sample_rate if audio_sample_rate
-    builder.channels audio_channels if audio_channels
+    add_audio_input_options builder
     audio_filters.each { |filter| builder.add_filter filter, stream: :audio }
     builder.encode_audio format_name, bitrate: opts.bitrate
-    apply_metadata builder
-    apply_output_bounds builder
-    builder.output outfile
-    builder.capture
+    finish_command builder
   end
 
   def extract_vtt lang_or_index, ffmpeg: nil
@@ -162,10 +134,6 @@ class Zipper
     Zipper::Subtitle.sanitize_vtt vtt
   end
 
-  def prepare_subtitle
-    Zipper::Subtitle.prepare self, translate_to: opts.slang
-  end
-
   def burn_subtitle path
     @subtitle_burn_filter = FFmpeg.subtitle_ass_filter path
     @subtitle_burn_index = fgraph.length
@@ -176,14 +144,6 @@ class Zipper
     @subtitle_input_path = path
     @subtitle_language = language
     self
-  end
-
-  def self.prepare_subtitle(*args, **kwargs)
-    Zipper::Subtitle.prepare_subtitle(*args, **kwargs)
-  end
-
-  def self.generate_srt(*args, **kwargs)
-    Zipper::Subtitle.generate_srt(*args, **kwargs)
   end
 
   protected
