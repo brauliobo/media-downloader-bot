@@ -28,55 +28,60 @@ module Audiobook
       def detect
         return [] if @lines.empty?
 
-        items = []
-        buf = []
-        start_idx = 0
-        start_page = nil
+        @items      = []
+        @buf        = []
+        @start_idx  = 0
+        @start_page = nil
         # The line last seen, which is where the block reaches to on the page; the buffer may hold
         # a joined line whose coordinates are those of the fragment that opened it.
-        previous = nil
+        @previous   = nil
 
-        @lines.each_with_index do |line, idx|
-          start_page ||= line.page_number
+        @lines.each_with_index { |line, idx| consume(line, idx) }
+        @items.concat(flush(@buf, @start_page, @start_idx)) if @buf.any?
 
-          if previous && buf.any?
-            # Dehyphenate across lines
-            if previous.ends_with_hyphen? && line.starts_with_lowercase?
-              buf[-1] = Line.new(buf.last.dehyphenate(line.text), **buf.last.style_attrs)
-              previous = line
-              next
-            end
-
-            if buf.one? && oversized_initial?(previous, line)
-              # Machine translation replaces the word a drop cap opened, leaving the letter orphaned.
-              opens = line.starts_with_lowercase?
-              buf = [opens ? Line.new("#{buf.last.text}#{line.text}", **line.style_attrs) : line]
-              (start_page, start_idx = line.page_number, idx) unless opens
-              previous = line
-              next
-            end
-          end
-
-          if previous && buf.any? &&
-              @breaks.break?(previous, line, buf, isolated: isolated?(idx - 1), fenced: isolated?(idx),
-                             block_break: previous.new_block?(line))
-            self.class.observer&.call(previous, line, buf, @grid)
-            items.concat(flush(buf, start_page, start_idx))
-            buf = [line]
-            start_idx = idx
-            start_page = line.page_number
-          else
-            buf << line
-          end
-          previous = line
-        end
-
-        items.concat(flush(buf, start_page, start_idx)) if buf.any?
-
-        items.reject { |data| data[:item].is_a?(Paragraph) && data[:item].empty? }
+        @items.reject { |data| data[:item].is_a?(Paragraph) && data[:item].empty? }
       end
 
       private
+
+      def consume(line, idx)
+        @start_page ||= line.page_number
+        join_fragment(line, idx) || (block_break?(line, idx) ? start_block(line, idx) : @buf << line)
+        @previous = line
+      end
+
+      # A line that continues the one before it, rather than being a line of its own.
+      def join_fragment(line, idx)
+        return false unless @previous && @buf.any?
+
+        if @previous.ends_with_hyphen? && line.starts_with_lowercase?
+          @buf[-1] = Line.new(@buf.last.dehyphenate(line.text), **@buf.last.style_attrs)
+        elsif @buf.one? && oversized_initial?(@previous, line)
+          join_initial(line, idx)
+        end
+      end
+
+      # Machine translation replaces the word a drop cap opened, leaving the letter orphaned.
+      def join_initial(line, idx)
+        opens = line.starts_with_lowercase?
+        @buf  = [opens ? Line.new("#{@buf.last.text}#{line.text}", **line.style_attrs) : line]
+        @start_page, @start_idx = line.page_number, idx unless opens
+        true
+      end
+
+      def block_break?(line, idx)
+        @previous && @buf.any? &&
+          @breaks.break?(@previous, line, @buf, isolated: isolated?(idx - 1), fenced: isolated?(idx),
+                         block_break: @previous.new_block?(line))
+      end
+
+      def start_block(line, idx)
+        self.class.observer&.call(@previous, line, @buf, @grid)
+        @items.concat(flush(@buf, @start_page, @start_idx))
+        @buf        = [line]
+        @start_idx  = idx
+        @start_page = line.page_number
+      end
 
       def flush(buf, start_page, start_idx)
         Factory.create_items_from_lines(
