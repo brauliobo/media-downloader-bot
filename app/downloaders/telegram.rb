@@ -109,12 +109,7 @@ module Downloaders
     end
 
     def td_text(content)
-      formatted = if content.respond_to?(:text)
-        content.text
-      elsif content.respond_to?(:caption)
-        content.caption
-      end
-      (formatted.respond_to?(:text) ? formatted.text : formatted.to_s).presence
+      Bot::FormattedText.of(content).presence
     end
 
     def td_author(message)
@@ -189,8 +184,7 @@ module Downloaders
     end
 
     def td
-      bot = msg&.bot
-      bot.td if bot.respond_to?(:td)
+      msg&.bot.try(:td)
     end
 
     def admin?

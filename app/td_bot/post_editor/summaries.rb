@@ -18,23 +18,17 @@ module TDBot
           text:                message_text(content),
           media:               message_media(content),
           reply_to_message_id: message_reply_to_id(message),
-          can_edit:            message.respond_to?(:can_be_edited) ? message.can_be_edited : nil,
-          sender_id:           message.sender_id.respond_to?(:user_id) ? message.sender_id.user_id : nil
+          can_edit:            message.try(:can_be_edited),
+          sender_id:           message.sender_id.try(:user_id)
         }
       end
 
       def message_reply_to_id(message)
-        reply_to = message.reply_to if message.respond_to?(:reply_to)
-        reply_to.message_id if reply_to.respond_to?(:message_id)
+        message.try(:reply_to).try(:message_id)
       end
 
       def message_text(content)
-        formatted = if content.respond_to?(:text)
-          content.text
-        elsif content.respond_to?(:caption)
-          content.caption
-        end
-        formatted.respond_to?(:text) ? formatted.text : formatted.to_s
+        Bot::FormattedText.of(content)
       end
 
       def message_media(content)
