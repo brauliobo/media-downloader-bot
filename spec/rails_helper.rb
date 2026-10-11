@@ -1,4 +1,5 @@
 ENV['RAILS_ENV'] ||= 'test'
+ENV['TD_BOT']    ||= '1'
 require_relative '../config/environment'
 require 'rspec/rails'
 
