@@ -20,6 +20,7 @@ module Bot
     self.td = TD::Client.new timeout: nil
     self.message_handler = TD::MessageHandler.new(td)
     message_handler.singleton_class.prepend(::TDBot::MessageTopic)
+    message_handler.singleton_class.prepend(::TDBot::MessageAttachments)
     self.message_sender  = TD::MessageSender.new(td)
     self.file_manager    = TD::FileManager.new(td)
     self.message_send_outcomes = Concurrent::Map.new
