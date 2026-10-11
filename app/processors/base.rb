@@ -25,10 +25,7 @@ module Processors
     end
 
     def parse_input
-      line = Utils::InputParser.input_text(ctx)
-      return if line.blank?
-      
-      parsed = Utils::InputParser.parse(line)
+      parsed = Utils::InputParser.parse(Utils::InputParser.input_text(ctx).to_s)
       @ctx.url = parsed.url&.to_s
       
       if parsed.url&.host
@@ -36,10 +33,14 @@ module Processors
         raise 'Blocked domain' if BLOCKED_DOMAINS.any? { |domain| host.include?(domain) }
       end
 
-      @ctx.opts = SymMash.new(parsed.opts.merge(session: @ctx.session))
-      self.class.normalize_options @ctx.opts
+      @ctx.opts = SymMash.new(chat_default_opts.merge(normalized(parsed.opts)).merge(session: @ctx.session))
       self.class.apply_process_opts @ctx.opts
     end
+
+    # The chat's default options go through the same normalization, so the ones typed override them.
+    def chat_default_opts = normalized(Utils::InputParser.parse(ChatSetting.default_options(ctx.msg&.chat&.id)).opts)
+
+    def normalized(opts) = self.class.normalize_options(SymMash.new(opts))
 
     def process(*args, **kwargs)
       result = download(*args, **kwargs) if respond_to?(:download)

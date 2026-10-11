@@ -28,6 +28,42 @@ RSpec.describe Processors::Base do
     expect(processor.service).to equal(service)
   end
 
+  describe 'chat default options' do
+    let(:chat_id) { -9_000_000_001 }
+    let(:other)   { -9_000_000_002 }
+
+    around do |example|
+      ChatSetting.db.transaction(rollback: :always, auto_savepoint: true) do
+        ChatSetting.update_settings(chat_id, options: 'lang=pt # dub=en')
+        example.run
+      end
+    end
+
+    def opts_for(chat, caption, **msg)
+      Dir.mktmpdir { |dir| described_class.new(Context.new(dir: dir, msg: SymMash.new(chat: {id: chat}, caption: caption, **msg))).opts }
+    end
+
+    it 'applies them through the usual normalization when the message has none' do
+      expect(opts_for(chat_id, 'audio')).to include(audio: 1, hashtags: 1, lang: 'pt', slang: 'pt', alang: 'pt', dub: 1, dub_lang: 'en')
+    end
+
+    it 'applies them to a document sent without a caption' do
+      opts = opts_for(chat_id, nil, document: {file_name: 'book.pdf', mime_type: 'application/pdf'})
+
+      expect(opts).to include(hashtags: 1, lang: 'pt')
+    end
+
+    it 'lets the options typed on the message win' do
+      expect(opts_for(chat_id, 'lang=en hts=0')).to include(lang: 'en', alang: 'en', slang: 'en', hashtags: '0')
+      expect(opts_for(chat_id, 'slang=es')).to include(lang: 'pt', alang: 'pt', slang: 'es', hashtags: 1)
+    end
+
+    it 'leaves other chats and messages without chat info alone' do
+      expect(opts_for(other, 'audio').keys).to contain_exactly(:audio, :session)
+      expect(described_class.new(Context.new(dir: Dir.tmpdir, msg: SymMash.new(caption: 'audio'))).opts.keys).to contain_exactly(:audio, :session)
+    end
+  end
+
   describe '.add_opt' do
     it 'applies nice as a general parsed option' do
       opts = SymMash.new
