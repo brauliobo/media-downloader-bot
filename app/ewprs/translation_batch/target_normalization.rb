@@ -94,29 +94,15 @@ module Ewprs
       end
 
       def replace_unquoted(value, pattern, replacement = nil, &block)
-        held = []
-        hold = ->(span) do
-          held << span
-          "__Q#{held.size}__"
-        end
+        hold, restore = span_holder
         masked = value.to_s.gsub(/&ldquo;.*?&rdquo;|&lsquo;.*?&rsquo;|“.*?”|‘.*?’|«\s*.*?\s*»/mi, &hold)
-        masked = if block
-          masked.gsub(pattern) { |word| block.call(word, $`) }
-        else
-          masked.gsub(pattern, replacement)
-        end
-        held.each_with_index.reverse_each { |span, index| masked.sub!("__Q#{index + 1}__", span) }
-        masked
+        restore.(block ? masked.gsub(pattern) { |word| block.call(word, $`) } : masked.gsub(pattern, replacement))
       end
 
       def strip_cjk_leftover_glue(value)
         return value unless value.match?(TranslationValidator::CJK_SCRIPT)
 
-        held = []
-        hold = ->(span) do
-          held << span
-          "__Q#{held.size}__"
-        end
+        hold, restore = span_holder
         masked = value.gsub(/&ldquo;.*?&rdquo;|&lsquo;.*?&rsquo;|『.*?』|「.*?」|".*?"/mi, &hold)
         masked = masked.gsub(/&(?:#\d+|#x[\da-f]+|[a-z][\w]*);/i, &hold)
         masked = masked.gsub(Regexp.union(
@@ -133,18 +119,13 @@ module Ewprs
           .gsub(/\bregarding\b,?/iu, '')
           .gsub(/(?<![A-Za-z])([A-Za-z][A-Za-z\p{M}'’-]{0,24})\s+and\s+(?=[A-Za-z])/u, "\\1#{coordinator}")
           .sub(/\A[ \t]+/, '')
-        held.each_with_index.reverse_each { |span, index| masked.sub!("__Q#{index + 1}__", span) }
-        masked
+        restore.(masked)
       end
 
       def strip_echoed_protected_ascii(unit, output)
         return output unless TranslationValidator::CJK_TARGET.key?(target)
 
-        held = []
-        hold = ->(span) do
-          held << span
-          "__Q#{held.size}__"
-        end
+        hold, restore = span_holder
         projected = output.to_s.gsub(/&ldquo;.*?&rdquo;|&lsquo;.*?&rsquo;|『.*?』|「.*?」|".*?"/mi, &hold)
         unit.tokens.flat_map { |marker, value| [marker, value] }.uniq.sort_by { |span| -span.size }.each do |span|
           next if span.empty?
@@ -169,8 +150,18 @@ module Ewprs
             projected.gsub!(exact_phrase_pattern(echo), '')
           end
         end
-        held.each_with_index.reverse_each { |span, index| projected.sub!("__Q#{index + 1}__", span) }
-        projected
+        restore.(projected)
+      end
+
+      # `hold` (for gsub) swaps the spans for placeholders and `restore` puts them back in the text.
+      def span_holder
+        held = []
+        hold = ->(span) { "__Q#{(held << span).size}__" }
+        restore = ->(text) do
+          held.each_with_index.reverse_each { |span, index| text.sub!("__Q#{index + 1}__", span) }
+          text
+        end
+        [hold, restore]
       end
 
       def ascii_fold_protected(value)
