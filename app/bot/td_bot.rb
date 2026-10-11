@@ -179,8 +179,7 @@ module Bot
     end
 
     delegate :edit_generated_message, :upload_generated_media, :ensure_forum_topic, :find_chats,
-             :resolve_chat_identifier, :chat_messages, :chat_message, :list_chats, :forum_topics, :copy_message,
-             :incoming_message, :message_link, :leave_chat, to: :post_editor
+             :resolve_chat_identifier, :chat_message, *CHAT_OPERATIONS, to: :post_editor
 
     def post_editor
       @post_editor ||= ::TDBot::PostEditor.new(self)
