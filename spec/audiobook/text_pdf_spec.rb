@@ -9,6 +9,20 @@ RSpec.describe Audiobook::TextPdf do
     File.expand_path("../fixtures/#{name}", __dir__)
   end
 
+  def ocr_image(path, text)
+    Audiobook::Image.allocate.tap do |image|
+      image.instance_variable_set(:@path, path)
+      image.instance_variable_set(:@sentences, [Audiobook::Sentence.new(text)])
+    end
+  end
+
+  def book_of(pages, metadata)
+    Audiobook::Book.allocate.tap do |book|
+      book.instance_variable_set(:@pages, pages)
+      book.instance_variable_set(:@metadata, metadata)
+    end
+  end
+
   def book_data
     SymMash.new(
       metadata: {page_count: 1, language: 'pt', title: 'Adiós a La Inflamación'},
@@ -35,16 +49,11 @@ RSpec.describe Audiobook::TextPdf do
     sentence.font_size = 12
     sentence.alignment = :left
     footer    = Audiobook::Paragraph.new([Audiobook::Sentence.new('Repeated footer.')])
-    image     = Audiobook::Image.allocate
-    image.instance_variable_set(:@path, 'book.pdf#page=1')
-    image.instance_variable_set(:@sentences, [Audiobook::Sentence.new('OCR cover text.')])
-    book = Audiobook::Book.allocate
-    book.instance_variable_set(:@pages, [
+    image     = ocr_image('book.pdf#page=1', 'OCR cover text.')
+    book_of([
       Audiobook::Page.new(1, [image]),
       Audiobook::Page.new(2, [section, heading, paragraph, footer]),
-    ])
-    book.instance_variable_set(:@metadata, SymMash.new(language: 'pt', title: 'Book Title'))
-    book
+    ], SymMash.new(language: 'pt', title: 'Book Title'))
   end
 
   it 'keeps sentences, headings, sections, footers, and references' do
@@ -71,12 +80,8 @@ RSpec.describe Audiobook::TextPdf do
   end
 
   it 'rasterizes an image-only first page as the cover' do
-    image = Audiobook::Image.allocate
-    image.instance_variable_set(:@path, '/tmp/book.pdf#page=1')
-    image.instance_variable_set(:@sentences, [Audiobook::Sentence.new('OCR cover text.')])
-    book = Audiobook::Book.allocate
-    book.instance_variable_set(:@pages, [Audiobook::Page.new(1, [image])])
-    book.instance_variable_set(:@metadata, SymMash.new(language: 'pt', title: 'Book', source_path: '/tmp/book.pdf'))
+    image = ocr_image('/tmp/book.pdf#page=1', 'OCR cover text.')
+    book = book_of([Audiobook::Page.new(1, [image])], SymMash.new(language: 'pt', title: 'Book', source_path: '/tmp/book.pdf'))
     pdf = described_class.new(book, source_pdf: '/tmp/book.pdf')
     allow(pdf).to receive(:rasterize_page).with(1, 'cover').and_return('cover.png')
 
@@ -88,9 +93,7 @@ RSpec.describe Audiobook::TextPdf do
 
   it 'keeps a text first page instead of rasterizing the untranslated source page' do
     sentence = Audiobook::Sentence.new('Texto da primeira pagina.')
-    book = Audiobook::Book.allocate
-    book.instance_variable_set(:@pages, [Audiobook::Page.new(1, [Audiobook::Paragraph.new([sentence])])])
-    book.instance_variable_set(:@metadata, SymMash.new(language: 'pt', title: 'Book', source_path: '/tmp/book.pdf'))
+    book = book_of([Audiobook::Page.new(1, [Audiobook::Paragraph.new([sentence])])], SymMash.new(language: 'pt', title: 'Book', source_path: '/tmp/book.pdf'))
     pdf = described_class.new(book, source_pdf: '/tmp/book.pdf')
     allow(pdf).to receive(:rasterize_page).and_return('cover.png')
 
@@ -101,13 +104,9 @@ RSpec.describe Audiobook::TextPdf do
   end
 
   it 'renders the OCR text of a full-page image kept beside a header line' do
-    image = Audiobook::Image.allocate
-    image.instance_variable_set(:@path, '/tmp/book.pdf#page=13')
-    image.instance_variable_set(:@sentences, [Audiobook::Sentence.new('Tabela de doses traduzida.')])
+    image = ocr_image('/tmp/book.pdf#page=13', 'Tabela de doses traduzida.')
     footer = Audiobook::Paragraph.new([Audiobook::Sentence.new('Page 13 of 13')])
-    book = Audiobook::Book.allocate
-    book.instance_variable_set(:@pages, [Audiobook::Page.new(13, [footer, image])])
-    book.instance_variable_set(:@metadata, SymMash.new(language: 'pt', title: 'Book'))
+    book = book_of([Audiobook::Page.new(13, [footer, image])], SymMash.new(language: 'pt', title: 'Book'))
 
     html = described_class.new(book).build_html
 
@@ -136,12 +135,8 @@ RSpec.describe Audiobook::TextPdf do
   end
 
   it 'renders scanned page text instead of the untranslated source page image' do
-    image = Audiobook::Image.allocate
-    image.instance_variable_set(:@path, '/tmp/book.pdf#page=2')
-    image.instance_variable_set(:@sentences, [Audiobook::Sentence.new('Texto traduzido da pagina.')])
-    book = Audiobook::Book.allocate
-    book.instance_variable_set(:@pages, [Audiobook::Page.new(2, [image])])
-    book.instance_variable_set(:@metadata, SymMash.new(language: 'pt', title: 'Book', source_path: '/tmp/book.pdf'))
+    image = ocr_image('/tmp/book.pdf#page=2', 'Texto traduzido da pagina.')
+    book = book_of([Audiobook::Page.new(2, [image])], SymMash.new(language: 'pt', title: 'Book', source_path: '/tmp/book.pdf'))
     pdf = described_class.new(book, source_pdf: '/tmp/book.pdf')
     allow(pdf).to receive(:rasterize_page).and_return('page-2.png')
 
@@ -155,9 +150,7 @@ RSpec.describe Audiobook::TextPdf do
     sentence = Audiobook::Sentence.new('A long translated paragraph that should not be centered on the page.')
     sentence.font_size = 12
     sentence.alignment = :center
-    book = Audiobook::Book.allocate
-    book.instance_variable_set(:@pages, [Audiobook::Page.new(1, [Audiobook::Paragraph.new([sentence])])])
-    book.instance_variable_set(:@metadata, SymMash.new(language: 'pt', title: 'Book'))
+    book = book_of([Audiobook::Page.new(1, [Audiobook::Paragraph.new([sentence])])], SymMash.new(language: 'pt', title: 'Book'))
 
     html = described_class.new(book).build_html
 
