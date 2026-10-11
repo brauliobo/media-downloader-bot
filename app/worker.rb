@@ -142,8 +142,8 @@ class Worker
       uploader.upload_or_queue i, pos
 
     rescue => e
-      if e.respond_to?(:user_message)
-        stline.error e.user_message
+      if (user_message = e.try(:user_message))
+        stline.error user_message
       else
         stline.error "Processing error", exception: e
       end
@@ -170,7 +170,7 @@ class Worker
   end
 
   def caption_limit
-    service.respond_to?(:max_caption) ? service.max_caption : Bot::MsgHelpers::MEDIA_CAPTION_LIMIT
+    service.try(:max_caption) || Bot::MsgHelpers::MEDIA_CAPTION_LIMIT
   end
 
   def caption_for(input, max: caption_limit)

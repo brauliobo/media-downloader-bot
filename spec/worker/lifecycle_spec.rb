@@ -32,7 +32,7 @@ RSpec.describe Worker, 'lifecycle' do
     end
   end
   let(:service) { service_class.new }
-  let(:worker)  { described_class.new(msg, service: service, job_id: 'job-id', tmpdir: dir) }
+  let(:worker)  { described_class.new(msg, service: service, job_id: 'job-id', tmpdir: dir, workdir_path: nil, skip_cleanup: nil) }
 
   after { FileUtils.remove_entry dir }
 
@@ -59,7 +59,7 @@ RSpec.describe Worker, 'lifecycle' do
     end
 
     it 'is kept when cleanup is skipped' do
-      worker = described_class.new(msg, service: service, tmpdir: dir, skip_cleanup: true)
+      worker = described_class.new(msg, service: service, tmpdir: dir, workdir_path: nil, skip_cleanup: true)
       path   = nil
       worker.workdir { |work_dir| path = work_dir }
 
