@@ -53,9 +53,10 @@ module Bot
     # list_chats(query) -> [{id:, title:, type:}]; forum_topics(chat_id:) -> [{id:, name:}]
     # chat_messages(chat_id:, topic_id:, filter:, from_message_id:, limit:) -> [{id:, media:, ...}], newest first
     # copy_message(from_chat_id:, message_id:, to_chat_id:, topic_id:, caption:) -> new message id
+    # delete_messages(chat_id:, message_ids:) -> removes them for everybody
     # incoming_message(chat_id:, message_id:) -> the bot's native message object, as if just received (not outgoing)
     # message_link(chat_id:, message_id:) -> url that opens the message in telegram, nil for chats without one
-    CHAT_OPERATIONS = %i[list_chats forum_topics chat_messages copy_message incoming_message message_link leave_chat].freeze
+    CHAT_OPERATIONS = %i[list_chats forum_topics chat_messages copy_message delete_messages incoming_message message_link leave_chat].freeze
     CHAT_OPERATIONS.each do |name|
       define_method(name) { |*, **| raise NotImplementedError, "#{self.class.name} does not support #{name}" }
     end

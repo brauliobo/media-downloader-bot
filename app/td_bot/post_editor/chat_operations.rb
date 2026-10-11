@@ -56,6 +56,10 @@ module TDBot
         end
       end
 
+      def delete_messages(chat_id:, message_ids:)
+        message_ids.each_slice(100) { |ids| td.delete_messages(chat_id: chat_id, message_ids: ids, revoke: true).value!(30) }
+      end
+
       # The stored message as the handler would build it on arrival, even when the own account sent it.
       def incoming_message(chat_id:, message_id:)
         message = td.get_message(chat_id: chat_id, message_id: message_id).value!(20)
