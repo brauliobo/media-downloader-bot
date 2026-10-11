@@ -85,49 +85,56 @@ class Subtitler
       end
 
       def inline_timed_words(text, cue_start, cue_finish, cue_id)
-        matches = text.to_enum(:scan, /<([^>]*)>/).map { Regexp.last_match }
-        malformed = matches.any? do |match|
-          match[1].match?(/\A\d{1,2}:\d{2}/) && Subtitler.parse_timestamp(match[1]).nil?
+        timed = timed_markers(text)
+        times = timed.map(&:last)
+        return [] if timed.empty?
+        return [] unless times.all? { |time| time >= cue_start && time <= cue_finish }
+        return [] unless times.each_cons(2).all? { |left, right| right > left }
+
+        boundaries = [cue_start, *times, cue_finish]
+        words = marker_chunks(text, timed).each_with_index.map do |chunk, index|
+          chunk_words(chunk, boundaries.fetch(index), boundaries.fetch(index + 1), index, cue_id)
         end
-        timed = text.to_enum(:scan, Subtitler::Timestamps::INLINE_TIMESTAMP).filter_map do
+        words.any?(&:nil?) ? [] : words.flatten
+      end
+
+      # The inline timestamps of a cue with the time each carries; none when any of them is malformed.
+      def timed_markers(text)
+        tags = text.scan(/<([^>]*)>/).flatten
+        return [] if tags.any? { |tag| tag.match?(/\A\d{1,2}:\d{2}/) && Subtitler.parse_timestamp(tag).nil? }
+
+        text.to_enum(:scan, Subtitler::Timestamps::INLINE_TIMESTAMP).filter_map do
           match = Regexp.last_match
           time  = Subtitler.parse_timestamp(match[1])
           [match, time] if time
         end
-        return [] if malformed || timed.empty?
+      end
 
-        times = timed.map(&:last)
-        return [] unless times.all? { |time| time >= cue_start && time <= cue_finish }
-        return [] unless times.each_cons(2).all? { |left, right| right > left }
-
-        chunks = []
+      # The text between the inline timestamps.
+      def marker_chunks(text, timed)
         cursor = 0
-        timed.each do |match, _time|
-          chunks << text[cursor...match.begin(0)]
-          cursor = match.end(0)
+        chunks = timed.map do |match, _time|
+          text[cursor...match.begin(0)].tap { cursor = match.end(0) }
         end
         chunks << text[cursor..]
+      end
 
-        boundaries = [cue_start, *times, cue_finish]
-        chunks.flat_map.with_index do |chunk, index|
-          tokens = semantic_text(chunk).split
-          next [] if tokens.empty?
+      # The words of one chunk spread evenly over its time; nil when the chunk has no time to spread over.
+      def chunk_words(chunk, start_time, finish_time, index, cue_id)
+        tokens = semantic_text(chunk).split
+        return [] if tokens.empty?
+        return unless finish_time > start_time
 
-          start_time  = boundaries.fetch(index)
-          finish_time = boundaries.fetch(index + 1)
-          return [] unless finish_time > start_time
-
-          duration = finish_time - start_time
-          tokens.map.with_index do |token, token_index|
-            token_start  = start_time + duration * token_index / tokens.size
-            token_finish = token_index == tokens.size - 1 ? finish_time : start_time + duration * (token_index + 1) / tokens.size
-            Word.new(
-              text: token,
-              start: token_start,
-              finish: token_finish,
-              metadata: {'cue_id' => cue_id, 'marker' => index.positive? && token_index.zero?, 'marker_group' => index}
-            )
-          end
+        duration = finish_time - start_time
+        tokens.map.with_index do |token, token_index|
+          token_start  = start_time + duration * token_index / tokens.size
+          token_finish = token_index == tokens.size - 1 ? finish_time : start_time + duration * (token_index + 1) / tokens.size
+          Word.new(
+            text: token,
+            start: token_start,
+            finish: token_finish,
+            metadata: {'cue_id' => cue_id, 'marker' => index.positive? && token_index.zero?, 'marker_group' => index}
+          )
         end
       end
 

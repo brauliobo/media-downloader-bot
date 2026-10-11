@@ -35,37 +35,7 @@ class Subtitler
           raise "SRT translation result count mismatch: expected #{lines.length}, got #{translated_lines.length}"
         end
 
-        translated_lines = translated_lines.zip(replacements).map do |text, line_replacements|
-          expected = line_replacements.map(&:first)
-          actual   = text.to_s.scan(marker_pattern)
-          unless actual == expected
-            raise "SRT translation corrupted inline timestamps: expected #{expected.join(', ')}"
-          end
-
-          values = line_replacements.to_h
-          text.to_s.gsub(marker_pattern) { |marker| values.fetch(marker) }
-        end
-
-        source_blocks = Values.mutable_copy(@metadata.fetch('source_blocks'))
-        cursor        = 0
-        @entries.each do |entry|
-          content_lines = translated_lines.slice(cursor, entry.metadata.fetch('content_lines').length)
-          cursor += content_lines.length
-          translated_text = Cues.semantic_text(content_lines.join("\n"))
-          words = Cues.inline_timed_words(content_lines.join("\n"), entry.start, entry.finish, entry.cue_id)
-          entry.replace_text!(translated_text)
-            .replace_words!(words)
-            .replace_source!(text: translated_text, words: words.map(&:deep_copy))
-          entry.replace_metadata!(Values.mutable_copy(entry.metadata).merge(
-            'content_lines' => content_lines,
-            'ass_text'      => CGI.unescapeHTML(content_lines.join("\n")).gsub(Subtitler::Timestamps::INLINE_TIMESTAMP, ''),
-            'source_text'   => translated_text
-          ))
-          block_index = entry.metadata.fetch('block_index')
-          block_end   = source_blocks.fetch(block_index)[/(?:\r?\n)+\z/].to_s
-          source_blocks[block_index] = original_srt_lines(entry).join(@metadata.fetch('line_ending')) + block_end
-        end
-        @metadata = Values.immutable_copy(Values.mutable_copy(@metadata).merge('source_blocks' => source_blocks))
+        apply_translated_srt_lines(restore_srt_timestamps(translated_lines, replacements, marker_pattern))
         replace_language!(to)
         rebuild_text_from_entries!
       end
@@ -85,6 +55,46 @@ class Subtitler
       end
 
       private
+
+      def restore_srt_timestamps(texts, replacements, marker_pattern)
+        texts.zip(replacements).map do |text, line_replacements|
+          expected = line_replacements.map(&:first)
+          actual   = text.to_s.scan(marker_pattern)
+          unless actual == expected
+            raise "SRT translation corrupted inline timestamps: expected #{expected.join(', ')}"
+          end
+
+          values = line_replacements.to_h
+          text.to_s.gsub(marker_pattern) { |marker| values.fetch(marker) }
+        end
+      end
+
+      def apply_translated_srt_lines(translated_lines)
+        source_blocks = Values.mutable_copy(@metadata.fetch('source_blocks'))
+        cursor        = 0
+        @entries.each do |entry|
+          count = entry.metadata.fetch('content_lines').length
+          translate_srt_entry(entry, translated_lines.slice(cursor, count), source_blocks)
+          cursor += count
+        end
+        @metadata = Values.immutable_copy(Values.mutable_copy(@metadata).merge('source_blocks' => source_blocks))
+      end
+
+      def translate_srt_entry(entry, content_lines, source_blocks)
+        translated_text = Cues.semantic_text(content_lines.join("\n"))
+        words = Cues.inline_timed_words(content_lines.join("\n"), entry.start, entry.finish, entry.cue_id)
+        entry.replace_text!(translated_text)
+          .replace_words!(words)
+          .replace_source!(text: translated_text, words: words.map(&:deep_copy))
+        entry.replace_metadata!(Values.mutable_copy(entry.metadata).merge(
+          'content_lines' => content_lines,
+          'ass_text'      => CGI.unescapeHTML(content_lines.join("\n")).gsub(Subtitler::Timestamps::INLINE_TIMESTAMP, ''),
+          'source_text'   => translated_text
+        ))
+        block_index = entry.metadata.fetch('block_index')
+        block_end   = source_blocks.fetch(block_index)[/(?:\r?\n)+\z/].to_s
+        source_blocks[block_index] = original_srt_lines(entry).join(@metadata.fetch('line_ending')) + block_end
+      end
 
       def protect_srt_timestamps(lines)
         prefix = nil
