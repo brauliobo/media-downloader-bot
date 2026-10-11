@@ -29,5 +29,6 @@ end
 
 # tdlib is only bundled for the TD_BOT process; these need it at load time
 unless ENV['TD_BOT']
-  Rails.autoloaders.main.ignore Rails.root.join('app/bot/td_bot.rb'), Rails.root.join('app/td_bot/post_editor.rb')
+  Rails.autoloaders.main.ignore Rails.root.join('app/bot/td_bot.rb'), Rails.root.join('app/td_bot/post_editor.rb'),
+    Rails.root.join('app/td_bot/post_editor')
 end
