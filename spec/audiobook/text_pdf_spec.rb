@@ -16,10 +16,20 @@ RSpec.describe Audiobook::TextPdf do
     end
   end
 
-  def book_of(pages, metadata)
+  def book_with(*pages, **metadata)
     Audiobook::Book.allocate.tap do |book|
       book.instance_variable_set(:@pages, pages)
-      book.instance_variable_set(:@metadata, metadata)
+      book.instance_variable_set(:@metadata, SymMash.new({language: 'pt', title: 'Book'}.merge(metadata)))
+    end
+  end
+
+  def page_of(*items, number: 1) = Audiobook::Page.new(number, items)
+
+  def paragraph_of(text) = Audiobook::Paragraph.new([Audiobook::Sentence.new(text)])
+
+  def source_pdf_of(*pages)
+    described_class.new(book_with(*pages, source_path: '/tmp/book.pdf'), source_pdf: '/tmp/book.pdf').tap do |pdf|
+      allow(pdf).to receive(:rasterize_page).and_return('cover.png')
     end
   end
 
@@ -48,12 +58,11 @@ RSpec.describe Audiobook::TextPdf do
     section.bold = true
     sentence.font_size = 12
     sentence.alignment = :left
-    footer    = Audiobook::Paragraph.new([Audiobook::Sentence.new('Repeated footer.')])
-    image     = ocr_image('book.pdf#page=1', 'OCR cover text.')
-    book_of([
-      Audiobook::Page.new(1, [image]),
-      Audiobook::Page.new(2, [section, heading, paragraph, footer]),
-    ], SymMash.new(language: 'pt', title: 'Book Title'))
+    book_with(
+      page_of(ocr_image('book.pdf#page=1', 'OCR cover text.')),
+      page_of(section, heading, paragraph, paragraph_of('Repeated footer.'), number: 2),
+      title: 'Book Title'
+    )
   end
 
   it 'keeps sentences, headings, sections, footers, and references' do
@@ -80,33 +89,31 @@ RSpec.describe Audiobook::TextPdf do
   end
 
   it 'rasterizes an image-only first page as the cover' do
-    image = ocr_image('/tmp/book.pdf#page=1', 'OCR cover text.')
-    book = book_of([Audiobook::Page.new(1, [image])], SymMash.new(language: 'pt', title: 'Book', source_path: '/tmp/book.pdf'))
-    pdf = described_class.new(book, source_pdf: '/tmp/book.pdf')
-    allow(pdf).to receive(:rasterize_page).with(1, 'cover').and_return('cover.png')
+    pdf = source_pdf_of(page_of(ocr_image('/tmp/book.pdf#page=1', 'OCR cover text.')))
 
     html = pdf.build_html
 
+    expect(pdf).to have_received(:rasterize_page).with(1, 'cover')
     expect(html).to include('<img class="cover" src="cover.png"')
     expect(html).not_to include('OCR cover text.')
   end
 
-  it 'keeps a text first page instead of rasterizing the untranslated source page' do
-    sentence = Audiobook::Sentence.new('Texto da primeira pagina.')
-    book = book_of([Audiobook::Page.new(1, [Audiobook::Paragraph.new([sentence])])], SymMash.new(language: 'pt', title: 'Book', source_path: '/tmp/book.pdf'))
-    pdf = described_class.new(book, source_pdf: '/tmp/book.pdf')
-    allow(pdf).to receive(:rasterize_page).and_return('cover.png')
+  {
+    'a text first page' => [1, -> { paragraph_of('Texto da pagina.') }],
+    'a scanned page'    => [2, -> { ocr_image('/tmp/book.pdf#page=2', 'Texto da pagina.') }]
+  }.each do |name, (number, item)|
+    it "renders #{name} instead of the untranslated source page image" do
+      html = source_pdf_of(page_of(instance_exec(&item), number: number)).build_html
 
-    html = pdf.build_html
-
-    expect(html).to include('Texto da primeira pagina.')
-    expect(html).not_to include('<img class="cover"')
+      expect(html).to include('<p>Texto da pagina.</p>')
+      expect(html).not_to include('<img class="cover"')
+      expect(html).not_to include('class="page-image"')
+    end
   end
 
   it 'renders the OCR text of a full-page image kept beside a header line' do
     image = ocr_image('/tmp/book.pdf#page=13', 'Tabela de doses traduzida.')
-    footer = Audiobook::Paragraph.new([Audiobook::Sentence.new('Page 13 of 13')])
-    book = book_of([Audiobook::Page.new(13, [footer, image])], SymMash.new(language: 'pt', title: 'Book'))
+    book = book_with(page_of(paragraph_of('Page 13 of 13'), image, number: 13))
 
     html = described_class.new(book).build_html
 
@@ -134,23 +141,11 @@ RSpec.describe Audiobook::TextPdf do
     end
   end
 
-  it 'renders scanned page text instead of the untranslated source page image' do
-    image = ocr_image('/tmp/book.pdf#page=2', 'Texto traduzido da pagina.')
-    book = book_of([Audiobook::Page.new(2, [image])], SymMash.new(language: 'pt', title: 'Book', source_path: '/tmp/book.pdf'))
-    pdf = described_class.new(book, source_pdf: '/tmp/book.pdf')
-    allow(pdf).to receive(:rasterize_page).and_return('page-2.png')
-
-    html = pdf.build_html
-
-    expect(html).to include('<p>Texto traduzido da pagina.</p>')
-    expect(html).not_to include('class="page-image"')
-  end
-
   it 'keeps long body paragraphs justified instead of inheriting center' do
     sentence = Audiobook::Sentence.new('A long translated paragraph that should not be centered on the page.')
     sentence.font_size = 12
     sentence.alignment = :center
-    book = book_of([Audiobook::Page.new(1, [Audiobook::Paragraph.new([sentence])])], SymMash.new(language: 'pt', title: 'Book'))
+    book = book_with(page_of(Audiobook::Paragraph.new([sentence])))
 
     html = described_class.new(book).build_html
 
