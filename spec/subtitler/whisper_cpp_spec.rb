@@ -1,6 +1,9 @@
 require 'rails_helper'
+require_relative '../support/whisper_server'
 
 RSpec.describe Subtitler::WhisperCpp do
+  include WhisperServer
+
   subject(:backend) do
     Class.new do
       extend Subtitler::WhisperCpp
@@ -15,9 +18,10 @@ RSpec.describe Subtitler::WhisperCpp do
     described_class.api = previous_api
   end
 
-  before do
-    allow(Zipper::AudioOps).to receive(:with_wav).with('audio.wav').and_yield('/tmp/audio.wav')
-  end
+  let(:dir)   { Dir.mktmpdir('whisper-spec-') }
+  let(:audio) { media_file(File.join(dir, 'audio.mp3')) }
+
+  after { FileUtils.remove_entry(dir) if Dir.exist?(dir) }
 
   def words(texts, start:, finish:)
     duration = (finish - start).to_f / texts.size
@@ -35,7 +39,7 @@ RSpec.describe Subtitler::WhisperCpp do
   end
 
   it 'loads verbose JSON into a normalized subtitle' do
-    response = http_response(JSON.generate(
+    whisper_says(
       language: 'Portuguese',
       text: ' Olá mundo',
       segments: [
@@ -49,17 +53,14 @@ RSpec.describe Subtitler::WhisperCpp do
           ],
         },
       ],
-    ))
-    expect(Utils::HTTP).to receive(:post).with(
-      'http://whisper.test:8080/inference',
-      {
-        file: '/tmp/audio.wav', temperature: '0.0',
-        response_format: 'verbose_json', language: 'auto',
-      }
-    ).and_return(response)
+    )
 
-    result = backend.transcribe('audio.wav')
+    result = backend.transcribe(audio)
 
+    expect(whisper_server.requests).to eq([{
+      url: 'http://whisper.test:8080/inference', file: 'RIFF', temperature: '0.0',
+      response_format: 'verbose_json', language: 'auto',
+    }])
     expect(result).to have_attributes(language: 'pt', text: 'Olá mundo')
     expect(result).to be_a(Subtitler::Subtitle)
     expect(result.entries.first.words.map { |word| [word.text, word.start, word.finish] }).to eq([
@@ -69,7 +70,7 @@ RSpec.describe Subtitler::WhisperCpp do
   end
 
   it 'merges split tokens within a segment and extends the first token timing' do
-    response = http_response(JSON.generate(
+    whisper_says(
       language: 'pt',
       segments: [
         {
@@ -84,10 +85,9 @@ RSpec.describe Subtitler::WhisperCpp do
           ],
         },
       ],
-    ))
-    allow(Utils::HTTP).to receive(:post).and_return(response)
+    )
 
-    segment = backend.transcribe('audio.wav').entries.first
+    segment = backend.transcribe(audio).entries.first
 
     expect(segment.words.map { |word| [word.text, word.start, word.finish] }).to eq([
       [' testando.', 0.0, 1.0],
@@ -97,7 +97,7 @@ RSpec.describe Subtitler::WhisperCpp do
   end
 
   it 'merges a leading split token across segments and removes the emptied following segment' do
-    response = http_response(JSON.generate(
+    whisper_says(
       language: 'pt',
       segments: [
         {
@@ -113,10 +113,9 @@ RSpec.describe Subtitler::WhisperCpp do
           words: [{ word: 'ando', start: 0.5, end: 1.0 }],
         },
       ],
-    ))
-    allow(Utils::HTTP).to receive(:post).and_return(response)
+    )
 
-    segments = backend.transcribe('audio.wav').entries
+    segments = backend.transcribe(audio).entries
 
     expect(segments.first.words.map { |word| [word.text, word.start, word.finish] }).to eq([
       [' testando', 0.0, 1.0],
@@ -127,7 +126,7 @@ RSpec.describe Subtitler::WhisperCpp do
   end
 
   it 'does not merge a cross-segment token after sentence punctuation' do
-    response = http_response(JSON.generate(
+    whisper_says(
       language: 'en',
       segments: [
         {
@@ -143,17 +142,16 @@ RSpec.describe Subtitler::WhisperCpp do
           words: [{ word: 'Next', start: 0.6, end: 1.0 }],
         },
       ],
-    ))
-    allow(Utils::HTTP).to receive(:post).and_return(response)
+    )
 
-    segments = backend.transcribe('audio.wav').entries
+    segments = backend.transcribe(audio).entries
 
     expect(segments.map { |segment| segment.words.map(&:text) }).to eq([[' Done!'], ['Next']])
     expect(segments.map(&:text)).to eq(['Done!', 'Next'])
   end
 
   it 'preserves split tokens and original segment text when merging is disabled' do
-    response = http_response(JSON.generate(
+    whisper_says(
       language: 'pt',
       segments: [
         {
@@ -166,10 +164,9 @@ RSpec.describe Subtitler::WhisperCpp do
           ],
         },
       ],
-    ))
-    allow(Utils::HTTP).to receive(:post).and_return(response)
+    )
 
-    segment = backend.transcribe('audio.wav', merge_words: false).entries.first
+    segment = backend.transcribe(audio, merge_words: false).entries.first
 
     expect(segment.words.map { |word| [word.text, word.start, word.finish] }).to eq([
       [' test', 0.0, 0.5],
@@ -179,7 +176,7 @@ RSpec.describe Subtitler::WhisperCpp do
   end
 
   it 'repairs collapsed extreme-rate sentences from the reliable document speech rate' do
-    response = http_response(JSON.generate(
+    whisper_says(
       language: 'en', duration: 8.0,
       segments: [
         segment(' One two three four.', start: 0.0, finish: 2.0,
@@ -193,10 +190,9 @@ RSpec.describe Subtitler::WhisperCpp do
         segment(' Five six seven eight.', start: 6.0, finish: 8.0,
           words: words([' Five', ' six', ' seven', ' eight.'], start: 6.0, finish: 8.0)),
       ],
-    ))
-    allow(Utils::HTTP).to receive(:post).and_return(response)
+    )
 
-    result   = backend.transcribe('audio.wav')
+    result   = backend.transcribe(audio)
     repaired = result.sentence_entries.fetch(1)
 
     expect(repaired.text).to eq('Broken timing needs repair.')
@@ -211,7 +207,7 @@ RSpec.describe Subtitler::WhisperCpp do
   end
 
   it 'caps a repaired sentence to its neighboring reliable slot' do
-    response = http_response(JSON.generate(
+    whisper_says(
       language: 'en', duration: 5.0,
       segments: [
         segment(' One two three four.', start: 0.0, finish: 2.0,
@@ -225,10 +221,9 @@ RSpec.describe Subtitler::WhisperCpp do
         segment(' Five six seven eight.', start: 3.0, finish: 5.0,
           words: words([' Five', ' six', ' seven', ' eight.'], start: 3.0, finish: 5.0)),
       ],
-    ))
-    allow(Utils::HTTP).to receive(:post).and_return(response)
+    )
 
-    repaired = backend.transcribe('audio.wav').sentence_entries.fetch(1)
+    repaired = backend.transcribe(audio).sentence_entries.fetch(1)
 
     expect(repaired).to have_attributes(start: 2.0, finish: 3.0)
   end
@@ -237,7 +232,7 @@ RSpec.describe Subtitler::WhisperCpp do
     collapsed = lambda do |texts, at|
       texts.map { |text| {word: text, start: at, end: at + 0.01} }
     end
-    response = http_response(JSON.generate(
+    whisper_says(
       language: 'en', duration: 10.0,
       segments: [
         segment(' One two three four.', start: 0.0, finish: 2.0,
@@ -249,10 +244,9 @@ RSpec.describe Subtitler::WhisperCpp do
         segment(' Five six seven eight.', start: 8.0, finish: 10.0,
           words: words([' Five', ' six', ' seven', ' eight.'], start: 8.0, finish: 10.0)),
       ],
-    ))
-    allow(Utils::HTTP).to receive(:post).and_return(response)
+    )
 
-    entries = backend.transcribe('audio.wav').sentence_entries
+    entries = backend.transcribe(audio).sentence_entries
 
     expect(entries[1].start).to be_within(0.0001).of(3.005)
     expect(entries[1].finish).to be_within(0.0001).of(5.005)
@@ -262,7 +256,7 @@ RSpec.describe Subtitler::WhisperCpp do
   end
 
   it 'leaves fast sentences unchanged when their word timings are not collapsed' do
-    response = http_response(JSON.generate(
+    whisper_says(
       language: 'en', duration: 4.0,
       segments: [
         segment(' One two three four.', start: 0.0, finish: 2.0,
@@ -270,10 +264,9 @@ RSpec.describe Subtitler::WhisperCpp do
         segment(' Naturally spoken very quickly.', start: 3.0, finish: 3.5,
           words: words([' Naturally', ' spoken', ' very', ' quickly.'], start: 3.0, finish: 3.5)),
       ],
-    ))
-    allow(Utils::HTTP).to receive(:post).and_return(response)
+    )
 
-    result = backend.transcribe('audio.wav').sentence_entries
+    result = backend.transcribe(audio).sentence_entries
 
     expect(result.last).to have_attributes(start: 3.0, finish: 3.5)
     expect(result.last.words.map { |word| [word.start, word.finish] }).to eq([
@@ -282,7 +275,7 @@ RSpec.describe Subtitler::WhisperCpp do
   end
 
   it 'estimates collapsed timing from the reliable speech rate of its speaker' do
-    response = http_response(JSON.generate(
+    whisper_says(
       language: 'en', duration: 12.0,
       segments: [
         segment(' Slow one.', start: 0.0, finish: 2.0,
@@ -300,9 +293,8 @@ RSpec.describe Subtitler::WhisperCpp do
           {word: ' repair.', start: 7.0, end: 7.01},
         ]),
       ],
-    ))
-    allow(Utils::HTTP).to receive(:post).and_return(response)
-    result = backend.transcribe('audio.wav')
+    )
+    result = backend.transcribe(audio)
     result.entries[0].assign_speaker!(0)
     result.entries[1].assign_speaker!(0)
     result.entries[2].assign_speaker!(1)
@@ -315,7 +307,7 @@ RSpec.describe Subtitler::WhisperCpp do
   end
 
   it 'falls back to the document rate when a speaker lacks reliable parts' do
-    response = http_response(JSON.generate(
+    whisper_says(
       language: 'en', duration: 10.0,
       segments: [
         segment(' Slow one.', start: 0.0, finish: 2.0,
@@ -331,9 +323,8 @@ RSpec.describe Subtitler::WhisperCpp do
           {word: ' repair.', start: 6.0, end: 6.01},
         ]),
       ],
-    ))
-    allow(Utils::HTTP).to receive(:post).and_return(response)
-    result = backend.transcribe('audio.wav')
+    )
+    result = backend.transcribe(audio)
     result.entries[0].assign_speaker!(0)
     result.entries[1].assign_speaker!(1)
     result.entries[2].assign_speaker!(1)
