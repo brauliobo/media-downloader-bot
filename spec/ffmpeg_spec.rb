@@ -558,9 +558,9 @@ RSpec.describe FFmpeg do
       intervals = 'between(t\\,10\\,20)+between(t\\,30\\,40)'
 
       ffmpeg.input('input.mp4')
-            .output_frame_rate(24)
-            .output_sample_rate(44_100)
-            .output_channels(2)
+            .frame_rate(24)
+            .sample_rate(44_100)
+            .channels(2)
             .preserve_resolution_scale(modulus: 8)
             .decimate('hi=1024:lo=512:frac=0.40')
             .speed(1.25, stream: :video)

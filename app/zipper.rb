@@ -106,9 +106,9 @@ class Zipper
     builder.input infile, **input_options
     builder.input subtitle_input_path if subtitle_input_path
     builder.seek input_seek if input_seek
-    builder.output_sample_rate audio_sample_rate if audio_sample_rate
-    builder.output_channels audio_channels if audio_channels
-    builder.output_frame_rate output_frame_rate if output_frame_rate
+    builder.sample_rate audio_sample_rate if audio_sample_rate
+    builder.channels audio_channels if audio_channels
+    builder.frame_rate output_frame_rate if output_frame_rate
     add_video_scale builder
     video_filters_before_subtitle.each { |filter| builder.add_filter filter, stream: :video }
     builder.add_filter subtitle_burn_filter, stream: :video if subtitle_burn_filter
@@ -143,8 +143,8 @@ class Zipper
     builder.disable :video
     builder.input infile
     builder.seek input_seek if input_seek
-    builder.output_sample_rate audio_sample_rate if audio_sample_rate
-    builder.output_channels audio_channels if audio_channels
+    builder.sample_rate audio_sample_rate if audio_sample_rate
+    builder.channels audio_channels if audio_channels
     audio_filters.each { |filter| builder.add_filter filter, stream: :audio }
     builder.encode_audio format_name, bitrate: opts.bitrate
     apply_metadata builder

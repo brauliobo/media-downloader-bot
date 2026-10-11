@@ -49,7 +49,7 @@ RSpec.describe Zipper do
 
     zipper.zip_video
 
-    expect(ffmpeg).to have_received(:output_frame_rate).with 24
+    expect(ffmpeg).to have_received(:frame_rate).with 24
     expect(ffmpeg).to have_received(:frame_rate_mode).with :vfr
     expect(ffmpeg).to have_received(:encode_video).with :h264, cuda: false, quality: 28
   end
@@ -94,8 +94,8 @@ RSpec.describe Zipper do
       '/tmp/dubbed.mp4', '/tmp/out.mp4', probe: video_probe, opts: opts, ffmpeg: ffmpeg
     ).zip_video
 
-    expect(ffmpeg).to have_received(:output_sample_rate).with 44_100
-    expect(ffmpeg).to have_received(:output_channels).with 2
+    expect(ffmpeg).to have_received(:sample_rate).with 44_100
+    expect(ffmpeg).to have_received(:channels).with 2
     expect(ffmpeg).not_to have_received(:copy_audio)
   end
 
