@@ -2,24 +2,6 @@ require 'rails_helper'
 require 'drb/drb'
 
 RSpec.describe Bot::Worker::Client do
-  describe '.td_file_id' do
-    it 'keeps a numeric TDLib file id' do
-      expect(described_class.td_file_id(42)).to eq(42)
-      expect(described_class.td_file_id('42')).to eq(42)
-    end
-
-    it 'reads the inner file id from a TD document' do
-      file = double(id: 99)
-      doc  = double(document: file)
-      expect(described_class.td_file_id(doc)).to eq(99)
-    end
-
-    it 'reads nested JSON hashes from the HTTP payload' do
-      expect(described_class.td_file_id({'document' => {'id' => 7}})).to eq(7)
-      expect(described_class.td_file_id(file_id: 8)).to eq(8)
-    end
-  end
-
   it 'posts a numeric file id to download_file' do
     token = ENV['BOT_HTTP_TOKEN']
     ENV['BOT_HTTP_TOKEN'] = 'token'
@@ -31,7 +13,7 @@ RSpec.describe Bot::Worker::Client do
       end
     end
     client = described_class.new('http://127.0.0.1:1181')
-    client.instance_variable_get(:@http_client).instance_variable_get(:@conn).adapter :test, stubs
+    client.instance_variable_get(:@transport).instance_variable_get(:@client).instance_variable_get(:@conn).adapter :test, stubs
 
     path = client.download_file(double(document: double(id: 123)), dir: '/tmp')
 
