@@ -14,8 +14,8 @@ setproctitle.setproctitle(f"pyannote-gpu{gpu}")
 
 MODEL_PATH = os.environ.get("PYANNOTE_MODEL", "/srv/pyannote-community1/model")
 DEVICE = os.environ.get("DIARIZATION_DEVICE", "cuda")
-MAX_UPLOAD_BYTES = int(os.environ.get("DIARIZATION_MAX_UPLOAD_BYTES", str(256 * 1024 * 1024)))
-MAX_AUDIO_SECONDS = float(os.environ.get("DIARIZATION_MAX_AUDIO_SECONDS", "7200"))
+MAX_UPLOAD_BYTES = int(os.environ.get("DIARIZATION_MAX_UPLOAD_BYTES", str(1024 * 1024 * 1024)))
+MAX_AUDIO_SECONDS = float(os.environ.get("DIARIZATION_MAX_AUDIO_SECONDS", "21600"))
 
 app = FastAPI()
 lock = threading.Lock()
