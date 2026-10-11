@@ -4,6 +4,9 @@ require 'time'
 
 module Audiobook::Ewprs
   class Batch
+    include Manifest
+    include Delivery
+
     attr_reader :catalog, :output, :jobs, :published, :failures, :edited
 
     def initialize(catalog:, output:, jobs: 5, manifest: nil, upload_dir: nil, manager: nil, chat_id: nil, topic: nil,
@@ -40,17 +43,6 @@ module Audiobook::Ewprs
       process_stage(discourses, offset: 0, total: total)
       process_stage(books, offset: discourses.size, total: total)
       summary(discourses, books)
-    end
-
-    def record(entry, message_id:, remote_id: nil)
-      append_record(
-        at:         Time.now.utc.iso8601,
-        kind:       entry.kind,
-        slug:       entry.slug,
-        title:      entry.title,
-        message_id: message_id.to_i,
-        remote_id:  remote_id
-      )
     end
 
     private
@@ -161,156 +153,6 @@ module Audiobook::Ewprs
 
     def cached_discourse_book(entry)
       @discourse_books_mutex.synchronize { @discourse_books[entry_key(entry)] }
-    end
-
-    def upload_entry(entry, audio, chapter_count, position, total)
-      seconds      = Prober.for(audio).format.duration.to_f.round
-      upload_audio = stage_upload(audio)
-      result       = manager.upload_generated_media(
-        chat_id: chat_id, forum_topic_id: topic[:forum_topic_id], text: caption(entry, seconds, chapter_count),
-        type: :audio, parse_mode: nil, audio_path: upload_audio, duration: seconds,
-        title: entry.title, performer: 'P. R. Sarkar', copy: false
-      )
-      raise 'upload returned no message ID' unless result[:message_id].to_i.positive?
-      raise 'upload returned no remote file ID' if result[:remote_id].to_s.empty?
-
-      record = {
-        at:             Time.now.utc.iso8601,
-        kind:           entry.kind,
-        slug:           entry.slug,
-        title:          entry.title,
-        chat_id:        chat_id,
-        forum_topic_id: topic[:forum_topic_id],
-        message_id:     result[:message_id],
-        remote_id:      result[:remote_id],
-        duration:       seconds,
-        bytes:          File.size(audio)
-      }
-      append_record(record)
-      stdout.puts JSON.generate(progress: "#{position}/#{total}", checkpointed: record)
-    ensure
-      FileUtils.rm_f(upload_audio) if upload_audio && upload_audio != audio
-    end
-
-    def edit_entry(entry, result, position, total)
-      previous     = published.fetch(entry_key(entry))
-      message_id   = previous.fetch(:message_id).to_i
-      seconds      = Prober.for(result[:audio]).format.duration.to_f.round
-      upload_audio = stage_upload(result[:audio])
-      response     = SymMash.new(manager.edit_generated_message(
-        chat_id: chat_id, message_id: message_id, text: caption(entry, seconds, result[:chapter_count]),
-        type: :audio, parse_mode: nil, audio_path: upload_audio, duration: seconds,
-        title: entry.title, performer: 'P. R. Sarkar', copy: false
-      ))
-      raise 'edit returned no message ID' unless response.message_id.to_i.positive?
-      raise 'edit returned no remote file ID' if response.remote_id.to_s.empty?
-
-      record = previous.merge(
-        at:             Time.now.utc.iso8601,
-        operation:      'edit',
-        title:          entry.title,
-        chat_id:        chat_id,
-        forum_topic_id: topic[:forum_topic_id],
-        message_id:     response.message_id,
-        remote_id:      response.remote_id,
-        duration:       seconds,
-        bytes:          File.size(result[:audio]),
-        audio_sha256:   result[:audio_sha256]
-      )
-      record[:edit_run_id] = edit_run_id if edit_run_id
-      append_record(record)
-      @edited += 1
-      stdout.puts JSON.generate(progress: "#{position}/#{total}", edited: record)
-    ensure
-      FileUtils.rm_f(upload_audio) if upload_audio && upload_audio != result&.dig(:audio)
-    end
-
-    def stage_upload(audio)
-      return audio unless upload_dir
-
-      FileUtils.mkdir_p(upload_dir)
-      staged = File.join(upload_dir, File.basename(audio))
-      return audio if staged == audio
-
-      FileUtils.cp(audio, staged)
-      staged
-    end
-
-    def caption(entry, _seconds, chapter_count)
-      locale = catalog.language
-      scope  = 'audiobook.ewprs.caption'
-      text   = lambda do |key, **options|
-        I18n.t(key, locale: locale, scope: scope, raise: true, **options)
-      end
-      [
-        entry.title,
-        'P. R. Sarkar',
-        text.call(:type, kind: text.call("kinds.#{entry.kind}")),
-        (text.call(:date_place, value: entry.info) if entry.info.present?),
-        (text.call(:published_in, value: entry.sources.join('; ')) if entry.sources.present?),
-        (text.call(:chapters, count: chapter_count, total: entry.chapters.size) if entry.kind == :book),
-        text.call(:language, language: text.call("languages.#{locale}"))
-      ].compact.join("\n")
-    end
-
-    def generation_message(entry, result, position, total)
-      details = if entry.kind == :book
-        " (#{result[:chapter_count]}/#{entry.chapters.size} chapters)"
-      else
-        ''
-      end
-      "#{position}/#{total} generated #{entry.kind}: #{entry.title}#{details}"
-    end
-
-    def audio_path(entry)
-      prefix = entry.kind == :book ? 'book-' : ''
-      File.join(output, "#{prefix}#{entry.slug}.m4a")
-    end
-
-    def checkpointed?(entry)
-      return false unless @apply && published.key?(entry_key(entry))
-      previous = published[entry_key(entry)]
-      return true unless @edit
-      return previous[:operation] == 'edit' && previous[:edit_run_id] == edit_run_id if edit_run_id
-      return true if previous[:operation] == 'edit'
-
-      expected = previous[:audio_sha256]
-      audio    = audio_path(entry)
-      expected.present? && File.size?(audio) && expected == audio_sha256(audio)
-    end
-
-    def audio_sha256(audio)
-      Digest::SHA256.file(audio).hexdigest
-    end
-
-    def entry_key(entry)
-      "#{entry.kind}:#{entry.slug}"
-    end
-
-    def load_manifest
-      @manifest.each_with_object({}) do |record, records|
-        records["#{record.fetch(:kind)}:#{record.fetch(:slug)}"] = record
-      end
-    end
-
-    def append_record(record)
-      @manifest.append(record)
-      published["#{record.fetch(:kind)}:#{record.fetch(:slug)}"] = record
-      record
-    end
-
-    def record_failure(stage, entry, error)
-      failure = {
-        at:    Time.now.utc.iso8601,
-        stage: stage,
-        kind:  entry.kind,
-        slug:  entry.slug,
-        title: entry.title,
-        error: "#{error.class}: #{error.message}"
-      }
-      failures << failure
-      @failure_log.append(failure)
-      stderr.puts JSON.generate(failure)
     end
 
     def summary(discourses, books)
