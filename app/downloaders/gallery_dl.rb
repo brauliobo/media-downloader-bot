@@ -16,7 +16,7 @@ module Downloaders
     def gallery_post?
       return false unless Utils::Safety.public_http_url?(normalized_url)
 
-      items = gallery_rows.select { |item| item.is_a?(Array) && item.first == 3 }
+      items = self.class.rows_of(gallery_rows, 3)
       items.present? && !(items.one? && items.first.last['type'].to_s == 'video')
     end
 
@@ -26,7 +26,7 @@ module Downloaders
       info   = gallery_info
       gopts  = gallery_opts
       _, e, s = Sh.run command, chdir: tmp
-      return st.error("gallery-dl error: #{e.lines.last(3).join.strip}") unless success?(s)
+      return st.error("gallery-dl error: #{e.lines.last(3).join.strip}") unless s.success?
 
       files = downloaded_files - before
       return st.error('gallery-dl did not download media') if files.empty?
@@ -55,14 +55,13 @@ module Downloaders
       File.executable?(BIN) ? BIN : 'gallery-dl'
     end
 
-    def success?(status)
-      status.respond_to?(:success?) ? status.success? : status == 0
-    end
+    # gallery-dl prints rows of [kind, ...payload]: 2 for the post, 3 for each file.
+    def self.rows_of(rows, kind) = Array(rows).select { |row| row.first == kind }
+
+    def self.post_metadata(rows) = SymMash.new((rows_of(rows, 2).first || rows_of(rows, 3).first)&.last || {})
 
     def self.content_from(rows)
-      row  = Array(rows).find { |item| item.is_a?(Array) && item.first == 2 } ||
-             Array(rows).find { |item| item.is_a?(Array) && item.first == 3 }
-      meta = SymMash.new(row&.last.is_a?(Hash) ? row.last : {})
+      meta = post_metadata(rows)
       meta.content.presence || meta.title.presence
     end
 
@@ -83,9 +82,7 @@ module Downloaders
     end
 
     def metadata
-      rows = gallery_rows
-      row  = rows.find { |item| item.is_a?(Array) && item.first == 2 } || rows.find { |item| item.is_a?(Array) && item.first == 3 }
-      SymMash.new(row&.last || {})
+      self.class.post_metadata(gallery_rows)
     rescue StandardError
       SymMash.new
     end
