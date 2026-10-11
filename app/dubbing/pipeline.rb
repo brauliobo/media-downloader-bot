@@ -3,6 +3,9 @@ require 'json'
 
 module Dubbing
   class Pipeline
+    include Subtitles
+    include Timings
+
     DEFAULT_TARGET_LANG = 'pt'.freeze
     attr_reader :source_lang, :target_lang, :speaker_references, :sentences, :timing_score
 
@@ -61,158 +64,6 @@ module Dubbing
 
     def normalize_target_lang
       Language::Code.normalize(@opts.dub_lang || @opts.lang || @opts.slang) || DEFAULT_TARGET_LANG
-    end
-
-    def translated_sentences(subtitle)
-      sentences = subtitle.sentence_entries
-      texts     = sentences.map(&:text)
-      translations = if ::Translator.respond_to?(:translate_for_dubbing)
-        Array(::Translator.translate_for_dubbing(texts, from: source_lang, to: target_lang))
-      else
-        Array(::Translator.translate(texts, from: source_lang, to: target_lang))
-      end
-
-      sentences.zip(translations).filter_map do |sentence, translated|
-        text = Subtitler::Subtitle.clean_translation(translated)
-        next if text.empty?
-
-        translated_entry(sentence, text)
-      end
-    end
-
-    def translated_entry(sentence, text)
-      sentence.deep_copy
-        .replace_source!(text: sentence.text.strip, words: sentence.words.map(&:deep_copy))
-        .project_text!(text)
-    end
-
-    def synthesize_timeline(workdir)
-      SpeechSynthesizer.new(
-        sentences:       @sentences,
-        references:      @speaker_references,
-        opts:            @opts,
-        target_lang:     target_lang,
-        workdir:         workdir,
-        video_duration:  video_duration,
-        stl:             @stl
-      ).render
-    end
-
-    def apply_scheduled_timings!(clips, spoken: nil)
-      unless @sentences.size == clips.size
-        raise "dubbed timeline clip count mismatch: expected #{@sentences.size}, got #{clips.size}"
-      end
-
-      spoken_words = Array(spoken&.entries).flat_map(&:words)
-      scheduled = @sentences.zip(clips).filter_map do |sentence, clip|
-        target_start    = clip.start.to_f
-        target_end      = clip.end.to_f
-        next unless target_end > target_start
-
-        words = words_in_clip(spoken_words, target_start, target_end)
-        if words.empty?
-          sentence.retime!(start: target_start, finish: target_end)
-        else
-          align_sentence_to_speech!(sentence, words, fallback_start: target_start, fallback_end: target_end)
-        end
-        sentence
-      end
-      replace_sentences!(scheduled)
-    end
-
-    def transcribe_spoken_timeline(path)
-      @stl&.update 'dubbing: aligning subtitles'
-      Subtitler.transcribe_vocals(path)
-    end
-
-    def words_in_clip(words, start_time, end_time)
-      words.select do |word|
-        next if word.finish <= word.start
-
-        midpoint = (word.start + word.finish) / 2.0
-        midpoint >= start_time && midpoint < end_time
-      end
-    end
-
-    def align_sentence_to_speech!(sentence, words, fallback_start:, fallback_end:)
-      copies = words.map(&:deep_copy).filter_map do |word|
-        start  = word.start.to_f.clamp(fallback_start, fallback_end)
-        finish = word.finish.to_f.clamp(start, fallback_end)
-        next if finish <= start
-
-        word.retime!(start: start, finish: finish)
-      end
-      if copies.empty?
-        sentence.retime!(start: fallback_start, finish: fallback_end)
-        return sentence
-      end
-
-      sentence.retime!(start: copies.first.start, finish: copies.last.finish)
-      sentence.replace_words!(copies)
-      sentence.project_text!(sentence.text)
-      sentence
-    end
-
-    def prepare_translated_subtitles
-      mode = @opts.sub_mode.to_s
-      return if mode == 'none'
-      return unless @opts.gensubs || mode.present?
-
-      case mode
-      when 'source'
-        @opts.subtitle = source_subtitle
-        @opts.sub_lang = source_lang
-      when 'both'
-        @opts.subtitle = bilingual_subtitle
-        @opts.sub_lang = 'mul'
-      when 'language'
-        target_language = subtitle_target_lang == target_lang
-        subtitle        = target_language ? target_subtitle : alternate_subtitle
-        @opts.subtitle = prepare_subtitle(subtitle, normalize: target_language)
-        @opts.sub_lang = subtitle_target_lang
-      else
-        @opts.subtitle = prepare_subtitle(target_subtitle)
-        @opts.sub_lang = target_lang
-      end
-    end
-
-    def target_subtitle
-      Subtitler::Subtitle.new(language: target_lang, entries: @sentences.map(&:deep_copy))
-    end
-
-    def source_subtitle
-      (@transcript_output || Subtitler::Subtitle.new).deep_copy
-    end
-
-    def alternate_subtitle
-      target_subtitle.translated(
-        from:           target_lang,
-        to:             subtitle_target_lang,
-        merge_adjacent: false
-      )
-    end
-
-    def bilingual_subtitle
-      entries = @sentences.map do |sentence|
-        texts = [sentence.source_text, sentence.text].map { |text| text.to_s.strip }.reject(&:empty?).uniq
-        Subtitler::Subtitle::Entry.new(
-          text: texts.join("\n"), start: sentence.start, finish: sentence.finish, speaker_id: sentence.speaker_id
-        )
-      end
-      Subtitler::Subtitle.new(language: 'mul', entries: entries)
-    end
-
-    def prepare_subtitle(subtitle, normalize: true)
-      subtitle.normalize_entries! if normalize
-      subtitle
-    end
-
-    def replace_sentences!(sentences)
-      @sentences = sentences
-    end
-
-    def subtitle_target_lang
-      @opts.sub_lang.presence || target_lang
     end
 
     def write_timing_score
