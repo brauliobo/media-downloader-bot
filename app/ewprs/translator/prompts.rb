@@ -3,7 +3,6 @@ module Ewprs
     # What the model is told: the instructions, the hints for words it tends to leave in English, and the repair requests.
     module Prompts
       QUOTED_PROSE_INSTRUCTION = 'Translate prose inside quotation marks too; quotation marks do not denote protected text.'
-
       DO_NOT_COPY_ENGLISH = 'Translate that meaning; do not copy English words.'
 
       SOURCE_TERM_HINTS = {
