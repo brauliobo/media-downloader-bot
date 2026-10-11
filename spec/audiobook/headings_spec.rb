@@ -19,7 +19,7 @@ RSpec.describe 'Heading extraction from PDF' do
   end
 
   it 'writes chapter and heading details from real PDFs into yaml' do
-    allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'male')
+    fake_llm
 
     %w[headings.pdf image-text-handler.pdf page-paragraphs-merge.pdf].each do |name|
       book = Audiobook::Book.from_input(

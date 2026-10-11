@@ -17,18 +17,12 @@ RSpec.describe Audiobook::Book do
           images: [],
         },
       )
-      seen = nil
-      allow(Language).to receive(:book_metadata) do |input|
-        seen = input
-        { 'lang' => 'pt', 'title' => 'A Solução Mineral Mestre', 'author' => 'Jim Humble', 'gender' => 'male' }
-      end
+      asked = fake_llm(lang: 'pt', title: 'A Solução Mineral Mestre', author: 'Jim Humble')
 
       book = described_class.new(data: data, opts: SymMash.new(source_base: 'MMS Jim Humble', includeall: true), translate: false)
 
-      expect(seen).to include('Filename: MMS Jim Humble')
-      expect(seen).to include('Autor: James V. Humble (Jim Humble)')
-      expect(seen).to include('Tradução para Português')
-      expect(seen).not_to include('Chapter 1')
+      expect(asked.sole).to include('Filename: MMS Jim Humble', 'Autor: James V. Humble (Jim Humble)', 'Tradução para Português')
+      expect(asked.sole).not_to include('Chapter 1')
       expect(book.author).to eq('Jim Humble')
       expect(book.language).to eq('pt')
     end
@@ -36,8 +30,10 @@ RSpec.describe Audiobook::Book do
 
   describe 'language options' do
     it 'uses alang as the source-language override' do
-      expect(Language).not_to receive(:book_metadata)
+      asked = fake_llm
+
       expect(described_class.detect_language('/does/not/exist.pdf', opts: SymMash.new(alang: 'pt'))).to eq('pt')
+      expect(asked).to be_empty
     end
 
     it 'treats lang= as the speech target, not the source' do
@@ -66,17 +62,12 @@ RSpec.describe Audiobook::Book do
     end
 
     before do
-      allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'male')
-      allow(Translator).to receive(:translate) do |text, from:, to:|
-        mapped = Array(text).map { |line| "PT(#{from}->#{to}):#{line}" }
-        text.is_a?(Array) ? mapped : mapped.first
-      end
+      fake_llm
+      fake_translator
     end
 
     it 'detects title and author then translates them' do
-      allow(Language).to receive(:book_metadata).and_return(
-        'title' => 'Hello Book', 'author' => 'Jane Doe', 'gender' => 'female'
-      )
+      fake_llm(title: 'Hello Book', author: 'Jane Doe', gender: 'female')
       book = described_class.new(data: english_book_data, opts: SymMash.new(lang: 'pt', includeall: true))
 
       expect(book.metadata.title).to eq('PT(en->pt):Hello Book')

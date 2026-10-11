@@ -135,7 +135,7 @@ RSpec.describe Audiobook::Parsers::Epub do
   end
 
   it 'classifies CSS-styled EPUB chapters through Book' do
-    allow(Language).to receive(:book_metadata).and_return('title' => '', 'author' => '', 'gender' => 'male')
+    fake_llm
 
     Dir.mktmpdir do |dir|
       path = build_epub(dir)
