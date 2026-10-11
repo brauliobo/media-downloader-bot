@@ -6,7 +6,7 @@ module AudiobookHelpers
   # Records what the TTS backend was asked to say and answers with a silent wav, as the service does.
   class FakeTTS
     attr_reader :calls, :batches
-    attr_accessor :seconds, :failure
+    attr_accessor :seconds, :failure, :before
 
     def initialize(seconds: 0.2)
       @seconds = seconds
@@ -19,6 +19,7 @@ module AudiobookHelpers
     def narration = calls.reject { |call| reference?(call) }
 
     def synthesize(out_path:, **options)
+      before&.call(options)
       calls << options.merge(out_path: out_path)
       write_wav(out_path)
     end
@@ -40,6 +41,28 @@ module AudiobookHelpers
       header = ['RIFF', 36 + data.bytesize, 'WAVE', 'fmt ', 16, 1, 1, rate, rate * 2, 2, 16, 'data', data.bytesize]
       File.binwrite(path, header.pack('a4Va4a4VvvVVvva4V') + data)
     end
+  end
+
+  # What the chat accepts: remembers every upload and edit, and answers with the message it made.
+  class FakeChat
+    attr_reader :uploads, :edits
+
+    def initialize
+      @uploads = []
+      @edits   = []
+    end
+
+    def upload_generated_media(**params)
+      uploads << params.merge(staged: File.exist?(params[:audio_path]))
+      {message_id: 100 + uploads.size, remote_id: "remote-#{uploads.size}"}
+    end
+
+    def edit_generated_message(**params)
+      edits << params
+      {message_id: params[:message_id], remote_id: "edited-#{edits.size}"}
+    end
+
+    def titles = uploads.map { |upload| upload[:title] }
   end
 
   class StatusLog
