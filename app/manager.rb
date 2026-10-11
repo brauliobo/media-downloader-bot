@@ -22,6 +22,8 @@ https://web.facebook.com/groups/590968084832296/posts/920964005166034 audio
 https://soundcloud.com/br-ulio-bhavamitra/sets/didi-gunamrta caption number
 EOS
 
+  include Service
+
   attr_reader :bot
   attr_reader :jobs
 
@@ -64,8 +66,7 @@ EOS
     msg.bot_type = bot.class.name
     return if msg.respond_to?(:is_outgoing) && msg.is_outgoing
     return if msg.text.blank? && msg.video.blank? && msg.audio.blank? && msg.document.blank?
-    return send_help msg if msg.text&.starts_with? '/start'
-    return send_help msg if msg.text&.starts_with? '/help'
+    return send_help msg if msg.text&.starts_with?('/start', '/help')
     return if msg.from.id.in? BLOCKED_USERS
 
     cmd_text = Utils::InputParser.message_text(msg).presence
@@ -93,146 +94,22 @@ EOS
     end
   end
 
-  def dequeue(timeout: nil)
-    jobs.dequeue(timeout: timeout)
-  end
-
-  def queue_size
-    jobs.size
-  end
-
-  def job_cancelled(id:)
-    jobs.cancelled?(id)
-  end
-
-  def finish_job(id:)
-    jobs.finish(id)
-  end
-
   def stop_jobs(msg)
-    admin_id = Bot::MsgHelpers::ADMIN_CHAT_ID
-    count = jobs.cancel_all(
-      user_id: msg.from.id,
-      chat_id: msg.chat.id,
-      admin:   admin_id && msg.from.id.to_i == admin_id,
-    )
-    text  = I18n.t('bot.stop.result', count: count)
-    bot.send_message(msg, Bot::MsgHelpers.me(text))
-  end
-
-  def start_edit_posts_job(args)
-    @edit_posts_jobs.start(args)
-  end
-
-  def edit_posts_job(id)
-    @edit_posts_jobs.fetch(id)
-  end
-
-  def edit_posts_jobs
-    @edit_posts_jobs.list
-  end
-
-  def edit_posts_job_log(id, lines: 100)
-    @edit_posts_jobs.log(id, lines: lines)
-  end
-
-  def start_bot_service
-    if ENV['BOT_HTTP']
-      uri = URI.parse(ENV['BOT_HTTP'])
-      port = uri.port || 8080
-      host = uri.host.presence || ENV['BOT_HTTP_BIND'].presence || '127.0.0.1'
-      Bot::Worker::HTTPService.start(self, port, host: host)
-    end
-
-    Bot::Worker::DRbService.start(self, ENV['BOT_DRB']) if ENV['BOT_DRB']
-  end
-
-  def bot_service_uri
-    ENV['BOT_DRB'].presence || ENV['BOT_HTTP'].presence
-  end
-
-  def max_caption
-    bot.max_caption
-  end
-
-  def find_chats(...)
-    bot.find_chats(...)
-  end
-
-  def resolve_chat_identifier(...)
-    bot.resolve_chat_identifier(...)
-  end
-
-  def chat_messages(...)
-    bot.chat_messages(...)
-  end
-
-  def chat_message(...)
-    bot.chat_message(...)
-  end
-
-  def edit_generated_message(...)
-    drb_result bot.edit_generated_message(...)
-  rescue => e
-    raise RuntimeError, drb_error_message(e), cause: nil
-  end
-
-  def upload_generated_media(...)
-    drb_result bot.upload_generated_media(...)
-  rescue => e
-    raise RuntimeError, drb_error_message(e), cause: nil
-  end
-
-  def ensure_forum_topic(...)
-    bot.ensure_forum_topic(...)
-  end
-
-  def send_message(msg:, text:, **params)
-    drb_result bot.send_message(msg, text, **params)
-  end
-
-  def send_album(msg:, text:, uploads:, **params)
-    uploads = Array(uploads).map { |upload| upload.is_a?(Hash) ? SymMash.new(upload) : upload }
-    Array(bot.send_album(msg, text, uploads: uploads, **params)).map { |result| Bot::MessageResult.dump(result) }
-  rescue => e
-    raise RuntimeError, drb_error_message(e)
-  end
-
-  def edit_message(msg:, id:, **params)
-    drb_result bot.edit_message(msg, id, **params)
-  end
-
-  def delete_message(msg:, id:, **params)
-    bot.delete_message(msg, id, **params)
-    true
-  end
-
-  def report_error(msg:, e:, error_class: nil, context: nil)
-    error = StandardError.new(e)
-    error.define_singleton_method(:class) { OpenStruct.new(name: error_class) } if error_class
-    bot.report_error(msg, error, context: context)
-    true
-  end
-
-  def download_file(file_id_or_info = nil, **params)
-    bot.download_file(params.delete(:file_id_or_info) || file_id_or_info, **params)
+    count = jobs.cancel_all(user_id: msg.from.id, chat_id: msg.chat.id, admin: admin?(msg.from.id))
+    bot.send_message(msg, Bot::MsgHelpers.me(I18n.t('bot.stop.result', count: count)))
   end
 
   def cancel_job(callback)
     id = Bot::Jobs.cancel_id(callback.data)
     return unless id
 
-    admin_id = Bot::MsgHelpers::ADMIN_CHAT_ID
-    result = jobs.cancel(
-      id,
-      user_id: callback.user_id,
-      chat_id: callback.chat_id,
-      admin:   admin_id && callback.user_id.to_i == admin_id,
-    )
+    result = jobs.cancel(id, user_id: callback.user_id, chat_id: callback.chat_id, admin: admin?(callback.user_id))
     bot.answer_callback(callback, text: cancel_job_message(result))
   end
 
   private
+
+  def admin?(user_id) = Bot::MsgHelpers::ADMIN_CHAT_ID && user_id.to_i == Bot::MsgHelpers::ADMIN_CHAT_ID
 
   def cancel_job_message(result)
     {
@@ -242,15 +119,4 @@ EOS
       not_found:         'This job is no longer active',
     }.fetch(result)
   end
-
-  def drb_result(result)
-    result.respond_to?(:to_h) ? result.to_h : result
-  end
-
-  def drb_error_message(error)
-    message = "#{error.class}: #{error.message}"
-    body    = error.respond_to?(:response) && error.response.respond_to?(:body) ? error.response.body : nil
-    body.present? ? "#{message}: #{body}" : message
-  end
-
 end
