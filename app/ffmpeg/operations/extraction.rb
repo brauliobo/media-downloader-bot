@@ -13,9 +13,7 @@ class FFmpeg
           builder.input input, seek: start, duration: duration
           builder.disable :video
           builder.add_filter filter, stream: :audio if filter
-          builder.channels channels
-          builder.sample_rate sample_rate
-          builder.codec codec, stream: :audio
+          audio_format(builder, channels:, sample_rate:, codec:)
           builder.output output
         end
       end
@@ -87,9 +85,7 @@ class FFmpeg
           builder.input input
           builder.disable :video
           builder.select_intervals FFmpeg.time_ranges_expression(ranges), stream: :audio
-          builder.channels channels
-          builder.sample_rate sample_rate
-          builder.codec 'pcm_s16le', stream: :audio
+          audio_format(builder, channels:, sample_rate:)
           builder.output output
         end
       end

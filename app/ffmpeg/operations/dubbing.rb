@@ -5,8 +5,7 @@ class FFmpeg
       def normalize_dub_audio input:, output:, label:
         run_one_shot label: label do |builder|
           builder.input input
-          builder.channels 1
-          builder.sample_rate 48_000
+          audio_format(builder, channels: 1, sample_rate: 48_000, codec: nil)
           builder.output output
         end
       end
@@ -65,9 +64,7 @@ class FFmpeg
         run_one_shot label: label do |builder|
           clips.each { |clip| builder.input clip.path }
           builder.set_complex_filter_script script
-          builder.codec codec, stream: :audio if codec
-          builder.channels 1
-          builder.sample_rate 48_000
+          audio_format(builder, channels: 1, sample_rate: 48_000, codec:)
           builder.output output
         end
       end

@@ -66,9 +66,7 @@ class FFmpeg
           builder.input input
           builder.input source, format: :lavfi
           builder.set_complex_filter filter
-          builder.channels 1
-          builder.sample_rate sample_rate
-          builder.codec 'pcm_s16le', stream: :audio
+          audio_format(builder, channels: 1, sample_rate:)
           builder.output output
         end
       end
