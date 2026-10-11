@@ -1,16 +1,24 @@
 require 'rails_helper'
 
 RSpec.describe Ewprs::TranslationBatch do
+  # The translation model: translates by the given transform, and answers the constrained retranslations with `answers`.
   class FakeMarkupTranslator
-    attr_reader :calls, :jobs, :repair_calls
+    RETRANSLATIONS = %i[
+      translate_preserving_placeholders translate_preserving_placeholder_order translate_preserving_editorial_tags
+      translate_preserving_smart_quotes translate_preserving_character_references translate_by_clauses
+    ].freeze
 
-    def initialize(jobs: 1, &transform)
+    attr_reader :calls, :jobs, :repair_calls, :retranslations
+
+    def initialize(jobs: 1, answers: {}, &transform)
       @jobs = jobs
+      @answers = answers
       @transform = transform || lambda do |text|
         text.gsub('English', 'Português').gsub('Translate me', 'Traduza-me').gsub(/\band\b/, 'e')
       end
       @calls = []
       @repair_calls = []
+      @retranslations = []
     end
 
     def translate_markup(texts, from: 'en', to:)
@@ -25,16 +33,11 @@ RSpec.describe Ewprs::TranslationBatch do
       @transform.call(source)
     end
 
-    def translate_preserving_placeholders(text, values: {}, from: 'en', to:)
-      @transform.call(text)
-    end
-
-    def translate_preserving_placeholder_order(text, from: 'en', to:)
-      @transform.call(text)
-    end
-
-    def translate_preserving_editorial_tags(text, from: 'en', to:)
-      @transform.call(text)
+    RETRANSLATIONS.each do |name|
+      define_method(name) do |text, **options|
+        @retranslations << [name, text, options]
+        @answers.fetch(name) { @transform.call(text) }
+      end
     end
   end
 
@@ -1857,11 +1860,7 @@ RSpec.describe Ewprs::TranslationBatch do
     )
     projected = 'これにより、その人は<span data-ewprs="11">罰について</span>穏やかな心持ちでいられ、' \
                 '__P0001__どんな悪しき行為の結果にも警戒できるようになるでしょう。'
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).to receive(:translate_preserving_editorial_tags).with(
-      prepared, from: 'en', to: 'ja'
-    ).and_return(projected)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new(answers: {translate_preserving_editorial_tags: projected})
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(
@@ -1873,6 +1872,8 @@ RSpec.describe Ewprs::TranslationBatch do
       'これにより、その人は[罰について]穏やかな心持ちでいられ、' \
       '[future]どんな悪しき行為の結果にも警戒できるようになるでしょう。'
     )
+    expect(translator.repair_calls).to be_empty
+    expect(translator.retranslations).to match_array([[:translate_preserving_editorial_tags, prepared, {from: 'en', to: 'ja'}]])
   end
 
   it 'retranslates echoed English inside CJK editorial spans by tagged segments' do
@@ -1882,11 +1883,7 @@ RSpec.describe Ewprs::TranslationBatch do
       prepared: prepared, tokens: {}, leading: '', trailing: ''
     )
     projected = '彼または彼女は、<span data-ewprs="11">あたかも</span>肉を食べたくないかのような表情を取る。'
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).to receive(:translate_preserving_editorial_tags).with(
-      prepared, from: 'en', to: 'ja'
-    ).and_return(projected)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new(answers: {translate_preserving_editorial_tags: projected})
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(
@@ -1895,6 +1892,8 @@ RSpec.describe Ewprs::TranslationBatch do
         '彼または彼女は、肉を食べたくないかのような表情を取る。<span data-ewprs="11">as if he or she is</span>'
       )
     ).to eq('彼または彼女は、[あたかも]肉を食べたくないかのような表情を取る。')
+    expect(translator.repair_calls).to be_empty
+    expect(translator.retranslations).to match_array([[:translate_preserving_editorial_tags, prepared, {from: 'en', to: 'ja'}]])
   end
 
   it 'falls back to bounded repair when editorial projection remains invalid' do
@@ -2097,13 +2096,11 @@ RSpec.describe Ewprs::TranslationBatch do
       tokens: {'__P0001__' => 'term'},
       leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).to receive(:translate_preserving_placeholders).with(
-      unit.prepared, values: {'__P0001__' => 'term'}, from: 'en', to: 'pt'
-    ).and_return('O __P0001__ aparece.')
+    translator = FakeMarkupTranslator.new(answers: {translate_preserving_placeholders: 'O __P0001__ aparece.'})
     batch = described_class.new(root: root, target: 'pt', cache: cache, translator: translator)
 
     expect(batch.send(:restore_tokens_with_retries, unit, 'O ZXQEWPRSP aparece.')).to eq('O term aparece.')
+    expect(translator.retranslations).to match_array([[:translate_preserving_placeholders, unit.prepared, {values: {'__P0001__' => 'term'}, from: 'en', to: 'pt'}]])
   end
 
   it 'restores a uniquely transliterated protected term to its exact source form' do
@@ -2148,17 +2145,13 @@ RSpec.describe Ewprs::TranslationBatch do
       tokens: {'__P0001__' => 'Karana', '__P0002__' => 'Brahma', '__P0003__' => 'svaravarna'},
       leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).to receive(:translate_preserving_placeholders).with(
-      unit.prepared,
-      values: {'__P0001__' => 'Karana', '__P0002__' => 'Brahma', '__P0003__' => 'svaravarna'},
-      from: 'en', to: 'de'
-    ).and_return('__P0001__ __P0002__ in tantrischen Schriften durch alle __P0003__ Klänge zusammen.')
+    translator = FakeMarkupTranslator.new(answers: {translate_preserving_placeholders: '__P0001__ __P0002__ in tantrischen Schriften durch alle __P0003__ Klänge zusammen.'})
     batch = described_class.new(root: root, target: 'de', cache: cache, translator: translator)
 
     expect(
       batch.send(:restore_tokens_with_retries, unit, unit.prepared)
     ).to eq('Karana Brahma in tantrischen Schriften durch alle svaravarna Klänge zusammen.')
+    expect(translator.retranslations).to match_array([[:translate_preserving_placeholders, unit.prepared, {values: {'__P0001__' => 'Karana', '__P0002__' => 'Brahma', '__P0003__' => 'svaravarna'}, from: 'en', to: 'de'}]])
   end
 
   it 'restores a natural-text projection when XML transport leaves entity-heavy prose untranslated' do
@@ -2171,15 +2164,10 @@ RSpec.describe Ewprs::TranslationBatch do
       tokens: {'__P0001__' => 'Hiran&#x301;maya Kos&#x301;a', '__P0002__' => 'kos&#x301;a'},
       leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).to receive(:translate_preserving_placeholders).with(
-      unit.prepared,
-      values: {'__P0001__' => 'Hiran&#x301;maya Kos&#x301;a', '__P0002__' => 'kos&#x301;a'},
-      from: 'en', to: 'de'
-    ).and_return(
-      '__P0001__ &ndash; in dieser __P0002__ sind der Körper und das Wissen vom ' \
-      '&ldquo;Ich&rdquo; kaum erkennbar.'
-    )
+    translator = FakeMarkupTranslator.new(answers: {
+      translate_preserving_placeholders: '__P0001__ &ndash; in dieser __P0002__ sind der Körper und das Wissen vom ' \
+      '&ldquo;Ich&rdquo; kaum erkennbar.',
+    })
     batch = described_class.new(root: root, target: 'de', cache: cache, translator: translator)
 
     expect(
@@ -2188,6 +2176,7 @@ RSpec.describe Ewprs::TranslationBatch do
       'Hiran&#x301;maya Kos&#x301;a &ndash; in dieser kos&#x301;a sind der Körper und das Wissen vom ' \
       '&ldquo;Ich&rdquo; kaum erkennbar.'
     )
+    expect(translator.retranslations).to match_array([[:translate_preserving_placeholders, unit.prepared, {values: {'__P0001__' => 'Hiran&#x301;maya Kos&#x301;a', '__P0002__' => 'kos&#x301;a'}, from: 'en', to: 'de'}]])
   end
 
   it 'retranslates quote-separated clauses when one drops a protected token' do
@@ -2196,10 +2185,7 @@ RSpec.describe Ewprs::TranslationBatch do
       prepared: 'Go to __P0001__.&rdquo; And &ldquo;Return to __P0002__.',
       tokens: {'__P0001__' => 'Kashi', '__P0002__' => 'Kashi'}, leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).to receive(:translate_preserving_smart_quotes).and_return(
-      'Geh nach __P0001__.&rdquo; Und &ldquo;Kehre nach __P0002__ zurück.'
-    )
+    translator = FakeMarkupTranslator.new(answers: {translate_preserving_smart_quotes: 'Geh nach __P0001__.&rdquo; Und &ldquo;Kehre nach __P0002__ zurück.'})
     batch = described_class.new(root: root, target: 'de', cache: cache, translator: translator)
 
     expect(
@@ -2208,6 +2194,7 @@ RSpec.describe Ewprs::TranslationBatch do
         'Geh nach __P0001__.&rdquo; Und &ldquo;Kehre zurück.'
       )
     ).to eq('Geh nach Kashi.&rdquo; Und &ldquo;Kehre nach Kashi zurück.')
+    expect(translator.retranslations).to match_array([[:translate_preserving_smart_quotes, anything, anything]])
   end
 
   it 'retranslates quoted segments when an entity-heavy title is left untranslated' do
@@ -2217,21 +2204,17 @@ RSpec.describe Ewprs::TranslationBatch do
       key: 'untranslated-quoted-title', source: source, prepared: prepared,
       tokens: {'__P0001__' => 'EE7.5'}, leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).to receive(:translate_preserving_placeholders).with(
-      prepared, values: {'__P0001__' => 'EE7.5'}, from: 'en', to: 'de'
-    ).and_return(prepared)
-    expect(translator).to receive(:translate_preserving_smart_quotes).with(
-      prepared, from: 'en', to: 'de'
-    ).and_return(
-      '__P0001__ - &ldquo;Caraeveti Caraeveti&rdquo; &ndash; &ldquo;Mach weiter, mach weiter&rdquo;'
-    )
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new(answers: {
+      translate_preserving_placeholders: prepared,
+      translate_preserving_smart_quotes: '__P0001__ - &ldquo;Caraeveti Caraeveti&rdquo; &ndash; &ldquo;Mach weiter, mach weiter&rdquo;',
+    })
     batch = described_class.new(root: root, target: 'de', cache: cache, translator: translator)
 
     expect(batch.send(:restore_tokens_with_retries, unit, prepared)).to eq(
       'EE7.5 - &ldquo;Caraeveti Caraeveti&rdquo; &ndash; &ldquo;Mach weiter, mach weiter&rdquo;'
     )
+    expect(translator.repair_calls).to be_empty
+    expect(translator.retranslations).to match_array([[:translate_preserving_placeholders, prepared, {values: {'__P0001__' => 'EE7.5'}, from: 'en', to: 'de'}], [:translate_preserving_smart_quotes, prepared, {from: 'en', to: 'de'}]])
   end
 
   it 'restores a quoted letter mistaken for an HTML tag' do
@@ -2240,13 +2223,13 @@ RSpec.describe Ewprs::TranslationBatch do
       key: 'quoted-letter-tag', source: prepared, prepared: prepared,
       tokens: {}, leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(
       batch.send(:restore_tokens_with_retries, unit, '宇宙の<I&rdquo;が残る。')
     ).to eq('宇宙の&ldquo;I&rdquo;が残る。')
+    expect(translator.repair_calls).to be_empty
   end
 
   it 'restores leaked quote markup and missing quote-entity semicolons' do
@@ -2255,8 +2238,7 @@ RSpec.describe Ewprs::TranslationBatch do
       key: 'leaked-quote-xml', source: prepared, prepared: prepared,
       tokens: {}, leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     result = batch.send(
@@ -2265,6 +2247,7 @@ RSpec.describe Ewprs::TranslationBatch do
     )
     expect(result).to include('&ldquo;', '&rdquo;')
     expect(result).not_to include('ewprs-quote')
+    expect(translator.repair_calls).to be_empty
   end
 
   it 'splits an italic letter fused onto leaked quote transport' do
@@ -2273,8 +2256,7 @@ RSpec.describe Ewprs::TranslationBatch do
       key: 'fused-italic-quote', source: prepared, prepared: prepared,
       tokens: {}, leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     result = batch.send(
@@ -2284,6 +2266,7 @@ RSpec.describe Ewprs::TranslationBatch do
     expect(result).to include('小さな')
     expect(result).not_to include('ewprs-quote')
     expect(result).not_to include('Iewprs')
+    expect(translator.repair_calls).to be_empty
   end
 
   it 'retranslates a copied English editorial span that failed as leftover English' do
@@ -2294,11 +2277,7 @@ RSpec.describe Ewprs::TranslationBatch do
       prepared: prepared, tokens: {}, leading: '', trailing: ''
     )
     projected = 'しかし、心が上向くとき、それはアヌラクティ、<span data-ewprs="11">偉大なるものへの魅力</span>と呼ばれる。'
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).to receive(:translate_preserving_editorial_tags).with(
-      prepared, from: 'en', to: 'ja'
-    ).and_return(projected)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new(answers: {translate_preserving_editorial_tags: projected})
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(
@@ -2307,6 +2286,8 @@ RSpec.describe Ewprs::TranslationBatch do
         'しかし、心が上向くとき、それはアヌラクティ、すなわち「偉大なるものへの魅力」と呼ばれる。<span data-ewprs="11">attraction for the Great</span>'
       )
     ).to eq('しかし、心が上向くとき、それはアヌラクティ、[偉大なるものへの魅力]と呼ばれる。')
+    expect(translator.repair_calls).to be_empty
+    expect(translator.retranslations).to match_array([[:translate_preserving_editorial_tags, prepared, {from: 'en', to: 'ja'}]])
   end
 
   it 'quotes leftover English work titles in Japanese citations' do
@@ -2315,8 +2296,7 @@ RSpec.describe Ewprs::TranslationBatch do
       key: 'citation-work-title', source: prepared, prepared: prepared,
       tokens: {}, leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(
@@ -2325,6 +2305,7 @@ RSpec.describe Ewprs::TranslationBatch do
         'Shrii Prabhat Ranjan Sarkar, The Liberation of Intellect: Neohumanism, 1982. &ndash;翻訳。'
       )
     ).to include('『The Liberation of Intellect: Neohumanism』')
+    expect(translator.repair_calls).to be_empty
   end
 
   it 'retranslates leftover English around placeholders after a determiner failure' do
@@ -2334,16 +2315,14 @@ RSpec.describe Ewprs::TranslationBatch do
       prepared: '__P0001__ on the indriyas.',
       tokens: {'__P0001__' => 'Sama&#x301;dhi'}, leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).to receive(:translate_preserving_placeholders).with(
-      unit.prepared, values: {'__P0001__' => 'Sama&#x301;dhi'}, from: 'en', to: 'ja'
-    ).and_return('感官における__P0001__。')
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new(answers: {translate_preserving_placeholders: '感官における__P0001__。'})
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(
       batch.send(:restore_tokens_with_retries, unit, '__P0001__ on the indriyas')
     ).to eq('感官におけるSama&#x301;dhi。')
+    expect(translator.repair_calls).to be_empty
+    expect(translator.retranslations).to match_array([[:translate_preserving_placeholders, unit.prepared, {values: {'__P0001__' => 'Sama&#x301;dhi'}, from: 'en', to: 'ja'}]])
   end
 
   it 'does not strip an ascii fold nested inside another protected token' do
@@ -2359,8 +2338,7 @@ RSpec.describe Ewprs::TranslationBatch do
       },
       leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     result = batch.send(
@@ -2368,6 +2346,7 @@ RSpec.describe Ewprs::TranslationBatch do
       '過程を__P0001__と呼ぶ。__P0002__の波動はparinamaである__P0003__。'
     )
     expect(result).to include('svarupa parinama', 'kala&#x301;', 'parin&#x301;a&#x301;ma')
+    expect(translator.repair_calls).to be_empty
   end
 
   it 'does not strip an ascii fold that is another protected token' do
@@ -2379,13 +2358,13 @@ RSpec.describe Ewprs::TranslationBatch do
       tokens: {'__P0001__' => 'Without sha&#x301;stra', '__P0002__' => 'shastra'},
       leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(
       batch.send(:restore_tokens_with_retries, unit, '__P0001__に対して、__P0002__は無意味になる。')
     ).to include('sha&#x301;stra').and include('shastra')
+    expect(translator.repair_calls).to be_empty
   end
 
   it 'drops leftover English glue beside Japanese prose' do
@@ -2395,13 +2374,13 @@ RSpec.describe Ewprs::TranslationBatch do
       prepared: prepared, tokens: {'__P0001__' => 'sa&#x301;dhana&#x301;', '__P0002__' => 'kulakun&#x301;d&#x301;alinii'},
       leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(
       batch.send(:restore_tokens_with_retries, unit, 'the目的 of maethuna __P0001__は、__P0002__を高める。')
     ).to eq('目的 maethuna sa&#x301;dhana&#x301;は、kulakun&#x301;d&#x301;aliniiを高める。')
+    expect(translator.repair_calls).to be_empty
   end
 
   it 'strips a leftover determiner glued to Japanese through punctuation' do
@@ -2409,11 +2388,11 @@ RSpec.describe Ewprs::TranslationBatch do
       key: 'cjk-colon-the', source: 'Use: The', prepared: 'Use: The',
       tokens: {}, leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(batch.send(:restore_tokens_with_retries, unit, '使用法:The')).to eq('使用法:')
+    expect(translator.repair_calls).to be_empty
   end
 
   it 'replaces leftover English and between transliterated terms in Japanese' do
@@ -2421,13 +2400,13 @@ RSpec.describe Ewprs::TranslationBatch do
       key: 'yama-and-niyama', source: 'Follow yama and niyama strictly.',
       prepared: 'Follow yama and niyama strictly.', tokens: {}, leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(
       batch.send(:restore_tokens_with_retries, unit, 'yama and niyamaを厳格に守れ。')
     ).to eq('yamaとniyamaを厳格に守れ。')
+    expect(translator.repair_calls).to be_empty
   end
 
   it 'strips leftover so-called beside Japanese' do
@@ -2435,13 +2414,13 @@ RSpec.describe Ewprs::TranslationBatch do
       key: 'so-called-ahimsa', source: 'The so-called ahimsa is hypocrisy.',
       prepared: 'The so-called ahimsa is hypocrisy.', tokens: {}, leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(
       batch.send(:restore_tokens_with_retries, unit, 'いわゆるso-called ahimsaは偽善である。')
     ).to eq('いわゆる ahimsaは偽善である。')
+    expect(translator.repair_calls).to be_empty
   end
 
   it 'strips leftover English in before a latin term glued to Japanese' do
@@ -2449,13 +2428,13 @@ RSpec.describe Ewprs::TranslationBatch do
       key: 'in-yoga-philosophy', source: 'Paramashiva in yoga philosophy.',
       prepared: 'Paramashiva in yoga philosophy.', tokens: {}, leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(
       batch.send(:restore_tokens_with_retries, unit, 'Paramashiva in yoga哲学。')
     ).to eq('Paramashiva yoga哲学。')
+    expect(translator.repair_calls).to be_empty
   end
 
   it 'strips leftover English by after Japanese before an editorial bracket' do
@@ -2463,13 +2442,13 @@ RSpec.describe Ewprs::TranslationBatch do
       key: 'cjk-by-bracket', source: 'One year later by [that is, after the rains].',
       prepared: 'One year later by [that is, after the rains].', tokens: {}, leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(
       batch.send(:restore_tokens_with_retries, unit, '1年後と言うby [つまり雨季の後]。')
     ).to eq('1年後と言う [つまり雨季の後]。')
+    expect(translator.repair_calls).to be_empty
   end
 
   it 'fills empty Japanese quotes from the following latin name' do
@@ -2477,13 +2456,13 @@ RSpec.describe Ewprs::TranslationBatch do
       key: 'empty-cjk-quotes', source: 'It is called Paramashiva in yoga philosophy.',
       prepared: 'It is called Paramashiva in yoga philosophy.', tokens: {}, leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(
       batch.send(:restore_tokens_with_retries, unit, '「」と呼ばれる Paramashiva in yoga哲学。')
     ).to eq('「Paramashiva」と呼ばれる yoga哲学。')
+    expect(translator.repair_calls).to be_empty
   end
 
   it 'keeps protected marked terms that look like English glue' do
@@ -2493,13 +2472,13 @@ RSpec.describe Ewprs::TranslationBatch do
       prepared: prepared, tokens: {'__P0001__' => 'On&#x32D;m&#x301; man&#x301;ipadme'},
       leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(
       batch.send(:restore_tokens_with_retries, unit, 'いわゆる仏教のタントラでも、__P0001__ うーん、と言っている。')
     ).to include('On&#x32D;m&#x301; man&#x301;ipadme')
+    expect(translator.repair_calls).to be_empty
   end
 
   it 'keeps a protected mantra after Japanese and drops its ascii echo' do
@@ -2510,8 +2489,7 @@ RSpec.describe Ewprs::TranslationBatch do
       prepared: prepared, tokens: {'__P0001__' => 'on&#x32D;m&#x301;ka&#x301;ra'},
       leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(
@@ -2520,6 +2498,7 @@ RSpec.describe Ewprs::TranslationBatch do
         'これは__P0001__の別名でもあり、耳に届くonmkaraの音である。'
       )
     ).to eq('これはon&#x32D;m&#x301;ka&#x301;raの別名でもあり、耳に届くの音である。')
+    expect(translator.repair_calls).to be_empty
   end
 
   it 'restores a two-token cosmic-sound sentence with an ascii mantra echo' do
@@ -2531,8 +2510,7 @@ RSpec.describe Ewprs::TranslationBatch do
       tokens: {'__P0001__' => 'Krs&#x301;n&#x301;a', '__P0002__' => 'on&#x32D;m&#x301;ka&#x301;ra'},
       leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     result = batch.send(
@@ -2541,6 +2519,7 @@ RSpec.describe Ewprs::TranslationBatch do
     )
     expect(result).to include('Krs&#x301;n&#x301;a', 'on&#x32D;m&#x301;ka&#x301;ra')
     expect(result).not_to include('onmkara')
+    expect(translator.repair_calls).to be_empty
   end
 
   it 'keeps a protected name that ends with an before Japanese' do
@@ -2551,13 +2530,13 @@ RSpec.describe Ewprs::TranslationBatch do
       tokens: {'__P0001__' => 'Sha&#x301;liva&#x301;han', '__P0002__' => 'Samatat&#x301;'},
       leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(
       batch.send(:restore_tokens_with_retries, unit, '__P0001__王は、この__P0002__の王でした。')
     ).to eq('Sha&#x301;liva&#x301;han王は、このSamatat&#x301;の王でした。')
+    expect(translator.repair_calls).to be_empty
   end
 
   it 'keeps a protected pronunciation that ends with in before Japanese' do
@@ -2567,13 +2546,13 @@ RSpec.describe Ewprs::TranslationBatch do
       prepared: prepared, tokens: {'__P0001__' => 'pa&#x301;nii', '__P0002__' => 'pa&#x301;in'},
       leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(
       batch.send(:restore_tokens_with_retries, unit, '同様に、__P0001__も__P0002__と同じように発音される。')
     ).to eq('同様に、pa&#x301;niiもpa&#x301;inと同じように発音される。')
+    expect(translator.repair_calls).to be_empty
   end
 
   it 'keeps double spaces inside a protected italic publication title' do
@@ -2584,13 +2563,13 @@ RSpec.describe Ewprs::TranslationBatch do
       prepared: prepared, tokens: {'__P0001__' => '<i>Prout in a  Nutshell Part 6.</i>'},
       leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(
       batch.send(:restore_tokens_with_retries, unit, 'この論考はかつて __P0001__ にありました。')
     ).to include('<i>Prout in a  Nutshell Part 6.</i>')
+    expect(translator.repair_calls).to be_empty
   end
 
   it 'allows adjacent quoted terms after restoring a protected quotation' do
@@ -2619,14 +2598,10 @@ RSpec.describe Ewprs::TranslationBatch do
       key: 'partial-entity-translation', source: source, prepared: source,
       tokens: {}, leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).to receive(:translate_preserving_character_references).with(
-      source, from: 'en', to: 'de'
-    ).and_return(
-      'Und alles, was ich anbieten würde, wie Blumen, Kränze und Sandelpaste &ndash; all diese Dinge wurden ' \
-      'von dir geschaffen.'
-    )
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new(answers: {
+      translate_preserving_character_references: 'Und alles, was ich anbieten würde, wie Blumen, Kränze und Sandelpaste &ndash; all diese Dinge wurden ' \
+      'von dir geschaffen.',
+    })
     batch = described_class.new(root: root, target: 'de', cache: cache, translator: translator)
 
     expect(
@@ -2639,6 +2614,8 @@ RSpec.describe Ewprs::TranslationBatch do
       'Und alles, was ich anbieten würde, wie Blumen, Kränze und Sandelpaste &ndash; all diese Dinge wurden ' \
       'von dir geschaffen.'
     )
+    expect(translator.repair_calls).to be_empty
+    expect(translator.retranslations).to match_array([[:translate_preserving_character_references, source, {from: 'en', to: 'de'}]])
   end
 
   it 'retranslates an echoed comma-dense fragment by clauses' do
@@ -2648,20 +2625,18 @@ RSpec.describe Ewprs::TranslationBatch do
       key: 'comma-dense-fragment', source: source, prepared: source,
       tokens: {}, leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).to receive(:translate_by_clauses).with(
-      source, from: 'en', to: 'de'
-    ).and_return(
-      'So in jener ersten Figur, in dieser ersten geometrischen Figur, zu Beginn der Schöpfung, ' \
-      'es kann mehr als eine Zeile geben,'
-    )
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new(answers: {
+      translate_by_clauses: 'So in jener ersten Figur, in dieser ersten geometrischen Figur, zu Beginn der Schöpfung, ' \
+      'es kann mehr als eine Zeile geben,',
+    })
     batch = described_class.new(root: root, target: 'de', cache: cache, translator: translator)
 
     expect(batch.send(:restore_tokens_with_retries, unit, source)).to eq(
       'So in jener ersten Figur, in dieser ersten geometrischen Figur, zu Beginn der Schöpfung, ' \
       'es kann mehr als eine Zeile geben,'
     )
+    expect(translator.repair_calls).to be_empty
+    expect(translator.retranslations).to match_array([[:translate_by_clauses, source, {from: 'en', to: 'de'}]])
   end
 
   it 'retranslates a retained English idiom in Japanese by clauses' do
@@ -2670,16 +2645,14 @@ RSpec.describe Ewprs::TranslationBatch do
       key: 'same-way-idiom', source: prepared, prepared: prepared,
       tokens: {}, leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).to receive(:translate_by_clauses).with(
-      prepared, from: 'en', to: 'ja'
-    ).and_return('彼らは他者に仕える。同じように、神は喜ばれる。')
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new(answers: {translate_by_clauses: '彼らは他者に仕える。同じように、神は喜ばれる。'})
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(
       batch.send(:restore_tokens_with_retries, unit, '彼らは他者に仕える。 in the same way、神は喜ばれる。')
     ).to eq('彼らは他者に仕える。同じように、神は喜ばれる。')
+    expect(translator.repair_calls).to be_empty
+    expect(translator.retranslations).to match_array([[:translate_by_clauses, prepared, {from: 'en', to: 'ja'}]])
   end
 
   it 'retranslates an echoed two-word fragment by clauses' do
@@ -2687,14 +2660,12 @@ RSpec.describe Ewprs::TranslationBatch do
       key: 'in-the-fragment', source: 'In the', prepared: 'In the',
       tokens: {}, leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).to receive(:translate_by_clauses).with(
-      'In the', from: 'en', to: 'ja'
-    ).and_return('その')
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new(answers: {translate_by_clauses: 'その'})
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(batch.send(:restore_tokens_with_retries, unit, 'In the')).to eq('その')
+    expect(translator.repair_calls).to be_empty
+    expect(translator.retranslations).to match_array([[:translate_by_clauses, 'In the', {from: 'en', to: 'ja'}]])
   end
 
   it 'retranslates retained bibliographic words by clauses around placeholders' do
@@ -2703,11 +2674,7 @@ RSpec.describe Ewprs::TranslationBatch do
       key: 'bibliographic-clauses', source: 'Third publication as a title, Third Edition, 1987.',
       prepared: prepared, tokens: {'__P0001__' => 'a title'}, leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).to receive(:translate_by_clauses).with(
-      prepared, from: 'en', to: 'de'
-    ).and_return('Dritte Veröffentlichung als __P0001__, Dritte Auflage, 1987.')
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new(answers: {translate_by_clauses: 'Dritte Veröffentlichung als __P0001__, Dritte Auflage, 1987.'})
     batch = described_class.new(root: root, target: 'de', cache: cache, translator: translator)
 
     expect(
@@ -2716,6 +2683,8 @@ RSpec.describe Ewprs::TranslationBatch do
         'Dritte Veröffentlichung als __P0001__, Third Edition, 1987.'
       )
     ).to eq('Dritte Veröffentlichung als a title, Dritte Auflage, 1987.')
+    expect(translator.repair_calls).to be_empty
+    expect(translator.retranslations).to match_array([[:translate_by_clauses, prepared, {from: 'en', to: 'de'}]])
   end
 
   it 'retranslates an echoed slash-separated title around placeholders by clauses' do
@@ -2724,16 +2693,14 @@ RSpec.describe Ewprs::TranslationBatch do
       key: 'slash-title-clauses', source: 'Kiirtana and Dance / The Psychic Order',
       prepared: prepared, tokens: {'__P0001__' => 'Kiirtana'}, leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).to receive(:translate_by_clauses).with(
-      prepared, from: 'en', to: 'ja'
-    ).and_return('__P0001__ と舞踏 / 精神的秩序')
-    expect(translator).not_to receive(:repair_markup)
+    translator = FakeMarkupTranslator.new(answers: {translate_by_clauses: '__P0001__ と舞踏 / 精神的秩序'})
     batch = described_class.new(root: root, target: 'ja', cache: cache, translator: translator)
 
     expect(batch.send(:restore_tokens_with_retries, unit, prepared)).to eq(
       'Kiirtana と舞踏 / 精神的秩序'
     )
+    expect(translator.repair_calls).to be_empty
+    expect(translator.retranslations).to match_array([[:translate_by_clauses, prepared, {from: 'en', to: 'ja'}]])
   end
 
   it 'reprojects delimiter-bearing placeholders when translation changes their order' do
@@ -2746,12 +2713,7 @@ RSpec.describe Ewprs::TranslationBatch do
       },
       leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).to receive(:translate_preserving_placeholders).with(
-      unit.prepared, values: unit.tokens, from: 'en', to: 'de'
-    ).and_return(
-      'Außerdem lebt __P0001__, ein Mann, der __P0002__ seine Frau verloren hat, in __P0003__.'
-    )
+    translator = FakeMarkupTranslator.new(answers: {translate_preserving_placeholders: 'Außerdem lebt __P0001__, ein Mann, der __P0002__ seine Frau verloren hat, in __P0003__.'})
     batch = described_class.new(root: root, target: 'de', cache: cache, translator: translator)
 
     expect(
@@ -2762,6 +2724,7 @@ RSpec.describe Ewprs::TranslationBatch do
     ).to eq(
       'Außerdem lebt sauna [a note], ein Mann, der (through death or divorce) seine Frau verloren hat, in Rarh.'
     )
+    expect(translator.retranslations).to match_array([[:translate_preserving_placeholders, unit.prepared, {values: unit.tokens, from: 'en', to: 'de'}]])
   end
 
   it 'removes balanced delimiters introduced around translated prose' do
@@ -2941,10 +2904,7 @@ RSpec.describe Ewprs::TranslationBatch do
       tokens: {'__P0001__' => "[[#{nested_marker}]]", '__P0002__' => '(Kalatiita)'},
       leading: '', trailing: ''
     )
-    translator = instance_double(Ewprs::Translator)
-    expect(translator).to receive(:translate_preserving_placeholder_order).with(
-      unit.prepared, from: 'en', to: 'zh'
-    ).and_return('它__P0001__超越时间__P0002__。')
+    translator = FakeMarkupTranslator.new(answers: {translate_preserving_placeholder_order: '它__P0001__超越时间__P0002__。'})
     chinese = described_class.new(root: root, target: 'zh', cache: cache, translator: translator)
     chinese.instance_variable_get(:@units)[nested_marker[/[0-9a-f]{64}/]] =
       batch.instance_variable_get(:@units).fetch(nested_marker[/[0-9a-f]{64}/])
@@ -2952,6 +2912,7 @@ RSpec.describe Ewprs::TranslationBatch do
     expect(
       chinese.send(:restore_tokens_with_retries, unit, '它超越时间__P0002__。__P0001__')
     ).to eq("它[[#{nested_marker}]]超越时间(Kalatiita)。")
+    expect(translator.retranslations).to match_array([[:translate_preserving_placeholder_order, unit.prepared, {from: 'en', to: 'zh'}]])
   end
 
   it 'allows protected terms to follow target-language grammar' do
