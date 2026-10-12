@@ -1,5 +1,4 @@
 require 'open3'
-require 'tempfile'
 
 module AI
   class Codex
@@ -8,7 +7,7 @@ module AI
     MODEL = ENV['CODEX_SHORTS_MODEL']
 
     def self.prompt(text, model: MODEL, effort: nil)
-      Tempfile.create('codex-response') do |out_file|
+      Utils::Tmp.file('codex-response') do |out_path|
         cmd = [
           'codex', 'exec',
           '--sandbox', 'read-only',
@@ -16,7 +15,7 @@ module AI
           '--ephemeral',
           '--skip-git-repo-check',
           '--color', 'never',
-          '-o', out_file.path
+          '-o', out_path
         ]
         cmd += ['--model', model] unless model.to_s.strip.empty?
         cmd += ['-c', "model_reasoning_effort=#{effort}"] unless effort.to_s.strip.empty?
@@ -27,8 +26,7 @@ module AI
         _out, err, st = Open3.capture3(env, *cmd, stdin_data: text)
         raise "codex failed (#{st.exitstatus}): #{err}" unless st.success?
 
-        out_file.rewind
-        out_file.read.strip
+        File.read(out_path).strip
       end
     end
   end
