@@ -49,32 +49,38 @@ class Worker
   end
 
   def run
-    workdir do |work_dir|
+    finished = workdir do |work_dir|
       @dir = work_dir
       init_status
 
-      ctx    = Context.new(dir: work_dir, msg: msg, st: @st, session: @session, service: service)
-      inputs = collect_inputs(ctx)
-
-      return if inputs.first.blank? and @st&.error?
-      return @st&.error('No inputs generated') if inputs.first.blank?
-
-      order_inputs!(inputs)
-
-      ordered  = opts[:sort] || opts[:number] || opts[:ordered] || opts[:reverse]
-      up_queue = inputs.size.times.to_a
-      uploader = UploadCoordinator.new(self)
-
-      inputs.each.with_index.api_peach(threads: peach_threads) do |i, pos|
-        process_input(i, pos: pos, total: inputs.size, ordered: ordered, up_queue: up_queue, uploader: uploader)
-      end
-
-      uploader.flush
-
-      inputs.map(&:processor).uniq.each(&:cleanup)
-      return if inputs.blank? or @st.keep?
+      ctx = Context.new(dir: work_dir, msg: msg, st: @st, session: @session, service: service)
+      ctx.tmp = Utils::Tmp.dir('input-', work_dir)
+      Utils::Tmp.within(ctx.tmp) { process_inputs(ctx) }
     end
-    msg.resp
+    msg.resp if finished
+  end
+
+  # Whether the job ran to the end, so the response is worth returning.
+  def process_inputs(ctx)
+    inputs = collect_inputs(ctx)
+
+    return if inputs.first.blank? and @st&.error?
+    return @st&.error('No inputs generated') if inputs.first.blank?
+
+    order_inputs!(inputs)
+
+    ordered  = opts[:sort] || opts[:number] || opts[:ordered] || opts[:reverse]
+    up_queue = inputs.size.times.to_a
+    uploader = UploadCoordinator.new(self)
+
+    inputs.each.with_index.api_peach(threads: peach_threads) do |i, pos|
+      process_input(i, pos: pos, total: inputs.size, ordered: ordered, up_queue: up_queue, uploader: uploader)
+    end
+
+    uploader.flush
+
+    inputs.map(&:processor).uniq.each(&:cleanup) unless skip_cleanup
+    !@st.keep?
   end
 
   def collect_inputs(ctx)

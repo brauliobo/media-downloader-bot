@@ -52,10 +52,7 @@ module Processors
     # An input that is already local has nothing to fetch; a URL processor overrides this.
     def download_one(input, pos: nil) = nil
 
-    def cleanup
-      return if ENV['TMPDIR']
-      FileUtils.remove_entry tmp if ::File.exist?(tmp)
-    end
+    def cleanup = FileUtils.rm_rf(tmp)
 
     # Backwards-compatible option parser used by CLI wrappers (e.g. bin/zip, mediazip).
     # Supports:
