@@ -1,30 +1,18 @@
-require 'fileutils'
-require 'securerandom'
-
 module Audiobook
   class OcrText
     PDF_PAGE_RE = /\A(.+\.pdf)#page=(\d+)\z/i
 
     def self.transcribe(path, stl: nil, opts: nil)
-      input = path
-      tmp_png = nil
-      base = nil
+      match = path.to_s.match(PDF_PAGE_RE)
+      return recognize(path, stl: stl, opts: opts) unless match
 
-      if (match = path.to_s.match(PDF_PAGE_RE))
-        pdf_path = match[1]
-        page_num = match[2].to_i
-        base = File.join(Dir.pwd, "page-#{page_num}-#{SecureRandom.hex(4)}")
-        tmp_png = rasterize_pdf_page(pdf_path, page_num, base)
-        return '' unless tmp_png
-
-        input = tmp_png
+      Utils::Tmp.dir('ocr-page-') do |dir|
+        png = rasterize_pdf_page(match[1], match[2].to_i, File.join(dir, 'page'))
+        png ? recognize(png, stl: stl, opts: opts) : ''
       end
-
-      text_from(Ocr.transcribe(input, opts: opts, stl: stl))
-    ensure
-      FileUtils.rm_f(tmp_png) if tmp_png
-      Dir["#{base}*"].each { |f| FileUtils.rm_f(f) } if base
     end
+
+    def self.recognize(input, stl:, opts:) = text_from(Ocr.transcribe(input, opts: opts, stl: stl))
 
     def self.text_from(data)
       (data&.text || data&.content&.text || '').to_s
