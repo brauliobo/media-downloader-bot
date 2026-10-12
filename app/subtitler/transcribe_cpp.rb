@@ -1,5 +1,4 @@
 require 'open3'
-require 'tempfile'
 
 class Subtitler
   module TranscribeCpp
@@ -24,29 +23,23 @@ class Subtitler
     private
 
     def run_cli(path, language:)
-      wav = Tempfile.new(['transcribe-cpp-', '.wav'])
-      result = Tempfile.new(['transcribe-cpp-', '.json'])
-      wav.close
-      result.close
+      Utils::Tmp.dir('transcribe-cpp-') do |dir|
+        wav, result = File.join(dir, 'audio.wav'), File.join(dir, 'result.json')
+        FFmpeg.new(ffmpeg: ffmpeg).transcribe_wav input: path, output: wav, label: 'ffmpeg failed'
 
-      converter = FFmpeg.new ffmpeg: ffmpeg
-      converter.transcribe_wav input: path, output: wav.path, label: 'ffmpeg failed'
+        command = [
+          cli, '--quiet', '--model', model, '--language', language.to_s,
+          '--timestamps', 'word', '--backend', backend, '--output-json', result
+        ]
+        command.concat(['--device', device.to_s]) if device.present?
+        command.concat(['--threads', threads.to_s]) if threads.present?
+        command << wav
 
-      command = [
-        cli, '--quiet', '--model', model, '--language', language.to_s,
-        '--timestamps', 'word', '--backend', backend, '--output-json', result.path
-      ]
-      command.concat(['--device', device.to_s]) if device.present?
-      command.concat(['--threads', threads.to_s]) if threads.present?
-      command << wav.path
+        _, transcribe_error, transcribe_status = Open3.capture3(*command)
+        raise "transcribe.cpp failed: #{transcribe_error}" unless transcribe_status.success?
 
-      _, transcribe_error, transcribe_status = Open3.capture3(*command)
-      raise "transcribe.cpp failed: #{transcribe_error}" unless transcribe_status.success?
-
-      File.read(result.path)
-    ensure
-      wav&.close!
-      result&.close!
+        File.read(result)
+      end
     end
 
     def normalize_result(raw, merge_words:)
