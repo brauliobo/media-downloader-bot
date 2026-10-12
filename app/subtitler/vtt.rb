@@ -23,14 +23,9 @@ class Subtitler
         return canonical
       end
 
-      Tempfile.create(['sub', ".#{safe_ext}"]) do |file|
-        file.binmode
-        file.write(body)
-        file.flush
-        vtt = ffmpeg.convert_subtitle(
-          input: file.path, format: :vtt, label: 'VTT conversion failed'
-        )
-        clean(vtt)
+      Utils::Tmp.file('sub', ".#{safe_ext}") do |path|
+        File.binwrite(path, body)
+        clean(ffmpeg.convert_subtitle(input: path, format: :vtt, label: 'VTT conversion failed'))
       end
     end
 
