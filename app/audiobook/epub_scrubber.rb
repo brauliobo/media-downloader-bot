@@ -1,5 +1,4 @@
 require 'fileutils'
-require 'tmpdir'
 
 module Audiobook
   # Removes the paragraphs a distributor stamps on an EPUB (e.g. "Book made for someone@mail.com"),
@@ -17,7 +16,7 @@ module Audiobook
     end
 
     def call(src, dest)
-      Dir.mktmpdir('epub-scrub') do |dir|
+      Utils::Tmp.dir('epub-scrub') do |dir|
         run 'unzip', %W[unzip -q -o #{File.expand_path(src)} -d #{dir}]
         removed = markup(dir).sum { |file| scrub(file) }
         raise "stamp still present in #{src}" if markup(dir).any? { |file| File.read(file).match?(@stamp) }
