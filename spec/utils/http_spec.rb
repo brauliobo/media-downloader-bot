@@ -78,6 +78,25 @@ RSpec.describe Utils::HTTP do
       expect(described_class.post('http://example.test', '{}')).to eq(:ok)
       expect(calls).to eq(2)
     end
+
+    it 'sends an uploaded file from the start on every retry' do
+      sent = []
+      agent = stub_http_client
+      allow(Kernel).to receive(:sleep)
+      allow(agent).to receive(:post) do |_url, params|
+        sent << params[:file].read
+        raise EOFError if sent.one?
+
+        :ok
+      end
+
+      Tempfile.create('upload') do |file|
+        file.write('audio')
+        described_class.post('http://example.test', file: file)
+      end
+
+      expect(sent).to eq(%w[audio audio])
+    end
   end
 
   describe '.url' do

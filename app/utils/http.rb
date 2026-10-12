@@ -40,7 +40,14 @@ module Utils
       # A service base URL, however it was written, with the path of one of its endpoints.
       def url(base, path = '') = "#{base.to_s.delete_suffix('/')}#{path}"
 
-      def request(verb, ...) = Retry.http { (Thread.current[:utils_http] || client).public_send(verb, ...) }
+      # Each attempt re-reads its uploads from the start, or a retried POST would send an empty file.
+      def request(verb, *args, **kwargs)
+        uploads = [*args, kwargs].grep(Hash).flat_map(&:values).select { _1.respond_to?(:rewind) }
+        Retry.http do
+          uploads.each(&:rewind)
+          (Thread.current[:utils_http] || client).public_send(verb, *args, **kwargs)
+        end
+      end
       private :request
 
       # Every service backend refuses the same way; only the label differs.
