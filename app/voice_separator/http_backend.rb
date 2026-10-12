@@ -2,7 +2,6 @@ require 'uri'
 require 'faraday'
 require 'faraday/multipart'
 require 'open3'
-require 'tempfile'
 
 class VoiceSeparator
   module HTTPBackend
@@ -18,27 +17,21 @@ class VoiceSeparator
 
     def separate(path, dir:)
       FileUtils.mkdir_p(dir)
-      archive = download(path)
-      extract_stems(archive.path, dir)
-    ensure
-      archive&.close!
+      Utils::Tmp.file("#{backend_name}-stems-", '.zip') do |archive_path|
+        download(path, archive_path)
+        extract_stems(archive_path, dir)
+      end
     end
 
     private
 
-    def download(path)
-      archive = Tempfile.new(["#{backend_name}-stems-", '.zip'])
-      archive.binmode
-      Zipper::AudioOps.with_copy(path) do |file|
-        status = stream_separate(file, archive)
-        raise "voice separation failed: #{status}" unless status.to_s == '200'
+    def download(path, archive_path)
+      File.open(archive_path, 'wb') do |archive|
+        Zipper::AudioOps.with_copy(path) do |file|
+          status = stream_separate(file, archive)
+          raise "voice separation failed: #{status}" unless status.to_s == '200'
+        end
       end
-      archive.flush
-      archive.rewind
-      archive
-    rescue
-      archive&.close!
-      raise
     end
 
     def stream_separate(file, archive)
