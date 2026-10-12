@@ -90,7 +90,7 @@ class Zipper
       audio
     end
 
-    def temp_audio(extension) = File.join(Dir.pwd, "audio-#{SecureRandom.hex 6}#{extension}")
+    def temp_audio(extension) = Utils::Tmp.path('audio-', extension)
 
     def sibling(path, prefix) = File.join(File.dirname(path), "#{prefix}_#{SecureRandom.hex 4}.wav")
 
