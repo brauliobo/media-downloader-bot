@@ -78,11 +78,11 @@ module Audiobook
         def xml_style_pages(pdf_path, first_page:, last_page:)
           return {} unless pdftohtml_bin
 
-          xml = pdftohtml_xml(pdf_path, first_page: first_page, last_page: last_page)
+          xml = sanitize_xml(pdftohtml_xml(pdf_path, first_page: first_page, last_page: last_page))
           return {} if xml.blank?
 
           fonts = {}
-          document = Nokogiri::XML(sanitize_xml(xml)) { |config| config.nonet }
+          document = Nokogiri::XML(xml) { |config| config.nonet }
           document.remove_namespaces!
           document.xpath('//page').each_with_object({}) do |page, pages|
             page.xpath('./fontspec').each do |font|
@@ -134,7 +134,8 @@ module Audiobook
           @pdftohtml_bin ||= %w[pdftohtml].find { Sh.which?(_1) }
         end
 
-        def sanitize_xml(text) = text.to_s.gsub(XML_CHAR, '')
+        # pdftohtml copies link targets byte for byte, so a URI in the PDF's own encoding is not valid UTF-8.
+        def sanitize_xml(text) = text.to_s.scrub('').gsub(XML_CHAR, '')
 
         def xml_match?(line, fragment, scale)
           top     = fragment[:top] * scale.y

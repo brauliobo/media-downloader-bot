@@ -73,6 +73,12 @@ RSpec.describe Audiobook::Parsers::Pdf do
     expect(pages.first.lines.first.x_max).to eq(298.0)
   end
 
+  it 'drops the bytes of a link target that are not UTF-8 from the style xml' do
+    xml = "<text>café <a href=\"http://x/\xCA\xCA\">link</a></text>".dup.force_encoding('UTF-8')
+
+    expect(described_class.sanitize_xml(xml)).to eq('<text>café <a href="http://x/">link</a></text>')
+  end
+
   it 'reads a tight justified gap as a space and a small-caps gap as none' do
     justified = words(['So,', 66.1, 79.5, 245.0, 258.9], ['the', 80.6, 95.9, 245.0, 258.9])
     small_cap = words(['J', 108, 116, 233.1, 245.7], ['HONATAN', 116.3, 192, 235.2, 245.2])
