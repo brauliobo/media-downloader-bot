@@ -21,11 +21,12 @@ module Replay
       { chat_id: Integer(params.fetch(:chat_id)), retry_failed: params[:retry_failed].to_s.in?(%w[1 true]) }
     end
 
-    # The copies made into the chat. Those the legacy replayed log knows come in as done, unless the bot only answered them with an error.
+    # The copies made into the chat. Those the legacy replayed log knows are judged by the bot's answers: done, failed when it
+    # only answered with errors, pending when it never answered (the process died with the book).
     def seed(job)
       chat_id = job.options[:chat_id]
-      failed  = failures(chat_id)
-      @forwarded.copies_in(chat_id).map { |copy| row(chat_id, copy[:id], failed[copy[:id]]) }
+      replies = legacy_replies(chat_id)
+      @forwarded.copies_in(chat_id).map { |copy| row(chat_id, copy[:id], replies[copy[:id]]) }
     end
 
     def perform(job, item)
@@ -60,19 +61,20 @@ module Replay
 
     def message_id(item) = item.key.split(':').last.to_i
 
-    def row(chat_id, id, error_messages)
-      status = error_messages ? 'failed' : (@replayed.replayed?(chat_id, id) ? 'done' : 'pending')
-      { key: "#{chat_id}:#{id}", status: status, error: ('the bot only answered with an error' if error_messages), result: Sequel.pg_jsonb({}),
-        messages: Array(error_messages).map { |message| tracked(message) } }
+    def row(chat_id, id, replies)
+      messages = Array(replies).map { |message| tracked(message) }
+      failed   = messages.present? && messages.all? { |message| message[:failed] }
+      { key: "#{chat_id}:#{id}", status: messages.empty? ? 'pending' : (failed ? 'failed' : 'done'), error: ('the bot only answered with an error' if failed),
+        result: Sequel.pg_jsonb(hashtags: wanted_hashtags(messages)), messages: messages }
     end
 
-    # { copy id => its error messages } for the copies the legacy log replayed and the bot only answered with errors.
-    def failures(chat_id)
+    # { copy id => the bot's messages answering it } for the copies the legacy log replayed.
+    def legacy_replies(chat_id)
       ids = @forwarded.copies_in(chat_id).map { |copy| copy[:id] }.select { |id| @replayed.replayed?(chat_id, id) }
       return {} if ids.empty?
 
-      replies = history(chat_id, ids.min).select { |message| ids.include?(message[:reply_to_message_id]) }
-      replies.group_by { |message| message[:reply_to_message_id] }.select { |_, group| group.all? { |message| failed?(message) } }
+      answered = history(chat_id, ids.min).select { |message| ids.include?(message[:reply_to_message_id]) }.group_by { |message| message[:reply_to_message_id] }
+      ids.index_with { |id| answered.fetch(id, []) }
     end
 
     # The messages of the chat down to `oldest`, newest first.
@@ -119,10 +121,11 @@ module Replay
       JobMessage.where(chat_id: chat_id, message_id: ids).update(deleted_at: Time.now)
     end
 
-    # The hashtags wanted are the ones the bot posted in the captions of its media.
+    # The hashtags wanted start as the ones the bot posted in the captions of its media.
     def summary(chat_id, messages)
-      tags = messages.reject { |message| message[:failed] || message[:kind] == 'Text' }.filter_map { |message| message[:hashtags].presence }.join(' ')
-      { options: ChatSetting.default_options(chat_id).join(' '), hashtags: tags, messages: messages }
+      { options: ChatSetting.default_options(chat_id).join(' '), hashtags: wanted_hashtags(messages), messages: messages }
     end
+
+    def wanted_hashtags(messages) = messages.reject { |message| message[:failed] || message[:kind] == 'Text' }.filter_map { |message| message[:hashtags].presence }.join(' ')
   end
 end

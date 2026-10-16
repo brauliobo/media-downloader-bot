@@ -31,13 +31,25 @@ RSpec.describe Replay::Handler do
     expect(item.messages.first).to have_attributes(chat_id: -200, kind: 'Audio', failed: false, hashtags: '#Livro #Yoga', link: "https://t.me/c/200/#{item.messages.first.message_id}")
   end
 
-  it 'imports the legacy log: replayed books are done, not replayed again' do
+  it 'imports the legacy log: the books the bot answered are done and tracked, not replayed again' do
     legacy.record(-200, 11)
+    manager.messages << { id: 500, chat_id: -200, type: 'Audio', text: "Book\n#Old", reply_to_message_id: 11 }
 
     run
 
     expect(manager.replayed.map { |m| m[:id] }).to contain_exactly(12, 13)
     expect(JobItem.done.count).to eq(3)
+    expect(JobItem.first(key: '-200:11')).to have_attributes(attempts: 0)
+    expect(JobItem.first(key: '-200:11').messages.map(&:message_id)).to eq([500])
+    expect(JobItem.first(key: '-200:11').outcome).to include(hashtags: '#Old')
+  end
+
+  it 'replays again the legacy books the bot never answered, because the process died with them' do
+    legacy.record(-200, 11)
+
+    run
+
+    expect(manager.replayed.map { |m| m[:id] }).to contain_exactly(11, 12, 13)
   end
 
   it 'fails the book the bot only answered with an error and retries it, deleting the error reply first' do
@@ -61,7 +73,8 @@ RSpec.describe Replay::Handler do
   it 'finds the books the legacy log replayed but the bot only answered with an error and retries them when asked' do
     legacy.record(-200, 11)
     legacy.record(-200, 12)
-    manager = ReplayingManager.new(messages: [{ id: 99, chat_id: -200, type: 'Text', text: 'failed: EOFError', reply_to_message_id: 12 }])
+    manager = ReplayingManager.new(messages: [{ id: 99, chat_id: -200, type: 'Text', text: 'failed: EOFError', reply_to_message_id: 12 },
+                                              { id: 98, chat_id: -200, type: 'Audio', text: 'Book', reply_to_message_id: 11 }])
     engine  = Tracked::Engine.new({ 'replay' => described_class.new(manager, forwarded: forwarded, replayed: legacy) }, tick: 0.01)
 
     id = engine.start(kind: 'replay', params: { chat_id: -200, retry_failed: '1' })[:id]
