@@ -3,7 +3,7 @@ require 'nokogiri'
 module Audiobook
   module Parsers
     class Pdf < Base
-      MAX_PAGES = ENV.fetch('MAX_PDF_PAGES', 2_000).to_i
+      MAX_PAGES = ENV.fetch('MAX_PDF_PAGES', 4_000).to_i
       # How far above the baseline a marker sits, in its own heights, to be a footnote mark.
       SUPERSCRIPT_RISE = 0.2
 
