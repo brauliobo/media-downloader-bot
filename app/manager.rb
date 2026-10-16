@@ -67,7 +67,8 @@ EOS
 
   BLOCKED_USERS = ENV['BLOCKED_USERS'].to_s.split(/[\s,]+/).reject(&:empty?).map(&:to_i)
 
-  def react msg
+  # `queued` messages come out of a group's queue, so they are processed now instead of joining it again.
+  def react(msg, queued: false)
     @relay.dispatch(msg)
     msg.bot = bot
     msg.bot_type = bot.class.name
@@ -81,6 +82,8 @@ EOS
     return stop_jobs(msg) if Bot::Jobs.stop_command?(cmd_text)
     return Commands::Cookie.new(bot, msg).process if cmd_text&.starts_with?('/cookies') || (msg.document&.file_name&.downcase == 'cookies.txt')
     return if Bot::MsgHelpers.in_group?(msg) && !Utils::InputParser.line_has_url?(cmd_text) && msg.video.blank? && msg.audio.blank? && msg.document.blank?
+
+    return if !queued && ENV['TD_BOT'] && queue_message(msg)
 
     enqueue_message msg
   rescue => e

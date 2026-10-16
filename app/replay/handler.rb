@@ -18,8 +18,11 @@ module Replay
 
     def normalize(params)
       params = super
-      { chat_id: Integer(params.fetch(:chat_id)), retry_failed: params[:retry_failed].to_s.in?(%w[1 true]) }
+      { chat_id: Integer(params.fetch(:chat_id)), retry_failed: params[:retry_failed].to_s.in?(%w[1 true]), follow: params[:follow].to_s.in?(%w[1 true]) }
     end
+
+    # A job that follows its chat is the group's queue: the messages posted there join it (see GroupQueue).
+    def standing?(job) = job.options[:follow]
 
     # The copies made into the chat. Those the legacy replayed log knows are judged by the bot's answers: done, failed when it
     # only answered with errors, pending when it never answered (the process died with the book).

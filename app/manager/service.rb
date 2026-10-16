@@ -20,12 +20,30 @@ class Manager
     # Resumable jobs kept in the database (see Tracked::Engine): tracked_start, tracked_stop, tracked_resume, ...
     delegate :start, :stop, :resume, :update, :retry_items, :edit, :apply, :delete_message, to: :@tracked, prefix: :tracked
 
+    # Turns the queue of a group on or off (its latest replay job follows the chat, or one starts) and sets its slots.
+    def group_queue(chat_id:, enabled:, parallel: nil)
+      job = Replay::GroupQueue.jobs(chat_id).first or return @tracked.start(kind: 'replay', parallel: parallel, params: { chat_id: chat_id, follow: enabled })
+
+      @tracked.update(job.id, parallel: parallel, params: { follow: enabled })
+      @tracked.resume(job.id) if enabled
+      job.refresh.to_api
+    end
+
+    # Reads the language of the job's books from their posted ymls in the background; the items show it as it is filled in.
+    def check_languages(job_id:) = Thread.new { Replay::LangCheck.new(self).call(Job.with_pk!(job_id)) }.then { true }
+
+    # A message posted in a group with a queue joins it; nil when the group has none.
+    def queue_message(msg)
+      job = Replay::GroupQueue.job_for(msg.chat.id) or return
+      @tracked.add(job.id, "#{msg.chat.id}:#{msg.id}")
+    end
+
     # What a stored message feeds the bot: its type, file name, text, and the url and options of each line.
     def message_input(chat_id:, message_id:) = Replay::Input.of(bot.incoming_message(chat_id: chat_id, message_id: message_id))
 
     # Feeds a stored message to the bot as if just received and blocks until its job ends.
     def replay_message(chat_id:, message_id:)
-      job = react(bot.incoming_message(chat_id: chat_id, message_id: message_id))
+      job = react(bot.incoming_message(chat_id: chat_id, message_id: message_id), queued: true)
       sleep 0.5 while job && jobs.active?(job[:id])
       true
     end

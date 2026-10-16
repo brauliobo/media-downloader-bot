@@ -1,4 +1,4 @@
-export type Chat = { id: number; title: string; type: string; respond: boolean; options: string }
+export type Chat = { id: number; title: string; type: string; respond: boolean; options: string; queue: Tracked | null }
 export type Topic = { id: number; name: string }
 export type ChatRef = { chat_id: number; topic_id: number | null }
 export type Job = {
@@ -9,7 +9,7 @@ export type ForwardingParams = { source: ChatRef; target: ChatRef; filter: strin
 
 export type Tracked = {
   id: number; kind: string; state: string; parallel: number; error: string | null
-  params: { chat_id?: number; retry_failed?: boolean }; counts: Record<string, number>
+  params: { chat_id?: number; retry_failed?: boolean; follow?: boolean }; counts: Record<string, number>
   created_at: string; started_at: string | null; finished_at: string | null
 }
 export type TrackedParams = { kind: string; parallel: number; params: { chat_id: number; retry_failed: boolean } }
@@ -23,7 +23,7 @@ export type TrackedInput = {
 }
 export type TrackedItem = {
   id: number; job_id: number; key: string; status: 'pending' | 'running' | 'done' | 'failed'; attempts: number; error: string | null
-  result: { hashtags?: string; options?: string; input?: TrackedInput }; finished_at: string | null; messages: TrackedMessage[]
+  result: { hashtags?: string; options?: string; input?: TrackedInput; lang_check?: { lang: string; expected?: string; mismatch?: boolean } }; finished_at: string | null; messages: TrackedMessage[]
 }
 
 export type RelayRuleParams = {
@@ -60,6 +60,8 @@ export const api = {
   setOptions: (chat: Chat, options: string) => call(`/api/chats/${chat.id}`, 'PATCH', { options, title: chat.title }),
   jobs: () => call<Job[]>('/api/forwardings'),
   forward: (forwarding: ForwardingParams) => call<Job>('/api/forwardings', 'POST', { forwarding }),
+  setQueue: (chat: Chat, enabled: boolean, parallel?: number) => call<Tracked>(`/api/chats/${chat.id}/queue`, 'PUT', { enabled, parallel }),
+  checkTrackedLanguages: (id: number) => call<{ started: boolean }>(`/api/jobs/${id}/check_languages`, 'POST'),
   trackedJobs: () => call<Tracked[]>('/api/jobs'),
   startTracked: (job: TrackedParams) => call<Tracked>('/api/jobs', 'POST', { job }),
   updateTracked: (id: number, job: { parallel: number }) => call<Tracked>(`/api/jobs/${id}`, 'PATCH', { job }),

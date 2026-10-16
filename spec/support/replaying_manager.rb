@@ -3,7 +3,8 @@
 class ReplayingManager
   attr_reader :replayed, :deleted, :captions, :messages
 
-  def initialize(failing: [], gate: nil, messages: [], answers: {})
+  def initialize(failing: [], gate: nil, messages: [], answers: {}, files: {})
+    @files    = files
     @messages = messages
     @answers  = answers
     @deleted  = []
@@ -17,6 +18,11 @@ class ReplayingManager
   def chat_messages(from_message_id: 0, limit: 20, **) = @messages.sort_by { |m| -m[:id] }.select { |m| from_message_id.zero? || m[:id] < from_message_id }.first(limit)
 
   def delete_messages(chat_id:, message_ids:) = @deleted.concat(message_ids).tap { @messages.reject! { |m| message_ids.include?(m[:id]) } }
+
+  # `files` maps a message id to { name:, path: } of the document it carries.
+  def chat_message(chat_id:, message_id:) = (file = @files[message_id]) && { id: message_id, media: { file_name: file[:name], file_id: message_id } }
+
+  def download_file(file_id) = @files.fetch(file_id)[:path]
 
   def message_input(chat_id:, message_id:) = { type: 'document', file_name: "Book #{message_id}.pdf", inputs: [{ opts: { 'lang' => 'pt' } }] }
 

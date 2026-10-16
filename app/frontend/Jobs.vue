@@ -62,6 +62,7 @@ section
   ul
     li(v-for="job in jobs" :key="job.id")
       strong {{ job.kind }} {{ job.id }}
+      span(v-if="job.params.follow")  · group queue
       |  · {{ job.state }} · {{ done(job) }} / {{ total(job) }} done
       span(v-for="(count, name) in job.counts" :key="name")  · {{ name }} {{ count }}
       span.error(v-if="job.error")  · {{ job.error }}
@@ -70,6 +71,7 @@ section
       button(v-if="active(job)" @click="attempt(() => api.stopTracked(job.id))") Stop
       button(v-else @click="attempt(() => api.resumeTracked(job.id))") Resume
       button(v-if="job.counts.failed" @click="attempt(() => api.retryFailedTracked(job.id))") Retry {{ job.counts.failed }} failed
+      button(@click="attempt(() => api.checkTrackedLanguages(job.id))") Check languages
       button(@click="open(job)") Items
   template(v-if="selected")
     h3 Items of job {{ selected.id }}
@@ -81,6 +83,7 @@ section
         | {{ item.key }} · {{ item.status }} · attempts {{ item.attempts }}
         span(v-if="item.result.input")  · {{ inputOf(item.result.input) }}
         span(v-if="item.result.options")  · chat options: {{ item.result.options }}
+        span.error(v-if="item.result.lang_check?.mismatch")  · read as {{ item.result.lang_check.lang }}, group is {{ item.result.lang_check.expected }}
         span.error(v-if="item.error")  · {{ item.error }}
         button(v-if="item.status === 'failed'" @click="attempt(() => api.retryTrackedItem(item.id))") Retry
         .row(v-if="item.status === 'done'")

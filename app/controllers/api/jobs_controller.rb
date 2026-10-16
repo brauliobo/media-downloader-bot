@@ -21,6 +21,9 @@ module Api
 
     def resume = render(json: manager.tracked_resume(job.id))
 
+    # Fills the language of the job's books from their ymls (see Replay::LangCheck); runs in the background.
+    def check_languages = render(json: { started: manager.check_languages(job_id: job.id) }, status: :accepted)
+
     private
 
     def job = @job ||= Job.with_pk!(params[:id])
