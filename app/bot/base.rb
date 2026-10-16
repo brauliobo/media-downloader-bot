@@ -56,7 +56,8 @@ module Bot
     # delete_messages(chat_id:, message_ids:) -> removes them for everybody
     # incoming_message(chat_id:, message_id:) -> the bot's native message object, as if just received (not outgoing)
     # message_link(chat_id:, message_id:) -> url that opens the message in telegram, nil for chats without one
-    CHAT_OPERATIONS = %i[list_chats forum_topics chat_messages copy_message delete_messages incoming_message message_link leave_chat].freeze
+    # replace_caption(chat_id:, message_id:, from:, to:) -> swaps `from` for `to` in the caption of a posted media message
+    CHAT_OPERATIONS = %i[list_chats forum_topics chat_messages copy_message delete_messages incoming_message message_link replace_caption leave_chat].freeze
     CHAT_OPERATIONS.each do |name|
       define_method(name) { |*, **| raise NotImplementedError, "#{self.class.name} does not support #{name}" }
     end

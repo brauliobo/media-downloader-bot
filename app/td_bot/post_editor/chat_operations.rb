@@ -68,6 +68,16 @@ module TDBot
 
       def message_link(chat_id:, message_id:) = MessageLink.url(chat_id: chat_id, message_id: message_id)
 
+      # Swaps `from` for `to` in the caption of a posted media message (appends `to` when `from` is blank).
+      def replace_caption(chat_id:, message_id:, from:, to:)
+        caption = CaptionEdit.replace(td.get_message(chat_id: chat_id, message_id: message_id).value!(20).content.caption, from, to)
+        bot.with_rate_limit('replace_caption') do
+          bot.send(:throttle!)
+          td.edit_message_caption(chat_id: chat_id, message_id: message_id, reply_markup: nil, show_caption_above_media: false, caption: td_payload(caption)).value!
+        end
+        true
+      end
+
       def leave_chat(chat_id:)
         td.leave_chat(chat_id: chat_id).value!(30)
       end
