@@ -12,6 +12,9 @@ module Tracked
     # [{ key:, status: 'pending' | 'done' }] oldest first; items already known to the database are left as they are.
     def seed(job) = raise(NotImplementedError, "#{self.class} must implement seed")
 
+    # Whether the job keeps running with nothing pending, for items added later.
+    def standing?(job) = false
+
     # What an item is about (hash), recorded once as `result[:input]` before it runs so a pending item can be told apart;
     # nil when the kind has nothing to show.
     def describe(item) = nil

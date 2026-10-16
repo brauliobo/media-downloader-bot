@@ -1,6 +1,7 @@
 module Tracked
-  # Runs jobs one at a time on top of the database: up to `job.parallel` threads claim the pending items of the running job,
-  # and every outcome stays in the rows. Stopping, changing the parallelism and resuming after a restart only touch rows.
+  # Runs jobs on top of the database: up to `job.parallel` threads claim the pending items of each running job, and every
+  # outcome stays in the rows. Stopping, changing the parallelism and resuming after a restart only touch rows. A job of a
+  # standing kind keeps running when it has nothing pending, waiting for items added with `add`.
   class Engine
     TICK         = 1
     MAX_PARALLEL = 10
@@ -9,7 +10,7 @@ module Tracked
     def initialize(handlers, tick: TICK)
       @handlers = handlers
       @tick     = tick
-      @pool     = Concurrent::FixedThreadPool.new(1)
+      @pool     = Concurrent::CachedThreadPool.new
     end
 
     def start(kind:, parallel: nil, params: {})
@@ -40,6 +41,13 @@ module Tracked
       items = JobItem.failed.where(id: ids)
       jobs  = items.select_map(:job_id).uniq
       items.update(status: 'pending', error: nil, finished_at: nil, updated_at: Time.now).tap { jobs.each { |id| resume(id) } }
+    end
+
+    # Puts a new item in a job's line (nothing happens if the item is already known) and returns it.
+    def add(job_id, key)
+      job = Job.with_pk!(job_id)
+      JobItem.dataset.insert_conflict(target: %i[kind key]).insert(job_id: job.id, kind: job.kind, key: key)
+      JobItem.first(kind: job.kind, key: key).tap { |item| describe_item(handler_for(job.kind), item) }
     end
 
     # Changes what a finished item recorded (e.g. its hashtags); `apply` then publishes it.
@@ -109,14 +117,16 @@ module Tracked
 
     # Items that don't show yet what they are about get it now; one that can't be described says why instead.
     def describe(job, handler)
-      JobItem.where(job_id: job.id).exclude(Sequel.pg_jsonb_op(:result).has_key?('input')).each do |item|
-        input = begin
-          handler.describe(item)
-        rescue *ERRORS => e
-          { error: "#{e.class}: #{e.message}" }
-        end
-        item.update(result: item.outcome.merge(input: input)) if input
+      JobItem.where(job_id: job.id).exclude(Sequel.pg_jsonb_op(:result).has_key?('input')).each { |item| describe_item(handler, item) }
+    end
+
+    def describe_item(handler, item)
+      input = begin
+        handler.describe(item)
+      rescue *ERRORS => e
+        { error: "#{e.class}: #{e.message}" }
       end
+      item.update(result: item.outcome.merge(input: input)) if input
     end
 
     def work(job, handler)
@@ -124,7 +134,7 @@ module Tracked
       while job.refresh.state == 'running'
         threads.select!(&:alive?)
         fill(job, handler, threads)
-        break if threads.empty?
+        break if threads.empty? && !handler.standing?(job)
 
         sleep @tick
       end

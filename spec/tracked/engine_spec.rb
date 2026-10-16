@@ -57,6 +57,22 @@ RSpec.describe Tracked::Engine do
     expect(JobItem.first.outcome).to include(input: { file_name: 'a.pdf' }, hashtags: '#A')
   end
 
+  it 'keeps a standing job running with nothing pending and runs the items added to it' do
+    handler = handler_class.new
+    handler.define_singleton_method(:standing?) { |_job| true }
+    engine = described_class.new({ 'fake' => handler }, tick: 0.01)
+    job    = engine.start(kind: 'fake', params: { keys: [] })
+    sleep 0.05
+
+    expect(Job[job[:id]].state).to eq('running')
+    expect(engine.add(job[:id], 'late')).to have_attributes(kind: 'fake', key: 'late')
+    Timeout.timeout(5) { sleep 0.01 until JobItem.first(key: 'late').status == 'done' }
+    expect(JobItem.first(key: 'late').outcome).to include(input: { file_name: 'late.pdf' })
+    expect(engine.add(job[:id], 'late').id).to eq(JobItem.first(key: 'late').id)
+    engine.stop(job[:id])
+    settled(job[:id], 'stopped')
+  end
+
   it 'never has more items in flight than the job allows' do
     settled(start(parallel: 2, keys: %w[a b c d e])[:id], 'completed')
 
