@@ -49,6 +49,9 @@ module Audiobook
 
     Hashtags.generate(Publication.sample_from_pages(book.pages).first(HASHTAG_EXCERPT_CHARS),
                       lang: Processors::LanguageOpts.from(opts, book_language(book)))
+  rescue => e
+    STDERR.puts "[AUDIOBOOK] hashtags failed: #{e.class}: #{e.message}"
+    nil
   end
 
   def self.tag_uploads(uploads, hashtags)

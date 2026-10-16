@@ -3,7 +3,7 @@ require 'rails_helper'
 RSpec.describe Hashtags do
   it 'generates normalized hashtags with the requested language and rules' do
     captured = nil
-    backend = double('codex')
+    backend = double('backend')
     allow(backend).to receive(:json_prompt) do |prompt, **kwargs|
       captured = {prompt: prompt, kwargs: kwargs}
       ['Mindfulness', 'mindfulness', 'Saúde', 'two words', 'three word term']
@@ -18,7 +18,7 @@ RSpec.describe Hashtags do
     result = described_class.new(backend: backend).call(subtitle)
 
     expect(result).to eq('#Mindfulness #Saúde #Two #Words')
-    expect(captured[:kwargs]).to include(model: 'gpt-6-luna', effort: 'low', schema: described_class::HASHTAG_SCHEMA)
+    expect(captured[:kwargs]).to include(schema: described_class::HASHTAG_SCHEMA)
     expect(captured[:prompt]).to include('Write every hashtag in pt.')
     expect(captured[:prompt]).to include('Ruby will format them as PascalCase hashtags')
     expect(captured[:prompt]).to include('majority of cases')
@@ -27,8 +27,8 @@ RSpec.describe Hashtags do
     expect(captured[:prompt]).to include('A transcript about mindfulness and health.')
   end
 
-  it 'does not invoke Codex for an empty transcription' do
-    backend = double('codex')
+  it 'does not invoke the backend for an empty transcription' do
+    backend = double('backend')
     expect(backend).not_to receive(:json_prompt)
 
     expect(described_class.new(backend: backend).call('   ')).to eq('')

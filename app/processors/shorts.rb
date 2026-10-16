@@ -49,7 +49,7 @@ module Processors
     def generate_cuts(subtitle, lang)
       ::Shorts.generate_cuts(subtitle, language: lang)
     rescue => e
-      @stl&.update "codex failed: #{e.message}"
+      @stl&.update "cuts failed: #{e.message}"
       []
     end
 

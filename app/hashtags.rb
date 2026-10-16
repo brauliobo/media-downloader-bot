@@ -1,9 +1,6 @@
 require 'active_support/core_ext/string/inflections'
 
 class Hashtags
-  MODEL  = 'gpt-6-luna'.freeze
-  EFFORT = 'low'.freeze
-
   HASHTAG_SCHEMA = {
     type:     'array',
     minItems: 5,
@@ -19,10 +16,8 @@ class Hashtags
     new.call(transcription, lang: lang)
   end
 
-  def initialize(backend: AI::Codex, model: MODEL, effort: EFFORT)
+  def initialize(backend: AI::ClaudeProxy)
     @backend = backend
-    @model   = model
-    @effort  = effort
   end
 
   def call(transcription, lang: nil)
@@ -52,7 +47,7 @@ class Hashtags
       #{text}
     PROMPT
 
-    normalize(@backend.json_prompt(prompt, schema: HASHTAG_SCHEMA, model: @model, effort: @effort))
+    normalize(@backend.json_prompt(prompt, schema: HASHTAG_SCHEMA))
   end
 
   private

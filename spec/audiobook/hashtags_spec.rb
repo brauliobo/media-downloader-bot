@@ -6,7 +6,7 @@ RSpec.describe Audiobook, '.generate_uploads hashtags' do
 
   before do
     allow(Language).to receive(:book_metadata).and_return('lang' => 'pt', 'title' => 'Caibalion', 'author' => 'Iniciados', 'gender' => 'male')
-    allow(AI::Codex).to receive(:json_prompt) { |text, **| prompt << text; %w[Hermetismo Filosofia Universo] }
+    allow(AI::ClaudeProxy).to receive(:json_prompt) { |text, **| prompt << text; %w[Hermetismo Filosofia Universo] }
   end
 
   def uploads(opts)
@@ -31,10 +31,19 @@ RSpec.describe Audiobook, '.generate_uploads hashtags' do
     expect(prompt.first).to include('Write every hashtag in es.')
   end
 
+  it 'still sends the audiobook, without hashtags, when generating them fails' do
+    allow(AI::ClaudeProxy).to receive(:json_prompt).and_raise('cli-proxy-api failed: 401')
+
+    result = uploads(hashtags: 1)
+
+    expect(result).not_to be_empty
+    expect(result.map { |upload| upload.info.hashtags }).to all(be_nil)
+  end
+
   it 'generates nothing without the hashtags option' do
     result = uploads({})
 
     expect(result.map { |upload| upload.info.hashtags }).to all(be_nil)
-    expect(AI::Codex).not_to have_received(:json_prompt)
+    expect(AI::ClaudeProxy).not_to have_received(:json_prompt)
   end
 end

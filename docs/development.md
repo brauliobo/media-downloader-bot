@@ -71,7 +71,7 @@ meaningful differences are found. Input and usage errors return status 2.
 
 ## Transcription hashtags
 
-Append Codex-generated Instagram-style hashtags to the media caption with any of
+Append Claude-generated Instagram-style hashtags to the media caption with any of
 these options:
 
 ```bash
