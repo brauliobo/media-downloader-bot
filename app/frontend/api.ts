@@ -7,12 +7,20 @@ export type Job = {
 }
 export type ForwardingParams = { source: ChatRef; target: ChatRef; filter: string; caption: string; leave: boolean }
 
-export type Replay = {
-  id: string; state: string; chat_id: number; parallel: number; plan: boolean
-  recover?: boolean; recovered?: number; deleted?: number
-  total?: number; replayed?: number; skipped?: number; running?: number; errors?: { id?: number; error: string }[]
+export type Tracked = {
+  id: number; kind: string; state: string; parallel: number; error: string | null
+  params: { chat_id?: number; retry_failed?: boolean }; counts: Record<string, number>
+  created_at: string; started_at: string | null; finished_at: string | null
 }
-export type ReplayParams = { chat_id: number; parallel: number; plan: boolean; recover: boolean }
+export type TrackedParams = { kind: string; parallel: number; params: { chat_id: number; retry_failed: boolean } }
+export type TrackedMessage = {
+  id: number; job_item_id: number; chat_id: number; message_id: number; kind: string | null; failed: boolean
+  text: string | null; hashtags: string | null; link: string | null; deleted_at: string | null
+}
+export type TrackedItem = {
+  id: number; job_id: number; key: string; status: 'pending' | 'running' | 'done' | 'failed'; attempts: number; error: string | null
+  result: { hashtags?: string; options?: string }; finished_at: string | null; messages: TrackedMessage[]
+}
 
 export type RelayRuleParams = {
   source_chat_id: number; source_topic_id: number | null; source_title?: string
@@ -48,9 +56,17 @@ export const api = {
   setOptions: (chat: Chat, options: string) => call(`/api/chats/${chat.id}`, 'PATCH', { options, title: chat.title }),
   jobs: () => call<Job[]>('/api/forwardings'),
   forward: (forwarding: ForwardingParams) => call<Job>('/api/forwardings', 'POST', { forwarding }),
-  replays: () => call<Replay[]>('/api/replays'),
-  replay: (replay: ReplayParams) => call<Replay>('/api/replays', 'POST', { replay }),
-  stopReplay: (id: string) => call<Replay>(`/api/replays/${id}/stop`, 'POST'),
+  trackedJobs: () => call<Tracked[]>('/api/jobs'),
+  startTracked: (job: TrackedParams) => call<Tracked>('/api/jobs', 'POST', { job }),
+  updateTracked: (id: number, job: { parallel: number }) => call<Tracked>(`/api/jobs/${id}`, 'PATCH', { job }),
+  stopTracked: (id: number) => call<Tracked>(`/api/jobs/${id}/stop`, 'POST'),
+  resumeTracked: (id: number) => call<Tracked>(`/api/jobs/${id}/resume`, 'POST'),
+  trackedItems: (jobId: number, status = '') => call<TrackedItem[]>(`/api/job_items?job_id=${jobId}&status=${status}`),
+  editTrackedItem: (id: number, hashtags: string) => call<TrackedItem>(`/api/job_items/${id}`, 'PATCH', { job_item: { hashtags } }),
+  applyTrackedItem: (id: number) => call<TrackedItem>(`/api/job_items/${id}/apply`, 'POST'),
+  retryTrackedItem: (id: number) => call<{ retried: number }>(`/api/job_items/${id}/retry`, 'POST'),
+  retryFailedTracked: (jobId: number) => call<{ retried: number }>(`/api/job_items/retry_failed?job_id=${jobId}`, 'POST'),
+  deleteTrackedMessage: (id: number) => call<TrackedMessage>(`/api/job_messages/${id}`, 'DELETE'),
   relayRules: () => call<RelayRule[]>('/api/relay_rules'),
   createRelayRule: (relay_rule: RelayRuleParams) => call<RelayRule>('/api/relay_rules', 'POST', { relay_rule }),
   updateRelayRule: (id: number, relay_rule: Partial<RelayRule>) => call<RelayRule>(`/api/relay_rules/${id}`, 'PATCH', { relay_rule }),

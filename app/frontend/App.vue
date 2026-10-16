@@ -4,7 +4,7 @@ import { token, saveToken } from './api'
 import Forwardings from './Forwardings.vue'
 import GroupSettings from './GroupSettings.vue'
 import Relays from './Relays.vue'
-import Replays from './Replays.vue'
+import Jobs from './Jobs.vue'
 
 const current = ref(token())
 const unlock = () => { saveToken(current.value); location.reload() }
@@ -19,7 +19,7 @@ main
   template(v-if="current")
     Forwardings
     Relays
-    Replays
+    Jobs
     GroupSettings
 </template>
 
