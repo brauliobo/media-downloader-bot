@@ -3,7 +3,7 @@ module Audiobook
     class Pdf
       # Bold, italic and size come from the XML pdftohtml writes, matched back to the lines already read.
       module Styles
-        XML_CHAR  = /[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/
+        XML_CHARS = "\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}"
         BOLD_FONT   = /bold|black|heavy|semibold|demi|extrabold/i
 
         ITALIC_FONT = /italic|oblique/i
@@ -135,7 +135,8 @@ module Audiobook
         end
 
         # pdftohtml copies link targets byte for byte, so a URI in the PDF's own encoding is not valid UTF-8.
-        def sanitize_xml(text) = text.to_s.scrub('').gsub(XML_CHAR, '')
+        # Not a regexp: one match over the text of a whole book outlasts Regexp.timeout.
+        def sanitize_xml(text) = text.to_s.scrub('').delete("^#{XML_CHARS}")
 
         def xml_match?(line, fragment, scale)
           top     = fragment[:top] * scale.y

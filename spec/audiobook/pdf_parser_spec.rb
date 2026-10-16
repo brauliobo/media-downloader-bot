@@ -79,6 +79,15 @@ RSpec.describe Audiobook::Parsers::Pdf do
     expect(described_class.sanitize_xml(xml)).to eq('<text>café <a href="http://x/">link</a></text>')
   end
 
+  it 'cleans the xml of a whole book within the regexp timeout' do
+    xml = "<text>#{'café ' * 2_000_000}\u0001</text>"
+    timeout, Regexp.timeout = Regexp.timeout, 0.01
+
+    expect(described_class.sanitize_xml(xml)).to end_with("café </text>")
+  ensure
+    Regexp.timeout = timeout
+  end
+
   it 'reads a tight justified gap as a space and a small-caps gap as none' do
     justified = words(['So,', 66.1, 79.5, 245.0, 258.9], ['the', 80.6, 95.9, 245.0, 258.9])
     small_cap = words(['J', 108, 116, 233.1, 245.7], ['HONATAN', 116.3, 192, 235.2, 245.2])
