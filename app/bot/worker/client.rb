@@ -1,10 +1,18 @@
+require 'drb/drb'
+require 'faraday'
+
 module Bot
   module Worker
-    # The bot as a worker sees it, reached by DRb or HTTP according to the service's address.
+    # The bot as a worker sees it, reached by DRb or HTTP according to the service's address. While the bot is not there (a
+    # deploy restarts it) every call waits for it with a growing pause, so the work in flight goes on and its messages are sent
+    # as soon as the bot is back.
     class Client
       include MsgHelpers
 
-      TRANSPORTS = { 'druby' => DRbTransport, 'http' => HTTPTransport, 'https' => HTTPTransport }.freeze
+      TRANSPORTS  = { 'druby' => DRbTransport, 'http' => HTTPTransport, 'https' => HTTPTransport }.freeze
+      UNREACHABLE = [Faraday::ConnectionFailed, DRb::DRbConnError, Errno::ECONNREFUSED].freeze
+      RETRIES     = Integer(ENV.fetch('MANAGER_RETRIES', 120))
+      PAUSE_MAX   = 30
 
       def initialize(uri)
         @transport = TRANSPORTS.fetch(URI.parse(uri).scheme) { raise ArgumentError, "Unsupported URI scheme: #{uri}" }.new(uri)
@@ -46,10 +54,23 @@ module Bot
 
       def job_cancelled?(id) = call(:job_cancelled, result: :cancelled, id: id)
       def finish_job(id) = call(:finish_job, id: id)
+      def queue_name = call(:queue_name, result: :queue)
 
       private
 
-      def call(method, **kwargs) = @transport.call(method, **kwargs)
+      # Only an unreachable bot is retried: the call never reached it, so it cannot be done twice.
+      def call(method, **kwargs)
+        attempts = 0
+        begin
+          @transport.call(method, **kwargs)
+        rescue *UNREACHABLE => e
+          raise if (attempts += 1) > RETRIES
+
+          warn "bot unreachable (#{e.class}), retrying #{method} in #{pause = [0.5 * 2**attempts, PAUSE_MAX].min}s"
+          sleep pause
+          retry
+        end
+      end
     end
   end
 end
