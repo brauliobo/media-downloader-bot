@@ -12,6 +12,8 @@ RSpec.describe Tracked::Engine do
 
       def seed(job) = job.options[:keys].map { |key| { key: key, status: 'pending', error: nil, result: Sequel.pg_jsonb({}) } }
 
+      def describe(item) = item.key == 'x' ? raise('gone') : { file_name: "#{item.key}.pdf" }
+
       def perform(job, item)
         @lock.synchronize { @peak = [@peak, @running += 1].max }
         @gate&.pop
@@ -40,6 +42,19 @@ RSpec.describe Tracked::Engine do
     expect(JobItem.where(job_id: job.id).map(&:attempts)).to eq([1, 1, 1])
     expect(JobMessage.select_map(:message_id)).to match_array(JobItem.select_map(:id))
     expect(JobItem.first.outcome).to include(hashtags: '#A')
+  end
+
+  it 'records what each item is about before it runs and keeps it with the outcome; an item that cannot be described says why' do
+    gate = Queue.new
+    engine = described_class.new({ 'fake' => handler_class.new(gate: gate) }, tick: 0.01)
+    job    = engine.start(kind: 'fake', parallel: 1, params: { keys: %w[a x] })
+    sleep 0.05 until JobItem.running.any?
+
+    expect(JobItem.order(:id).map { |item| item.outcome[:input] }).to eq([{ file_name: 'a.pdf' }, { error: 'RuntimeError: gone' }])
+
+    2.times { gate << true }
+    settled(job[:id], 'completed')
+    expect(JobItem.first.outcome).to include(input: { file_name: 'a.pdf' }, hashtags: '#A')
   end
 
   it 'never has more items in flight than the job allows' do

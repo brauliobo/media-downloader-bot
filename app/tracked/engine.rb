@@ -88,6 +88,7 @@ module Tracked
       job.update(state: 'running', started_at: Time.now)
       handler = handler_for(job.kind)
       seed(job, handler)
+      describe(job, handler)
       work(job, handler)
       finish(job)
     rescue *ERRORS => e
@@ -104,6 +105,18 @@ module Tracked
       items = JobItem.where(kind: job.kind, key: rows.map { |row| row[:key] })
       items.failed.update(status: 'pending', error: nil, finished_at: nil) if job.options[:retry_failed]
       items.update(job_id: job.id)
+    end
+
+    # Items that don't show yet what they are about get it now; one that can't be described says why instead.
+    def describe(job, handler)
+      JobItem.where(job_id: job.id).exclude(Sequel.pg_jsonb_op(:result).has_key?('input')).each do |item|
+        input = begin
+          handler.describe(item)
+        rescue *ERRORS => e
+          { error: "#{e.class}: #{e.message}" }
+        end
+        item.update(result: item.outcome.merge(input: input)) if input
+      end
     end
 
     def work(job, handler)
@@ -129,7 +142,7 @@ module Tracked
       result = handler.perform(job, item)
       error  = handler.error_of(result)
       item.record_messages(result.fetch(:messages, []))
-      item.update(status: error ? 'failed' : 'done', error: error, result: result.except(:messages), finished_at: Time.now)
+      item.update(status: error ? 'failed' : 'done', error: error, result: item.outcome.merge(result.except(:messages)), finished_at: Time.now)
     rescue *ERRORS => e
       item.update(status: 'failed', error: "#{e.class}: #{e.message}", finished_at: Time.now)
     end
