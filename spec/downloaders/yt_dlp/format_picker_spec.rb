@@ -29,6 +29,25 @@ RSpec.describe Downloaders::YtDlp::FormatPicker do
     expect(pick(info)).to be_nil
   end
 
+  describe 'AV1' do
+    let(:av1) { 'av01.0.05M.08' }
+
+    it 'is used when no h264 video fits' do
+      info.formats = [audio('140', 4), video('135', 480, 80), video('av1', 1080, 30, vcodec: av1)]
+      expect(pick(info)).to eq('av1+140')
+    end
+
+    it 'loses to a smaller h264 even when it is the better resolution' do
+      info.formats = [audio('140', 4), video('133', 240, 5), video('av1', 1080, 30, vcodec: av1)]
+      expect(pick(info)).to eq('133+140')
+    end
+
+    it 'picks the best AV1 among the ones that fit' do
+      info.formats = [audio('140', 4), video('av1-720', 720, 20, vcodec: av1), video('av1-1080', 1080, 30, vcodec: av1)]
+      expect(pick(info)).to eq('av1-1080+140')
+    end
+  end
+
   it 'falls back to the lighter audio when the best one does not fit' do
     info.formats = [audio('139', 2), audio('140', 4), video('135', 480, 44)]
     expect(pick(info)).to eq('135+139')
