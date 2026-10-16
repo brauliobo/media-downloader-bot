@@ -47,7 +47,7 @@ EOS
     start_td_bot if ENV['TD_BOT']
     start_tg_bot if ENV['TG_BOT']
     @relay.recover!
-    @tracked.recover!
+    @tracked.recover! if ENV['TD_BOT'] # replay needs tdlib; the Telegram bot API can't read chats
     start_bot_service
     start_frontend
     sleep 1.year while true
