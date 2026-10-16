@@ -90,4 +90,11 @@ RSpec.describe Audiobook::FontRoles do
     expect(described_class.alignment_for(x: 200, x_max: 400, page_width: 600)).to eq(:center)
     expect(described_class.alignment_for(x: 200, x_max: 400, page_width: 600, shared_edge: true)).to eq(:left)
   end
+
+  it 'reads a line without a font size as body' do
+    roles = described_class.from_lines([line('Body one is long enough.', 12), line('Body two is long enough.', 12)])
+
+    expect(roles.role_for(line('Transcribed', nil))).to eq(:body)
+    expect(roles.heading?(line('Transcribed', 0))).to be(false)
+  end
 end

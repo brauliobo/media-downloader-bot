@@ -93,8 +93,7 @@ module Audiobook
     private
 
     def lookup(line_or_size)
-      sample = sample_from(line_or_size)
-      return {} unless sample[:size]
+      sample = sample_from(line_or_size) or return {}
 
       @map[signature(sample)] || @map[size_key(sample[:size])] || {}
     end
