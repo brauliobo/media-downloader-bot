@@ -18,6 +18,8 @@ class ReplayingManager
 
   def delete_messages(chat_id:, message_ids:) = @deleted.concat(message_ids).tap { @messages.reject! { |m| message_ids.include?(m[:id]) } }
 
+  def message_input(chat_id:, message_id:) = { type: 'document', file_name: "Book #{message_id}.pdf", inputs: [{ opts: { 'lang' => 'pt' } }] }
+
   def message_link(chat_id:, message_id:) = "https://t.me/c/#{chat_id.abs}/#{message_id}"
 
   def replace_caption(chat_id:, message_id:, from:, to:) = @captions << { chat_id: chat_id, message_id: message_id, from: from, to: to }

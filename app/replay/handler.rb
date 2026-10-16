@@ -29,6 +29,8 @@ module Replay
       @forwarded.copies_in(chat_id).map { |copy| row(chat_id, copy[:id], replies[copy[:id]]) }
     end
 
+    def describe(item) = @manager.message_input(chat_id: item.key.split(':').first.to_i, message_id: message_id(item))
+
     def perform(job, item)
       chat_id = job.options[:chat_id]
       id      = message_id(item)

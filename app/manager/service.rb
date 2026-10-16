@@ -20,6 +20,9 @@ class Manager
     # Resumable jobs kept in the database (see Tracked::Engine): tracked_start, tracked_stop, tracked_resume, ...
     delegate :start, :stop, :resume, :update, :retry_items, :edit, :apply, :delete_message, to: :@tracked, prefix: :tracked
 
+    # What a stored message feeds the bot: its type, file name, text, and the url and options of each line.
+    def message_input(chat_id:, message_id:) = Replay::Input.of(bot.incoming_message(chat_id: chat_id, message_id: message_id))
+
     # Feeds a stored message to the bot as if just received and blocks until its job ends.
     def replay_message(chat_id:, message_id:)
       job = react(bot.incoming_message(chat_id: chat_id, message_id: message_id))

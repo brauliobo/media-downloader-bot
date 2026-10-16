@@ -27,7 +27,7 @@ RSpec.describe Replay::Handler do
     expect(job.counts).to eq('done' => 3)
     expect(manager.replayed.map { |m| m[:id] }).to contain_exactly(11, 12, 13)
     item = JobItem.first(key: '-200:11')
-    expect(item.outcome).to include(hashtags: '#Livro #Yoga', options: '')
+    expect(item.outcome).to include(hashtags: '#Livro #Yoga', options: '', input: { type: 'document', file_name: 'Book 11.pdf', inputs: [{ opts: { lang: 'pt' } }] })
     expect(item.messages.first).to have_attributes(chat_id: -200, kind: 'Audio', failed: false, hashtags: '#Livro #Yoga', link: "https://t.me/c/200/#{item.messages.first.message_id}")
   end
 

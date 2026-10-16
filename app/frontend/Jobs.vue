@@ -1,6 +1,6 @@
 <script setup vapor lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { api, type Tracked, type TrackedItem } from './api'
+import { api, type Tracked, type TrackedItem, type TrackedInput } from './api'
 import ChatPicker from './ChatPicker.vue'
 
 const STATUSES = ['', 'pending', 'running', 'done', 'failed']
@@ -39,6 +39,9 @@ const done = (job: Tracked) => (job.counts.done ?? 0)
 const total = (job: Tracked) => Object.values(job.counts).reduce((sum, count) => sum + count, 0)
 const active = (job: Tracked) => ['queued', 'running', 'stopping'].includes(job.state)
 const changed = (item: TrackedItem) => item.messages.some(message => !message.deleted_at && !message.failed && message.kind !== 'Text' && (message.hashtags ?? '') !== (hashtags.value[item.id] ?? ''))
+const opt = ([key, value]: [string, string | number]) => value === 1 ? key : `${key}=${value}`
+const inputOf = ({ file_name, type, size, text, inputs = [], error }: TrackedInput) =>
+  [file_name ?? text, type, size && `${(size / 1048576).toFixed(1)} MB`, ...inputs.flatMap(({ url, opts = {} }) => [url, ...Object.entries(opts).map(opt)]), error].filter(Boolean).join(' · ')
 const save = (item: TrackedItem) => attempt(async () => { await api.editTrackedItem(item.id, hashtags.value[item.id]); await api.applyTrackedItem(item.id) })
 
 onMounted(() => { refresh(); timer = setInterval(refresh, 3000) })
@@ -76,7 +79,8 @@ section
     ul
       li(v-for="item in items" :key="item.id")
         | {{ item.key }} · {{ item.status }} · attempts {{ item.attempts }}
-        span(v-if="item.result.options")  · {{ item.result.options }}
+        span(v-if="item.result.input")  · {{ inputOf(item.result.input) }}
+        span(v-if="item.result.options")  · chat options: {{ item.result.options }}
         span.error(v-if="item.error")  · {{ item.error }}
         button(v-if="item.status === 'failed'" @click="attempt(() => api.retryTrackedItem(item.id))") Retry
         .row(v-if="item.status === 'done'")

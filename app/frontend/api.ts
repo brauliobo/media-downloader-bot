@@ -17,9 +17,13 @@ export type TrackedMessage = {
   id: number; job_item_id: number; chat_id: number; message_id: number; kind: string | null; failed: boolean
   text: string | null; hashtags: string | null; link: string | null; deleted_at: string | null
 }
+export type TrackedInput = {
+  type?: string; file_name?: string; size?: number; text?: string; error?: string
+  inputs?: { url?: string; opts?: Record<string, string | number> }[]
+}
 export type TrackedItem = {
   id: number; job_id: number; key: string; status: 'pending' | 'running' | 'done' | 'failed'; attempts: number; error: string | null
-  result: { hashtags?: string; options?: string }; finished_at: string | null; messages: TrackedMessage[]
+  result: { hashtags?: string; options?: string; input?: TrackedInput }; finished_at: string | null; messages: TrackedMessage[]
 }
 
 export type RelayRuleParams = {
