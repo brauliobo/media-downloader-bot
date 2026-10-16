@@ -2,11 +2,16 @@ class Manager
   # What the manager answers to workers and other processes over DRb and HTTP: keyword arguments throughout.
   module Service
     delegate :max_caption, :find_chats, :resolve_chat_identifier, :chat_message, :ensure_forum_topic, *Bot::Base::CHAT_OPERATIONS, to: :bot
-    delegate :dequeue, to: :jobs
     delegate :size, to: :jobs, prefix: :queue
+
+    # The queue this bot's workers take their jobs from.
+    def queue_name = jobs.queue
 
     def job_cancelled(id:) = jobs.cancelled?(id)
     def finish_job(id:) = jobs.finish(id)
+
+    # Whether a message is being processed or waits for a worker.
+    def message_job_active?(chat_id:, message_id:) = jobs.active_key?("#{chat_id}:#{message_id}")
 
     def start_edit_posts_job(args) = @edit_posts_jobs.start(args)
     def edit_posts_job(id) = @edit_posts_jobs.fetch(id)

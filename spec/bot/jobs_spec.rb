@@ -1,6 +1,8 @@
 require 'rails_helper'
 
 RSpec.describe Bot::Jobs do
+  before { BotJob.dataset.delete }
+
   let(:msg) do
     SymMash.new(from: {id: 123}, chat: {id: 123}, text: 'https://example.com', bot: Object.new, resp: {id: 1})
   end
@@ -12,10 +14,30 @@ RSpec.describe Bot::Jobs do
     expect(job).to include(id: be_a(String), owner_id: 123, chat_id: 123, message: include(text: 'https://example.com'))
     expect(job[:message]).not_to include(:bot, :resp)
     expect(jobs.size).to eq(1)
-    expect(jobs.dequeue).to eq(job)
+    expect(jobs.dequeue(worker: 'w1')).to eq(job)
+    expect(jobs.size).to eq(0)
     expect(jobs.cancelled?(job[:id])).to be(false)
     expect(jobs.finish(job[:id])).to be(true)
     expect(jobs.cancel(job[:id], user_id: 123, chat_id: 123)).to eq(:not_found)
+  end
+
+  it 'queues a message once while it is active' do
+    jobs  = described_class.new
+    reply = SymMash.new(from: {id: 123}, chat: {id: 123}, message_id: 7, text: 'url')
+    job   = jobs.submit(reply)
+
+    expect(jobs.submit(reply)).to eq(job)
+    expect(jobs.size).to eq(1)
+    expect(jobs.active_key?('123:7')).to be(true)
+    jobs.finish(job[:id])
+    expect(jobs.submit(reply)[:id]).not_to eq(job[:id])
+  end
+
+  it 'keeps the queues of the bots apart' do
+    job = described_class.new(queue: 'tdbot').submit(msg)
+
+    expect(described_class.new(queue: 'tgbot').dequeue(worker: 'w1')).to be_nil
+    expect(described_class.new(queue: 'tdbot').dequeue(worker: 'w1')).to eq(job)
   end
 
   it 'registers inline jobs without adding them to the external queue' do
@@ -89,6 +111,8 @@ RSpec.describe Bot::Jobs do
 end
 
 RSpec.describe Manager, '#enqueue_message' do
+  before { BotJob.dataset.delete }
+
   around do |example|
     original = ENV['WITH_WORKER']
     ENV['WITH_WORKER'] = '1'

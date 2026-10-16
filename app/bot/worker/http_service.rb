@@ -115,14 +115,8 @@ module Bot
         r.halt [413, {'Content-Type' => 'application/json'}, [{error: 'request too large'}.to_json]] if content_length > 1024 * 1024
         r.halt [401, {'Content-Type' => 'application/json'}, [{error: 'unauthorized'}.to_json]] unless authorized?(r)
 
-        r.get 'queue/dequeue' do
-          timeout = r.params['timeout']&.to_f
-          job = service.dequeue(timeout: timeout)
-          job ? {job: job, service_uri: service.bot_service_uri} : {job: nil}
-        end
-
-        r.get 'queue/size' do
-          {size: service.queue_size}
+        r.post 'queue_name' do
+          {queue: service.queue_name}
         end
 
         r.get 'chat_messages' do

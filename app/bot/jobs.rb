@@ -1,82 +1,56 @@
 require 'securerandom'
 
 module Bot
+  # What a bot's workers have to do, kept in the database (BotJob) so that neither the bot nor a worker restarting loses it.
+  # `submit` queues a message for the workers of the bot's `queue`; `register` tracks one the bot runs itself. A message is
+  # queued once while it is active: submitting it again returns the job it already has.
   class Jobs
     CANCEL_PREFIX = 'job:cancel:'.freeze
     STOP_COMMAND  = %r{\A/stop(?:@\w+)?(?:\s|\z)}i.freeze
+    INLINE        = 'inline'.freeze
 
     attr_reader :queue
 
-    def initialize(queue: Queue.new)
-      @queue = queue
-      @jobs  = {}
-      @mutex = Mutex.new
-    end
+    def initialize(queue: 'default') = @queue = queue
 
-    def submit(msg)
-      job = register(msg)
-      queue.enq(job)
-      job
-    end
+    def submit(msg) = insert(msg, message: msg.to_h.except(:bot, :resp))
 
-    def register(msg)
-      id   = SecureRandom.urlsafe_base64(12)
-      data = msg.to_h.except(:bot, :resp)
-      job = {
-        id:       id,
-        owner_id: msg.from.id,
-        chat_id:  msg.chat.id,
-        message:  data,
-      }
+    def register(msg) = insert(msg, state: 'running', worker: INLINE)
 
-      @mutex.synchronize do
-        @jobs[id] = {owner_id: job[:owner_id], chat_id: job[:chat_id], cancelled: false}
-      end
-      job
-    end
+    # A worker takes the next job and holds it until it finishes or releases it, renewing the lease through `heartbeat`.
+    def dequeue(worker:) = BotJob.claim(queue, worker)&.envelope
 
-    def dequeue(timeout: nil)
-      queue.deq(timeout: timeout)
-    end
+    def heartbeat(worker) = BotJob.renew(worker)
 
-    def size
-      queue.size
-    end
+    def release(id) = mine.where(id: id.to_s).release.then { true }
+
+    # Whatever the bot ran itself died with it.
+    def drop_inline! = mine.where(worker: INLINE).delete
+
+    def size = mine.where(state: 'queued').count
 
     def cancel(id, user_id:, chat_id:, admin: false)
-      @mutex.synchronize do
-        job = @jobs[id.to_s]
-        return :not_found unless job
-        owner = job[:owner_id].to_i == user_id.to_i && job[:chat_id].to_i == chat_id.to_i
-        return :forbidden unless admin || owner
-        return :already_cancelled if job[:cancelled]
+      job = mine.first(id: id.to_s) or return :not_found
+      return :forbidden unless admin || (job.owner_id == user_id.to_i && job.chat_id == chat_id.to_i)
+      return :already_cancelled if job.cancelled
 
-        job[:cancelled] = true
-        :cancelled
-      end
+      job.update(cancelled: true)
+      :cancelled
     end
 
     def cancel_all(user_id:, chat_id:, admin: false)
-      @mutex.synchronize do
-        @jobs.values.count do |job|
-          next false if job[:cancelled]
-          next false unless admin || (job[:owner_id].to_i == user_id.to_i && job[:chat_id].to_i == chat_id.to_i)
-
-          job[:cancelled] = true
-        end
-      end
+      jobs = mine.where(cancelled: false)
+      jobs = jobs.where(owner_id: user_id.to_i, chat_id: chat_id.to_i) unless admin
+      jobs.update(cancelled: true)
     end
 
-    def active?(id) = @mutex.synchronize { @jobs.key?(id.to_s) }
+    def active?(id) = mine.where(id: id.to_s).any?
 
-    def cancelled?(id)
-      @mutex.synchronize { @jobs.dig(id.to_s, :cancelled) == true }
-    end
+    def active_key?(key) = mine.where(key: key).any?
 
-    def finish(id)
-      @mutex.synchronize { @jobs.delete(id.to_s) }
-      true
-    end
+    def cancelled?(id) = mine.where(id: id.to_s, cancelled: true).any?
+
+    def finish(id) = mine.where(id: id.to_s).delete.then { true }
 
     def self.cancel_data(id)
       "#{CANCEL_PREFIX}#{id}"
@@ -89,6 +63,23 @@ module Bot
 
     def self.stop_command?(text)
       text.to_s.match?(STOP_COMMAND)
+    end
+
+    # What identifies a message for as long as it is active, nil for one that has no id.
+    def self.key_of(msg)
+      id = msg.message_id || msg.id
+      "#{msg.chat.id}:#{id}" if id
+    end
+
+    private
+
+    def mine = BotJob.of(queue)
+
+    def insert(msg, message: {}, **attrs)
+      row = { id: SecureRandom.urlsafe_base64(12), queue: queue, key: self.class.key_of(msg), owner_id: msg.from.id, chat_id: msg.chat.id,
+              message: Sequel.pg_jsonb(message), **attrs }
+      BotJob.dataset.insert_conflict(target: %i[queue key]).insert(row)
+      (row[:key] ? mine.first(key: row[:key]) : BotJob.with_pk!(row[:id])).envelope
     end
   end
 end

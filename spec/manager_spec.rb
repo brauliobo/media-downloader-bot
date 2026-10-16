@@ -1,6 +1,8 @@
 require 'rails_helper'
 
 RSpec.describe Manager do
+  before { BotJob.dataset.delete }
+
   it 'serializes generated media upload errors for DRb clients' do
     manager = described_class.new
     bot     = double
@@ -26,7 +28,7 @@ RSpec.describe Manager do
       allow(manager).to receive(:bot).and_return(bot)
       allow(bot).to receive(:incoming_message).with(chat_id: 456, message_id: 7).and_return(msg)
       job = manager.jobs.register(msg)
-      allow(manager).to receive(:react).with(msg).and_return(job)
+      allow(manager).to receive(:react).with(msg, queued: true).and_return(job)
       Thread.new { sleep 0.2; manager.jobs.finish(job[:id]) }
 
       expect(manager.replay_message(chat_id: 456, message_id: 7)).to be(true)

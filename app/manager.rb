@@ -28,7 +28,7 @@ EOS
   attr_reader :jobs
 
   def initialize
-    @jobs = Bot::Jobs.new
+    @jobs = Bot::Jobs.new(queue: ENV['TD_BOT'] ? 'tdbot' : 'tgbot')
     @edit_posts_jobs = EditPosts::JobManager.new(self) if ENV['TD_BOT']
     @forwarding = Forwarding::Jobs.new(-> { bot })
     @tracked = Tracked::Engine.new({ 'replay' => Replay::Handler.new(self) })
@@ -44,6 +44,7 @@ EOS
   end
 
   def start
+    @jobs.drop_inline!
     start_td_bot if ENV['TD_BOT']
     start_tg_bot if ENV['TG_BOT']
     @relay.recover!
