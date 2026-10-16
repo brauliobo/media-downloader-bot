@@ -31,7 +31,7 @@ EOS
     @jobs = Bot::Jobs.new
     @edit_posts_jobs = EditPosts::JobManager.new(self) if ENV['TD_BOT']
     @forwarding = Forwarding::Jobs.new(-> { bot })
-    @replays = Replay::Jobs.new(self)
+    @tracked = Tracked::Engine.new({ 'replay' => Replay::Handler.new(self) })
     @relay = Relay::Dispatcher.new(-> { bot })
   end
 
@@ -47,6 +47,7 @@ EOS
     start_td_bot if ENV['TD_BOT']
     start_tg_bot if ENV['TG_BOT']
     @relay.recover!
+    @tracked.recover!
     start_bot_service
     start_frontend
     sleep 1.year while true

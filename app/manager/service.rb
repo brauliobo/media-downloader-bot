@@ -17,10 +17,8 @@ class Manager
     def forwarding_job(id) = @forwarding.fetch(id)
     def forwarding_jobs = @forwarding.list
 
-    def start_replay(params) = @replays.start(params)
-    def replay_job(id) = @replays.fetch(id)
-    def replay_jobs = @replays.list
-    def stop_replay(id) = @replays.stop(id)
+    # Resumable jobs kept in the database (see Tracked::Engine): tracked_start, tracked_stop, tracked_resume, ...
+    delegate :start, :stop, :resume, :update, :retry_items, :edit, :apply, :delete_message, to: :@tracked, prefix: :tracked
 
     # Feeds a stored message to the bot as if just received and blocks until its job ends.
     def replay_message(chat_id:, message_id:)

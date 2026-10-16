@@ -1,5 +1,5 @@
 module Replay
-  # The messages already handed to the bot, so a resumed replay does not convert a book twice.
+  # Legacy: the messages handed to the bot before replays were tracked in the database; Handler seeds them as done.
   class Log < KeyedLog
     self.fields = %i[chat_id id]
 

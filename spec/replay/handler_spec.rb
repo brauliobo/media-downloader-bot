@@ -1,0 +1,109 @@
+require 'rails_helper'
+require 'tmpdir'
+require_relative '../support/replaying_manager'
+
+RSpec.describe Replay::Handler do
+  let(:dir)       { Dir.mktmpdir }
+  let(:legacy)    { Replay::Log.new(path: File.join(dir, 'replayed.jsonl')) }
+  let(:forwarded) { Forwarding::Log.new(path: File.join(dir, 'forwarded.jsonl')) }
+  let(:manager)   { ReplayingManager.new }
+  let(:engine)    { Tracked::Engine.new({ 'replay' => described_class.new(manager, forwarded: forwarded, replayed: legacy) }, tick: 0.01) }
+
+  before { [1, 2, 3].each { |id| forwarded.record({ chat_id: -100 }, { chat_id: -200 }, id, 10 + id) } }
+
+  after do
+    Job.dataset.delete
+    FileUtils.remove_entry(dir)
+  end
+
+  def run(**params) = engine.start(kind: 'replay', params: { chat_id: -200, **params }, parallel: 3)[:id].then { |id| settled(id) }
+
+  def settled(id) = Timeout.timeout(5) { sleep 0.01 until Job[id].state.in?(%w[completed failed stopped]) }.then { Job[id] }
+
+  it 'replays the messages forwarded into the chat and tracks every message the bot sent, with its hashtags' do
+    job = run
+
+    expect(job).to have_attributes(state: 'completed', parallel: 3)
+    expect(job.counts).to eq('done' => 3)
+    expect(manager.replayed.map { |m| m[:id] }).to contain_exactly(11, 12, 13)
+    item = JobItem.first(key: '-200:11')
+    expect(item.outcome).to include(hashtags: '#Livro #Yoga', options: '')
+    expect(item.messages.first).to have_attributes(chat_id: -200, kind: 'Audio', failed: false, hashtags: '#Livro #Yoga', link: "https://t.me/c/200/#{item.messages.first.message_id}")
+  end
+
+  it 'imports the legacy log: replayed books are done, not replayed again' do
+    legacy.record(-200, 11)
+
+    run
+
+    expect(manager.replayed.map { |m| m[:id] }).to contain_exactly(12, 13)
+    expect(JobItem.done.count).to eq(3)
+  end
+
+  it 'fails the book the bot only answered with an error and retries it, deleting the error reply first' do
+    manager = ReplayingManager.new(answers: { 12 => [{ type: 'Text', text: 'failed: EOFError' }] })
+    engine  = Tracked::Engine.new({ 'replay' => described_class.new(manager, forwarded: forwarded, replayed: legacy) }, tick: 0.01)
+    id      = engine.start(kind: 'replay', params: { chat_id: -200 })[:id]
+    Timeout.timeout(5) { sleep 0.01 until Job[id].state == 'failed' }
+
+    expect(JobItem.failed.first).to have_attributes(key: '-200:12', error: 'the bot only answered with an error')
+    expect(JobMessage.failures.count).to eq(1)
+
+    manager.instance_variable_set(:@answers, {})
+    engine.retry_items(JobItem.failed.select_map(:id))
+    Timeout.timeout(5) { sleep 0.01 until Job[id].state == 'completed' }
+
+    expect(manager.deleted).to eq(JobMessage.failures.select_map(:message_id))
+    expect(JobMessage.failures.live.count).to eq(0)
+    expect(JobItem.first(key: '-200:12')).to have_attributes(status: 'done', attempts: 2)
+  end
+
+  it 'finds the books the legacy log replayed but the bot only answered with an error and retries them when asked' do
+    legacy.record(-200, 11)
+    legacy.record(-200, 12)
+    manager = ReplayingManager.new(messages: [{ id: 99, chat_id: -200, type: 'Text', text: 'failed: EOFError', reply_to_message_id: 12 }])
+    engine  = Tracked::Engine.new({ 'replay' => described_class.new(manager, forwarded: forwarded, replayed: legacy) }, tick: 0.01)
+
+    id = engine.start(kind: 'replay', params: { chat_id: -200, retry_failed: '1' })[:id]
+    Timeout.timeout(5) { sleep 0.01 until Job[id].state == 'completed' }
+
+    expect(JobItem.done.count).to eq(3)
+    expect(manager.replayed.map { |m| m[:id] }).to contain_exactly(12, 13)
+    expect(manager.deleted).to eq([99])
+  end
+
+  it 'keeps the answers of a run that died after the bot answered, instead of converting the book twice' do
+    answered = { id: 500, chat_id: -200, type: 'Audio', text: "Book\n#Old", reply_to_message_id: 11 }
+    manager  = ReplayingManager.new(messages: [answered])
+    engine   = Tracked::Engine.new({ 'replay' => described_class.new(manager, forwarded: forwarded, replayed: legacy) }, tick: 0.01)
+    job      = Job.create(kind: 'replay', state: 'running', parallel: 1, params: { chat_id: -200 })
+    JobItem.create(job_id: job.id, kind: 'replay', key: '-200:11', status: 'running', attempts: 1)
+
+    engine.recover!
+    Timeout.timeout(5) { sleep 0.01 until Job[job.id].state == 'completed' }
+
+    expect(manager.replayed.map { |m| m[:id] }).to contain_exactly(12, 13)
+    expect(JobItem.first(key: '-200:11').outcome).to include(hashtags: '#Old')
+  end
+
+  it 'changes the hashtags in the captions of the posted media' do
+    run
+    item = JobItem.first(key: '-200:11')
+    engine.edit(item.id, hashtags: '#Novo')
+    engine.apply(item.id)
+
+    expect(manager.captions).to eq([{ chat_id: -200, message_id: item.messages.first.message_id, from: '#Livro #Yoga', to: '#Novo' }])
+    expect(item.messages.first.reload.hashtags).to eq('#Novo')
+    engine.apply(item.id)
+    expect(manager.captions.size).to eq(1)
+  end
+
+  it 'deletes a tracked message from the chat and remembers it' do
+    run
+    message = JobItem.first(key: '-200:13').messages.first
+
+    expect(engine.delete_message(message.id)).to include(deleted_at: be_present)
+    expect(manager.deleted).to eq([message.message_id])
+    expect(JobMessage.live.count).to eq(2)
+  end
+end
