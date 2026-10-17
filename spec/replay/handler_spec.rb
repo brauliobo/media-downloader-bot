@@ -71,6 +71,39 @@ RSpec.describe Replay::Handler do
     expect(manager.replayed.map { |m| m[:id] }).to eq([13])
   end
 
+  describe 'a message joining the queue' do
+    let(:manager) { ReplayingManager.new(same_file: [11, 13]) }
+    let(:handler) { described_class.new(manager, forwarded: forwarded, replayed: legacy) }
+    let(:job)     { Job.create(kind: 'replay', state: 'running', parallel: 1, params: { chat_id: -200 }) }
+    let(:input)   { Sequel.pg_jsonb(input: { file_name: 'Book 11.pdf', size: 10 }) }
+
+    def item(id, **attrs) = JobItem.create(job_id: job.id, kind: 'replay', key: "-200:#{id}", result: input, **attrs)
+
+    it 'gets the standard Queued reply' do
+      expect(handler.queued(item(13))).to be_nil
+      expect(manager.announced).to eq([13])
+      expect(manager.replies).to be_empty
+    end
+
+    it 'is settled with the link of the book, not queued, when the group has the file already' do
+      item(11, status: 'done', checksum: 'sum-11')
+
+      expect(handler.queued(item(13))).to include(duplicate_of: '-200:11', messages: [])
+      expect(manager.announced).to be_empty
+      expect(manager.replies.map { |reply| reply[:message_id] }).to eq([13])
+    end
+  end
+
+  it 'deletes the Queued reply when the message starts, the worker posts its own status' do
+    queued  = { id: 500, chat_id: -200, type: 'Text', text: Bot::UserQueue::QUEUED_MSG, reply_to_message_id: 11 }
+    manager = ReplayingManager.new(messages: [queued])
+    engine  = Tracked::Engine.new({ 'replay' => described_class.new(manager, forwarded: forwarded, replayed: legacy) }, tick: 0.01)
+    id      = engine.start(kind: 'replay', params: { chat_id: -200 })[:id]
+    settled(id)
+
+    expect(manager.deleted).to eq([500])
+  end
+
   it 'imports the legacy log: the books the bot answered are done and tracked, not replayed again' do
     legacy.record(-200, 11)
     manager.messages << { id: 500, chat_id: -200, type: 'Audio', text: "Book\n#Old", reply_to_message_id: 11 }

@@ -1,7 +1,7 @@
 # A manager that records what is replayed. Replaying a message makes the bot answer it with `answers[id]` (default: one audio
 # captioned with hashtags); the ones in `failing` raise. `messages` are chat history already there, `gate` blocks a replay until fed.
 class ReplayingManager
-  attr_reader :replayed, :deleted, :captions, :messages, :replies
+  attr_reader :replayed, :deleted, :captions, :messages, :replies, :announced
 
   def initialize(failing: [], gate: nil, messages: [], answers: {}, files: {}, active: [], same_file: [])
     @active   = active
@@ -11,6 +11,7 @@ class ReplayingManager
     @answers  = answers
     @deleted  = []
     @replies  = []
+    @announced = []
     @captions = []
     @gate     = gate
     @failing  = failing
@@ -40,6 +41,8 @@ class ReplayingManager
   def replace_caption(chat_id:, message_id:, from:, to:) = @captions << { chat_id: chat_id, message_id: message_id, from: from, to: to }
 
   def reply_to_message(chat_id:, message_id:, text:) = @replies << { chat_id: chat_id, message_id: message_id, text: text }
+
+  def announce_queued(chat_id:, message_id:) = @announced << message_id
 
   def file_of(message_id) = @same_file.include?(message_id) ? @same_file.first : message_id
 

@@ -54,7 +54,7 @@ RSpec.describe Tracked::Engine do
 
     2.times { gate << true }
     settled(job[:id], 'completed')
-    expect(JobItem.first.outcome).to include(input: { file_name: 'a.pdf' }, hashtags: '#A')
+    expect(JobItem.first(key: 'a').outcome).to include(input: { file_name: 'a.pdf' }, hashtags: '#A')
   end
 
   it 'keeps a standing job running with nothing pending and runs the items added to it' do
@@ -71,6 +71,24 @@ RSpec.describe Tracked::Engine do
     expect(engine.add(job[:id], 'late').id).to eq(JobItem.first(key: 'late').id)
     engine.stop(job[:id])
     settled(job[:id], 'stopped')
+  end
+
+  it 'lets the handler tell an item added to a job that it waits, or settle it at once, but not one it already had' do
+    told = []
+    handler = handler_class.new
+    handler.define_singleton_method(:standing?) { |_job| true }
+    handler.define_singleton_method(:queued) { |item| (told << item.key) && (item.key == 'dup' ? { duplicate_of: 'a', messages: [] } : nil) }
+    engine = described_class.new({ 'fake' => handler }, tick: 3600)
+    job    = engine.start(kind: 'fake', params: { keys: [] })
+    sleep 0.05
+
+    %w[late dup late].each { |key| engine.add(job[:id], key) }
+    Timeout.timeout(5) { sleep 0.01 until told.size == 2 }
+
+    expect(told).to contain_exactly('late', 'dup')
+    expect(JobItem.first(key: 'dup')).to have_attributes(status: 'done').and(satisfy { |item| item.outcome[:duplicate_of] == 'a' })
+    expect(JobItem.first(key: 'late').status).to eq('pending')
+    engine.stop(job[:id])
   end
 
   it 'never has more items in flight than the job allows' do

@@ -34,6 +34,16 @@ module Replay
 
     def describe(item) = @manager.message_input(chat_id: chat_id_of(item), message_id: message_id(item))
 
+    # A message joining the queue is told how it stands once its checksum is read: a file the group already has is settled at once
+    # with the link of its book, any other gets the standard "Queued" reply.
+    def queued(item)
+      original = original_of(item)
+      return answer_duplicate(item, original) if original
+
+      @manager.announce_queued(chat_id: chat_id_of(item), message_id: message_id(item))
+      nil
+    end
+
     # A file the group already has (the same checksum, whatever topic or message it came in) is not converted again: the item stands
     # for the earlier one, which is the first of the twins and so never a duplicate itself.
     def perform(job, item)
@@ -105,11 +115,15 @@ module Replay
       item.checksum || @manager.message_checksum(chat_id: chat_id_of(item), message_id: message_id(item)).tap { |checksum| item.update(checksum: checksum) }
     end
 
-    # Before every run the error replies go, the tracked ones and those a dead run left that the engine never saw.
+    # Before every run the error replies go, the tracked ones and those a dead run left that the engine never saw, and the
+    # "Queued" reply: the worker posts its own status.
     def clear_failures(chat_id, id, item)
       tracked = item.messages_dataset.live.failures.select_map(:message_id)
-      delete(chat_id, (tracked + answers(chat_id, id).select { |message| message[:failed] }.map { |message| message[:message_id] }).uniq)
+      stale   = answers(chat_id, id).select { |message| message[:failed] || queued_status?(message) }.map { |message| message[:message_id] }
+      delete(chat_id, (tracked + stale).uniq)
     end
+
+    def queued_status?(message) = message[:kind] == 'Text' && message[:text] == Bot::UserQueue::QUEUED_MSG
 
     def row(chat_id, id, replies)
       messages = Array(replies).map { |message| tracked(message) }

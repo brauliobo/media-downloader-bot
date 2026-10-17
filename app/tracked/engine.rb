@@ -48,8 +48,12 @@ module Tracked
     # Puts a new item in a job's line (nothing happens if the item is already known) and returns it.
     def add(job_id, key)
       job = Job.with_pk!(job_id)
-      JobItem.dataset.insert_conflict(target: %i[kind key]).insert(job_id: job.id, kind: job.kind, key: key)
-      JobItem.first(kind: job.kind, key: key).tap { |item| describe_item(handler_for(job.kind), item) }
+      handler = handler_for(job.kind)
+      fresh   = JobItem.dataset.insert_conflict(target: %i[kind key]).insert(job_id: job.id, kind: job.kind, key: key)
+      JobItem.first(kind: job.kind, key: key).tap do |item|
+        describe_item(handler, item)
+        @pool.post { announce(handler, item) } if fresh
+      end
     end
 
     # Changes what a finished item recorded (e.g. its hashtags); `apply` then publishes it.
@@ -151,12 +155,23 @@ module Tracked
     end
 
     def perform(handler, job, item)
-      result = handler.perform(job, item)
-      error  = handler.error_of(result)
-      item.record_messages(result.fetch(:messages, []))
-      item.update(status: error ? 'failed' : 'done', error: error, result: item.outcome.merge(result.except(:messages)), finished_at: Time.now)
+      settle(handler, item, handler.perform(job, item))
     rescue *ERRORS => e
       item.update(status: 'failed', error: "#{e.class}: #{e.message}", finished_at: Time.now)
+    end
+
+    def settle(handler, item, result)
+      error = handler.error_of(result)
+      item.record_messages(result.fetch(:messages, []))
+      item.update(status: error ? 'failed' : 'done', error: error, result: item.outcome.merge(result.except(:messages)), finished_at: Time.now)
+    end
+
+    # Off the caller's thread (it may read the item's file); an item a thread of the job took meanwhile is left to it.
+    def announce(handler, item)
+      result = handler.queued(item)
+      settle(handler, item, result) if result && item.refresh.status == 'pending'
+    rescue *ERRORS => e
+      warn "item #{item.id}: #{e.class}: #{e.message}"
     end
 
     def finish(job)

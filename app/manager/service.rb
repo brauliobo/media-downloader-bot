@@ -46,6 +46,9 @@ class Manager
       @tracked.add(job.id, "#{msg.chat.id}:#{msg.id}")
     end
 
+    # Posts the standard "Queued" reply to a stored message.
+    def announce_queued(chat_id:, message_id:) = Bot::UserQueue.announce(bot, bot.incoming_message(chat_id: chat_id, message_id: message_id)).then { true }
+
     # What a stored message feeds the bot: its type, file name, text, and the url and options of each line.
     def message_input(chat_id:, message_id:) = Replay::Input.of(bot.incoming_message(chat_id: chat_id, message_id: message_id))
 

@@ -19,6 +19,10 @@ module Tracked
     # nil when the kind has nothing to show.
     def describe(item) = nil
 
+    # Called once for an item added after the job started, as soon as it is described: tells whoever sent it that it waits, or
+    # returns the result that settles it at once (like `perform` would).
+    def queued(item) = nil
+
     # Runs one claimed item and returns its result hash; raising fails the item.
     def perform(job, item) = raise(NotImplementedError, "#{self.class} must implement perform")
 

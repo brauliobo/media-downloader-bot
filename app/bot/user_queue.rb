@@ -9,6 +9,9 @@ module Bot
       @instance ||= new
     end
 
+    # The standard status of a message that has to wait; the worker later replaces it with its progress.
+    def self.announce(bot, msg) = bot.send_message(msg, Bot::MsgHelpers.me(QUEUED_MSG))
+
     def initialize
       @running = Hash.new(0)
       @mutex   = Mutex.new
@@ -53,7 +56,7 @@ module Bot
 
       user_id = msg.from.id
       admin   = Bot::MsgHelpers.from_admin?(msg)
-      msg.resp = bot.send_message(msg, Bot::MsgHelpers.me(QUEUED_MSG)) if !admin && queued?(user_id)
+      msg.resp = self.class.announce(bot, msg) if !admin && queued?(user_id)
       with_slot(user_id, admin: admin) do
         yield
       end
