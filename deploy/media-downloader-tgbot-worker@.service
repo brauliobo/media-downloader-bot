@@ -4,6 +4,7 @@
 Description=media-downloader-bot tgbot worker %i
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=0
 
 [Service]
 SyslogIdentifier=mdb-tgbot-worker-%i
@@ -41,7 +42,6 @@ TimeoutStopSec=600
 
 Restart=always
 RestartSec=1
-StartLimitIntervalSec=0
 
 [Install]
 WantedBy=multi-user.target
