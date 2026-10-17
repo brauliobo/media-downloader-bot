@@ -31,7 +31,7 @@ module Bot
 
     def monitor_thread(thread, job_id)
       until thread.join(CANCEL_POLL_INTERVAL)
-        case interruption_signal(job_id)
+        case interruption(job_id)
         when :restart then thread.raise(JobRestarted)
         when :cancel  then thread.raise(JobCancelled)
         else thread.raise(JobCancelled) if cancelled?(job_id)
@@ -92,10 +92,14 @@ module Bot
     end
 
     def interruption_signal(job_id)
-      case @interrupted.call(job_id)
+      case interruption(job_id)
       when :restart then :USR1
       when :cancel  then :TERM
       end
+    end
+
+    def interruption(job_id)
+      @interrupted.call(job_id)
     rescue StandardError
       nil
     end
