@@ -22,6 +22,33 @@ RSpec.describe Audiobook::Runner do
     expect { narrate(sentence_book('Hello world.')) }.to raise_error('page TTS failed')
   end
 
+  context 'in a job that is interrupted and taken again' do
+    let(:texts) { ['First sentence.', 'Second sentence.', 'Third sentence.'] }
+
+    around { |example| Dir.mktmpdir('job-') { |job| Utils::Tmp.within(job) { example.run } } }
+
+    it 'reads only what the interrupted run did not' do
+      tts = fake_tts
+      tts.before = ->(_) { raise 'killed' if tts.narration.size >= 1 }
+
+      expect { narrate(sentence_book(*texts)) }.to raise_error('killed')
+      tts.before = nil
+      narrate(sentence_book(*texts))
+
+      expect(tts.narration.map { |call| call[:text] }).to match_array(texts)
+    end
+
+    it 'does not resume in the audio of another book, and leaves nothing behind when done' do
+      tts = fake_tts
+
+      narrate(sentence_book(*texts))
+      narrate(sentence_book('Another book.'))
+
+      expect(tts.narration.map { |call| call[:text] }).to match_array(texts + ['Another book.'])
+      expect(Dir.children(Utils::Tmp.root).grep(/\Aaudiobook-/)).to be_empty
+    end
+  end
+
   it 'pipelines sentence translation into batch synthesis in the speech language' do
     tts = fake_tts
     fake_translator

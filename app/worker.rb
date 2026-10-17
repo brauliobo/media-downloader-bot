@@ -3,6 +3,7 @@ class Worker
   include StatusMessage
 
   ALBUM_CAPTION_SEPARATOR = "\n\n".freeze
+  WORKDIR_TTL = 7.days
 
   class_attribute :service, :workdir_path, :skip_cleanup
   class_attribute :tmpdir, default: Utils::Tmp.root
@@ -54,7 +55,7 @@ class Worker
       init_status
 
       ctx = Context.new(dir: work_dir, msg: msg, st: @st, session: @session, service: service)
-      ctx.tmp = Utils::Tmp.dir('input-', work_dir)
+      ctx.tmp = input_dir(work_dir)
       Utils::Tmp.within(ctx.tmp) { process_inputs(ctx) }
     end
     msg.resp if finished
@@ -184,17 +185,31 @@ class Worker
     inputs.map { |input| caption_for(input, max: budget) }.reject(&:blank?).join(ALBUM_CAPTION_SEPARATOR)
   end
 
-  # Where a job keeps its files, and clearing them afterwards.
+  # Where a job keeps its files, and clearing them afterwards. A job has a directory of its own name, so one that was stopped
+  # (see Bot::JobRestarted) or lost with its worker continues in it when it is taken again.
   def workdir &block
-    cancelled = false
-    @dir = workdir_path || Utils::Tmp.dir('mdb-', tmpdir)
+    cancelled = restarted = false
+    @dir = FileUtils.mkdir_p(workdir_path || job_dir, mode: 0o700).first
     yield @dir
   rescue Bot::JobCancelled
     cancelled = true
     FileUtils.rm_rf(@dir) unless skip_cleanup
     raise
+  rescue Bot::JobRestarted
+    restarted = true
+    raise
   ensure
-    cleanup_workdir(@dir) unless skip_cleanup || cancelled
+    cleanup_workdir(@dir) unless skip_cleanup || cancelled || restarted
+  end
+
+  def job_dir = job_id ? File.join(tmpdir, "job-#{job_id}") : Utils::Tmp.dir('mdb-', tmpdir)
+
+  # Where the inputs of the job work: a directory of a fixed name inside the job's own, so a resumed job finds what it left.
+  def input_dir(work_dir) = workdir_path ? Utils::Tmp.dir('input-', work_dir) : FileUtils.mkdir_p(File.join(work_dir, 'input')).first
+
+  # The directories of jobs that were never taken again after their worker died.
+  def self.prune_workdirs(older_than: WORKDIR_TTL, root: tmpdir)
+    Dir.glob(File.join(root, 'job-*')).select { |dir| File.mtime(dir) < older_than.ago }.each { |dir| FileUtils.rm_rf(dir) }
   end
 
   def cleanup_workdir(dir)

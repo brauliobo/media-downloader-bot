@@ -12,7 +12,9 @@ module Audiobook
       end
     end
 
-    def self.recognize(input, stl:, opts:) = text_from(Ocr.transcribe(input, opts: opts, stl: stl))
+    def self.recognize(input, stl:, opts:)
+      Utils::Tmp.cached('ocr', input, opts: opts.to_h) { text_from(Ocr.transcribe(input, opts: opts, stl: stl)) }
+    end
 
     def self.text_from(data)
       (data&.text || data&.content&.text || '').to_s

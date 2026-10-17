@@ -3,9 +3,10 @@ require 'fileutils'
 module Bot
   module Worker
     # The bot service reads album files from disk, but a worker's own directory goes away with it,
-    # so the files are copied to a directory of the service's reach for as long as the send takes.
+    # so the files are copied to a directory of the service's reach for as long as the send takes: under the temporary root, which
+    # the service and its workers share (TMPDIR), even when they run from different trees.
     module AlbumProxy
-      ROOT = Rails.root.join('tmp/album-proxy').to_s
+      ROOT = File.join(Utils::Tmp.root, 'album-proxy')
 
       module_function
 

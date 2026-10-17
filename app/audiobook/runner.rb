@@ -16,7 +16,7 @@ module Audiobook
       return create_silent_audiobook(out_audio) if pages.empty?
 
       @stl&.update 'Generating audio'
-      Utils::Tmp.dir('audiobook-') do |dir|
+      Utils::Tmp.resumable('audiobook-', [@lang, @opts.to_h, pages.map(&:to_h)]) do |dir|
         combined_wav = File.join(dir, 'combined.wav')
         @stl&.update 'Concatenating audio'
         Zipper::AudioOps.concat(synthesize_pages(pages, dir), combined_wav, stl: @stl)

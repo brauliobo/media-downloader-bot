@@ -50,6 +50,34 @@ RSpec.describe Worker, 'lifecycle' do
       expect(Process).to have_received(:detach).with(1)
     end
 
+    it 'is named after the job, so the job finds its files again when it is taken after a stop' do
+      path = nil
+      expect { worker.workdir { |work_dir| File.write(File.join(path = work_dir, 'page-1.wav'), 'audio'); raise Bot::JobRestarted } }.to raise_error(Bot::JobRestarted)
+
+      expect(path).to eq File.join(dir, 'job-job-id')
+      expect(Process).not_to have_received(:spawn)
+      described_class.new(msg, service: service, job_id: 'job-id', tmpdir: dir, workdir_path: nil, skip_cleanup: nil).workdir do |work_dir|
+        expect(File.read(File.join(work_dir, 'page-1.wav'))).to eq 'audio'
+      end
+    end
+
+    it 'gives the inputs of a job a directory of a fixed name, unless the work dir was chosen' do
+      worker.workdir do |work_dir|
+        expect(worker.send(:input_dir, work_dir)).to eq File.join(work_dir, 'input')
+      end
+      chosen = described_class.new(msg, service: service, job_id: 'job-id', tmpdir: dir, workdir_path: File.join(dir, 'out'), skip_cleanup: true)
+      chosen.workdir { |work_dir| expect(chosen.send(:input_dir, work_dir)).not_to eq File.join(work_dir, 'input') }
+    end
+
+    it 'is pruned, once nobody has taken the job for long' do
+      old, recent = %w[job-old job-recent].map { |name| FileUtils.mkdir_p(File.join(dir, name)).first }
+      File.utime(Time.now - 3.days, Time.now - 3.days, old)
+
+      described_class.prune_workdirs(older_than: 2.days, root: dir)
+
+      expect([File.exist?(old), File.exist?(recent)]).to eq [false, true]
+    end
+
     it 'is removed right away when the job is cancelled' do
       path = nil
 
