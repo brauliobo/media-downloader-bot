@@ -23,6 +23,19 @@ RSpec.describe JobPool do
     expect { results.to_a }.to raise_error('worker failed')
   end
 
+  it 'lets running tasks finish instead of killing them when another one fails' do
+    finished = Queue.new
+    results = described_class.new(jobs: 2).ordered_map([:slow, :failing]) do |item|
+      raise 'worker failed' if item == :failing
+
+      sleep 0.1
+      finished << item
+    end
+
+    expect { results.to_a }.to raise_error('worker failed')
+    expect(finished.size).to eq(1)
+  end
+
   it 'identifies failed ordered tasks without exposing worker coordination' do
     error = nil
     begin

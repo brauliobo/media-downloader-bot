@@ -51,10 +51,12 @@ class JobPool
       mutex     = Mutex.new
       condition = ConditionVariable.new
       pool      = Concurrent::FixedThreadPool.new(jobs)
-      completed = false
+      cancelled = false
 
       items.each_with_index do |item, index|
         pool.post do
+          next if cancelled
+
           Thread.current.priority = priority if priority
           result = begin
             {value: block.call(item)}
@@ -67,7 +69,6 @@ class JobPool
           end
         end
       end
-      pool.shutdown
 
       items.each_index do |index|
         result = mutex.synchronize do
@@ -78,9 +79,11 @@ class JobPool
 
         output << result[:value]
       end
-      completed = true
     ensure
-      pool&.kill unless completed
+      # Tasks not started are skipped; running ones finish. Killing a thread inside a subprocess call closes its pipes
+      # under the reader threads, and their IOError would replace the error that stopped the pool.
+      cancelled = true
+      pool&.shutdown
       pool&.wait_for_termination
     end
   end
