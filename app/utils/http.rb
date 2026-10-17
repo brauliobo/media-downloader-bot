@@ -13,7 +13,10 @@ module Utils
 
     class << self
 
-      def client(timeout: ENV['HTTP_TIMEOUT']&.to_i || 30.minutes)
+      def default_timeout = ENV['HTTP_TIMEOUT']&.to_i || 30.minutes
+
+      # The timeout is remembered per thread: the agent a retry builds after #reset! keeps it, instead of falling back to the default.
+      def client(timeout: default_timeout)
         agent = Thread.current[:utils_http] ||= Mechanize.new { |shared|
           shared.keep_alive = false
           shared.idle_timeout = 0
@@ -23,6 +26,7 @@ module Utils
         agent.open_timeout = timeout
         agent.read_timeout = timeout
         agent.write_timeout = timeout
+        Thread.current[:utils_http_timeout] = timeout
         agent
       end
 
@@ -45,7 +49,7 @@ module Utils
         uploads = [*args, kwargs].grep(Hash).flat_map(&:values).select { _1.respond_to?(:rewind) }
         Retry.http do
           uploads.each(&:rewind)
-          (Thread.current[:utils_http] || client).public_send(verb, *args, **kwargs)
+          (Thread.current[:utils_http] || client(timeout: Thread.current[:utils_http_timeout] || default_timeout)).public_send(verb, *args, **kwargs)
         end
       end
       private :request

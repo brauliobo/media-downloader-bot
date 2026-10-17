@@ -12,6 +12,18 @@ RSpec.describe Utils::HTTP do
     end
   end
 
+  describe '.reset!' do
+    it 'keeps the timeout the caller set for the next request, so a retry does not wait the 30 minutes default' do
+      allow_any_instance_of(Mechanize).to receive(:post).and_return(:ok)
+      described_class.client(timeout: 120)
+
+      described_class.reset!
+      described_class.post('http://example.test', '{}')
+
+      expect(Thread.current[:utils_http]).to have_attributes(read_timeout: 120, open_timeout: 120, write_timeout: 120)
+    end
+  end
+
   describe '.download_public' do
     it 'rejects private addresses before opening a destination file' do
       Dir.mktmpdir('http-download-') do |dir|
