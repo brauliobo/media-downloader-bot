@@ -23,6 +23,26 @@ RSpec.describe Bot::Worker::Client do
     ENV['BOT_HTTP_TOKEN'] = token
   end
 
+  it 'sends the remote id of a document with its file id, which TDLib renumbers when the bot restarts' do
+    token = ENV['BOT_HTTP_TOKEN']
+    ENV['BOT_HTTP_TOKEN'] = 'token'
+    payload = nil
+    stubs = Faraday::Adapter::Test::Stubs.new do |stub|
+      stub.post('/download_file') do |env|
+        payload = JSON.parse(env.body)
+        [200, {'Content-Type' => 'application/json'}, {'path' => '/tmp/file.pdf'}]
+      end
+    end
+    client = described_class.new('http://127.0.0.1:1181')
+    client.instance_variable_get(:@transport).instance_variable_get(:@client).instance_variable_get(:@conn).adapter :test, stubs
+
+    client.download_file(SymMash.new(document: { id: 123, remote: { id: 'BQACAgEA' } }), dir: '/tmp')
+
+    expect(payload).to include('file_id_or_info' => 123, 'remote_id' => 'BQACAgEA')
+  ensure
+    ENV['BOT_HTTP_TOKEN'] = token
+  end
+
   it 'round-trips send_message and download_file over DRb' do
     manager = Manager.new
     bot     = double

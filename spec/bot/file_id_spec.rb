@@ -19,6 +19,22 @@ RSpec.describe Bot::FileId do
     expect(described_class.call('AgACAgIAAxkBAAI')).to eq('AgACAgIAAxkBAAI')
   end
 
+  describe '.remote' do
+    it 'reads the remote id of a TD document, as a hash or as a mash' do
+      document = { 'document' => { 'id' => 7, 'remote' => { 'id' => 'BQACAgEA' } } }
+
+      expect(described_class.remote(document)).to eq('BQACAgEA')
+      expect(described_class.remote(SymMash.new(document))).to eq('BQACAgEA')
+    end
+
+    it 'has none for a bare id, a Bot API document or a file not uploaded yet' do
+      expect(described_class.remote(42)).to be_nil
+      expect(described_class.remote('AgACAgIAAxkBAAI')).to be_nil
+      expect(described_class.remote({ document: { id: 7, remote: { id: '' } } })).to be_nil
+      expect(described_class.remote({ file_id: 'AgACAgIAAxkBAAI' })).to be_nil
+    end
+  end
+
   describe '.name' do
     it 'reads the file name of a hash or of an object' do
       expect(described_class.name({ 'file_name' => 'a.pdf' })).to eq('a.pdf')

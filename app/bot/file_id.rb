@@ -12,6 +12,10 @@ module Bot
       end
     end
 
+    # The id Telegram keeps for a TD document: TDLib numbers its files per run, so the id above names another file once the bot
+    # restarted, and this one does not.
+    def remote(info) = info.try(:with_indifferent_access)&.dig(:document, :remote, :id).presence
+
     # The name a file was given, when whatever describes it carries one.
     def name(info)
       case info
