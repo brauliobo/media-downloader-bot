@@ -18,6 +18,7 @@ PrivateTmp=true
 WorkingDirectory=/srv/media-downloader-worker
 ReadWritePaths=/srv/media-downloader-worker
 Environment=HOME=/srv/media-downloader-worker
+Environment=SYSTEMD_INSTANCE=%i
 StateDirectory=media-downloader/work-tg
 Environment=TMPDIR=/var/lib/media-downloader/work-tg
 
