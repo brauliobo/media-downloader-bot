@@ -108,9 +108,16 @@ class FFmpeg
         'alimiter=limit=0.841395:attack=5:release=50:level=false'
     end
 
+    # Short fades on a cut clip, so a cut that lands on sound does not click.
+    def fade_filter duration, fade: 0.02
+      ["afade=t=in:st=0:d=#{fade}", "afade=t=out:st=#{(duration - fade).round(3)}:d=#{fade}"].join ','
+    end
+
+    # +level+ only sets the loudness, leaving the timbre alone: a quiet source makes the model lose the voice.
     def voice_reference_filter profile, silence_threshold_db:, pad_duration: nil
       base = {
         raw:     nil,
+        level:   'loudnorm=I=-20:TP=-2:LRA=7',
         clone:   ['highpass=f=80', 'afftdn=nf=-25', 'loudnorm=I=-16:TP=-1.5:LRA=11'].join(','),
         quality: [voice_quality_filter, edge_filter(silence_threshold_db)].join(','),
       }.fetch profile.to_sym

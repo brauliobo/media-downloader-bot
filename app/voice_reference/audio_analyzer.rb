@@ -3,6 +3,7 @@ class VoiceReference
     SILENCE_THRESHOLD_DB = Audio::Quality::DEFAULT_THRESHOLDS.fetch(:silence_threshold_db)
     FILTERS = {
       raw:     FFmpeg.voice_reference_filter(:raw, silence_threshold_db: SILENCE_THRESHOLD_DB),
+      level:   FFmpeg.voice_reference_filter(:level, silence_threshold_db: SILENCE_THRESHOLD_DB),
       clone:   FFmpeg.voice_reference_filter(:clone, silence_threshold_db: SILENCE_THRESHOLD_DB),
       quality: FFmpeg.voice_reference_filter(:quality, silence_threshold_db: SILENCE_THRESHOLD_DB),
     }.freeze
