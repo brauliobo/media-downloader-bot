@@ -1,7 +1,6 @@
 class Translator
   module Ollama
 
-    API   = ENV['OLLAMA_HOST']
     MODEL = ENV['OLLAMA_MODEL']
     MARKER = '|||---SUBTITLEBLOCK---|||'
 
@@ -41,12 +40,7 @@ class Translator
       ])
     end
 
-    def chat(messages, **options)
-      body = Utils::HTTP.post("#{API}/api/chat", { model: MODEL, options: AI::Ollama::OPTIONS, stream: false, messages: messages, **options }.to_json).body.to_s
-      SymMash.new(JSON.parse(body)).dig(:message, :content).to_s.strip
-    rescue JSON::ParserError
-      body.to_s.strip
-    end
+    def chat(messages, **options) = AI::Ollama.chat(messages, model: MODEL, **options)
 
     def system_prompt(to_iso, to)
       <<~PROMPT
