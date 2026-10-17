@@ -42,7 +42,7 @@ class Translator
     end
 
     def chat(messages, **options)
-      body = Utils::HTTP.post("#{API}/api/chat", { model: MODEL, temperature: 0, stream: false, messages: messages, **options }.to_json).body.to_s
+      body = Utils::HTTP.post("#{API}/api/chat", { model: MODEL, options: AI::Ollama::OPTIONS, stream: false, messages: messages, **options }.to_json).body.to_s
       SymMash.new(JSON.parse(body)).dig(:message, :content).to_s.strip
     rescue JSON::ParserError
       body.to_s.strip

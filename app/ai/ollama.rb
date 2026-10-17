@@ -4,13 +4,15 @@ module AI
     DEFAULT_MODEL = ENV['OLLAMA_MODEL'] || 'gemma4:e2b'
     MODEL         = ENV['OLLAMA_OCR_MODEL'] || DEFAULT_MODEL
     PROMPT_MODEL  = ENV['OLLAMA_LANGUAGE_MODEL'] || DEFAULT_MODEL
+    # One thread: the GPU does the work, more only spin on the CPU. Every caller sends the same options, or Ollama reloads the model.
+    OPTIONS       = { temperature: 0.0, num_thread: 1 }
 
     def self.prompt(text, model: PROMPT_MODEL)
       chat([{ role: :user, content: text }], model: model)
     end
 
     def self.chat(messages, format: nil, model: MODEL)
-      payload = { model: MODEL, stream: false, options: {temperature: 0.0}, messages: messages }
+      payload = { model: MODEL, stream: false, options: OPTIONS,messages: messages }
       payload[:model] = model if model
       payload[:format] = format if format
       res = Utils::HTTP.post "#{API}/api/chat", payload.to_json
