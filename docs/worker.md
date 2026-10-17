@@ -12,8 +12,11 @@ in it is specific to TDLib or to the Bot API.
 | restarts | on every deploy of the bot, in seconds | when reloaded (see below), after its book |
 | code tree | the bot's | its own (`/srv/media-downloader-worker`), so a bot deploy never changes code under a worker |
 
-The work dirs live under `TMPDIR`, a directory both share (not `/tmp`, which is private per unit): the worker writes the files it
-uploads there and the bot's service reads them (`BOT_ALLOWED_PATH_ROOTS` defaults to `TMPDIR`).
+The work dirs live under `TMPDIR`, a directory both share: the worker writes the files it uploads there and the bot's service reads
+them (`BOT_ALLOWED_PATH_ROOTS` defaults to `TMPDIR`). It is `/tmp/media-downloader/work` (`work-tg` for the tgbot), on the tmpfs of
+`/tmp`: a book's parts are many times its size and the disk cannot take them. So no unit has `PrivateTmp`, and
+`media-downloader.tmpfiles.conf` makes the dirs at boot and keeps them out of the cleaning of `/tmp`. A reboot loses them: the books
+being converted start over (a reload or a restart of a worker or the bot does not).
 
 ## The queue
 
@@ -76,7 +79,8 @@ One-time cut-over from the bot running the books itself (done for the tdbot on 2
 3. One environment file per bot, `/etc/media-downloader/<bot>-worker.env` (root:mdb 0640), holding that bot's `BOT_HTTP_TOKEN`: the two
    bots' tokens differ, and what the unit sets wins over the dotenv files. The bots' services are `BOT_HTTP` 1181 (tdbot) and 1180 (tgbot).
 4. Install `media-downloader-workers.slice` and `media-downloader-<bot>-worker@.service`, and per bot a drop-in from `bot-workers.conf`.
-   Remove `WITH_WORKER` from the bot's drop-ins and from its `.env.local`.
+   Remove `WITH_WORKER` from the bot's drop-ins and from its `.env.local`. Install `media-downloader.tmpfiles.conf` as
+   `/etc/tmpfiles.d/media-downloader.conf` and run `systemd-tmpfiles --create` for the work dirs.
 5. `systemctl daemon-reload`, restart the bot (the last time the books it was running are lost; replay items are retried), then
    `systemctl enable --now media-downloader-tdbot-worker@{1..7}`. A worker takes minutes to boot on a busy host.
 

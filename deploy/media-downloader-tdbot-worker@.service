@@ -17,16 +17,16 @@ Slice=media-downloader-workers.slice
 LimitNOFILE=1001001
 ProtectHome=yes
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
-PrivateTmp=true
 
 # Its own release tree, so deploying the bot never changes the code under a running worker.
 WorkingDirectory=/srv/media-downloader-worker
 ReadWritePaths=/srv/media-downloader-worker
 Environment=HOME=/srv/media-downloader-worker
 Environment=SYSTEMD_INSTANCE=%i
-# The work dirs (job-<id>), shared with the bot: it reads the files a worker uploads from here. Not /tmp, which is private per unit.
-StateDirectory=media-downloader/work
-Environment=TMPDIR=/var/lib/media-downloader/work
+# The work dirs (job-<id>), shared with the bot: it reads the files a worker uploads from here. On the host's tmpfs, a book's parts are
+# many times its size; /tmp is not private to the unit (no PrivateTmp) and the dir is made, and kept from the cleaning of /tmp, by
+# media-downloader.tmpfiles.conf.
+Environment=TMPDIR=/tmp/media-downloader/work
 
 Environment=BUNDLE_DEPLOYMENT=true
 Environment=BUNDLE_FROZEN=false
