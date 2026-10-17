@@ -16,22 +16,23 @@ class Zipper
       layout = channel_layout_for channels if layout.empty?
 
       encoding = FFmpeg.pause_encoding format
-      FFmpeg.resolve(ffmpeg, ffmpeg_factory).create_silence(
-        output:             path,
-        source_sample_rate: sample_rate,
-        duration:            seconds,
-        filter:              amplitude.to_f.positive? ? FFmpeg.lowpass_filter(6000) : nil,
-        sample_rate:         format.empty? ? nil : sample_rate,
-        channels:             format.empty? || !channels.positive? ? nil : channels,
-        channel_layout:       format.empty? ? nil : layout,
-        amplitude:             amplitude,
-        codec:                 encoding.codec,
-        codec_profile:        encoding.profile,
-        bitrate:               encoding.bitrate,
-        sample_format:        encoding.sample_format,
-        label:                 'Failed to create silent audio file'
-      )
-      path
+      Utils::Atomic.write(path) do |part|
+        FFmpeg.resolve(ffmpeg, ffmpeg_factory).create_silence(
+          output:             part,
+          source_sample_rate: sample_rate,
+          duration:            seconds,
+          filter:              amplitude.to_f.positive? ? FFmpeg.lowpass_filter(6000) : nil,
+          sample_rate:         format.empty? ? nil : sample_rate,
+          channels:             format.empty? || !channels.positive? ? nil : channels,
+          channel_layout:       format.empty? ? nil : layout,
+          amplitude:             amplitude,
+          codec:                 encoding.codec,
+          codec_profile:        encoding.profile,
+          bitrate:               encoding.bitrate,
+          sample_format:        encoding.sample_format,
+          label:                 'Failed to create silent audio file'
+        )
+      end
     end
 
     def pause(seconds, dir, sample_rate: nil, extension: '.wav', format: nil, amplitude: nil, ffmpeg: nil, ffmpeg_factory: nil)

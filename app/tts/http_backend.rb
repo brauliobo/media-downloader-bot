@@ -66,7 +66,7 @@ class TTS
       raise "TTS batch returned #{audios.size} items for #{out_paths.size} requests" unless audios.size == out_paths.size
 
       audios.each_with_index do |item, idx|
-        File.binwrite(out_paths[idx], Base64.decode64(item.fetch('audio')))
+        Utils::Atomic.binwrite(out_paths[idx], Base64.decode64(item.fetch('audio')))
       end
       out_paths
     end
@@ -139,11 +139,11 @@ class TTS
     end
 
     def assemble_output(wavs, out_path, dir)
-      return FileUtils.cp(wavs.first, out_path) if wavs.one?
+      return Utils::Atomic.copy(wavs.first, out_path) if wavs.one?
 
       combined = File.join(dir, 'combined.wav')
       Zipper::AudioOps.concat(wavs, combined)
-      FileUtils.cp(combined, out_path)
+      Utils::Atomic.copy(combined, out_path)
     end
   end
 end

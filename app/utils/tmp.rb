@@ -40,8 +40,12 @@ module Utils
       return dir(prefix, &block) unless @scope
 
       FileUtils.mkdir_p(path = File.join(@scope, "#{prefix}#{digest(key)}"))
+      prune_interrupted(path)
       yield(path).tap { FileUtils.rm_rf(path) }
     end
+
+    # What a stopped run left half written (see Atomic): nothing in the dir that is there is half a file.
+    def prune_interrupted(dir) = FileUtils.rm_rf(Dir.glob(File.join(dir, '**', "#{Atomic::PREFIX}*"), File::FNM_DOTMATCH))
 
     # The text +file+ yields under +key+ (what else the text depends on), computed once per job even if the job restarts.
     def cached(name, file, **key)
@@ -51,7 +55,7 @@ module Utils
       return File.read(path) if File.exist?(path)
 
       FileUtils.mkdir_p(File.dirname(path))
-      yield.tap { |text| File.write(path, text) }
+      yield.tap { |text| Utils::Atomic.write(path) { |part| File.write(part, text) } }
     end
 
     def digest(key) = Digest::SHA256.hexdigest(key.to_json)[0, 24]

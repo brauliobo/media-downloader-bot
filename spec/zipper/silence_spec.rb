@@ -15,7 +15,7 @@ RSpec.describe Zipper::Silence do
 
       expect(path).to end_with 'pause_0_1_24000.wav'
       expect(ffmpeg).to have_received(:create_silence).with(
-        output: path,
+        output: a_string_ending_with("-#{File.basename(path)}"),
         source_sample_rate: 24_000,
         duration: 0.1,
         filter: nil,
@@ -45,7 +45,7 @@ RSpec.describe Zipper::Silence do
 
       expect(path).to end_with 'pause_3_5_24000_0_001.m4a'
       expect(ffmpeg).to have_received(:create_silence).with(
-        output: path,
+        output: a_string_ending_with("-#{File.basename(path)}"),
         source_sample_rate: 24_000,
         duration: 3.5,
         filter: 'lowpass=f=6000',
@@ -82,7 +82,7 @@ RSpec.describe Zipper::Silence do
 
       expect(path).to match(%r{/pause_3_5_24000_[0-9a-f]{12}\.wav\z})
       expect(ffmpeg).to have_received(:create_silence).with(
-        output: path,
+        output: a_string_ending_with("-#{File.basename(path)}"),
         source_sample_rate: 24_000,
         duration: 3.5,
         filter: nil,
@@ -119,7 +119,7 @@ RSpec.describe Zipper::Silence do
       path = described_class.pause 3.5, dir, format: format, extension: '.m4a', ffmpeg: ffmpeg
 
       expect(ffmpeg).to have_received(:create_silence).with(
-        output: path,
+        output: a_string_ending_with("-#{File.basename(path)}"),
         source_sample_rate: 24_000,
         duration: 3.5,
         filter: nil,
@@ -156,7 +156,7 @@ RSpec.describe Zipper::Silence do
       path = described_class.pause 3.5, dir, format: format, extension: '.m4a', ffmpeg: ffmpeg
 
       expect(ffmpeg).to have_received(:create_silence).with(
-        output: path,
+        output: a_string_ending_with("-#{File.basename(path)}"),
         source_sample_rate: 24_000,
         duration: 3.5,
         filter: nil,
@@ -197,7 +197,7 @@ RSpec.describe Zipper::Silence do
       described_class.file path, 3.5, format: format, ffmpeg: ffmpeg
 
       expect(ffmpeg).to have_received(:create_silence).with(
-        output: path,
+        output: a_string_ending_with("-#{File.basename(path)}"),
         source_sample_rate: 24_000,
         duration: 3.5,
         filter: nil,

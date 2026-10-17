@@ -35,6 +35,25 @@ RSpec.describe Utils::Tmp do
       expect(File.exist?(first)).to be(false)
     end
 
+    it 'clears what a stopped run left half written, and keeps what it finished' do
+      first = nil
+      expect do
+        described_class.resumable('book-', 'k') do |path|
+          first = path
+          File.write(File.join(path, 'done.wav'), 'whole')
+          FileUtils.mkdir_p(File.join(path, 'nested'))
+          File.write(File.join(path, 'nested', '.part-ab12cd34-half.wav'), 'half')
+          raise 'killed'
+        end
+      end.to raise_error('killed')
+
+      described_class.resumable('book-', 'k') do |path|
+        expect(path).to eq(first)
+        expect(File.exist?(File.join(path, 'done.wav'))).to be(true)
+        expect(Dir.glob(File.join(path, '**', '.part-*'), File::FNM_DOTMATCH)).to be_empty
+      end
+    end
+
     it 'gives other work a directory of its own' do
       dirs = [%w[a b], %w[a c]].map { |key| described_class.resumable('book-', key) { |dir| dir } }
 
