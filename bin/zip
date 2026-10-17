@@ -21,6 +21,8 @@ while ARGV[-1] and !File.exist?(ARGV[-1]) and ARGV[-1] !~ URI::regexp
 end
 
 Zipper.size_mb_limit = ENV['SIZE_MB_LIMIT']&.to_i || 2_000
+# zip encodes unless asked to stream
+lopts.push 'nostream' unless lopts.include?('stream')
 
 bot = Bot::Mock.new
 Worker.service = bot
