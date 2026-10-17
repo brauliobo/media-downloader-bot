@@ -1,0 +1,45 @@
+# PROPOSAL, not installed anywhere. Worker of the tgbot (Telegram Bot API) queue; see media-downloader-tdbot-worker@.service.
+#   systemctl enable --now media-downloader-tgbot-worker@{1..2}
+[Unit]
+Description=media-downloader-bot tgbot worker %i
+After=network-online.target media-downloader-tgbot.service
+Wants=network-online.target
+
+[Service]
+SyslogIdentifier=mdb-tgbot-worker-%i
+User=mdb
+Nice=19
+CPUQuota=900%
+LimitNOFILE=1001001
+ProtectHome=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+PrivateTmp=true
+
+WorkingDirectory=/srv/media-downloader-worker
+ReadWritePaths=/srv/media-downloader-worker
+Environment=HOME=/srv/media-downloader-worker
+StateDirectory=media-downloader/work-tg
+Environment=TMPDIR=/var/lib/media-downloader/work-tg
+
+Environment=BUNDLE_DEPLOYMENT=true
+Environment=BUNDLE_FROZEN=false
+Environment=RAILS_ENV=production
+Environment=DB=1
+Environment=THREADS=10
+# The tgbot's service: its own port, so both bots can run on one host.
+Environment=BOT_HTTP=http://127.0.0.1:1181
+EnvironmentFile=-/etc/media-downloader/worker.env
+ExecStart=/usr/local/rvm/wrappers/ruby-3.4.4/bundle exec bin/worker
+
+ExecReload=/bin/kill -USR2 $MAINPID
+KillMode=mixed
+KillSignal=SIGTERM
+Environment=WORKER_DRAIN_TIMEOUT=540
+TimeoutStopSec=600
+
+Restart=always
+RestartSec=1
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target

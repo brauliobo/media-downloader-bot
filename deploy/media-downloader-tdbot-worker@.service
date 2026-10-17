@@ -1,0 +1,52 @@
+# PROPOSAL, not installed anywhere. Worker of the tdbot (TDLib user account) queue; instance = a number, one book at a time each:
+#   systemctl enable --now media-downloader-tdbot-worker@{1..3}
+# The tgbot worker (media-downloader-tgbot-worker@.service) is the same unit pointed at the tgbot's service.
+[Unit]
+Description=media-downloader-bot tdbot worker %i
+After=network-online.target media-downloader-tdbot.service
+Wants=network-online.target
+# No Requires=/BindsTo=/PartOf= on the bot: restarting or stopping it must not touch a worker.
+
+[Service]
+SyslogIdentifier=mdb-tdbot-worker-%i
+User=mdb
+Nice=19
+CPUQuota=900%
+LimitNOFILE=1001001
+ProtectHome=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+PrivateTmp=true
+
+# Its own release tree, so deploying the bot never changes the code under a running worker.
+WorkingDirectory=/srv/media-downloader-worker
+ReadWritePaths=/srv/media-downloader-worker
+Environment=HOME=/srv/media-downloader-worker
+# The work dirs (job-<id>), shared with the bot: it reads the files a worker uploads from here. Not /tmp, which is private per unit.
+StateDirectory=media-downloader/work
+Environment=TMPDIR=/var/lib/media-downloader/work
+
+Environment=BUNDLE_DEPLOYMENT=true
+Environment=BUNDLE_FROZEN=false
+Environment=RAILS_ENV=production
+Environment=DB=1
+Environment=THREADS=10
+# The bot's service (BOT_HTTP of media-downloader-tdbot.service) and BOT_HTTP_TOKEN, DB_* in the private environment file.
+Environment=BOT_HTTP=http://127.0.0.1:1180
+EnvironmentFile=-/etc/media-downloader/worker.env
+ExecStart=/usr/local/rvm/wrappers/ruby-3.4.4/bundle exec bin/worker
+
+# Reload = finish the book in flight, take no other, exit; Restart=always brings the new code up.
+ExecReload=/bin/kill -USR2 $MAINPID
+# Stop = the same, but after WORKER_DRAIN_TIMEOUT the book goes back to the queue and the worker exits by itself, before systemd's
+# SIGKILL. Only the worker gets SIGTERM; ffmpeg & co. are left to it (and killed at the end if it hangs).
+KillMode=mixed
+KillSignal=SIGTERM
+Environment=WORKER_DRAIN_TIMEOUT=540
+TimeoutStopSec=600
+
+Restart=always
+RestartSec=1
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target
