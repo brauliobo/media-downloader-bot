@@ -99,6 +99,31 @@ RSpec.describe Replay::Handler do
     expect(JobItem.first(key: '-200:11').outcome).to include(hashtags: '#Old')
   end
 
+  it 'converts again the book a dead run left only a status line for, deleting the line' do
+    status  = { id: 500, chat_id: -200, type: 'Text', text: 'Downloading...', reply_to_message_id: 11 }
+    manager = ReplayingManager.new(messages: [status])
+    engine  = Tracked::Engine.new({ 'replay' => described_class.new(manager, forwarded: forwarded, replayed: legacy) }, tick: 0.01)
+    job     = Job.create(kind: 'replay', state: 'running', parallel: 1, params: { chat_id: -200 })
+    JobItem.create(job_id: job.id, kind: 'replay', key: '-200:11', status: 'running', attempts: 1)
+
+    engine.recover!
+    Timeout.timeout(5) { sleep 0.01 until Job[job.id].state == 'completed' }
+
+    expect(manager.replayed.map { |m| m[:id] }).to contain_exactly(11, 12, 13)
+    expect(manager.deleted).to eq([500])
+    expect(JobItem.first(key: '-200:11')).to have_attributes(status: 'done')
+  end
+
+  it 'fails the book the bot answered with status lines only' do
+    manager = ReplayingManager.new(answers: { 12 => [{ type: 'Text', text: 'Downloading...' }] })
+    engine  = Tracked::Engine.new({ 'replay' => described_class.new(manager, forwarded: forwarded, replayed: legacy) }, tick: 0.01)
+    id      = engine.start(kind: 'replay', params: { chat_id: -200 })[:id]
+    Timeout.timeout(5) { sleep 0.01 until Job[id].state == 'failed' }
+
+    expect(JobItem.first(key: '-200:12')).to have_attributes(status: 'failed', error: 'the bot sent no book')
+    expect(JobItem.done.count).to eq(2)
+  end
+
   it 'waits for the worker still converting a book after the bot restarted, instead of taking its status message for an answer' do
     status   = { id: 500, chat_id: -200, type: 'Text', text: 'Downloading...', reply_to_message_id: 11 }
     manager  = ReplayingManager.new(messages: [status], active: [11])

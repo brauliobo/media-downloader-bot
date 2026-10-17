@@ -41,9 +41,12 @@ module Replay
       summary(chat_id, previous_answers(chat_id, id, item) || replay(chat_id, id))
     end
 
+    # Whatever the bot answered with, there must be a book among it: errors and status lines alone are a failure.
     def error_of(result)
       messages = result[:messages]
-      'the bot only answered with an error' if messages.present? && messages.all? { |message| message[:failed] }
+      return if messages.blank?
+
+      messages.all? { |message| message[:failed] } ? 'the bot only answered with an error' : ('the bot sent no book' unless messages.any? { |message| book?(message) })
     end
 
     # Puts the item's wanted hashtags in the captions of the media messages that still carry other ones.
@@ -68,8 +71,8 @@ module Replay
 
     def row(chat_id, id, replies)
       messages = Array(replies).map { |message| tracked(message) }
-      failed   = messages.present? && messages.all? { |message| message[:failed] }
-      { key: "#{chat_id}:#{id}", status: messages.empty? ? 'pending' : (failed ? 'failed' : 'done'), error: ('the bot only answered with an error' if failed),
+      error    = error_of(messages: messages)
+      { key: "#{chat_id}:#{id}", status: messages.empty? ? 'pending' : (error ? 'failed' : 'done'), error: error,
         result: Sequel.pg_jsonb(hashtags: wanted_hashtags(messages)), messages: messages }
     end
 
@@ -95,15 +98,19 @@ module Replay
       messages
     end
 
-    # A run that died with the process may have answered already: keep its answers, drop its errors. Not while a worker is
-    # still converting the book: it is waited for (see Manager::Service#replay_message).
+    # A run that died with the process may have sent the book already: keep its answers, drop its errors. When it only left
+    # errors and status lines, those go and the book is converted again. Not while a worker is still converting the book: it is
+    # waited for (see Manager::Service#replay_message).
     def previous_answers(chat_id, id, item)
       return if item.attempts <= 1 || @manager.message_job_active?(chat_id: chat_id, message_id: id)
 
       answered = answers(chat_id, id)
-      delete(chat_id, answered.select { |message| message[:failed] }.map { |message| message[:message_id] })
-      answered.reject { |message| message[:failed] }.presence
+      book     = answered.any? { |message| book?(message) }
+      delete(chat_id, answered.select { |message| !book || message[:failed] }.map { |message| message[:message_id] })
+      answered.reject { |message| message[:failed] } if book
     end
+
+    def book?(message) = message[:kind] != 'Text' && !message[:failed]
 
     def replay(chat_id, id)
       @manager.replay_message(chat_id: chat_id, message_id: id)
