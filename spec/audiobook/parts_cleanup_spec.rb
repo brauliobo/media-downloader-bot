@@ -26,6 +26,20 @@ RSpec.describe 'Audiobook parts cleanup' do
       expect(wav).to eq(File.join(dir, 'page_0001.wav'))
       expect(wavs(dir)).to all(match(/\Apage_|\Apause_/))
       expect(wavs(dir)).to include('page_0001.wav')
+      expect(Dir.children(dir).grep(/\.opus\z/)).to be_empty
+    end
+  end
+
+  it 'keeps a sentence as Opus until its paragraph is joined, and does not synthesize it again' do
+    Dir.mktmpdir('audiobook-parts-') do |dir|
+      sentence = page.items.first.sentences.first
+      stored   = sentence.to_wav(dir, '1_0', lang: 'en')
+
+      expect(stored).to eq File.join(dir, '1_0.opus')
+      expect(Dir.children(dir)).to eq ['1_0.opus']
+      expect(page.sentence_job(sentence, File.join(dir, '1_0.wav'), 'en', 'x')).to be_nil
+      expect(sentence.to_wav(dir, '1_0', lang: 'en')).to eq stored
+      expect(spoken).to eq ['Hello.']
     end
   end
 

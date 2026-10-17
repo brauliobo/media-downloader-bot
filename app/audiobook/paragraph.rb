@@ -60,7 +60,7 @@ module Audiobook
       end
       return nil if wavs.empty?
 
-      Zipper::AudioOps.join(wavs, wav_path, consumed: spoken.compact)
+      AudioFiles.join(wavs, wav_path, consumed: spoken.compact)
     end
 
     # Discover paragraphs from Line objects (with font metadata)

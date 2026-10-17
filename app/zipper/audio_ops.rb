@@ -6,8 +6,9 @@ class Zipper
 
     module_function
 
-    def concat(inputs, outfile, stl: nil, ffmpeg: nil, ffmpeg_factory: nil)
-      return FileUtils.cp inputs.first, outfile if inputs.size == 1
+    # The joined audio has the sample rate asked, or the highest of the inputs'.
+    def concat(inputs, outfile, sample_rate: nil, stl: nil, ffmpeg: nil, ffmpeg_factory: nil)
+      return FileUtils.cp inputs.first, outfile if inputs.one? && File.extname(inputs.first) == File.extname(outfile)
 
       builder = FFmpeg.resolve(ffmpeg, ffmpeg_factory)
       signatures = inputs.map { |input| Prober.audio_signature input, ffmpeg: builder }
@@ -15,15 +16,15 @@ class Zipper
         listfile = File.join dir, 'concat.txt'
         File.write listfile, inputs.map { |path| Utils::Safety.concat_manifest_path path }.join("\n")
 
-        copy = copy_safe? signatures
-        sample_rate = signatures.map { |signature| signature[:sample_rate].to_i }.max
+        sample_rate ||= signatures.map { |signature| signature[:sample_rate].to_i }.max
+        copy = copy_safe?(signatures, sample_rate)
         arguments = {
           inputs: copy ? listfile : inputs,
           output: outfile,
           copy:   copy,
           label:  'FFmpeg concat failed',
         }
-        arguments[:sample_rate] = sample_rate if !copy && sample_rate.positive?
+        arguments[:sample_rate] = sample_rate if !copy && sample_rate.to_i.positive?
 
         begin
           builder.concat_audio(**arguments)
@@ -43,7 +44,10 @@ class Zipper
       outfile
     end
 
-    def copy_safe?(signatures) = signatures.none?(&:empty?) && signatures.uniq.one?
+    # Copying needs inputs that are all the same, and already at the sample rate wanted.
+    def copy_safe?(signatures, sample_rate)
+      signatures.none?(&:empty?) && signatures.uniq.one? && signatures.first[:sample_rate].to_i == sample_rate
+    end
 
     def add_floor!(wav_path, amplitude:, loudness_lufs:, sample_rate: 22_050, ffmpeg: nil, ffmpeg_factory: nil)
       output = sibling(wav_path, 'audio_floor')
@@ -54,15 +58,14 @@ class Zipper
       replace(wav_path, output)
     end
 
-    def speed!(wav_path, speed, ffmpeg: nil, ffmpeg_factory: nil)
+    # The audio at `output`, encoded with the codec at the bitrate and sped up if a speed is asked.
+    def compress(input, output, codec:, bitrate:, speed: nil, ffmpeg: nil, ffmpeg_factory: nil)
       speed = speed.to_f
-      return wav_path unless speed.positive? && speed != 1
-
-      output = sibling(wav_path, 'speed')
-      FFmpeg.resolve(ffmpeg, ffmpeg_factory).speed_audio(
-        input: wav_path, output: output, filter: FFmpeg.speech_speed_filter(speed), label: 'Failed to apply audio speed'
+      FFmpeg.resolve(ffmpeg, ffmpeg_factory).reencode_audio(
+        input: input, output: output, codec: codec, bitrate: bitrate, speed: (speed if speed.positive? && speed != 1),
+        label: 'Failed to compress audio'
       )
-      replace(wav_path, output)
+      output
     end
 
     def with_wav(path, sample_rate: nil, channels: nil, ffmpeg: nil, ffmpeg_factory: nil, &block)

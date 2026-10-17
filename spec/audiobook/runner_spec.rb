@@ -29,7 +29,8 @@ RSpec.describe Audiobook::Runner do
 
     it 'reads only what the interrupted run did not' do
       tts = fake_tts
-      tts.before = ->(_) { raise 'killed' if tts.narration.size >= 1 }
+      stub_const('TTS::BATCH_SIZE', 1)
+      tts.before = ->(options) { raise 'killed' if options[:text] == 'Second sentence.' }
 
       expect { narrate(sentence_book(*texts)) }.to raise_error('killed')
       tts.before = nil

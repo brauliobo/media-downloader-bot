@@ -92,6 +92,17 @@ RSpec.describe Zipper::AudioOps do
     )
   end
 
+  it 'joins at the sample rate asked, and does not copy a single input into a file of another format' do
+    ffmpeg = ffmpeg_double
+    allow(Prober).to receive(:audio_signature).and_return({codec_name: 'opus', sample_rate: 48_000})
+
+    described_class.concat %w[/tmp/speech.opus], '/tmp/out.wav', sample_rate: 24_000, ffmpeg: ffmpeg
+
+    expect(ffmpeg).to have_received(:concat_audio).with(
+      inputs: %w[/tmp/speech.opus], output: '/tmp/out.wav', copy: false, sample_rate: 24_000, label: 'FFmpeg concat failed'
+    )
+  end
+
   it 'preserves the concat error label' do
     ffmpeg = ffmpeg_double
     allow(Prober).to receive(:audio_signature).and_return({codec_name: 'pcm_s16le', sample_rate: 24_000})
@@ -111,10 +122,6 @@ RSpec.describe Zipper::AudioOps do
         File.write arguments.fetch(:output), 'speech with floor'
         arguments.fetch(:output)
       end
-      allow(ffmpeg).to receive(:speed_audio) do |arguments|
-        File.write arguments.fetch(:output), 'sped'
-        arguments.fetch(:output)
-      end
 
       expect(described_class.add_floor!(
         source, amplitude: 0.001, loudness_lufs: -18, sample_rate: 24_000, ffmpeg: ffmpeg
@@ -125,15 +132,19 @@ RSpec.describe Zipper::AudioOps do
         output: match(%r{/audio_floor_.*\.wav\z}),
         sample_rate: 24_000, label: 'Failed to add audiobook audio floor'
       )
-
-      expect(described_class.speed!(source, 1.2, ffmpeg: ffmpeg)).to eq source
-      expect(File.read(source)).to eq 'sped'
-      expect(ffmpeg).to have_received(:speed_audio).with(
-        input: source, output: match(%r{/speed_.*\.wav\z}),
-        filter: match(/rubberband=tempo=1\.2.*formant=preserved/),
-        label: 'Failed to apply audio speed'
-      )
     end
+  end
+
+  it 'compresses audio, asking for a speed only when it changes the audio' do
+    ffmpeg = ffmpeg_double
+
+    expect(described_class.compress('in.wav', 'out.opus', codec: 'libopus', bitrate: 64_000, speed: 1.2, ffmpeg: ffmpeg)).to eq 'out.opus'
+    described_class.compress('in.wav', 'out.opus', codec: 'libopus', bitrate: 64_000, speed: 1, ffmpeg: ffmpeg)
+
+    expect(ffmpeg).to have_received(:reencode_audio).with(
+      input: 'in.wav', output: 'out.opus', codec: 'libopus', bitrate: 64_000, speed: 1.2, label: 'Failed to compress audio'
+    )
+    expect(ffmpeg).to have_received(:reencode_audio).with(hash_including(speed: nil))
   end
 
   it 'preserves the WAV conversion error label' do

@@ -1,5 +1,8 @@
 module Audiobook
   module AudioFiles
+    # bits/s; 64k is about a fifth of the wav and speech stays clean.
+    STORED_BITRATE = ENV.fetch('SENTENCE_OPUS_BITRATE', 64_000).to_i
+
     module_function
 
     def pause(seconds, dir, sample_rate: self.sample_rate, extension: '.wav', format: nil, amplitude: nil)
@@ -14,12 +17,22 @@ module Audiobook
       Zipper::Silence.file(path, seconds, sample_rate: sample_rate)
     end
 
-    def speed!(path, speed)
-      Zipper::AudioOps.speed!(path, speed)
+    # A sentence is kept as Opus, a fraction of its wav, which the tmpfs of a book cannot hold: the TTS writes the wav, this stores it
+    # (at the speed asked, in the same pass) and drops it. The stored file exists only whole, so one that exists is done.
+    def compress(wav, speed: nil)
+      stored = stored_path(wav)
+      Utils::Atomic.write(stored) { |part| Zipper::AudioOps.compress(wav, part, codec: 'libopus', bitrate: STORED_BITRATE, speed: speed) }
+      FileUtils.rm_f(wav)
+      stored
     end
 
-    def speed_all(paths, speed)
-      Array(paths).each { |path| speed!(path, speed) }
+    def compress_all(wavs, speed) = wavs.map { |wav| compress(wav, speed: speed) }
+
+    def stored_path(wav) = wav.sub(/\.wav\z/, '.opus')
+
+    # Joins parts, stored or not, into a wav at the sample rate of the book (an Opus part decodes at 48 kHz).
+    def join(parts, wav, consumed: [])
+      Zipper::AudioOps.join(parts, wav, consumed: consumed, sample_rate: sample_rate)
     end
 
     def split_speed_options(options)

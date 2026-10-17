@@ -41,25 +41,32 @@ module Audiobook
         progress = Utils::ProgressCounter.new(total: jobs.size, status: @stl) do |completed, total|
           "#{jobs[completed - 1][:status]}, audio #{completed}/#{total}"
         end
-        synthesize_speech_jobs(jobs, options, progress)
-        AudioFiles.speed_all(jobs.map { |job| job[:out_path] }.select { |path| File.exist?(path) }, speed)
+        synthesize_speech_jobs(jobs, options, store_batch(progress, speed))
       end
 
-      def synthesize_speech_jobs(jobs, options, progress)
-        if @book.try(:translation_needed?) && !@book.translated
-          pipeline_speech_jobs(jobs, options, progress)
-        else
-          TTS.synthesize_batch(items: jobs, on_batch: progress.batch_callback, **options)
+      # Each batch is stored (at the speed asked) as it arrives, so the wavs do not pile up while the book is read.
+      def store_batch(progress, speed)
+        lambda do |batch|
+          AudioFiles.compress_all(batch.map { |job| job[:out_path] }, speed)
+          progress.batch_callback.call(batch)
         end
       end
 
-      def pipeline_speech_jobs(jobs, options, progress)
+      def synthesize_speech_jobs(jobs, options, on_batch)
+        if @book.try(:translation_needed?) && !@book.translated
+          pipeline_speech_jobs(jobs, options, on_batch)
+        else
+          TTS.synthesize_batch(items: jobs, on_batch: on_batch, **options)
+        end
+      end
+
+      def pipeline_speech_jobs(jobs, options, on_batch)
         target = @book.speech_language
         Pipeline.each(
           jobs, tasks: 2, batch: TTS::BATCH_SIZE,
           perform: ->(job) { translate_speech_job(job, target) }
         ) do |batch|
-          TTS.synthesize_batch(items: batch.select { |job| job[:text].present? }, on_batch: progress.batch_callback, **options)
+          TTS.synthesize_batch(items: batch.select { |job| job[:text].present? }, on_batch: on_batch, **options)
         end
         @book.translate!
       end

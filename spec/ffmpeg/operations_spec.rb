@@ -151,13 +151,19 @@ RSpec.describe FFmpeg::Operations do
   end
 
   it 'changes the audio speed keeping the pitch' do
-    ffmpeg.speed_audio input: 'in.wav', output: path('out.wav'), label: 'x', speed: 1.2
+    ffmpeg.reencode_audio input: 'in.wav', output: path('out.wav'), label: 'x', speed: 1.2
 
     expect(commands).to eq [
       'ffmpeg -y -threads 5 -loglevel error -i in.wav ' \
       '-af rubberband=tempo=1.2:pitch=1:transients=smooth:detector=soft:phase=laminar:window=long:formant=preserved ' \
       '-c:a pcm_s16le <dir>/out.wav'
     ]
+  end
+
+  it 'encodes audio with a codec at a bitrate, without a filter unless asked' do
+    ffmpeg.reencode_audio input: 'in.wav', output: path('out.opus'), label: 'x', codec: 'libopus', bitrate: 64_000
+
+    expect(commands).to eq ['ffmpeg -y -threads 5 -loglevel error -i in.wav -c:a libopus -b:a 64000 <dir>/out.opus']
   end
 
   it 'converts audio to wav' do

@@ -73,6 +73,8 @@ a busy one was working anyway. A job handed back or lost is resumed, not restart
   `Worker.prune_workdirs` clears the ones nobody took for 7 days);
 - the audiobook keeps its audio in a directory named by a hash of the text and the voice and skips the pages already read (the voice
   reference is kept too, so the narrator does not change); the OCR text of each page is kept by a hash of the page image.
+  A sentence is kept as Opus (`SENTENCE_OPUS_BITRATE`, 64 kbit/s, about a fifth of the wav) once its batch is read, at the speed asked;
+  the wavs of the sentences and paragraphs go once joined.
 
 Not resumed: the download of the input, the parsing of the book, the translation. The resumed job posts a new status message.
 

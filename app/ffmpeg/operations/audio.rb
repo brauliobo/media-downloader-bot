@@ -71,13 +71,15 @@ class FFmpeg
         end
       end
 
-      def speed_audio input:, output:, label:, filter: nil, speed: nil
-        filter ||= FFmpeg.speech_speed_filter speed
+      # Re-encodes the audio, through the filter if any (a speed asks for the speech one), as 16-bit PCM unless told otherwise.
+      def reencode_audio input:, output:, label:, filter: nil, speed: nil, codec: 'pcm_s16le', bitrate: nil
+        filter ||= FFmpeg.speech_speed_filter speed if speed
 
         run_one_shot label: label do |builder|
           builder.input input
-          builder.set_filter filter, stream: :audio
-          builder.codec 'pcm_s16le', stream: :audio
+          builder.set_filter filter, stream: :audio if filter
+          builder.codec codec, stream: :audio
+          builder.bitrate bitrate, stream: :audio, unit: :bit if bitrate
           builder.output output
         end
       end

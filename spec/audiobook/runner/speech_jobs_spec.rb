@@ -8,7 +8,7 @@ RSpec.describe Audiobook::Runner::SpeechJobs do
       include Audiobook::Runner::SpeechJobs
 
       define_method(:initialize) { @book = book; @lang = 'en' }
-      public :pipeline_speech_jobs
+      public :pipeline_speech_jobs, :store_batch
     end
   end
 
@@ -20,8 +20,21 @@ RSpec.describe Audiobook::Runner::SpeechJobs do
     spoken = []
     allow(TTS).to receive(:synthesize_batch) { |items:, **| spoken.concat(items.map { |item| item[:text] }) }
 
-    host.new.pipeline_speech_jobs(%w[blank dots one].map { |text| job(text) }, {}, Utils::ProgressCounter.new(total: 3, status: nil) { '' })
+    host.new.pipeline_speech_jobs(%w[blank dots one].map { |text| job(text) }, {}, ->(_batch) { })
 
     expect(spoken).to eq(['um'])
+  end
+
+  it 'stores each batch at the speed asked as it arrives, then counts it' do
+    status   = double(:status)
+    progress = Utils::ProgressCounter.new(total: 2, status: status) { |done, total| "#{done}/#{total}" }
+    allow(status).to receive(:update)
+    batch    = [job('one'), job('two')]
+    allow(Audiobook::AudioFiles).to receive(:compress_all)
+
+    host.new.store_batch(progress, 1.2).call(batch)
+
+    expect(Audiobook::AudioFiles).to have_received(:compress_all).with(['/tmp/one.wav', '/tmp/two.wav'], 1.2)
+    expect(status).to have_received(:update).with('2/2')
   end
 end

@@ -72,7 +72,7 @@ module Audiobook
           speed, options = AudioFiles.split_speed_options(tts_options)
           TTS.synthesize(text: spoken, lang: lang, out_path: wav_path, **options)
           raise 'TTS produced no audio' unless File.exist?(wav_path) && File.size?(wav_path)
-          AudioFiles.speed!(wav_path, speed)
+          AudioFiles.compress(wav_path, speed: speed)
         end
       end
     end

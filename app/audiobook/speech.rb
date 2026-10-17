@@ -18,17 +18,15 @@ module Audiobook
       h.merge!(extra_hash)
     end
 
-    # Generate WAV file for this speech unit
+    # The audio of this speech unit: the stored one if it was already made, else synthesized (a sentence is stored as Opus).
     # dir: directory to write into
     # idx: index label for file naming (string or integer)
     # lang: tts language
     # stl: status line object (optional, for compatibility)
     def to_wav(dir, idx, lang: 'en', stl: nil, tts_options: {})
       wav_path = File.join(dir, "#{idx}.wav")
-      return wav_path if File.exist?(wav_path)
-
-      synthesize_audio(wav_path, lang, tts_options: tts_options)
-      wav_path
+      stored = AudioFiles.stored_path(wav_path)
+      File.exist?(stored) ? stored : synthesize_audio(wav_path, lang, tts_options: tts_options)
     end
 
     def pause_file(dir)
@@ -37,8 +35,10 @@ module Audiobook
 
     protected
 
-    def synthesize_audio(_wav_path, _lang, tts_options: {})
-      AudioFiles.silence(_wav_path, 0.5)
+    # Writes the audio and returns its path.
+    def synthesize_audio(wav_path, _lang, tts_options: {})
+      AudioFiles.silence(wav_path, 0.5)
+      wav_path
     end
 
     def extra_hash

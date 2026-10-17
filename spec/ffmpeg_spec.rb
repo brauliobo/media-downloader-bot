@@ -1255,7 +1255,7 @@ RSpec.describe FFmpeg do
         output = File.join dir, 'speed.wav'
         filter = 'rubberband=tempo=1.2:pitch=1:formant=preserved'
 
-        expect(ffmpeg.speed_audio(
+        expect(ffmpeg.reencode_audio(
           input: 'speech.wav', output: output, filter: filter, label: 'speed failed'
         )).to eq output
         expect(commands).to eq [[
@@ -1269,7 +1269,7 @@ RSpec.describe FFmpeg do
       Dir.mktmpdir do |dir|
         output = File.join dir, 'speed.wav'
 
-        expect(ffmpeg.speed_audio(
+        expect(ffmpeg.reencode_audio(
           input: 'speech.wav', output: output, speed: 1.2, label: 'speed failed'
         )).to eq output
         expect(commands).to eq [[

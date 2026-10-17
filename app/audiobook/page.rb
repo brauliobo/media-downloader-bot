@@ -45,7 +45,7 @@ module Audiobook
 
       return nil if wavs.empty?
 
-      Zipper::AudioOps.join(wavs, wav_path(dir, idx), consumed: spoken.compact)
+      AudioFiles.join(wavs, wav_path(dir, idx), consumed: spoken.compact)
     end
 
     def prepare_speech_items(dir, idx, lang: 'en', stl: nil, para_context: nil, page_context: nil, book_metadata: {}, tts_options: {})
@@ -125,7 +125,7 @@ module Audiobook
     end
 
     def sentence_job(sentence, out_path, lang, status)
-      return if File.exist?(out_path)
+      return if File.exist?(AudioFiles.stored_path(out_path))
 
       lang = sentence.language || lang
       text = sentence.spoken_text(lang)
