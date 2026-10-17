@@ -32,7 +32,7 @@ module Bot
       end
 
       def edit_message(msg, id, text: nil, type: 'text', parse_mode: 'MarkdownV2', **params)
-        call(:edit_message, msg: msg, id: id, text: text, type: type, parse_mode: parse_mode, **params)
+        call(:edit_message, result: :success, msg: msg, id: id, text: text, type: type, parse_mode: parse_mode, **params)
       end
 
       def delete_message(msg, id, wait: nil) = call(:delete_message, msg: msg, id: id, wait: wait)

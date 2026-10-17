@@ -171,8 +171,7 @@ module Bot
         r.post 'edit_message' do
           params, msg = message_params(r)
           id = params.delete(:id)
-          service.edit_message(msg: msg, id: id, **params)
-          {success: true}
+          {success: !!service.edit_message(msg: msg, id: id, **params)}
         end
 
         r.post 'delete_message' do

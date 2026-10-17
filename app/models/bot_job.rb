@@ -32,6 +32,9 @@ class BotJob < Sequel::Model(:bot_jobs)
       end
     end
 
+    # The status message the job keeps up to date, kept in its message (`resp`) so that a worker resuming the job edits it instead of posting another.
+    def remember_status(id, message_id) = where(id: id.to_s).update(message: Sequel.lit('message || ?::jsonb', { resp: { message_id: message_id } }.to_json))
+
     def renew(worker) = where(worker: worker, state: 'running').update(lease_until: Time.now + LEASE)
 
     # Gives a job back, unharmed by the attempt: its worker stopped on purpose.

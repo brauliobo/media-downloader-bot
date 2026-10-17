@@ -49,7 +49,30 @@ RSpec.describe Worker, 'job status controls' do
     worker.send(:init_status)
 
     expect(service.sent).to be_nil
-    expect(service.edited.last).to eq([789, {text: 'Downloading metadata\\.\\.\\.', cancel_job: 'job-id'}])
+    expect(service.edited.last).to eq([789, {text: 'Downloading metadata\\.\\.\\.', cancel_job: 'job-id', force: true}])
+  end
+
+  it 'posts a status once and keeps its id in the job, for a worker resuming it to edit' do
+    BotJob.dataset.delete
+    BotJob.dataset.insert(id: 'job-id', queue: 'tdbot', key: '123:1', message: Sequel.pg_jsonb(text: 'url'))
+    worker = described_class.new(msg, service: service, job_id: 'job-id', skip_cleanup: true)
+
+    worker.send(:init_status)
+
+    expect(BotJob.first(id: 'job-id').message.to_h).to eq('text' => 'url', 'resp' => { 'message_id' => 789 })
+  ensure
+    BotJob.dataset.delete
+  end
+
+  it 'posts a new status when the one a dead run left cannot be edited' do
+    msg.resp = SymMash.new(message_id: 111)
+    allow(service).to receive(:edit_message).and_return(false)
+    worker = described_class.new(msg, service: service, job_id: nil, skip_cleanup: true)
+
+    worker.send(:init_status)
+
+    expect(service.sent.first).to eq('Downloading metadata\\.\\.\\.')
+    expect(msg.resp.message_id).to eq(789)
   end
 
   it 'replaces the status with Cancelled when execution is interrupted' do
