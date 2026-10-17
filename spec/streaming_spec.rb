@@ -16,9 +16,9 @@ RSpec.describe Streaming do
       expect(described_class.enabled?(opts)).to be false
     end
 
-    it 'is off without a bot size limit' do
+    it 'stays on without a size limit' do
       Zipper.size_mb_limit = nil
-      expect(described_class.enabled?(opts)).to be false
+      expect(described_class.enabled?(opts)).to be true
     end
 
     it 'is off for every encoding option' do
@@ -53,6 +53,15 @@ RSpec.describe Streaming do
         expect(described_class.fits?(path)).to be true
         Zipper.size_mb_limit = 0
         expect(described_class.fits?(path)).to be false
+      end
+    end
+
+    it 'accepts any file without a size limit' do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, 'f.mp4')
+        File.write(path, 'x')
+        Zipper.size_mb_limit = nil
+        expect(described_class.fits?(path)).to be true
       end
     end
   end

@@ -1,4 +1,4 @@
-# Uploads a source format that already fits the bot's size limit instead of transcoding it.
+# Uploads a source format that already fits the bot's size limit (if it has one) instead of transcoding it.
 module Streaming
   # Options that change the encoded streams, so the download can't be uploaded as is.
   # Not listed on purpose: ss, to and t (yt-dlp cuts that section while downloading, --download-sections)
@@ -20,9 +20,8 @@ module Streaming
   module_function
 
   # On by default for everybody; never with `nostream` or an encoding option.
-  def enabled?(opts)
-    Zipper.size_mb_limit.present? && opts.nostream.blank? && ENCODING_KEYS.none? { |key| opts[key].present? }
-  end
+  def enabled?(opts) = opts.nostream.blank? && ENCODING_KEYS.none? { |key| opts[key].present? }
 
-  def fits?(path) = ::File.size(path) < Zipper.size_mb_limit * 2**20
+  # Without a size limit anything fits.
+  def fits?(path) = Zipper.size_mb_limit.nil? || ::File.size(path) < Zipper.size_mb_limit * 2**20
 end

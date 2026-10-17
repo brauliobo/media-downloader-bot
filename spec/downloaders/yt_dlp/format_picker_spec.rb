@@ -125,4 +125,22 @@ RSpec.describe Downloaders::YtDlp::FormatPicker do
     info.duration = nil
     expect(pick(info)).to be_nil
   end
+
+  describe 'without a size limit' do
+    it 'picks the best mp4 pair whatever its size, with any audio bitrate' do
+      info.formats = [audio('139', 2, abr: 48), audio('140', 4, abr: 130), video('135', 480, 25), video('137', 1080, 5000)]
+      expect(pick(info, limit_mb: nil)).to eq('137+140')
+    end
+
+    it 'does not need to know the sizes nor the duration' do
+      info.formats = [video('134', 360, 0).merge(filesize: nil), audio('140', 4).merge(filesize: nil)]
+      info.duration = nil
+      expect(pick(info, limit_mb: nil)).to eq('134+140')
+    end
+
+    it 'still prefers h264 over AV1' do
+      info.formats = [audio('140', 4), video('135', 480, 25), video('av1', 1080, 30, vcodec: 'av01.0.05M.08')]
+      expect(pick(info, limit_mb: nil)).to eq('135+140')
+    end
+  end
 end
