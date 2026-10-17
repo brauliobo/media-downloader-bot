@@ -171,6 +171,17 @@ RSpec.describe Replay::Handler do
     expect(manager.replayed.map { |m| m[:id] }).to contain_exactly(11, 12, 13)
   end
 
+  it 'keeps only the book of a run that left status lines behind, as a resumed one does' do
+    manager = ReplayingManager.new(answers: { 12 => [{ type: 'Text', text: 'Processing page 1/9' }, { type: 'Audio', text: 'Book 12' }] })
+    engine  = Tracked::Engine.new({ 'replay' => described_class.new(manager, forwarded: forwarded, replayed: legacy) }, tick: 0.01)
+
+    id = engine.start(kind: 'replay', params: { chat_id: -200 })[:id]
+    Timeout.timeout(5) { sleep 0.01 until Job[id].state == 'completed' }
+
+    expect(JobItem.first(key: '-200:12').messages.map(&:kind)).to eq(['Audio'])
+    expect(manager.deleted.size).to eq(1)
+  end
+
   it 'reprocesses a done book from scratch, deleting everything sent for it' do
     run
     item = JobItem.first(key: '-200:12')

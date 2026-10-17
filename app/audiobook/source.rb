@@ -44,16 +44,16 @@ module Audiobook
       data
     end
 
-    # Word and OpenDocument texts are laid out by LibreOffice and read as the PDF it makes, kept beside the document for the cover.
+    # Word and OpenDocument texts are exported as an EPUB by LibreOffice, which keeps the paragraphs whole, and read as one.
     def parse_office(path, stl: nil, opts: nil)
-      stl&.update 'Converting document to PDF...'
+      stl&.update 'Converting document to EPUB...'
       Utils::Tmp.dir('office-') do |profile|
-        Sh.run('soffice', '--headless', "-env:UserInstallation=file://#{profile}", '--convert-to', 'pdf', '--outdir', File.dirname(path), path)
+        Sh.run('soffice', '--headless', "-env:UserInstallation=file://#{profile}", '--convert-to', 'epub', '--outdir', File.dirname(path), path)
       end
-      pdf = path.sub(/#{Regexp.escape(File.extname(path))}\z/, '.pdf')
-      raise "LibreOffice could not convert #{File.basename(path)}" unless File.exist?(pdf)
+      epub = path.sub(/#{Regexp.escape(File.extname(path))}\z/, '.epub')
+      raise "LibreOffice could not convert #{File.basename(path)}" unless File.exist?(epub)
 
-      parse_pdf(pdf, stl: stl, opts: opts)
+      parse_epub(epub, stl: stl, opts: opts)
     end
 
     def parse_html(html_path, stl: nil, opts: nil)

@@ -104,23 +104,32 @@ module Replay
       messages
     end
 
-    # A run that died with the process may have sent the book already: keep its answers, drop its errors. When it only left
-    # errors and status lines, those go and the book is converted again. Not while a worker is still converting the book: it is
-    # waited for (see Manager::Service#replay_message).
+    # A run that died with the process may have sent the book already: keep it. When it only left errors and status lines,
+    # those go and the book is converted again. Not while a worker is still converting the book: it is waited for (see
+    # Manager::Service#replay_message).
     def previous_answers(chat_id, id, item)
       return if item.attempts <= 1 || @manager.message_job_active?(chat_id: chat_id, message_id: id)
 
       answered = answers(chat_id, id)
-      book     = answered.any? { |message| book?(message) }
-      delete(chat_id, answered.select { |message| !book || message[:failed] }.map { |message| message[:message_id] })
-      answered.reject { |message| message[:failed] } if book
+      return books_only(chat_id, answered) if answered.any? { |message| book?(message) }
+
+      delete(chat_id, answered.map { |message| message[:message_id] })
+      nil
     end
 
     def book?(message) = message[:kind] != 'Text' && !message[:failed]
 
     def replay(chat_id, id)
       @manager.replay_message(chat_id: chat_id, message_id: id)
-      answers(chat_id, id)
+      answered = answers(chat_id, id)
+      answered.any? { |message| book?(message) } ? books_only(chat_id, answered) : answered
+    end
+
+    # With the book there, no status line or error reply is of use, whoever left them (a resumed book posts a new status).
+    def books_only(chat_id, answered)
+      books, rest = answered.partition { |message| message[:kind] != 'Text' }
+      delete(chat_id, rest.map { |message| message[:message_id] })
+      books
     end
 
     def answers(chat_id, id) = @manager.chat_messages(chat_id: chat_id, limit: WINDOW).select { |message| message[:reply_to_message_id] == id }.map { |message| tracked(message) }
