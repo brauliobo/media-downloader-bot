@@ -2,7 +2,7 @@ require 'rails_helper'
 
 RSpec.describe Dubbing::SpeechSynthesizer do
   let(:dir) { Dir.mktmpdir('speech-synthesizer-spec-') }
-  let(:reference) { Dubbing::VoiceReference::Reference.new(path: File.join(dir, 'source.wav'), text: 'English reference.') }
+  let(:reference) { TTS::Reference.new(path: File.join(dir, 'source.wav'), text: 'English reference.') }
   let(:sentences) do
     [
       sentence('Sim.', 0.0, 1.0, 'speaker'),
@@ -18,7 +18,6 @@ RSpec.describe Dubbing::SpeechSynthesizer do
 
   before do
     File.write(reference.path, 'source')
-    allow(TTS).to receive(:supports?).and_return(true)
     allow(Dubbing::Audio).to receive(:normalize) do |_input, output|
       File.write(output, 'fit')
     end
@@ -31,7 +30,7 @@ RSpec.describe Dubbing::SpeechSynthesizer do
     FileUtils.remove_entry(dir) if Dir.exist?(dir)
   end
 
-  it 'warms each speaker with target-language audio before synthesizing jobs' do
+  it 'clones every sentence of a speaker from the speaker recorded reference, not from a synthesized anchor' do
     calls = []
     allow(TTS).to receive(:synthesize_batch) do |items:, **options|
       calls << {items: items, options: options}
@@ -47,13 +46,10 @@ RSpec.describe Dubbing::SpeechSynthesizer do
       video_duration: 5.0
     ).render
 
-    expect(calls.size).to eq(2)
-    expect(calls.first.fetch(:items).map { |item| item.fetch(:text) }).to eq([sentences.last.text])
+    expect(calls.size).to eq(1)
+    expect(calls.first.fetch(:items).map { |item| item.fetch(:text) }).to eq(sentences.map(&:text))
     expect(calls.first.fetch(:options)).to include(speaker_wav: reference.path, ref_text: reference.text)
-    expect(calls.last.fetch(:items).map { |item| item.fetch(:text) }).to eq(sentences.map(&:text))
-    expect(calls.last.fetch(:options)).to include(ref_text: sentences.last.text)
-    expect(calls.last.fetch(:options)).not_to include(:threads)
-    expect(calls.last.fetch(:options).fetch(:speaker_wav)).to end_with('speaker-0000.target-reference.wav')
+    expect(calls.first.fetch(:options)).not_to include(:threads)
   end
 
   it 'reports normalization progress before timeline rendering' do
@@ -76,19 +72,16 @@ RSpec.describe Dubbing::SpeechSynthesizer do
     ).render
 
     expect(updates).to include(
-      'dubbing: preparing speaker voice 1/1',
       'dubbing: synthesizing 2/2',
       'dubbing: normalizing speech 1/2',
       'dubbing: normalizing speech 2/2'
     )
-    expect(updates.index('dubbing: preparing speaker voice 1/1')).to be < updates.index('dubbing: synthesizing 2/2')
     expect(updates.last).to eq('dubbing: rendering speech')
   end
 
   it 'uses the default voice for a speaker without a usable reference' do
     missing_reference_sentence = sentence('Voz padrão.', 4.0, 5.0, 'missing')
     calls = []
-    allow(TTS).to receive(:supports?).and_return(false)
     allow(TTS).to receive(:synthesize_batch) do |items:, **options|
       calls << {items: items, options: options}
       items.each { |item| File.write(item.fetch(:out_path), 'raw') }

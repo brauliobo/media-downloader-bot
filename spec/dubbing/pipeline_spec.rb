@@ -250,8 +250,8 @@ RSpec.describe Dubbing::Pipeline do
     }
     speaker_paths.each_value { |path| File.write(path, 'speaker') }
     speakers = {
-      0 => Dubbing::VoiceReference::Reference.new(path: speaker_paths.fetch(0), text: 'Hello.'),
-      1 => Dubbing::VoiceReference::Reference.new(path: speaker_paths.fetch(1), text: 'Bye.'),
+      0 => TTS::Reference.new(path: speaker_paths.fetch(0), text: 'Hello.'),
+      1 => TTS::Reference.new(path: speaker_paths.fetch(1), text: 'Bye.'),
     }
     diarization = diarization(
       speaker_segment(0.0, 1.0, 0),
@@ -271,7 +271,6 @@ RSpec.describe Dubbing::Pipeline do
     allow(::Translator).to receive(:translate_for_dubbing).and_return(['Olá.', 'Tchau.'])
     allow(Diarizer).to receive(:diarize).and_return(diarization)
     allow(Dubbing::VoiceReference).to receive(:extract_by_speaker).and_return(speakers)
-    allow(TTS).to receive(:supports?).and_return(false)
     allow(Dubbing::Audio).to receive(:normalize) { |_raw, out| File.write(out, 'fit') }
     allow(Dubbing::Audio).to receive(:render_timeline) do |clips, output, **|
       Dubbing::Audio::Timeline.new(path: output, clips: clips)
@@ -312,7 +311,7 @@ RSpec.describe Dubbing::Pipeline do
   it 'uses the default voice without removing sentences whose speaker has no usable reference' do
     speaker_path = File.join(dir, 'speaker-0.wav')
     File.write(speaker_path, 'speaker')
-    reference = Dubbing::VoiceReference::Reference.new(path: speaker_path, text: 'Hello.')
+    reference = TTS::Reference.new(path: speaker_path, text: 'Hello.')
     diarization = diarization(
       speaker_segment(0.0, 1.0, 0),
       speaker_segment(2.0, 3.0, 1)
@@ -322,7 +321,6 @@ RSpec.describe Dubbing::Pipeline do
     allow(::Translator).to receive(:translate_for_dubbing).and_return(['Olá.', 'Tchau.'])
     allow(Diarizer).to receive(:diarize).and_return(diarization)
     allow(Dubbing::VoiceReference).to receive(:extract_by_speaker).and_return(0 => reference)
-    allow(TTS).to receive(:supports?).and_return(false)
     allow(TTS).to receive(:synthesize_batch) do |items:, **|
       items.each { |item| File.write(item.fetch(:out_path), 'raw') }
     end
@@ -354,7 +352,6 @@ RSpec.describe Dubbing::Pipeline do
     allow(::Translator).to receive(:translate_for_dubbing).and_return(['Olá.', 'Tchau.'])
     allow(Diarizer).to receive(:diarize).and_return(diarization)
     allow(Dubbing::VoiceReference).to receive(:extract_by_speaker).and_return({})
-    allow(TTS).to receive(:supports?).and_return(false)
     allow(TTS).to receive(:synthesize_batch) do |items:, **|
       items.each { |item| File.write(item.fetch(:out_path), 'raw') }
     end

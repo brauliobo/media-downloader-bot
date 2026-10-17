@@ -86,12 +86,6 @@ RSpec.describe Dubbing::VoiceReference do
     expect(references.keys).to eq(['SPEAKER_01'])
   end
 
-  it 'provides its own TTS voice-cloning options' do
-    reference = described_class::Reference.new(path: '/tmp/speaker.wav', text: 'Reference text.')
-
-    expect(reference.tts_options).to eq(speaker_wav: '/tmp/speaker.wav', ref_text: 'Reference text.')
-  end
-
   it 'uses the extracted audio transcript when one is provided' do
     transcriber = instance_double('VoiceReference::Transcriber', call_vocals: transcript('Observed reference.'))
 

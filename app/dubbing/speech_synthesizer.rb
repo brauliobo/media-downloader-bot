@@ -1,6 +1,8 @@
 require 'thread'
 
 module Dubbing
+  # Speaks every sentence in its speaker's recorded voice. The reference goes straight to the backend: a synthesized
+  # copy of it (an Anchor) would only be a worse clone of the same voice.
   class SpeechSynthesizer
     def initialize(sentences:, references:, opts:, target_lang:, workdir:, video_duration:, stl: nil)
       @sentences       = sentences
@@ -14,16 +16,14 @@ module Dubbing
 
     def render
       @stl&.update 'dubbing: synthesizing'
-      clips             = Array.new(@sentences.size)
-      options           = TTS::Options.for(@opts)
-      synthesis         = progress_counter('synthesizing')
-      normalization     = progress_counter('normalizing speech')
-      use_target_voice  = target_reference_supported?
+      clips         = Array.new(@sentences.size)
+      options       = TTS::Options.for(@opts)
+      synthesis     = progress_counter('synthesizing')
+      normalization = progress_counter('normalizing speech')
 
-      speaker_groups.each_with_index do |(speaker_id, indices), speaker_index|
-        reference = @references[speaker_id]
-        jobs      = jobs_for(indices)
-        synthesize_speaker(reference, jobs, speaker_index, options, synthesis.batch_callback, use_target_voice)
+      speaker_groups.each do |speaker_id, indices|
+        jobs = jobs_for(indices)
+        synthesize_jobs(jobs, @references[speaker_id], options, on_batch: synthesis.batch_callback)
         normalize_jobs(jobs, indices, clips, normalization)
       end
 
@@ -47,38 +47,9 @@ module Dubbing
       end
     end
 
-    def synthesize_speaker(reference, jobs, speaker_index, options, on_batch, use_target_voice)
-      target_reference = if reference && use_target_voice
-        target_reference_for(reference, jobs, speaker_index, options)
-      else
-        reference
-      end
-
-      synthesize_jobs(jobs, target_reference, options, on_batch: on_batch)
-    end
-
-    def target_reference_for(reference, jobs, speaker_index, options)
-      # Short cross-lingual targets can echo the source-language voice prompt.
-      @stl&.update "dubbing: preparing speaker voice #{speaker_index + 1}/#{speaker_groups.size}"
-      anchor_text = jobs.max_by { |job| job.fetch(:text).to_s.length }.fetch(:text).to_s
-      anchor_path = File.join(@workdir, format('speaker-%04d.target-reference.wav', speaker_index))
-      anchor_job = {text: anchor_text, lang: @target_lang, out_path: anchor_path}
-
-      synthesize_jobs([anchor_job], reference, options)
-      VoiceReference::Reference.new(path: anchor_path, text: anchor_text)
-    end
-
+    # A speaker without a usable reference gets the backend's default voice.
     def synthesize_jobs(jobs, reference, options, on_batch: nil)
-      reference_options = reference ? reference.tts_options : {}
-      TTS.synthesize_batch(
-        items:    jobs,
-        on_batch: on_batch,
-        **options.merge(reference_options)
-      )
-    end
-
-    def target_reference_supported?
-      TTS.supports?(:stable_voice_reference) && TTS.supports?(:batch_synthesis)
+      TTS.synthesize_batch(items: jobs, on_batch: on_batch, **options.merge(reference ? reference.tts_options : {}))
     end
 
     def normalize_jobs(jobs, indices, clips, progress)

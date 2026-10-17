@@ -1,15 +1,11 @@
 require 'fileutils'
 
 module Dubbing
+  # Cuts each speaker's recorded TTS::Reference out of the original vocals. Dubbing always clones these, never an Anchor.
   module VoiceReference
     MIN_DURATION = 4.0
     MAX_DURATION = 8.0
     REFERENCE_GAP = 0.15
-    Reference = Data.define(:path, :text) do
-      def tts_options
-        {speaker_wav: path, ref_text: text}
-      end
-    end
     Selection = Data.define(:start, :duration, :text)
 
     module_function
@@ -33,7 +29,7 @@ module Dubbing
         text = reference_text(path, selections, transcriber)
         next if text.empty?
 
-        [speaker_id, Reference.new(path: path, text: text)]
+        [speaker_id, TTS::Reference.new(path: path, text: text)]
       end.to_h
     end
 
