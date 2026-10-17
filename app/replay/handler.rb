@@ -41,12 +41,12 @@ module Replay
       summary(chat_id, previous_answers(chat_id, id, item) || replay(chat_id, id))
     end
 
-    # Whatever the bot answered with, there must be a book among it: errors and status lines alone are a failure.
+    # Whatever the bot answered with, there must be a book among it: nothing, errors or status lines alone are a failure.
     def error_of(result)
-      messages = result[:messages]
-      return if messages.blank?
+      messages = Array(result[:messages])
+      return 'the bot only answered with an error' if messages.present? && messages.all? { |message| message[:failed] }
 
-      messages.all? { |message| message[:failed] } ? 'the bot only answered with an error' : ('the bot sent no book' unless messages.any? { |message| book?(message) })
+      'the bot sent no book' unless messages.any? { |message| book?(message) }
     end
 
     # Puts the item's wanted hashtags in the captions of the media messages that still carry other ones.
@@ -71,7 +71,7 @@ module Replay
 
     def row(chat_id, id, replies)
       messages = Array(replies).map { |message| tracked(message) }
-      error    = error_of(messages: messages)
+      error    = error_of(messages: messages) if messages.present?
       { key: "#{chat_id}:#{id}", status: messages.empty? ? 'pending' : (error ? 'failed' : 'done'), error: error,
         result: Sequel.pg_jsonb(hashtags: wanted_hashtags(messages)), messages: messages }
     end

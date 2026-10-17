@@ -124,6 +124,15 @@ RSpec.describe Replay::Handler do
     expect(JobItem.done.count).to eq(2)
   end
 
+  it 'fails the book the bot never answered, as when its job vanished' do
+    manager = ReplayingManager.new(answers: { 12 => [] })
+    engine  = Tracked::Engine.new({ 'replay' => described_class.new(manager, forwarded: forwarded, replayed: legacy) }, tick: 0.01)
+    id      = engine.start(kind: 'replay', params: { chat_id: -200 })[:id]
+    Timeout.timeout(5) { sleep 0.01 until Job[id].state == 'failed' }
+
+    expect(JobItem.first(key: '-200:12')).to have_attributes(status: 'failed', error: 'the bot sent no book')
+  end
+
   it 'waits for the worker still converting a book after the bot restarted, instead of taking its status message for an answer' do
     status   = { id: 500, chat_id: -200, type: 'Text', text: 'Downloading...', reply_to_message_id: 11 }
     manager  = ReplayingManager.new(messages: [status], active: [11])
