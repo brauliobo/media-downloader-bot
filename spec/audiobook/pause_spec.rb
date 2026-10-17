@@ -19,9 +19,10 @@ RSpec.describe 'Audiobook pause assembly' do
       expect(Audiobook::AudioFiles).to receive(:pause)
         .with(Audiobook::Pauses::PARAGRAPH, dir).and_return(paragraph_pause)
       expect(second).to receive(:pause_file).with(dir).and_return(sentence_pause)
-      expect(Zipper::AudioOps).to receive(:concat).with(
+      expect(Zipper::AudioOps).to receive(:join).with(
         [paragraph_pause, first_wav, sentence_pause, second_wav],
-        File.join(dir, 'para_1.wav')
+        File.join(dir, 'para_1.wav'),
+        consumed: [first_wav, second_wav]
       )
 
       paragraph.to_wav

@@ -45,6 +45,19 @@ RSpec.describe Zipper::AudioOps do
     )
   end
 
+  it 'joins into a file that exists only whole and drops the parts it consumed, not the ones shared' do
+    Dir.mktmpdir('join-spec-') do |dir|
+      part, shared, output = %w[part.wav shared.wav out.wav].map { |name| File.join(dir, name) }
+      File.write part, 'part'
+      File.write shared, 'shared'
+
+      expect(described_class.join([part], output, consumed: [part])).to eq output
+
+      expect(File.read(output)).to eq 'part'
+      expect(Dir.children(dir)).to contain_exactly('shared.wav', 'out.wav')
+    end
+  end
+
   it 'preserves single-input copy compatibility and uses semantic concat for multiple inputs' do
     Dir.mktmpdir('concat-spec-') do |dir|
       one = File.join dir, 'one.wav'

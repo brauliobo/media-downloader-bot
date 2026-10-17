@@ -19,12 +19,16 @@ module Audiobook
       { 'paragraph' => { 'sentences' => sentences.map(&:to_h) } }
     end
 
-    # Generate combined wav for this paragraph
+    def wav_path = File.join(dir, "para_#{idx}.wav")
+
+    # Generate combined wav for this paragraph; the sentences' own wavs go once it is there, and a paragraph already joined is kept.
     def to_wav
       return nil if sentences.empty?
+      return wav_path if File.exist?(wav_path)
 
       speech_options = tts_options || {}
-      
+      spoken = []
+
       wavs = sentences.each_with_index.flat_map do |sent, sidx|
         next [] unless sent.speakable?
 
@@ -35,29 +39,28 @@ module Audiobook
           lang: sent.language || lang || 'en',
           tts_options: speech_options
         )
+        spoken << main_wav
         pause_file = sidx.zero? ? AudioFiles.pause(PAUSE, dir) : sent.pause_file(dir)
         ref_wavs = (sent.references || []).each_with_index.flat_map do |ref, ridx|
           stl&.update "Processing reference #{ref.id} for sentence #{sidx+1}/#{sentences.size}"
           ref.sentences.each_with_index.flat_map do |rs, j|
-            wav_path = rs.to_wav(
+            ref_wav = rs.to_wav(
               dir,
               "#{idx}_#{sidx}_r#{ridx}_#{j}",
               lang: rs.language || lang || 'en',
               tts_options: speech_options
             )
+            spoken << ref_wav
             ref_pause = AudioFiles.pause(Pauses::REFERENCE, dir) if ridx == 0 && j == 0
             rs_pause = rs.pause_file(dir)
-            [j == 0 ? ref_pause : nil, rs_pause, wav_path].compact
+            [j == 0 ? ref_pause : nil, rs_pause, ref_wav].compact
           end
         end
         [pause_file, main_wav, *ref_wavs].compact
       end
-      
-      combined = File.join(dir, "para_#{idx}.wav")
       return nil if wavs.empty?
 
-      Zipper::AudioOps.concat(wavs, combined)
-      combined
+      Zipper::AudioOps.join(wavs, wav_path, consumed: spoken.compact)
     end
 
     # Discover paragraphs from Line objects (with font metadata)

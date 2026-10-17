@@ -15,13 +15,20 @@ module Audiobook
       { 'page' => { 'number' => number, 'items' => items.map(&:to_h) } }
     end
 
+    def wav_path(dir, idx) = File.join(dir, "page_#{idx}.wav")
+
+    # The page's wav; the wavs of its items go once it is there, and a page already joined is kept.
     def to_wav(dir, idx, **kwargs)
       return nil if items.empty?
+      return wav_path(dir, idx) if File.exist?(wav_path(dir, idx))
 
       context = prepare_speech_items(dir, idx, **kwargs)
+      spoken = []
       wavs = items.each_with_index.flat_map do |item, iidx|
         if item.is_a?(Audiobook::Paragraph)
-          [item.to_wav]
+          wav = item.to_wav
+          spoken << wav
+          [wav]
         else
           kwargs[:stl]&.update item_status(item, iidx, context[:page_idx], context[:page_total], ocr: context[:is_ocr_book])
           wav = item.to_wav(
@@ -30,6 +37,7 @@ module Audiobook
             stl: kwargs[:stl],
             tts_options: kwargs[:tts_options] || {}
           )
+          spoken << wav
           heading_pause = item.pause_file(dir)
           [heading_pause, wav].compact
         end
@@ -37,9 +45,7 @@ module Audiobook
 
       return nil if wavs.empty?
 
-      combined = File.join(dir, "page_#{idx}.wav")
-      Zipper::AudioOps.concat(wavs, combined)
-      combined
+      Zipper::AudioOps.join(wavs, wav_path(dir, idx), consumed: spoken.compact)
     end
 
     def prepare_speech_items(dir, idx, lang: 'en', stl: nil, para_context: nil, page_context: nil, book_metadata: {}, tts_options: {})
@@ -74,7 +80,10 @@ module Audiobook
       { page_idx: page_idx, page_total: page_total, is_ocr_book: is_ocr_book }
     end
 
+    # Nothing is left to synthesize for a page, or a paragraph, whose wav is already joined: its sentences' wavs were dropped.
     def speech_jobs(dir, idx, lang)
+      return [] if File.exist?(wav_path(dir, idx))
+
       paragraph  = items.grep(Audiobook::Paragraph).first
       page_idx   = paragraph&.page_idx || number
       page_total = paragraph&.page_total || number
@@ -89,6 +98,8 @@ module Audiobook
     end
 
     def paragraph_jobs(paragraph, lang)
+      return [] if File.exist?(paragraph.wav_path)
+
       paragraph.sentences.each_with_index.flat_map do |sentence, sidx|
         jobs = [sentence_job(sentence, File.join(paragraph.dir, "#{paragraph.idx}_#{sidx}.wav"), lang,
                              paragraph.progress_status("sentence #{sidx + 1}/#{paragraph.sentences.size}", ocr: false))]

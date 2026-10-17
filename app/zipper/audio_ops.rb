@@ -35,6 +35,16 @@ class Zipper
       outfile
     end
 
+    # Joins the inputs into outfile, which exists only whole (a killed run leaves none), then drops the `consumed` ones: the parts
+    # are not needed once their sum is there, and a book's parts are many times its size.
+    def join(inputs, outfile, consumed: [], **options)
+      part = sibling(outfile, 'part')
+      concat(inputs, part, **options)
+      replace(outfile, part)
+      FileUtils.rm_f(consumed)
+      outfile
+    end
+
     def copy_safe?(signatures) = signatures.none?(&:empty?) && signatures.uniq.one?
 
     def add_floor!(wav_path, amplitude:, loudness_lufs:, sample_rate: 22_050, ffmpeg: nil, ffmpeg_factory: nil)
