@@ -16,7 +16,7 @@ Nice=19
 Slice=media-downloader-workers.slice
 LimitNOFILE=1001001
 ProtectHome=yes
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
 PrivateTmp=true
 
 # Its own release tree, so deploying the bot never changes the code under a running worker.
