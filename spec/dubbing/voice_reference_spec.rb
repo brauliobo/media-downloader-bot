@@ -29,7 +29,27 @@ RSpec.describe Dubbing::VoiceReference do
     instance_double(Process::Status, success?: true)
   end
 
+  def words(*confidences)
+    confidences.map { |confidence| Subtitler::Subtitle::Word.new(text: 'w', start: 0, finish: 1, confidence: confidence, metadata: {}) }
+  end
+
+  let(:analyzer) do
+    instance_double(::VoiceReference::AudioAnalyzer).tap do |double|
+      scored = ->(candidate) { candidate.tap { |value| value.score = value.confidence } }
+      allow(double).to receive(:measure, &scored)
+      allow(double).to receive(:assess, &scored)
+      allow(double).to receive(:extract_span) { |audio:, output:, **| FileUtils.cp(audio, output) }
+    end
+  end
+  let(:cutter) do
+    instance_double(Dubbing::VoiceReference::Cutter).tap do |double|
+      allow(double).to receive(:call) { |_audio, selection, **| selection }
+    end
+  end
+
   before do
+    allow(::VoiceReference::AudioAnalyzer).to receive(:new).and_return(analyzer)
+    allow(Dubbing::VoiceReference::Cutter).to receive(:new).and_return(cutter)
     allow(described_class).to receive(:extract_span) do |_input, selection, output_dir, idx|
       File.join(output_dir, format('speaker-%04d.wav', idx)).tap do |path|
         File.write(path, "#{selection.start}:#{selection.duration}")
@@ -200,12 +220,14 @@ RSpec.describe Dubbing::VoiceReference do
     expect(references.fetch('B').text).to eq('Goodbye.')
   end
 
-  it 'keeps raw source audio by default for an OmniVoice reference' do
+  it 'fades the edges of a clip and pauses after it, without changing the voice' do
     allow(described_class).to receive(:extract_span).and_call_original
+    allow(::VoiceReference::AudioAnalyzer).to receive(:new).and_call_original
     selection = described_class::Selection.new(start: 1.0, duration: 4.0, text: 'Clean phrase.')
     expect(Sh).to receive(:run) do |command|
       command = command.join(' ')
-      expect(command).not_to include('-af', 'afftdn', 'highpass', 'loudnorm', 'apad')
+      expect(command).to include('afade=t=in:st=0:d=0.02', 'afade=t=out:st=3.98:d=0.02', 'apad=pad_dur=0.15')
+      expect(command).not_to include('afftdn', 'highpass', 'loudnorm')
       output = File.join(dir, 'speaker-0001.wav')
       File.write(output, 'clean reference')
       ['', '', ok_status]
@@ -216,8 +238,83 @@ RSpec.describe Dubbing::VoiceReference do
     expect(output).to eq(File.join(dir, 'speaker-0001.wav'))
   end
 
+  it 'brings the joined reference to a steady loudness once, not clip by clip' do
+    reference = described_class.extract_by_speaker(
+      input, [segment(0, 3), segment(5, 8)],
+      sentences: [sentence(0, 3, source_text: 'One.'), sentence(5, 8, source_text: 'Two.')], dir: dir
+    ).fetch(0)
+
+    expect(analyzer).to have_received(:extract_span)
+      .with(hash_including(audio: reference.path, output: File.join(File.dirname(reference.path), 'speaker.level.wav'), filter: :level)).once
+  end
+
+  it 'builds the reference from the most confidently transcribed sentences' do
+    sentences = [
+      sentence(0, 4, source_text: 'Mumbled.', source_words: words(0.3, 0.4)),
+      sentence(5, 9, source_text: 'Clear.', source_words: words(0.99, 0.98)),
+    ]
+
+    reference = described_class.extract_by_speaker(input, [], sentences: sentences, dir: dir).fetch(0)
+
+    expect(reference.text).to eq('Clear.')
+  end
+
+  it 'leaves out a sentence another speaker talks over' do
+    sentences = [
+      sentence(0, 4, source_text: 'Talked over.'),
+      sentence(5, 9, source_text: 'On its own.'),
+      sentence(10, 12, source_text: 'Other.', speaker_id: 1),
+    ]
+    segments = [segment(0, 4), segment(1, 3, speaker_id: 1), segment(5, 9), segment(10, 12, speaker_id: 1)]
+
+    reference = described_class.extract_by_speaker(input, segments, sentences: sentences, dir: dir).fetch(0)
+
+    expect(reference.text).to eq('On its own.')
+  end
+
+  it 'uses a sentence another speaker talks over when there is no other' do
+    sentences = [sentence(0, 4, source_text: 'Talked over.'), sentence(10, 12, source_text: 'Other.', speaker_id: 1)]
+    segments = [segment(0, 4), segment(1, 3, speaker_id: 1), segment(10, 12, speaker_id: 1)]
+
+    reference = described_class.extract_by_speaker(input, segments, sentences: sentences, dir: dir).fetch(0)
+
+    expect(reference.text).to eq('Talked over.')
+  end
+
+  it 'cuts each sentence where the cutter finds silence' do
+    allow(cutter).to receive(:call) do |_audio, selection, **|
+      selection.with(start: selection.start - 0.2, duration: selection.duration + 0.3)
+    end
+
+    described_class.extract_by_speaker(input, [], sentences: [sentence(5, 9, source_text: 'Cut.')], dir: dir)
+
+    expect(File.read(File.join(dir, 'speaker-0000', 'speaker-0001.wav'))).to eq('4.8:4.3')
+  end
+
+  it 'gives each sentence room for its cut only up to half the silence to its neighbours' do
+    seen = []
+    allow(cutter).to receive(:call) { |_audio, selection, **| selection.tap { seen << selection } }
+    sentences = [sentence(0.2, 2, source_text: 'First.'), sentence(2.2, 4, source_text: 'Second.'), sentence(9, 11, source_text: 'Third.')]
+
+    described_class.extract_by_speaker(input, [], sentences: sentences, dir: dir)
+
+    rooms = seen.sort_by(&:start).map { |selection| [selection.before.round(2), selection.after.round(2)] }
+    expect(rooms).to eq([[0.2, 0.1], [0.1, 0.25], [0.25, 0.25]])
+  end
+
+  it 'falls back to any sentence when none is cut in clean silence' do
+    allow(cutter).to receive(:call) { |_audio, selection, **| selection.with(clean: false) }
+
+    reference = described_class.extract_by_speaker(input, [], sentences: [sentence(0, 4, source_text: 'Tight.')], dir: dir).fetch(0)
+
+    expect(reference.text).to eq('Tight.')
+    expect(analyzer).to have_received(:measure)
+    expect(analyzer).not_to have_received(:assess)
+  end
+
   it 'allows the full quality filter and reference padding as explicit options' do
     allow(described_class).to receive(:extract_span).and_call_original
+    allow(::VoiceReference::AudioAnalyzer).to receive(:new).and_call_original
     selection = described_class::Selection.new(start: 1.0, duration: 4.0, text: 'Quality phrase.')
     expect(Sh).to receive(:run) do |command|
       command = command.join(' ')
