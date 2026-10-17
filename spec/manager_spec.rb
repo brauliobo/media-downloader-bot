@@ -123,6 +123,15 @@ RSpec.describe Manager do
       expect(manager.queue_size).to eq(2)
     end
 
+    it 'counts a message against its sender, except one that comes out of a tracked job: that has its own limit' do
+      msg = SymMash.new(from: {id: 123}, chat: {id: 456}, message_id: 7, text: 'https://example.com/video')
+      job = manager.enqueue_message(msg)
+      replayed = manager.enqueue_message(SymMash.new(**msg, message_id: 8), queued: true)
+
+      expect(BotJob.with_pk!(job[:id]).owner_id).to eq(123)
+      expect(BotJob.with_pk!(replayed[:id]).owner_id).to be_nil
+    end
+
     it 'cancels only the job of the status message a /stop replies to' do
       msg       = SymMash.new(from: {id: 123}, chat: {id: 456}, text: '/stop', reply_to_message_id: 9)
       job       = manager.jobs.submit(SymMash.new(from: {id: 123}, chat: {id: 456}, text: 'url'))

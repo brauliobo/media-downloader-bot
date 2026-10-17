@@ -67,6 +67,13 @@ RSpec.describe Bot::Jobs, 'leases' do
     expect([jobs.dequeue(worker: 'w4'), jobs.dequeue(worker: 'w5')]).to eq(admin)
   end
 
+  it 'lets as many ownerless jobs run as there are workers: what a tracked job feeds the bot has its own limit' do
+    submitted = [1, 2, 3].map { |id| jobs.submit(other(1, id), owner: nil) }
+
+    expect(%w[w1 w2 w3].map { |worker| jobs.dequeue(worker: worker) }).to eq(submitted)
+    expect(BotJob.select_map(:owner_id).uniq).to eq([nil])
+  end
+
   it 'forgets the jobs the bot ran itself when it restarts' do
     inline = jobs.register(msg)
     queued = jobs.submit(other(2, 2))

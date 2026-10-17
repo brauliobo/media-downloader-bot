@@ -86,15 +86,15 @@ EOS
 
     return if !queued && ENV['TD_BOT'] && queue_message(msg)
 
-    enqueue_message msg
+    enqueue_message msg, queued: queued
   rescue => e
     bot.report_error msg, e rescue nil
     STDERR.puts e.full_message
     raise
   end
 
-  def enqueue_message(msg)
-    return jobs.submit(msg) unless ENV['WITH_WORKER']
+  def enqueue_message(msg, queued: false)
+    return jobs.submit(msg, owner: (msg.from.id unless queued)) unless ENV['WITH_WORKER']
 
     job    = jobs.register(msg)
     forked = bot.fork_workers?

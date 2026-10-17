@@ -13,7 +13,8 @@ module Bot
 
     def initialize(queue: 'default') = @queue = queue
 
-    def submit(msg) = insert(msg, message: msg.to_h.except(:bot, :resp))
+    # `owner` is who the job counts against (one running job per user); none for what a tracked job feeds the bot, that has its own limit.
+    def submit(msg, owner: msg.from.id) = insert(msg, owner: owner, message: msg.to_h.except(:bot, :resp))
 
     def register(msg) = insert(msg, state: 'running', worker: INLINE)
 
@@ -76,8 +77,8 @@ module Bot
 
     def mine = BotJob.of(queue)
 
-    def insert(msg, message: {}, **attrs)
-      row = { id: SecureRandom.urlsafe_base64(12), queue: queue, key: self.class.key_of(msg), owner_id: msg.from.id, chat_id: msg.chat.id,
+    def insert(msg, owner: msg.from.id, message: {}, **attrs)
+      row = { id: SecureRandom.urlsafe_base64(12), queue: queue, key: self.class.key_of(msg), owner_id: owner, chat_id: msg.chat.id,
               message: Sequel.pg_jsonb(message), **attrs }
       BotJob.dataset.insert_conflict(target: %i[queue key]).insert(row)
       (row[:key] ? mine.first(key: row[:key]) : BotJob.with_pk!(row[:id])).envelope
