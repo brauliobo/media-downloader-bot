@@ -21,6 +21,17 @@ RSpec.describe Bot::Jobs do
     expect(jobs.cancel(job[:id], user_id: 123, chat_id: 123)).to eq(:not_found)
   end
 
+  it 'marks the progress of a job each time its status is edited' do
+    jobs  = described_class.new
+    reply = SymMash.new(from: {id: 123}, chat: {id: 123}, message_id: 7, text: 'url')
+    jobs.submit(reply)
+    BotJob.dataset.update(updated_at: Time.now - 3600)
+
+    jobs.touch(reply)
+
+    expect(BotJob.first.updated_at).to be > Time.now - 60
+  end
+
   it 'queues a message once while it is active' do
     jobs  = described_class.new
     reply = SymMash.new(from: {id: 123}, chat: {id: 123}, message_id: 7, text: 'url')

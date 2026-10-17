@@ -30,6 +30,20 @@ RSpec.describe 'Api jobs', type: :request do
     Rails.application.config.x.manager = fake_manager
   end
 
+  it 'finds the running items that made no progress for a while' do
+    quiet = JobItem.create(job_id: job.id, kind: 'replay', key: '-200:3', status: 'running', claimed_at: Time.now - 3600)
+    busy  = JobItem.create(job_id: job.id, kind: 'replay', key: '-200:4', status: 'running', claimed_at: Time.now - 3600)
+    BotJob.dataset.insert(id: 'busy', queue: 'tdbot', key: '-200:4', state: 'running', message: Sequel.pg_jsonb({}), updated_at: Time.now - 60)
+
+    get "/api/job_items?job_id=#{job.id}&status=running", headers: headers
+    expect(response.parsed_body.to_h { |i| [i['id'], i['stalled']] }).to eq(quiet.id => true, busy.id => false)
+
+    get "/api/job_items?job_id=#{job.id}&status=stalled", headers: headers
+    expect(response.parsed_body.map { |i| i['id'] }).to eq([quiet.id])
+  ensure
+    BotJob.where(id: 'busy').delete
+  end
+
   it 'rejects calls without the token' do
     get '/api/jobs'
 

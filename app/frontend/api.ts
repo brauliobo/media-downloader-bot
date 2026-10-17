@@ -22,7 +22,7 @@ export type TrackedInput = {
   inputs?: { url?: string; opts?: Record<string, string | number> }[]
 }
 export type TrackedItem = {
-  id: number; job_id: number; key: string; status: 'pending' | 'running' | 'done' | 'failed'; attempts: number; error: string | null
+  id: number; job_id: number; key: string; status: 'pending' | 'running' | 'done' | 'failed'; attempts: number; error: string | null; active_at: string | null; stalled: boolean
   result: { hashtags?: string; options?: string; input?: TrackedInput; lang_check?: { lang: string; expected?: string; mismatch?: boolean } }; finished_at: string | null; messages: TrackedMessage[]
 }
 

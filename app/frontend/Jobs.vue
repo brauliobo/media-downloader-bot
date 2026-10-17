@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { api, type Tracked, type TrackedItem, type TrackedInput } from './api'
 import ChatPicker from './ChatPicker.vue'
 
-const STATUSES = ['', 'pending', 'running', 'done', 'failed']
+const STATUSES = ['', 'pending', 'running', 'stalled', 'done', 'failed']
 const group = ref({ chatId: null as number | null, topicId: null as number | null })
 const parallel = ref(8)
 const retryFailed = ref(true)
@@ -39,6 +39,7 @@ const done = (job: Tracked) => (job.counts.done ?? 0)
 const total = (job: Tracked) => Object.values(job.counts).reduce((sum, count) => sum + count, 0)
 const active = (job: Tracked) => ['queued', 'running', 'stopping'].includes(job.state)
 const changed = (item: TrackedItem) => item.messages.some(message => !message.deleted_at && !message.failed && message.kind !== 'Text' && (message.hashtags ?? '') !== (hashtags.value[item.id] ?? ''))
+const idle = (item: TrackedItem) => item.active_at ? Math.round((Date.now() - Date.parse(item.active_at)) / 60000) : 0
 const opt = ([key, value]: [string, string | number]) => value === 1 ? key : `${key}=${value}`
 const inputOf = ({ file_name, type, size, text, inputs = [], error }: TrackedInput) =>
   [file_name ?? text, type, size && `${(size / 1048576).toFixed(1)} MB`, ...inputs.flatMap(({ url, opts = {} }) => [url, ...Object.entries(opts).map(opt)]), error].filter(Boolean).join(' · ')
@@ -84,6 +85,8 @@ section
         span(v-if="item.result.input")  · {{ inputOf(item.result.input) }}
         span(v-if="item.result.options")  · chat options: {{ item.result.options }}
         span.error(v-if="item.result.lang_check?.mismatch")  · read as {{ item.result.lang_check.lang }}, group is {{ item.result.lang_check.expected }}
+        span.error(v-if="item.stalled")  · stalled, no progress for {{ idle(item) }} min
+        span(v-else-if="item.status === 'running'")  · last progress {{ idle(item) }} min ago
         span.error(v-if="item.error")  · {{ item.error }}
         button(v-if="item.status === 'failed'" @click="attempt(() => api.retryTrackedItem(item.id))") Retry
         button(v-if="item.status === 'done'" @click="attempt(() => api.retryTrackedItem(item.id, true))") Delete outputs and reprocess

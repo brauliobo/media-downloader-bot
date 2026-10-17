@@ -75,7 +75,7 @@ class Manager
     def upload_generated_media(...) = remote { drb_result bot.upload_generated_media(...) }
 
     def send_message(msg:, text:, **params) = drb_result bot.send_message(msg, text, **params)
-    def edit_message(msg:, id:, **params) = drb_result bot.edit_message(msg, id, **params)
+    def edit_message(msg:, id:, **params) = drb_result(bot.edit_message(msg, id, **params)).tap { jobs.touch(msg) }
 
     def send_album(msg:, text:, uploads:, **params)
       remote do

@@ -52,6 +52,9 @@ module Bot
 
     def cancelled?(id) = mine.where(id: id.to_s, cancelled: true).any?
 
+    # A worker edited the message's status: the job is making progress (BotJob#updated_at tells how long ago, to find the stalled ones).
+    def touch(msg) = mine.where(key: self.class.key_of(msg)).update(updated_at: Time.now)
+
     def finish(id) = mine.where(id: id.to_s).delete.then { true }
 
     def self.cancel_data(id)
