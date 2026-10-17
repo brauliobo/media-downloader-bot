@@ -18,12 +18,15 @@ class BotJob < Sequel::Model(:bot_jobs)
     # Owners that already run as many jobs as `limit`, except the admin.
     def saturated(queue, limit, admin) = of(queue).leased.exclude(owner_id: admin).exclude(owner_id: nil).group(:owner_id).having { count.function.* >= limit }.select(:owner_id)
 
+    # People's jobs first, then the ownerless ones (tracked jobs feeding the bot): a person never waits behind a batch.
+    def people_first = order(Sequel.case({ { owner_id: nil } => 1 }, 0), :created_at, :id)
+
     # Takes the oldest job nobody holds, atomically so that concurrent workers never share one, and leases it to `worker`.
     # Jobs that outlived their attempts (they keep killing their workers) are dropped; a user at their limit waits.
     def claim(queue, worker, limit: Bot::UserQueue.limit, admin: Bot::MsgHelpers::ADMIN_CHAT_ID)
       of(queue).claimable.where { attempts >= MAX_ATTEMPTS }.delete
       db.transaction do
-        id  = of(queue).claimable.exclude(owner_id: saturated(queue, limit, admin)).order(:created_at, :id).for_update.skip_locked.get(:id)
+        id  = of(queue).claimable.exclude(owner_id: saturated(queue, limit, admin)).people_first.for_update.skip_locked.get(:id)
         row = where(id: id).returning.update(state: 'running', worker: worker, lease_until: Time.now + LEASE, attempts: Sequel[:attempts] + 1, updated_at: Time.now).first if id
         model.call(row) if row
       end

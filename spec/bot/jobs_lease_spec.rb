@@ -74,6 +74,13 @@ RSpec.describe Bot::Jobs, 'leases' do
     expect(BotJob.select_map(:owner_id).uniq).to eq([nil])
   end
 
+  it 'hands a person the job before the older ownerless ones' do
+    jobs.submit(other(1, 1), owner: nil)
+    person = jobs.submit(other(2, 2))
+
+    expect(jobs.dequeue(worker: 'w1')).to eq(person)
+  end
+
   it 'forgets the jobs the bot ran itself when it restarts' do
     inline = jobs.register(msg)
     queued = jobs.submit(other(2, 2))
