@@ -311,6 +311,39 @@ RSpec.describe Downloaders::YtDlp do
         expect(stream).to eq('140x')
       end
 
+      describe 'for direct files with no size announced' do
+        def direct(id, height) = {format_id: id, ext: 'mp4', protocol: 'https', url: "https://cdn.example/#{id}.mp4", height: height}
+
+        before { info.formats = [direct('sd', 360), direct('hd', 720)] }
+
+        def announce(sizes) = allow(Utils::HTTP).to receive(:head_public) { |url| {'content-length' => sizes.fetch(url[/(sd|hd)\.mp4/, 1]).to_s} }
+
+        it 'are asked their size, and the best that fits is picked' do
+          announce('sd' => 40 * 2**20, 'hd' => 140 * 2**20)
+
+          expect(stream).to eq('sd')
+        end
+
+        it 'are encoded when none fits' do
+          announce('sd' => 90 * 2**20, 'hd' => 140 * 2**20)
+
+          expect(stream).to be_nil
+        end
+
+        it 'are encoded when the server does not answer' do
+          allow(Utils::HTTP).to receive(:head_public).and_raise('HTTP request failed: 405')
+
+          expect(stream).to be_nil
+        end
+
+        it 'are not asked when a listed format already fits' do
+          info.formats << SymMash.new(format_id: '18', ext: 'mp4', vcodec: 'avc1.42001E', acodec: 'mp4a.40.2', height: 360, filesize: 20 * 2**20)
+          expect(Utils::HTTP).not_to receive(:head_public)
+
+          expect(stream).to eq('18')
+        end
+      end
+
       it 'picks an audio track for a source without video' do
         info.video_ext = 'none'
         info.formats   = [SymMash.new(format_id: 'sc', ext: 'mp3', vcodec: 'none', acodec: 'mp3', abr: 128, filesize: 3 * 2**20)]

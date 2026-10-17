@@ -38,6 +38,12 @@ RSpec.describe Utils::HTTP do
     end
   end
 
+  describe '.head_public' do
+    it 'rejects private addresses' do
+      expect { described_class.head_public('http://127.0.0.1/secret') }.to raise_error(ArgumentError, /public addresses/)
+    end
+  end
+
   describe '.get_public' do
     it 'prefers IPv4 and falls back when that address times out' do
       allow(Utils::Safety).to receive(:public_addresses).with('example.com').and_return(['2001:db8::1', '203.0.113.10'])

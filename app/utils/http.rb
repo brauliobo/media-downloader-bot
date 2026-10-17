@@ -69,6 +69,13 @@ module Utils
         body
       end
 
+      # The response headers of a HEAD request, with the same public-address guard as the other public requests.
+      def head_public(value, redirects: PUBLIC_REDIRECTS)
+        headers = nil
+        request_public(value, max_bytes: Float::INFINITY, redirects: redirects, verb: Net::HTTP::Head) { |_, res| headers = res }
+        headers
+      end
+
       def download_public(value, path, max_bytes: PUBLIC_DOWNLOAD_MAX_BYTES, redirects: PUBLIC_REDIRECTS)
         part = "#{path}.part"
         FileUtils.mkdir_p(File.dirname(path))
@@ -86,7 +93,7 @@ module Utils
 
       private
 
-      def request_public(value, max_bytes:, redirects:, read_timeout: 30, &block)
+      def request_public(value, max_bytes:, redirects:, read_timeout: 30, verb: Net::HTTP::Get, &block)
         uri       = URI.parse(value.to_s)
         addresses = Safety.public_addresses(uri.host)
         raise ArgumentError, 'URL must resolve only to public addresses' unless uri.is_a?(URI::HTTP) && addresses.any? && !uri.userinfo
@@ -94,7 +101,7 @@ module Utils
         last_error = nil
         public_ips(addresses).each do |ip|
           begin
-            return fetch_public(uri, ip, max_bytes: max_bytes, redirects: redirects, read_timeout: read_timeout, &block)
+            return fetch_public(uri, ip, max_bytes: max_bytes, redirects: redirects, read_timeout: read_timeout, verb: verb, &block)
           rescue Net::OpenTimeout, Errno::EHOSTUNREACH, Errno::ECONNREFUSED, Errno::ENETUNREACH, SocketError => e
             last_error = e
           end
@@ -106,7 +113,7 @@ module Utils
         addresses.sort_by { |addr| IPAddr.new(addr).ipv4? ? 0 : 1 }
       end
 
-      def fetch_public(uri, ip, max_bytes:, redirects:, read_timeout:, &block)
+      def fetch_public(uri, ip, max_bytes:, redirects:, read_timeout:, verb:, &block)
         http              = Net::HTTP.new(uri.host, uri.port)
         http.ipaddr       = ip
         http.use_ssl      = uri.scheme == 'https'
@@ -114,14 +121,15 @@ module Utils
         http.read_timeout = read_timeout
 
         content_type = nil
-        http.request(Net::HTTP::Get.new(uri.request_uri, {'User-Agent' => PUBLIC_USER_AGENT})) do |res|
+        http.request(verb.new(uri.request_uri, {'User-Agent' => PUBLIC_USER_AGENT})) do |res|
           if res.is_a?(Net::HTTPRedirection)
             raise ArgumentError, 'too many HTTP redirects' unless redirects.positive?
             location = URI.join(uri, res.fetch('location')).to_s
-            return request_public(location, max_bytes: max_bytes, redirects: redirects - 1, read_timeout: read_timeout, &block)
+            return request_public(location, max_bytes: max_bytes, redirects: redirects - 1, read_timeout: read_timeout, verb: verb, &block)
           end
 
           raise "HTTP request failed: #{res.code}" unless res.is_a?(Net::HTTPSuccess)
+          yield nil, res if verb == Net::HTTP::Head # no body follows
           length = res['content-length']&.to_i
           raise ArgumentError, 'HTTP response is too large' if length && length > max_bytes
 

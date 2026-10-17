@@ -56,10 +56,21 @@ module Downloaders
     def stream_selector(info)
       return unless Streaming.enabled?(opts)
 
+      pick_format(info) || (pick_format(info) if announce_sizes(info))
+    end
+
+    def pick_format(info)
       FormatPicker.new(
         info, audio_only: audio_only?(info), limit_mb: Zipper.size_mb_limit, max_res: MAX_RES.to_i,
         clip: Utils::Duration.clip_length(opts, info.duration), alang: opts.alang
       ).selector
+    end
+
+    # A direct file the extractor gives no size for (Facebook's sd and hd) is asked for it, so it can still be picked.
+    # A server that does not answer leaves the size unknown, which only means the video is encoded as before.
+    def announce_sizes(info)
+      sizeless = Array(info.formats).select { |f| f.protocol.in?(%w[http https]) && f.url && !(f.filesize || f.filesize_approx || f.tbr) }
+      sizeless.each { |f| f.filesize = Utils::HTTP.head_public(f.url)['content-length']&.to_i rescue nil }.any?(&:filesize)
     end
 
     def pick_downloaded_file(files, want_video:)
