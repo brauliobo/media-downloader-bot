@@ -70,7 +70,7 @@ export const api = {
   trackedItems: (jobId: number, status = '') => call<TrackedItem[]>(`/api/job_items?job_id=${jobId}&status=${status}`),
   editTrackedItem: (id: number, hashtags: string) => call<TrackedItem>(`/api/job_items/${id}`, 'PATCH', { job_item: { hashtags } }),
   applyTrackedItem: (id: number) => call<TrackedItem>(`/api/job_items/${id}/apply`, 'POST'),
-  retryTrackedItem: (id: number) => call<{ retried: number }>(`/api/job_items/${id}/retry`, 'POST'),
+  retryTrackedItem: (id: number, discard = false) => call<{ retried: number }>(`/api/job_items/${id}/retry?discard=${discard}`, 'POST'),
   retryFailedTracked: (jobId: number) => call<{ retried: number }>(`/api/job_items/retry_failed?job_id=${jobId}`, 'POST'),
   deleteTrackedMessage: (id: number) => call<TrackedMessage>(`/api/job_messages/${id}`, 'DELETE'),
   relayRules: () => call<RelayRule[]>('/api/relay_rules'),

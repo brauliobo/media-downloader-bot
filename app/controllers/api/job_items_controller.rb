@@ -15,7 +15,7 @@ module Api
     def apply = render(json: manager.tracked_apply(item.id))
 
     def retry
-      render json: { retried: manager.tracked_retry_items([item.id]) }
+      render json: { retried: manager.tracked_retry_items([item.id], discard: params[:discard] == 'true') }
     end
 
     def retry_failed

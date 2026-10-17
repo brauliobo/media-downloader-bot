@@ -12,7 +12,7 @@ RSpec.describe 'Api jobs', type: :request do
       def tracked_resume(id) = (@calls << [:resume, id]) && { id: id }
       def tracked_edit(id, result) = (@calls << [:edit, id, result]) && { id: id }
       def tracked_apply(id) = (@calls << [:apply, id]) && { id: id }
-      def tracked_retry_items(ids) = (@calls << [:retry, ids]) && ids.size
+      def tracked_retry_items(ids, discard: false) = (@calls << [:retry, ids, discard]) && ids.size
       def tracked_delete_message(id) = (@calls << [:delete, id]) && { id: id }
     end.new
   end
@@ -64,10 +64,11 @@ RSpec.describe 'Api jobs', type: :request do
     patch "/api/job_items/#{item.id}", params: { job_item: { hashtags: '#Novo' } }.to_json, headers: headers
     post "/api/job_items/#{item.id}/apply", headers: headers
     post "/api/job_items/#{item.id}/retry", headers: headers
+    post "/api/job_items/#{item.id}/retry?discard=true", headers: headers
     post "/api/job_items/retry_failed?job_id=#{job.id}", headers: headers
 
     expect(response.parsed_body).to eq('retried' => 1)
-    expect(fake_manager.calls).to eq([[:edit, item.id, { 'hashtags' => '#Novo' }], [:apply, item.id], [:retry, [item.id]], [:retry, [item.id]]])
+    expect(fake_manager.calls).to eq([[:edit, item.id, { 'hashtags' => '#Novo' }], [:apply, item.id], [:retry, [item.id], false], [:retry, [item.id], true], [:retry, [item.id], false]])
   end
 
   it 'lists the live messages and deletes one through the manager' do

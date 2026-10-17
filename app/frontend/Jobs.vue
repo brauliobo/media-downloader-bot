@@ -86,6 +86,7 @@ section
         span.error(v-if="item.result.lang_check?.mismatch")  · read as {{ item.result.lang_check.lang }}, group is {{ item.result.lang_check.expected }}
         span.error(v-if="item.error")  · {{ item.error }}
         button(v-if="item.status === 'failed'" @click="attempt(() => api.retryTrackedItem(item.id))") Retry
+        button(v-if="item.status === 'done'" @click="attempt(() => api.retryTrackedItem(item.id, true))") Delete outputs and reprocess
         .row(v-if="item.status === 'done'")
           input(v-model="hashtags[item.id]" placeholder="#Hashtags posted with the book")
           button(:disabled="!changed(item)" @click="save(item)") Change in chat

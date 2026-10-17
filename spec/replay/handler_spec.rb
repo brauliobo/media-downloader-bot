@@ -159,6 +159,21 @@ RSpec.describe Replay::Handler do
     expect(manager.captions.size).to eq(1)
   end
 
+  it 'reprocesses a done book from scratch, deleting everything sent for it' do
+    run
+    item = JobItem.first(key: '-200:12')
+    sent = item.messages.map(&:message_id)
+    item.update(attempts: 3)
+
+    expect(engine.retry_items([item.id], discard: true)).to eq(1)
+    Timeout.timeout(5) { sleep 0.01 until item.reload.status == 'done' && item.messages_dataset.live.any? }
+
+    expect(manager.deleted).to include(*sent)
+    expect(manager.replayed.map { |m| m[:id] }.count(12)).to eq(2)
+    expect(item).to have_attributes(attempts: 1)
+    expect(engine.retry_items([item.id])).to eq(0)
+  end
+
   it 'deletes a tracked message from the chat and remembers it' do
     run
     message = JobItem.first(key: '-200:13').messages.first

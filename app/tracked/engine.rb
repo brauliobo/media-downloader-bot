@@ -36,11 +36,13 @@ module Tracked
       job.update({ parallel: (clamp(parallel) if parallel), params: (handler_for(job.kind).normalize(job.options.merge(params.to_h.symbolize_keys)) if params) }.compact).to_api
     end
 
-    # Puts failed items back in line and wakes their jobs up; returns how many.
-    def retry_items(ids)
-      items = JobItem.failed.where(id: ids)
+    # Puts failed items back in line and wakes their jobs up; returns how many. With `discard` the done ones go too, after
+    # deleting from their chats whatever was sent for them: they are reprocessed from scratch.
+    def retry_items(ids, discard: false)
+      items = JobItem.where(id: ids, status: discard ? %w[done failed] : 'failed')
       jobs  = items.select_map(:job_id).uniq
-      items.update(status: 'pending', error: nil, finished_at: nil, updated_at: Time.now).tap { jobs.each { |id| resume(id) } }
+      items.all.each { |item| item.messages_dataset.live.each { |message| handler_for(item.kind).delete_message(message) } } if discard
+      items.update({ status: 'pending', error: nil, finished_at: nil, updated_at: Time.now }.merge(discard ? { attempts: 0 } : {})).tap { jobs.each { |id| resume(id) } }
     end
 
     # Puts a new item in a job's line (nothing happens if the item is already known) and returns it.
