@@ -119,6 +119,10 @@ module Bot
           {queue: service.queue_name}
         end
 
+        r.post 'size_mb_limit' do
+          {size_mb_limit: service.size_mb_limit}
+        end
+
         r.get 'chat_messages' do
           params = request_params(r)
           params[:chat_id] = params[:chat_id].to_i

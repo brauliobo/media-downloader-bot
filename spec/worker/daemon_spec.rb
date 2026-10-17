@@ -1,7 +1,7 @@
 require 'rails_helper'
 
 RSpec.describe Worker::Daemon do
-  let(:service) { double(queue_name: 'daemon-spec') }
+  let(:service) { double(queue_name: 'daemon-spec', size_mb_limit: 50) }
   let(:jobs)    { Bot::Jobs.new(queue: 'daemon-spec') }
   let(:daemon)  { described_class.new(service: service) }
   let(:started) { Queue.new }
@@ -41,6 +41,17 @@ RSpec.describe Worker::Daemon do
     BotJob.dataset.delete
     allow(Worker).to receive(:prune_workdirs)
     work_on_jobs
+  end
+
+  after { Zipper.size_mb_limit = nil }
+
+  it 'uploads no more than its bot does' do
+    thread = run_daemon
+    wait_until { Zipper.size_mb_limit }
+    signal(:USR2)
+    thread.join(5)
+
+    expect(Zipper.size_mb_limit).to eq(50)
   end
 
   it 'works through the queue of its bot, finishing every job it ran' do

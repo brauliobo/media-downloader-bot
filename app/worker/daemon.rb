@@ -24,6 +24,7 @@ class Worker
     def run
       SIGNALS.each { |signal, timeout| trap(signal) { stop(signal, timeout) } }
       @jobs = Bot::Jobs.new(queue: @service.queue_name)
+      Zipper.size_mb_limit = @service.size_mb_limit # what it makes is uploaded by its bot, within its limit
       Worker.prune_workdirs
       lease = keep_lease
       puts "worker #{id} takes the jobs of #{@jobs.queue}"

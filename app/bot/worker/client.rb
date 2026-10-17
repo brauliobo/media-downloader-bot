@@ -55,6 +55,7 @@ module Bot
       def job_cancelled?(id) = call(:job_cancelled, result: :cancelled, id: id)
       def finish_job(id) = call(:finish_job, id: id)
       def queue_name = call(:queue_name, result: :queue)
+      def size_mb_limit = call(:size_mb_limit, result: :size_mb_limit)
 
       private
 

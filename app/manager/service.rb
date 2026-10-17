@@ -7,6 +7,9 @@ class Manager
     # The queue this bot's workers take their jobs from.
     def queue_name = jobs.queue
 
+    # The biggest file this bot uploads (nil for no limit), which the workers encode and stream to fit.
+    def size_mb_limit = Zipper.size_mb_limit
+
     def job_cancelled(id:) = jobs.cancelled?(id)
     def finish_job(id:) = jobs.finish(id)
 

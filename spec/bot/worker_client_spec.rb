@@ -107,6 +107,12 @@ RSpec.describe Bot::Worker::Client do
     expect(client.queue_name).to eq('tdbot')
   end
 
+  it 'asks the bot how big a file it uploads' do
+    over_drb(client, double(size_mb_limit: 2_000))
+
+    expect(client.size_mb_limit).to eq(2_000)
+  end
+
   it 'refuses an address it has no transport for' do
     expect { described_class.new('ftp://host') }.to raise_error(ArgumentError, /Unsupported URI scheme/)
   end
