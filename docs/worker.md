@@ -65,16 +65,23 @@ a busy one was working anyway. A job handed back or lost is resumed, not restart
 
 Not resumed: the download of the input, the parsing of the book, the translation. The resumed job posts a new status message.
 
-## Deploy runbook (proposal: `deploy/`, nothing is installed by the repo)
+## Deploy runbook (the units live in `deploy/`; the repo installs nothing)
 
-One-time cut-over from the bot running the books itself:
+One-time cut-over from the bot running the books itself (done for the tdbot on 2026-10-16):
 
 1. Apply the migration (`db/migrate/20261016150000_create_bot_jobs.rb`) to the production database.
-2. Check out the worker tree (`/srv/media-downloader-worker`, `bundle install`) and install `deploy/media-downloader-*-worker@.service`
-   and `/etc/media-downloader/worker.env` (`BOT_HTTP_TOKEN`, `DB_*`, the same values as the bot's private environment).
-3. Add `deploy/bot-workers.conf` to the bot units (`TMPDIR`, `StateDirectory`, `BOT_HTTP`) and make sure `WITH_WORKER` is not set.
-4. `systemctl daemon-reload`, restart the bot (the last time the books it was running are lost; replay items are retried), then
-   `systemctl enable --now media-downloader-tdbot-worker@{1..3}`.
+2. Make the worker tree `/srv/media-downloader-worker`: a clone of a bot tree, plus its `vendor/`, `.bundle/`, `Gemfile.lock`, `voices/`
+   and the `.env` and `.env.user` files. Use the lock of a tree built without `TD_BOT` (the tgbot's): a worker needs no TDLib, and its
+   `.env.local` must not exist (no `TD_BOT`, no `WITH_WORKER`).
+3. One environment file per bot, `/etc/media-downloader/<bot>-worker.env` (root:mdb 0640), holding that bot's `BOT_HTTP_TOKEN`: the two
+   bots' tokens differ, and what the unit sets wins over the dotenv files. The bots' services are `BOT_HTTP` 1181 (tdbot) and 1180 (tgbot).
+4. Install `media-downloader-workers.slice` and `media-downloader-<bot>-worker@.service`, and per bot a drop-in from `bot-workers.conf`.
+   Remove `WITH_WORKER` from the bot's drop-ins and from its `.env.local`.
+5. `systemctl daemon-reload`, restart the bot (the last time the books it was running are lost; replay items are retried), then
+   `systemctl enable --now media-downloader-tdbot-worker@{1..7}`. A worker takes minutes to boot on a busy host.
+
+Jobs fed by a tracked job (replay, a group's queue) count against no user: the job's own `parallel` is their limit. A message sent by a
+person counts against them (`Bot::UserQueue.limit` running jobs, the admin exempt).
 
 After that:
 
