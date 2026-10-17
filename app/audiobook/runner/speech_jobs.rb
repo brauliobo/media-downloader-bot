@@ -42,7 +42,7 @@ module Audiobook
           "#{jobs[completed - 1][:status]}, audio #{completed}/#{total}"
         end
         synthesize_speech_jobs(jobs, options, progress)
-        AudioFiles.speed_all(jobs.map { |job| job[:out_path] }, speed)
+        AudioFiles.speed_all(jobs.map { |job| job[:out_path] }.select { |path| File.exist?(path) }, speed)
       end
 
       def synthesize_speech_jobs(jobs, options, progress)
@@ -59,11 +59,12 @@ module Audiobook
           jobs, tasks: 2, batch: TTS::BATCH_SIZE,
           perform: ->(job) { translate_speech_job(job, target) }
         ) do |batch|
-          TTS.synthesize_batch(items: batch, on_batch: progress.batch_callback, **options)
+          TTS.synthesize_batch(items: batch.select { |job| job[:text].present? }, on_batch: progress.batch_callback, **options)
         end
         @book.translate!
       end
 
+      # The translation can come back blank or as punctuation only, which the TTS refuses: such a job is skipped, as an untranslated one is.
       def translate_speech_job(job, target)
         sent = job[:sentence]
         Book.translate_sentences([sent], from: sent.language.presence || book_language, to: target)
