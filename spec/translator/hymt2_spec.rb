@@ -108,6 +108,15 @@ RSpec.describe Translator::HyMT2 do
     backend.translate('Hello.', from: 'en', to: 'es')
   end
 
+  it 'gives up on a request the backend lost after the translator timeout, not the client default of 30 minutes' do
+    allow(Utils::HTTP).to receive(:post).and_return(response)
+    expect(Utils::HTTP).to receive(:client).with(timeout: Translator::LlamacppApi::REQUEST_TIMEOUT).and_call_original
+
+    backend.translate('Hello.', from: 'en', to: 'es')
+
+    expect(Translator::LlamacppApi::REQUEST_TIMEOUT).to eq(2.minutes)
+  end
+
   it 'retries EOF from the translation backend' do
     calls = 0
     agent = stub_http_client

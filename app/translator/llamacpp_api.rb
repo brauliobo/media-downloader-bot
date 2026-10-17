@@ -5,6 +5,8 @@ class Translator
 
     API_PATH = '/v1/chat/completions'
     HEADERS  = {'Content-Type' => 'application/json'}.freeze
+    # A translation takes seconds: a request the server lost must not hold the worker for the client's default 30 minutes.
+    REQUEST_TIMEOUT = ENV.fetch('TRANSLATOR_HTTP_TIMEOUT', 2.minutes).to_i
 
     def translate(_text, to:, from: nil)
       texts        = Array.wrap(_text)
@@ -47,6 +49,7 @@ class Translator
         temperature: 0,
         max_tokens:  512,
       }
+      Utils::HTTP.client(timeout: REQUEST_TIMEOUT)
       response = Utils::HTTP.post Utils::HTTP.url(llama_api_host, API_PATH), opts.to_json, HEADERS
       JSON.parse(response.body).fetch('choices').fetch(0).fetch('message').fetch('content').strip
     end
