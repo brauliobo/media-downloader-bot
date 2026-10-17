@@ -7,7 +7,9 @@ class Worker
   #
   # USR2, TERM and INT make it stop taking jobs and end once the job in flight does; a process manager that restarts it then
   # brings the replacement up. USR2 waits as long as the job takes, TERM and INT only up to DRAIN_TIMEOUT. The same signal twice, or
-  # the timeout, hands the job back to the queue and stops at once: whoever takes it next resumes it from its work dir.
+  # the timeout, stops the job: it is asked to (Bot::JobRestarted) and leaves at its next checkpoint, in seconds, with its files whole,
+  # and goes back to the queue; whoever takes it next resumes it from its work dir. Only a job that reaches no checkpoint in
+  # Bot::JobRunner::STOP_GRACE has the stop thrown into it.
   class Daemon
     POLL          = 1
     DRAIN_TIMEOUT = Integer(ENV.fetch('WORKER_DRAIN_TIMEOUT', 540))
@@ -22,6 +24,7 @@ class Worker
     end
 
     def run
+      Thread.abort_on_exception = false # a thread of a stopped job (a reader of its subprocess) ending must not take the worker down
       SIGNALS.each { |signal, timeout| trap(signal) { stop(signal, timeout) } }
       @jobs = Bot::Jobs.new(queue: @service.queue_name)
       Zipper.size_mb_limit = @service.size_mb_limit # what it makes is uploaded by its bot, within its limit
@@ -44,7 +47,7 @@ class Worker
     end
 
     def process(job)
-      @restarted = @interrupted = false
+      @restarted = false
       runner = Bot::JobRunner.new(cancelled: @jobs.method(:cancelled?), interrupted: method(:interruption), finished: method(:finish))
       runner.run(job[:id]) { work(job) }
     end
@@ -59,12 +62,8 @@ class Worker
     # A job that was stopped to restart goes back to the queue, any other one is over.
     def finish(job_id) = @restarted ? @jobs.release(job_id) : @jobs.finish(job_id)
 
-    def interruption(_job_id)
-      return unless hard? && !@interrupted
-
-      @interrupted = true
-      :restart
-    end
+    # Asked at every poll of the runner, which asks the job once and throws the stop into it if it takes too long.
+    def interruption(_job_id) = (:restart if hard?)
 
     # Signal handlers only set flags.
     def stop(signal, timeout)

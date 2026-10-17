@@ -26,8 +26,11 @@ class JobPool
     pool   = Concurrent::FixedThreadPool.new(jobs)
     items.each do |item|
       pool.post do
+        Bot::JobRestarted.check! # a stop is waited for by the tasks under way, the rest are left for the next run
         Thread.current.priority = priority if priority
         block.call(item)
+      rescue Bot::JobRestarted
+        nil # raised below, in the caller of the pool: a thread of the pool ending on it would be lost
       rescue => error
         if reraise
           errors << error
@@ -39,6 +42,7 @@ class JobPool
     pool.shutdown
     if wait
       pool.wait_for_termination
+      Bot::JobRestarted.check!
       raise errors.pop unless errors.empty?
     end
     self
@@ -59,7 +63,10 @@ class JobPool
 
           Thread.current.priority = priority if priority
           result = begin
+            Bot::JobRestarted.check!
             {value: block.call(item)}
+          rescue Bot::JobRestarted
+            {value: nil} # the consumer raises it at its checkpoint
           rescue => error
             {error: error}
           end
@@ -71,6 +78,7 @@ class JobPool
       end
 
       items.each_index do |index|
+        Bot::JobRestarted.check!
         result = mutex.synchronize do
           condition.wait(mutex) while results[index].nil?
           results[index]

@@ -2,6 +2,7 @@ module Bot
   class JobRunner
     CANCEL_POLL_INTERVAL = 0.25
     CANCEL_GRACE_SECONDS = 5
+    STOP_GRACE           = Integer(ENV.fetch('WORKER_STOP_GRACE', 45))
 
     def initialize(cancelled:, interrupted:, finished:)
       @cancelled   = cancelled
@@ -19,6 +20,7 @@ module Bot
 
     def spawn_thread(job_id, &work)
       thread = Thread.new do
+        JobRestarted.reset!
         work.call
       rescue JobCancelled, JobRestarted
         nil
@@ -32,11 +34,22 @@ module Bot
     def monitor_thread(thread, job_id)
       until thread.join(CANCEL_POLL_INTERVAL)
         case interruption(job_id)
-        when :restart then thread.raise(JobRestarted)
+        when :restart then stop(thread)
         when :cancel  then thread.raise(JobCancelled)
         else thread.raise(JobCancelled) if cancelled?(job_id)
         end
       end
+    end
+
+    # Asks the job to stop at its next checkpoint (JobRestarted.check!), where its files are whole. Only a job that reaches none
+    # in STOP_GRACE has the stop thrown into it, wherever it is.
+    def stop(thread)
+      JobRestarted.request!
+      @stop_asked_at ||= monotonic_time
+      return if @stop_thrown || monotonic_time - @stop_asked_at < STOP_GRACE
+
+      @stop_thrown = true
+      thread.raise(JobRestarted)
     end
 
     def spawn_fork(job_id, &work)

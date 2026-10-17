@@ -38,12 +38,16 @@ RSpec.describe Worker::Daemon do
   before do
     stub_const("#{described_class}::POLL", 0.05)
     stub_const('Bot::JobRunner::CANCEL_POLL_INTERVAL', 0.05)
+    stub_const('Bot::JobRunner::STOP_GRACE', 0.2)
     BotJob.dataset.delete
     allow(Worker).to receive(:prune_workdirs)
     work_on_jobs
   end
 
-  after { Zipper.size_mb_limit = nil }
+  after do
+    Zipper.size_mb_limit = nil
+    Bot::JobRestarted.reset!
+  end
 
   it 'uploads no more than its bot does' do
     thread = run_daemon
@@ -132,6 +136,28 @@ RSpec.describe Worker::Daemon do
       signal(:USR2)
 
       expect(thread.join(5)).to be_truthy
+      expect(BotJob.with_pk!(id)).to have_attributes(state: 'queued', worker: nil, attempts: 0)
+    end
+
+    it 'lets the job leave at its checkpoint, whole, instead of throwing the stop into it' do
+      stub_const('Bot::JobRunner::STOP_GRACE', 30)
+      id = submit(1)[:id]
+      left = Queue.new
+      work_on_jobs do |job_id|
+        started << job_id
+        loop { Bot::JobRestarted.check!; sleep 0.02 }
+      rescue Bot::JobRestarted
+        left << :at_checkpoint
+        raise
+      end
+      thread = run_daemon
+      started.pop
+      signal(:USR2)
+      sleep 0.2
+      signal(:USR2)
+
+      expect(thread.join(5)).to be_truthy
+      expect(left.pop).to eq(:at_checkpoint)
       expect(BotJob.with_pk!(id)).to have_attributes(state: 'queued', worker: nil, attempts: 0)
     end
   end

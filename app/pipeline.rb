@@ -26,18 +26,24 @@ class Pipeline
     submit  = lambda do |group|
       pool.post do
         Enumerable.with_peach_threads(count) { consume.call(group) }
+      rescue Bot::JobRestarted
+        nil # raised below, once the batches under way are over
       rescue => error
         errors << error
       end
     end
 
-    JobPool.new(jobs: count).ordered_each(items, perform: perform) do |item, _|
-      pending << item
-      submit.call(pending.shift(batch)) if pending.size >= batch
+    begin
+      JobPool.new(jobs: count).ordered_each(items, perform: perform) do |item, _|
+        pending << item
+        submit.call(pending.shift(batch)) if pending.size >= batch
+      end
+      submit.call(pending) if pending.any?
+    ensure
+      pool.shutdown
+      pool.wait_for_termination # the batches under way end before a stop leaves, or they would write on after the job
     end
-    submit.call(pending) if pending.any?
-    pool.shutdown
-    pool.wait_for_termination
+    Bot::JobRestarted.check!
     raise errors.pop unless errors.empty?
   end
   private_class_method :wrap, :each_batched

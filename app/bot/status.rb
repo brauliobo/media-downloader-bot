@@ -85,7 +85,9 @@ module Bot
       clean.length > TELEGRAM_ERROR_LIMIT ? "#{clean[0, TELEGRAM_ERROR_LIMIT]}…" : clean
     end
 
+    # Every progress report is a checkpoint: a stop asked of the job is taken here, between two steps of its work.
     def update *args, **params
+      JobRestarted.check!
       return @on_empty&.call if blank?
 
       send_update formatted, *args, **params
