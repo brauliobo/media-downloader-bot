@@ -32,9 +32,14 @@ module Replay
       @forwarded.copies_in(chat_id).map { |copy| row(chat_id, copy[:id], replies[copy[:id]]) }
     end
 
-    def describe(item) = @manager.message_input(chat_id: item.key.split(':').first.to_i, message_id: message_id(item))
+    def describe(item) = @manager.message_input(chat_id: chat_id_of(item), message_id: message_id(item))
 
+    # A file the group already has (the same checksum, whatever topic or message it came in) is not converted again: the item stands
+    # for the earlier one, which is the first of the twins and so never a duplicate itself.
     def perform(job, item)
+      original = original_of(item)
+      return answer_duplicate(item, original) if original
+
       chat_id = job.options[:chat_id]
       id      = message_id(item)
       clear_failures(chat_id, id, item) unless @manager.message_job_active?(chat_id: chat_id, message_id: id)
@@ -43,6 +48,8 @@ module Replay
 
     # Whatever the bot answered with, there must be a book among it: nothing, errors or status lines alone are a failure.
     def error_of(result)
+      return if result[:duplicate_of]
+
       messages = Array(result[:messages])
       return 'the bot only answered with an error' if messages.present? && messages.all? { |message| message[:failed] }
 
@@ -68,6 +75,35 @@ module Replay
     private
 
     def message_id(item) = item.key.split(':').last.to_i
+
+    # The duplicate is answered with where its book is: the post of the original's book, or its message while it is being converted.
+    def answer_duplicate(item, original)
+      book = original.messages_dataset.live.media.exclude(failed: true).first
+      link = book&.link || @manager.message_link(chat_id: chat_id_of(original), message_id: message_id(original))
+      @manager.reply_to_message(chat_id: chat_id_of(item), message_id: message_id(item), text: "#{book ? 'Already converted' : 'Already being converted'}: #{link}")
+      { duplicate_of: original.key, link: link, messages: [] }
+    end
+
+    def chat_id_of(item) = item.key.split(':').first.to_i
+
+    # The earlier item of the job with the same file, if any; twins are the ones with the same name and size, so only those are read.
+    def original_of(item)
+      checksum = checksum_of(item) or return
+      twins(item).find { |twin| checksum_of(twin) == checksum }
+    end
+
+    def twins(item)
+      file = item.outcome[:input].to_h.slice(:file_name, :size)
+      return [] if file.size < 2
+
+      JobItem.where(kind: item.kind).where(Sequel[:id] < item.id).exclude(status: 'failed')
+             .where(Sequel.pg_jsonb_op(:result).contains(input: file)).order(:id).all
+    end
+
+    # Read from the message the first time and kept with the item.
+    def checksum_of(item)
+      item.checksum || @manager.message_checksum(chat_id: chat_id_of(item), message_id: message_id(item)).tap { |checksum| item.update(checksum: checksum) }
+    end
 
     # Before every run the error replies go, the tracked ones and those a dead run left that the engine never saw.
     def clear_failures(chat_id, id, item)

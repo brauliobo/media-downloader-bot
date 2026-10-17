@@ -49,6 +49,16 @@ class Manager
     # What a stored message feeds the bot: its type, file name, text, and the url and options of each line.
     def message_input(chat_id:, message_id:) = Replay::Input.of(bot.incoming_message(chat_id: chat_id, message_id: message_id))
 
+    # The SHA-256 of the file a stored message carries; nil for a message without one.
+    def message_checksum(chat_id:, message_id:)
+      msg  = bot.incoming_message(chat_id: chat_id, message_id: message_id)
+      kind = Relay::Filter.kind(msg) or return
+      Digest::SHA256.file(bot.download_file(msg[kind])).hexdigest
+    end
+
+    # Answers a stored message (in its topic) with plain text.
+    def reply_to_message(chat_id:, message_id:, text:) = send_message(msg: bot.incoming_message(chat_id: chat_id, message_id: message_id), text: text, parse_mode: nil)
+
     # Feeds a stored message to the bot as if just received and blocks until its job ends. A message that already has a job (a
     # worker kept it through a restart of the bot) is waited for, not fed again.
     def replay_message(chat_id:, message_id:)

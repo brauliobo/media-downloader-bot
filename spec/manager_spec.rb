@@ -20,6 +20,25 @@ RSpec.describe Manager do
     expect(error.cause).to be_nil
   end
 
+  describe '#message_checksum' do
+    let(:manager) { described_class.new.tap { |manager| allow(manager).to receive(:bot).and_return(bot) } }
+    let(:bot)     { double }
+
+    it 'is the SHA-256 of the file the stored message carries, nil without one' do
+      Tempfile.create('book') do |file|
+        file.write('book')
+        file.flush
+        media = SymMash.new(file_name: 'book.pdf')
+        allow(bot).to receive(:incoming_message).with(chat_id: 1, message_id: 7).and_return(SymMash.new(document: media))
+        allow(bot).to receive(:incoming_message).with(chat_id: 1, message_id: 8).and_return(SymMash.new(text: 'hi'))
+        allow(bot).to receive(:download_file).with(media).and_return(file.path)
+
+        expect(manager.message_checksum(chat_id: 1, message_id: 7)).to eq(Digest::SHA256.hexdigest('book'))
+        expect(manager.message_checksum(chat_id: 1, message_id: 8)).to be_nil
+      end
+    end
+  end
+
   describe '#replay_message' do
     it 'reacts to the stored message and waits for its job to end' do
       manager = described_class.new

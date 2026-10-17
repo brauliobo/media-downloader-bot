@@ -27,8 +27,48 @@ RSpec.describe Replay::Handler do
     expect(job.counts).to eq('done' => 3)
     expect(manager.replayed.map { |m| m[:id] }).to contain_exactly(11, 12, 13)
     item = JobItem.first(key: '-200:11')
-    expect(item.outcome).to include(hashtags: '#Livro #Yoga', options: '', input: { type: 'document', file_name: 'Book 11.pdf', inputs: [{ opts: { lang: 'pt' } }] })
+    expect(item.outcome).to include(hashtags: '#Livro #Yoga', options: '', input: { type: 'document', file_name: 'Book 11.pdf', size: 10, inputs: [{ opts: { lang: 'pt' } }] })
     expect(item.messages.first).to have_attributes(chat_id: -200, kind: 'Audio', failed: false, hashtags: '#Livro #Yoga', link: "https://t.me/c/200/#{item.messages.first.message_id}")
+  end
+
+  it 'does not convert again the file of another message (another topic) of the same chat: the duplicate is answered with the link of the book' do
+    manager = ReplayingManager.new(same_file: [11, 13])
+    engine  = Tracked::Engine.new({ 'replay' => described_class.new(manager, forwarded: forwarded, replayed: legacy) }, tick: 0.01)
+    id      = engine.start(kind: 'replay', params: { chat_id: -200 }, parallel: 1)[:id]
+    settled(id)
+
+    original = JobItem.first(key: '-200:11')
+    book     = original.messages.first
+    expect(manager.replayed.map { |m| m[:id] }).to contain_exactly(11, 12)
+    expect(JobItem.first(key: '-200:13')).to have_attributes(status: 'done', checksum: 'sum-11').and(have_attributes(messages: []))
+    expect(JobItem.first(key: '-200:13').outcome).to include(duplicate_of: '-200:11', link: book.link)
+    expect(original.checksum).to eq('sum-11')
+    expect(manager.replies).to eq([{ chat_id: -200, message_id: 13, text: "Already converted: #{book.link}" }])
+  end
+
+  it 'tells the duplicate of a book still being converted where it is, by the link of its message' do
+    manager = ReplayingManager.new(same_file: [11, 13])
+    handler = described_class.new(manager, forwarded: forwarded, replayed: legacy)
+    job     = Job.create(kind: 'replay', state: 'running', parallel: 1, params: { chat_id: -200 })
+    JobItem.create(job_id: job.id, kind: 'replay', key: '-200:11', status: 'running', checksum: 'sum-11', result: Sequel.pg_jsonb(input: { file_name: 'Book 11.pdf', size: 10 }))
+    twin = JobItem.create(job_id: job.id, kind: 'replay', key: '-200:13', status: 'running', result: Sequel.pg_jsonb(input: { file_name: 'Book 11.pdf', size: 10 }))
+
+    expect(handler.perform(job, twin)).to include(duplicate_of: '-200:11', messages: [])
+    expect(manager.replies.map { |reply| reply[:text] }).to eq(['Already being converted: https://t.me/c/200/11'])
+    expect(manager.replayed).to be_empty
+  end
+
+  it 'converts a file again when the earlier one failed, and one with the same name and size but another content' do
+    manager = ReplayingManager.new(same_file: [11, 13])
+    handler = described_class.new(manager, forwarded: forwarded, replayed: legacy)
+    job     = Job.create(kind: 'replay', state: 'running', parallel: 1, params: { chat_id: -200 })
+    input   = Sequel.pg_jsonb(input: { file_name: 'Book 11.pdf', size: 10 })
+    JobItem.create(job_id: job.id, kind: 'replay', key: '-200:11', status: 'failed', checksum: 'sum-11', result: input)
+    JobItem.create(job_id: job.id, kind: 'replay', key: '-200:12', status: 'done', checksum: 'other', result: input)
+    twin = JobItem.create(job_id: job.id, kind: 'replay', key: '-200:13', status: 'running', result: input)
+
+    expect(handler.perform(job, twin)).not_to include(:duplicate_of)
+    expect(manager.replayed.map { |m| m[:id] }).to eq([13])
   end
 
   it 'imports the legacy log: the books the bot answered are done and tracked, not replayed again' do

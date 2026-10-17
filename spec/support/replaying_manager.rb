@@ -1,14 +1,16 @@
 # A manager that records what is replayed. Replaying a message makes the bot answer it with `answers[id]` (default: one audio
 # captioned with hashtags); the ones in `failing` raise. `messages` are chat history already there, `gate` blocks a replay until fed.
 class ReplayingManager
-  attr_reader :replayed, :deleted, :captions, :messages
+  attr_reader :replayed, :deleted, :captions, :messages, :replies
 
-  def initialize(failing: [], gate: nil, messages: [], answers: {}, files: {}, active: [])
+  def initialize(failing: [], gate: nil, messages: [], answers: {}, files: {}, active: [], same_file: [])
     @active   = active
+    @same_file = same_file
     @files    = files
     @messages = messages
     @answers  = answers
     @deleted  = []
+    @replies  = []
     @captions = []
     @gate     = gate
     @failing  = failing
@@ -25,7 +27,10 @@ class ReplayingManager
 
   def download_file(file_id) = @files.fetch(file_id)[:path]
 
-  def message_input(chat_id:, message_id:) = { type: 'document', file_name: "Book #{message_id}.pdf", inputs: [{ opts: { 'lang' => 'pt' } }] }
+  # Every message carries a different file unless `same_file` lists message ids that carry one: a book of the same name and size.
+  def message_input(chat_id:, message_id:) = { type: 'document', file_name: "Book #{file_of(message_id)}.pdf", size: 10, inputs: [{ opts: { 'lang' => 'pt' } }] }
+
+  def message_checksum(chat_id:, message_id:) = "sum-#{file_of(message_id)}"
 
   # `active` are the message ids a worker is still converting.
   def message_job_active?(chat_id:, message_id:) = @active.include?(message_id)
@@ -33,6 +38,10 @@ class ReplayingManager
   def message_link(chat_id:, message_id:) = "https://t.me/c/#{chat_id.abs}/#{message_id}"
 
   def replace_caption(chat_id:, message_id:, from:, to:) = @captions << { chat_id: chat_id, message_id: message_id, from: from, to: to }
+
+  def reply_to_message(chat_id:, message_id:, text:) = @replies << { chat_id: chat_id, message_id: message_id, text: text }
+
+  def file_of(message_id) = @same_file.include?(message_id) ? @same_file.first : message_id
 
   def replay_message(chat_id:, message_id:)
     @gate&.pop
