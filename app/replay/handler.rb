@@ -37,7 +37,7 @@ module Replay
     def perform(job, item)
       chat_id = job.options[:chat_id]
       id      = message_id(item)
-      delete(chat_id, item.messages_dataset.live.failures.select_map(:message_id))
+      clear_failures(chat_id, id, item) unless @manager.message_job_active?(chat_id: chat_id, message_id: id)
       summary(chat_id, previous_answers(chat_id, id, item) || replay(chat_id, id))
     end
 
@@ -68,6 +68,12 @@ module Replay
     private
 
     def message_id(item) = item.key.split(':').last.to_i
+
+    # Before every run the error replies go, the tracked ones and those a dead run left that the engine never saw.
+    def clear_failures(chat_id, id, item)
+      tracked = item.messages_dataset.live.failures.select_map(:message_id)
+      delete(chat_id, (tracked + answers(chat_id, id).select { |message| message[:failed] }.map { |message| message[:message_id] }).uniq)
+    end
 
     def row(chat_id, id, replies)
       messages = Array(replies).map { |message| tracked(message) }

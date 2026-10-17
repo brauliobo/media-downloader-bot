@@ -9,6 +9,11 @@ RSpec.describe Audiobook::SourceFormats do
       expect(described_class.document_kind(file_name: 'book.TXT')).to eq(:txt)
     end
 
+    it 'classifies Word and OpenDocument texts by extension or mime type' do
+      expect(%w[book.odt book.doc book.DOCX].map { |name| described_class.document_kind(file_name: name) }).to all(eq(:office))
+      expect(described_class.document_kind(file_name: 'download', mime_type: 'application/vnd.oasis.opendocument.text')).to eq(:office)
+    end
+
     it 'does not treat another named text format as a TXT audiobook' do
       expect(described_class.document_kind(file_name: 'notes.md', mime_type: 'text/plain')).to be_nil
     end

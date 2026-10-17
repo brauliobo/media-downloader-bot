@@ -5,6 +5,11 @@ module Audiobook
       json: { extensions: %w[.json], parser: :parse_json },
       pdf:  { extensions: %w[.pdf], mimes: %w[application/pdf], parser: :parse_pdf, document: true },
       epub: { extensions: %w[.epub], mimes: %w[application/epub+zip], parser: :parse_epub, document: true },
+      office: {
+        extensions: %w[.odt .doc .docx],
+        mimes: %w[application/vnd.oasis.opendocument.text application/msword application/vnd.openxmlformats-officedocument.wordprocessingml.document],
+        parser: :parse_office, document: true,
+      },
       html: { extensions: %w[.html .htm], parser: :parse_html },
       txt:  {
         extensions: %w[.txt], mimes: %w[text/plain], parser: :parse_txt,

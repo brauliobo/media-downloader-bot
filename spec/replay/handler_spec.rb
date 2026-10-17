@@ -159,6 +159,18 @@ RSpec.describe Replay::Handler do
     expect(manager.captions.size).to eq(1)
   end
 
+  it 'deletes the error replies a dead run left in the chat, tracked or not, before every run' do
+    leftover = { id: 99, chat_id: -200, type: 'Text', text: 'Processing error: ArgumentError: boom', reply_to_message_id: 12 }
+    manager  = ReplayingManager.new(messages: [leftover])
+    engine   = Tracked::Engine.new({ 'replay' => described_class.new(manager, forwarded: forwarded, replayed: legacy) }, tick: 0.01)
+
+    id = engine.start(kind: 'replay', params: { chat_id: -200 })[:id]
+    Timeout.timeout(5) { sleep 0.01 until Job[id].state == 'completed' }
+
+    expect(manager.deleted).to eq([99])
+    expect(manager.replayed.map { |m| m[:id] }).to contain_exactly(11, 12, 13)
+  end
+
   it 'reprocesses a done book from scratch, deleting everything sent for it' do
     run
     item = JobItem.first(key: '-200:12')

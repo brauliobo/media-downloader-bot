@@ -44,6 +44,18 @@ module Audiobook
       data
     end
 
+    # Word and OpenDocument texts are laid out by LibreOffice and read as the PDF it makes, kept beside the document for the cover.
+    def parse_office(path, stl: nil, opts: nil)
+      stl&.update 'Converting document to PDF...'
+      Utils::Tmp.dir('office-') do |profile|
+        Sh.run('soffice', '--headless', "-env:UserInstallation=file://#{profile}", '--convert-to', 'pdf', '--outdir', File.dirname(path), path)
+      end
+      pdf = path.sub(/#{Regexp.escape(File.extname(path))}\z/, '.pdf')
+      raise "LibreOffice could not convert #{File.basename(path)}" unless File.exist?(pdf)
+
+      parse_pdf(pdf, stl: stl, opts: opts)
+    end
+
     def parse_html(html_path, stl: nil, opts: nil)
       stl&.update 'Analyzing HTML document'
       Parsers::Html.parse(html_path, stl: stl, opts: opts)
