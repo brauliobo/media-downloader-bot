@@ -34,6 +34,18 @@ RSpec.describe Manager do
       expect(manager.replay_message(chat_id: 456, message_id: 7)).to be(true)
       expect(manager.jobs.active?(job[:id])).to be(false)
     end
+
+    it 'waits for the job a message already has instead of feeding it again' do
+      manager = described_class.new
+      job     = manager.jobs.submit(SymMash.new(from: {id: 123}, chat: {id: 456}, message_id: 7, text: 'https://example.com/video'))
+      allow(manager).to receive(:bot).and_return(double)
+      expect(manager).not_to receive(:react)
+      expect(manager.message_job_active?(chat_id: 456, message_id: 7)).to be(true)
+      Thread.new { sleep 0.2; manager.jobs.finish(job[:id]) }
+
+      expect(manager.replay_message(chat_id: 456, message_id: 7)).to be(true)
+      expect(manager.message_job_active?(chat_id: 456, message_id: 7)).to be(false)
+    end
   end
 
   describe '#react' do

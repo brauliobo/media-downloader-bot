@@ -46,7 +46,8 @@ module Bot
 
     def active?(id) = mine.where(id: id.to_s).any?
 
-    def active_key?(key) = mine.where(key: key).any?
+    # The job a message is active in, if any.
+    def job_for(key) = mine.first(key: key)&.envelope
 
     def cancelled?(id) = mine.where(id: id.to_s, cancelled: true).any?
 

@@ -28,7 +28,7 @@ RSpec.describe Bot::Jobs do
 
     expect(jobs.submit(reply)).to eq(job)
     expect(jobs.size).to eq(1)
-    expect(jobs.active_key?('123:7')).to be(true)
+    expect(jobs.job_for('123:7')).to eq(job)
     jobs.finish(job[:id])
     expect(jobs.submit(reply)[:id]).not_to eq(job[:id])
   end

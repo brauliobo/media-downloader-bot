@@ -99,6 +99,20 @@ RSpec.describe Replay::Handler do
     expect(JobItem.first(key: '-200:11').outcome).to include(hashtags: '#Old')
   end
 
+  it 'waits for the worker still converting a book after the bot restarted, instead of taking its status message for an answer' do
+    status   = { id: 500, chat_id: -200, type: 'Text', text: 'Downloading...', reply_to_message_id: 11 }
+    manager  = ReplayingManager.new(messages: [status], active: [11])
+    engine   = Tracked::Engine.new({ 'replay' => described_class.new(manager, forwarded: forwarded, replayed: legacy) }, tick: 0.01)
+    job      = Job.create(kind: 'replay', state: 'running', parallel: 1, params: { chat_id: -200 })
+    JobItem.create(job_id: job.id, kind: 'replay', key: '-200:11', status: 'running', attempts: 1)
+
+    engine.recover!
+    Timeout.timeout(5) { sleep 0.01 until Job[job.id].state == 'completed' }
+
+    expect(manager.replayed.map { |m| m[:id] }).to contain_exactly(11, 12, 13)
+    expect(JobItem.first(key: '-200:11').outcome).to include(hashtags: '#Livro #Yoga')
+  end
+
   it 'changes the hashtags in the captions of the posted media' do
     run
     item = JobItem.first(key: '-200:11')

@@ -3,7 +3,8 @@
 class ReplayingManager
   attr_reader :replayed, :deleted, :captions, :messages
 
-  def initialize(failing: [], gate: nil, messages: [], answers: {}, files: {})
+  def initialize(failing: [], gate: nil, messages: [], answers: {}, files: {}, active: [])
+    @active   = active
     @files    = files
     @messages = messages
     @answers  = answers
@@ -25,6 +26,9 @@ class ReplayingManager
   def download_file(file_id) = @files.fetch(file_id)[:path]
 
   def message_input(chat_id:, message_id:) = { type: 'document', file_name: "Book #{message_id}.pdf", inputs: [{ opts: { 'lang' => 'pt' } }] }
+
+  # `active` are the message ids a worker is still converting.
+  def message_job_active?(chat_id:, message_id:) = @active.include?(message_id)
 
   def message_link(chat_id:, message_id:) = "https://t.me/c/#{chat_id.abs}/#{message_id}"
 

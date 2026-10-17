@@ -11,7 +11,7 @@ class Manager
     def finish_job(id:) = jobs.finish(id)
 
     # Whether a message is being processed or waits for a worker.
-    def message_job_active?(chat_id:, message_id:) = jobs.active_key?("#{chat_id}:#{message_id}")
+    def message_job_active?(chat_id:, message_id:) = jobs.job_for("#{chat_id}:#{message_id}").present?
 
     def start_edit_posts_job(args) = @edit_posts_jobs.start(args)
     def edit_posts_job(id) = @edit_posts_jobs.fetch(id)
@@ -46,9 +46,10 @@ class Manager
     # What a stored message feeds the bot: its type, file name, text, and the url and options of each line.
     def message_input(chat_id:, message_id:) = Replay::Input.of(bot.incoming_message(chat_id: chat_id, message_id: message_id))
 
-    # Feeds a stored message to the bot as if just received and blocks until its job ends.
+    # Feeds a stored message to the bot as if just received and blocks until its job ends. A message that already has a job (a
+    # worker kept it through a restart of the bot) is waited for, not fed again.
     def replay_message(chat_id:, message_id:)
-      job = react(bot.incoming_message(chat_id: chat_id, message_id: message_id), queued: true)
+      job = jobs.job_for("#{chat_id}:#{message_id}") || react(bot.incoming_message(chat_id: chat_id, message_id: message_id), queued: true)
       sleep 0.5 while job && jobs.active?(job[:id])
       true
     end

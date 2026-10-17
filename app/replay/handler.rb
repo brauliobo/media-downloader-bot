@@ -95,9 +95,10 @@ module Replay
       messages
     end
 
-    # A run that died with the process may have answered already: keep its answers, drop its errors.
+    # A run that died with the process may have answered already: keep its answers, drop its errors. Not while a worker is
+    # still converting the book: it is waited for (see Manager::Service#replay_message).
     def previous_answers(chat_id, id, item)
-      return unless item.attempts > 1
+      return if item.attempts <= 1 || @manager.message_job_active?(chat_id: chat_id, message_id: id)
 
       answered = answers(chat_id, id)
       delete(chat_id, answered.select { |message| message[:failed] }.map { |message| message[:message_id] })
