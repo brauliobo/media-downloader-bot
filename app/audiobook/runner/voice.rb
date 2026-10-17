@@ -1,6 +1,9 @@
 module Audiobook
   class Runner
     # The voice the book is read in: its reference, instruction and the backend settings that go with it.
+    #
+    # The reference is recorded when the caller gives a voice (a link or a speaker_wav); only without one is it an
+    # Anchor, made up from the voice instruction so the whole book keeps the same narrator.
     module Voice
       VOICE_REFERENCE_WORDS = 12..24
 
@@ -14,43 +17,37 @@ module Audiobook
           options[:position_temperature] = @opts.position_temperature.to_f
         end
         options[:audio_speed] = audio_speed if audio_speed
-        return options unless stable_voice_reference?
+        return options unless reference_voice?
 
-        if voice_url
-          ref_path  = File.join(dir, 'audiobook_voice_reference.wav')
-          reference_options = {
-            url:              voice_url,
-            output:           ref_path,
-            language:         @lang,
-            reference_filter: :clone,
-          }
-          reference_options[:on_status] = @stl.method(:update) if @stl
-          reference = ::VoiceReference.from_url(**reference_options)
-          return with_speaker(options, ref_path, reference.text)
-        end
-
-        if @opts&.speaker_wav.present?
-          return with_speaker(options, File.expand_path(@opts.speaker_wav), @opts.ref_text.to_s.strip)
-        end
-
-        options[:instruct] ||= detected_voice_instruct
-        ref_path = File.join(dir, 'audiobook_voice_reference.wav')
-        reference_options = options.except(:audio_speed)
-        unless File.exist?(ref_path) && File.size?(ref_path)
-          TTS.synthesize(
-            text:     voice_reference_text,
-            lang:     @lang,
-            out_path: ref_path,
-            **reference_options
-          )
-        end
-
-        with_speaker(options, ref_path, voice_reference_text)
+        recorded = recorded_voice(dir)
+        options[:instruct] ||= detected_voice_instruct unless recorded
+        options.merge((recorded || anchor_voice(options, dir)).tts_options)
       end
 
-      def with_speaker(options, wav, text)
-        options.merge(speaker_wav: wav, ref_text: text)
+      def recorded_voice(dir)
+        recorded_voice_from_url(dir) || recorded_voice_from_file
       end
+
+      def recorded_voice_from_url(dir)
+        return unless voice_url
+
+        path = reference_path(dir)
+        reference_options = {url: voice_url, output: path, language: @lang, reference_filter: :clone}
+        reference_options[:on_status] = @stl.method(:update) if @stl
+        TTS::Reference.new(path: path, text: ::VoiceReference.from_url(**reference_options).text)
+      end
+
+      def recorded_voice_from_file
+        return unless @opts&.speaker_wav.present?
+
+        TTS::Reference.new(path: File.expand_path(@opts.speaker_wav), text: @opts.ref_text.to_s.strip)
+      end
+
+      def anchor_voice(options, dir)
+        TTS::Anchor.call(text: voice_reference_text, lang: @lang, path: reference_path(dir), **options.except(:audio_speed))
+      end
+
+      def reference_path(dir) = File.join(dir, 'audiobook_voice_reference.wav')
 
       def voice_reference_text
         @voice_reference_text ||= source_voice_reference_text || Language.voice_reference_text(@lang)
@@ -79,8 +76,8 @@ module Audiobook
         @author_gender ||= @book.try(:author_gender).presence || 'male'
       end
 
-      def stable_voice_reference?
-        backend_supports?(:stable_voice_reference)
+      def reference_voice?
+        backend_supports?(:reference_voice)
       end
 
       def backend_supports?(feature)

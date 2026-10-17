@@ -2,9 +2,9 @@ require 'rails_helper'
 
 RSpec.describe TTS::MossTTS do
   it 'enables stable seeded voice references without changing unrelated backends' do
-    expect(described_class.supports_stable_voice_reference?).to eq(true)
-    expect(TTS::OmniVoice.supports_stable_voice_reference?).to eq(true)
-    expect(TTS::Chatterbox.supports_stable_voice_reference?).to eq(false)
+    expect(described_class.supports_reference_voice?).to eq(true)
+    expect(TTS::OmniVoice.supports_reference_voice?).to eq(true)
+    expect(TTS::Chatterbox.supports_reference_voice?).to eq(false)
   end
 
   it 'sends language, temperature, and reference audio to the HTTP server' do

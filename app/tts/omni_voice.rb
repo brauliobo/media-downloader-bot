@@ -3,11 +3,11 @@ class TTS
     include HTTPBackend
 
     configure_backend(
-      base_url:              ENV['OMNIVOICE_URL'] || "http://127.0.0.1:#{ENV['OMNIVOICE_PORT']&.to_i || 10440}",
-      segment_chars:         ENV['OMNIVOICE_SEGMENT_CHARS']&.to_i || 420,
-      batch_synth_path:      '/synthesize_batch',
-      segment:               false,
-      stable_voice_reference: true,
+      base_url:         ENV['OMNIVOICE_URL'] || "http://127.0.0.1:#{ENV['OMNIVOICE_PORT']&.to_i || 10440}",
+      segment_chars:    ENV['OMNIVOICE_SEGMENT_CHARS']&.to_i || 420,
+      batch_synth_path: '/synthesize_batch',
+      segment:          false,
+      reference_voice:  true,
       sample_rate:     24_000,
       sample_rate_env: 'OMNIVOICE_SAMPLE_RATE'
     )

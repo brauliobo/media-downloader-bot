@@ -3,9 +3,9 @@ class TTS
     include HTTPBackend
 
     configure_backend(
-      base_url:               "http://127.0.0.1:#{ENV['MOSS_TTS_PORT']&.to_i || 10260}",
-      segment_chars:          ENV['MOSS_TTS_SEGMENT_CHARS']&.to_i || 500,
-      stable_voice_reference: true,
+      base_url:        "http://127.0.0.1:#{ENV['MOSS_TTS_PORT']&.to_i || 10260}",
+      segment_chars:   ENV['MOSS_TTS_SEGMENT_CHARS']&.to_i || 500,
+      reference_voice: true,
       sample_rate:     48_000,
       sample_rate_env: 'MOSS_TTS_SAMPLE_RATE'
     )

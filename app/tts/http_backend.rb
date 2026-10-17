@@ -16,24 +16,25 @@ class TTS
       mattr_accessor :segment
       mattr_accessor :synth_path
       mattr_accessor :batch_synth_path
-      mattr_accessor :stable_voice_reference
+      mattr_accessor :reference_voice
     end
 
     class_methods do
-      def configure_backend(base_url:, segment_chars: 500, synth_path: '/synthesize', batch_synth_path: nil, segment: true, stable_voice_reference: false, sample_rate: nil, sample_rate_env: nil)
-        self.base_url               = base_url
-        self.segment_chars          = segment_chars
-        self.segment                = segment
-        self.synth_path             = synth_path
-        self.batch_synth_path       = batch_synth_path
-        self.stable_voice_reference = stable_voice_reference
+      def configure_backend(base_url:, segment_chars: 500, synth_path: '/synthesize', batch_synth_path: nil, segment: true, reference_voice: false, sample_rate: nil, sample_rate_env: nil)
+        self.base_url         = base_url
+        self.segment_chars    = segment_chars
+        self.segment          = segment
+        self.synth_path       = synth_path
+        self.batch_synth_path = batch_synth_path
+        self.reference_voice  = reference_voice
         # Read from the environment on every call, the way each backend used to declare it.
         define_singleton_method(:output_sample_rate) { TTS.env_sample_rate(sample_rate_env) || sample_rate } if sample_rate
       end
     end
 
-    def supports_stable_voice_reference?
-      stable_voice_reference
+    # The backend keeps one voice when given a TTS::Reference (recorded or Anchor) to clone.
+    def supports_reference_voice?
+      reference_voice
     end
 
     def synthesize(text:, lang:, out_path:, speaker_wav: nil, **kwargs)
