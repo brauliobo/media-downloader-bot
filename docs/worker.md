@@ -54,9 +54,17 @@ wait and go out when the bot is back. A call the bot answered with an error is n
 | signal | worker |
 |---|---|
 | `USR2` (`systemctl reload`) | stops taking jobs, finishes the one in flight however long it takes, exits 0; `Restart=always` starts the replacement on the new code |
-| `TERM` (`systemctl stop`, reboot), `INT` | the same, but after `WORKER_DRAIN_TIMEOUT` (540 s, under `TimeoutStopSec=600`) the job is handed back to the queue and the worker exits |
-| the same signal twice | hands the job back and exits now |
+| `TERM` (`systemctl stop`, reboot), `INT` | the same, but after `WORKER_DRAIN_TIMEOUT` (540 s, under `TimeoutStopSec=660`) the job is stopped, handed back to the queue, and the worker exits |
+| the same signal twice | stops the job now |
 | `KILL`, crash, power loss | lease runs out in at most a minute, another worker takes the job |
+
+Stopping a job is asking it to (`Bot::JobRestarted.request!`), not cutting it: its threads leave at their next checkpoint, a status
+update (every sentence, page or batch) or a task of a pool (`JobPool`, `Pipeline`), which no longer starts the tasks not started yet; the
+ones under way end, the pools hand the stop to their callers, and the job goes back to the queue, in seconds, with its files whole. Only
+a job that reaches no checkpoint in `WORKER_STOP_GRACE` (45 s) has the stop thrown into it (`Thread#raise`), wherever it is. Either way
+the files are safe to resume from: whatever resume takes for done is written aside and moved into place (`Utils::Atomic`: the sentence
+wavs, the pauses, the paragraph and page wavs, the cached texts), and a resumed run clears what the stopped one left half written
+(`Utils::Tmp.resumable`). A stop costs the job no attempt.
 
 Each worker converts one book, so reloading all of them loses no capacity: idle ones restart at once, busy ones after their book, and
 a busy one was working anyway. A job handed back or lost is resumed, not restarted:
