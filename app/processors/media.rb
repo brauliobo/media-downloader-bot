@@ -3,8 +3,9 @@ require 'timeout'
 module Processors
   class Media < File
     Types = Zipper::Types
-    # file extension => format of what can be uploaded as downloaded
-    STREAM_FORMATS = {'.mp4' => Types.video.h264, '.m4a' => Types.audio.aac, '.mp3' => Types.audio.mp3}.freeze
+    # The codecs that are uploaded as downloaded, in any container: only the container is rewrapped, never the streams.
+    STREAM_VIDEO = %w[h264 av1].freeze
+    STREAM_AUDIO = {'aac' => Types.audio.aac, 'mp3' => Types.audio.mp3}.freeze
 
     VID_TOO_LONG = -> { "\nQuality is compromised as the video is too long to fit the #{Zipper.size_mb_limit}MB upload limit on Telegram Bots" }
     AUD_TOO_LONG = -> { "\nQuality is compromised as the audio is too long to fit the #{Zipper.size_mb_limit}MB upload limit on Telegram Bots" }
@@ -116,16 +117,23 @@ module Processors
       i.stl.update AUD_TOO_LONG[] if i.type == Types.audio && i.durat > Zipper::Limits.aud_duration_thld.minutes.to_i
     end
 
-    # The downloader already fetched a Telegram-playable file that fits the limit, so upload it untouched.
-    def streamable?(i)
-      format = STREAM_FORMATS[::File.extname(i.fn_in)]
-      i.stream.present? && format && i.type.name == Utils::MimeTypes.type_for_mime(format.mime) && Streaming.fits?(i.fn_in)
+    # The downloader already fetched a file that fits the limit, so upload its streams untouched when Telegram plays them.
+    def streamable?(i) = i.stream.present? && Streaming.fits?(i.fn_in) && stream_format(i).present?
+
+    # The format a download uploads as, nil when its codecs have to be encoded. A codec the extractor did not report is checked here.
+    def stream_format(i)
+      video, audio = %w[video audio].map { |kind| Array(i.probe.streams).find { _1.codec_type == kind }&.codec_name }
+      return STREAM_AUDIO[audio] if i.type == Types.audio
+
+      Types.video.h264 if STREAM_VIDEO.include?(video) && (audio.nil? || STREAM_AUDIO.key?(audio))
     end
 
     def passthrough(i, pos: nil)
-      i.format = STREAM_FORMATS.fetch(::File.extname(i.fn_in))
+      i.format = stream_format(i)
       i.mime   = i.format.mime
-      ::File.expand_path(Output.filename(i.info, dir: dir, ext: i.format.ext, pos: pos)).tap { |fn_out| FileUtils.mv i.fn_in, fn_out }
+      fn_out   = ::File.expand_path(Output.filename(i.info, dir: dir, ext: i.format.ext, pos: pos))
+      ::File.extname(i.fn_in) == ".#{i.format.ext}" ? FileUtils.mv(i.fn_in, fn_out) : FFmpeg.new.remux(input: i.fn_in, output: fn_out, label: 'remux failed')
+      fn_out
     end
 
     def convert i, pos: nil

@@ -58,6 +58,18 @@ class FFmpeg
         end
       end
 
+      # The same streams in the container of the output's extension, with nothing encoded.
+      def remux input:, output:, label:
+        run_one_shot profile: :overwrite, label: label do |builder|
+          builder.input input
+          builder.disable :subtitle
+          builder.disable :data
+          builder.copy
+          builder.movflags '+faststart' unless File.extname(output) == '.mp3'
+          builder.output output
+        end
+      end
+
       def remux_audio input:, output:, label:
         run_one_shot profile: :overwrite, label: label do |builder|
           builder.input input

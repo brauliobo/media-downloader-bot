@@ -18,7 +18,7 @@ RSpec.describe Downloaders::YtDlp::FormatPicker do
   end
   let(:info)    { SymMash.new(duration: 600, formats: formats) }
 
-  def pick(info = self.info, limit_mb: 50, max_res: 1080, **opts) = described_class.for(info, limit_mb: limit_mb, max_res: max_res, **opts).selector
+  def pick(info = self.info, limit_mb: 50, max_res: 1080, **opts) = described_class.new(info, limit_mb: limit_mb, max_res: max_res, **opts).selector
 
   it 'picks the best mp4 pair that fits the limit' do
     expect(pick).to eq('135+140')
@@ -27,6 +27,42 @@ RSpec.describe Downloaders::YtDlp::FormatPicker do
   it 'ignores formats that are not mp4 compatible even when they fit' do
     info.formats = [audio('140', 4), video('248', 1080, 10, vcodec: 'vp09.00.40.08', ext: 'webm')]
     expect(pick(info)).to be_nil
+  end
+
+  describe 'container' do
+    it 'does not matter when the codecs are playable' do
+      info.formats = [audio('140', 4, ext: 'webm'), video('135', 480, 25, ext: 'mkv'), video('136', 720, 30, ext: 'flv')]
+      expect(pick(info)).to eq('136+140')
+    end
+
+    it 'does not make up for a codec that is not playable' do
+      info.formats = [audio('251', 4, ext: 'm4a', acodec: 'opus'), video('135', 480, 25)]
+      expect(pick(info)).to be_nil
+    end
+  end
+
+  describe 'codecs the extractor does not report' do
+    def combined(id, height, mb) = {format_id: id, ext: 'mp4', vcodec: nil, acodec: nil, width: height * 16 / 9, height: height, filesize: mb * 2**20}
+
+    it 'are taken as playable, the best resolution that fits first' do
+      info.formats = [combined('hls-250p', 250, 10), combined('hls-360p', 360, 30), combined('hls-720p', 720, 120)]
+      expect(pick(info)).to eq('hls-360p')
+    end
+
+    it 'rank below a known codec even at a lower resolution' do
+      info.formats = [combined('hls-720p', 720, 30), audio('140', 4), video('133', 240, 5)]
+      expect(pick(info)).to eq('133+140')
+    end
+
+    it 'are taken as playable in a video-only format and an audio-only one' do
+      info.formats = [{format_id: 'v', ext: 'mp4', acodec: 'none', height: 360, filesize: 10 * 2**20}, {format_id: 'a', ext: 'm4a', vcodec: 'none', filesize: 2**20}]
+      expect(pick(info)).to eq('v+a')
+    end
+
+    it 'leave out the formats that are neither video nor audio, like storyboards' do
+      info.formats = [{format_id: 'sb0', ext: 'mhtml', vcodec: 'none', acodec: 'none', filesize: 2**20}]
+      expect(pick(info)).to be_nil
+    end
   end
 
   describe 'AV1' do

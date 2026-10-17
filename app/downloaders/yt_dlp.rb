@@ -56,7 +56,7 @@ module Downloaders
     def stream_selector(info)
       return unless Streaming.enabled?(opts)
 
-      FormatPicker.for(
+      FormatPicker.new(
         info, audio_only: audio_only?(info), limit_mb: Zipper.size_mb_limit, max_res: MAX_RES.to_i,
         clip: Utils::Duration.clip_length(opts, info.duration), alang: opts.alang
       ).selector

@@ -178,6 +178,31 @@ RSpec.describe Processors::Media do
       expect(updates.join).not_to include('transcoding')
     end
 
+    def codecs(path) = Prober.for(path).streams.to_h { [_1.codec_type, _1.codec_name] }
+
+    it 'only rewraps a playable download in another container, with no transcoding' do
+      mkv   = media_file(File.join(dir, 'in.mkv'), as: :mp4)
+      input = input(fn_in: mkv, stream: '135+140', info: SymMash.new(title: 't', _filename: 'f.mkv'))
+
+      processor.handle_input(input)
+
+      expect(File.extname(input.fn_out)).to eq('.mp4')
+      expect(codecs(input.fn_out)).to eq(codecs(source))
+      expect(input.mime).to eq('video/mp4')
+      expect(updates.join).not_to include('transcoding')
+    end
+
+    it 'transcodes a download whose codecs Telegram does not play' do
+      mkv = File.join(dir, 'in.mkv')
+      system('ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc=d=1:s=64x64:r=5', '-c:v', 'mpeg4', mkv, exception: true)
+      input = input(fn_in: mkv, stream: 'hls-360p', info: SymMash.new(title: 't', _filename: 'f.mkv'))
+
+      processor.handle_input(input)
+
+      expect(updates.join).to include('transcoding')
+      expect(codecs(input.fn_out)['video']).to eq('h264')
+    end
+
     it 'transcodes when the download does not fit the limit' do
       Zipper.size_mb_limit = 0
 

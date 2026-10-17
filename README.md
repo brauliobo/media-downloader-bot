@@ -135,7 +135,7 @@ Send a document and add options in its caption:
 
 The bot has an upload limit that depends on how it runs: 50 MB on the regular Telegram Bot API, 2 GB when it runs as a Telegram user client.
 
-To avoid slow, quality-losing re-encodes, **everybody gets streaming uploads by default**: the bot picks the best mp4 (h264/AAC) format of the video, or the best m4a/mp3 track for audio, that fits the limit and uploads it exactly as downloaded, so it is also fast. For example, a 3:30 video at a 20 MB limit is delivered as 480p instead of being recompressed.
+To avoid slow, quality-losing re-encodes, **everybody gets streaming uploads by default**: the bot picks the best format of the video (h264/AV1 with AAC/MP3, in any container), or the best AAC/MP3 track for audio, that fits the limit and uploads its streams untouched, only rewrapped as mp4/m4a/mp3 when the container differs, so it is also fast. Formats whose codecs the source does not report are tried too, and encoded as before if the downloaded file turns out to need it. For example, a 3:30 video at a 20 MB limit is delivered as 480p instead of being recompressed.
 
 - Add `nostream` to get the re-encoded version instead.
 - Options that only change text or the file list (`clang=`, `caption`, `hashtags`, `number`, ...) keep streaming on. `audio` also streams.
