@@ -1,9 +1,9 @@
-# PROPOSAL, not installed anywhere. Worker of the tdbot (TDLib user account) queue; instance = a number, one book at a time each:
-#   systemctl enable --now media-downloader-tdbot-worker@{1..3}
+# Worker of the tdbot (TDLib user account) queue; instance = a number, one book at a time each:
+#   systemctl enable --now media-downloader-tdbot-worker@{1..7}
 # The tgbot worker (media-downloader-tgbot-worker@.service) is the same unit pointed at the tgbot's service.
 [Unit]
 Description=media-downloader-bot tdbot worker %i
-After=network-online.target media-downloader-tdbot.service
+After=network-online.target
 Wants=network-online.target
 # No Requires=/BindsTo=/PartOf= on the bot: restarting or stopping it must not touch a worker.
 
@@ -11,7 +11,8 @@ Wants=network-online.target
 SyslogIdentifier=mdb-tdbot-worker-%i
 User=mdb
 Nice=19
-CPUQuota=900%
+# All the workers share the CPU the bot's books had (media-downloader-workers.slice).
+Slice=media-downloader-workers.slice
 LimitNOFILE=1001001
 ProtectHome=yes
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
@@ -30,9 +31,11 @@ Environment=BUNDLE_FROZEN=false
 Environment=RAILS_ENV=production
 Environment=DB=1
 Environment=THREADS=10
-# The bot's service (BOT_HTTP of media-downloader-tdbot.service) and BOT_HTTP_TOKEN, DB_* in the private environment file.
-Environment=BOT_HTTP=http://127.0.0.1:1180
-EnvironmentFile=-/etc/media-downloader/worker.env
+Environment=CUDA=1
+Environment=CUDA_VISIBLE_DEVICES=1
+# The tdbot's service (BOT_HTTP of media-downloader-tdbot.service); its BOT_HTTP_TOKEN is in the environment file (root:mdb 0640).
+Environment=BOT_HTTP=http://127.0.0.1:1181
+EnvironmentFile=/etc/media-downloader/tdbot-worker.env
 ExecStart=/usr/local/rvm/wrappers/ruby-3.4.4/bundle exec bin/worker
 
 # Reload = finish the book in flight, take no other, exit; Restart=always brings the new code up.

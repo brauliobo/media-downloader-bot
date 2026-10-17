@@ -1,15 +1,15 @@
-# PROPOSAL, not installed anywhere. Worker of the tgbot (Telegram Bot API) queue; see media-downloader-tdbot-worker@.service.
+# Worker of the tgbot (Telegram Bot API) queue; see media-downloader-tdbot-worker@.service.
 #   systemctl enable --now media-downloader-tgbot-worker@{1..2}
 [Unit]
 Description=media-downloader-bot tgbot worker %i
-After=network-online.target media-downloader-tgbot.service
+After=network-online.target
 Wants=network-online.target
 
 [Service]
 SyslogIdentifier=mdb-tgbot-worker-%i
 User=mdb
 Nice=19
-CPUQuota=900%
+Slice=media-downloader-workers.slice
 LimitNOFILE=1001001
 ProtectHome=yes
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
@@ -26,9 +26,10 @@ Environment=BUNDLE_FROZEN=false
 Environment=RAILS_ENV=production
 Environment=DB=1
 Environment=THREADS=10
-# The tgbot's service: its own port, so both bots can run on one host.
-Environment=BOT_HTTP=http://127.0.0.1:1181
-EnvironmentFile=-/etc/media-downloader/worker.env
+Environment=CUDA_VISIBLE_DEVICES=1
+# The tgbot's service (BOT_HTTP of media-downloader-tgbot.service); its BOT_HTTP_TOKEN is in the environment file (root:mdb 0640).
+Environment=BOT_HTTP=http://127.0.0.1:1180
+EnvironmentFile=/etc/media-downloader/tgbot-worker.env
 ExecStart=/usr/local/rvm/wrappers/ruby-3.4.4/bundle exec bin/worker
 
 ExecReload=/bin/kill -USR2 $MAINPID

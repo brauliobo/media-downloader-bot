@@ -1,0 +1,3 @@
+# The CPU all the workers share: what the books got inside the bots' own units (CPUQuota=400%) before they had workers.
+[Slice]
+CPUQuota=400%
