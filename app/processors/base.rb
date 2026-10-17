@@ -28,14 +28,13 @@ module Processors
       parsed = Utils::InputParser.parse(Utils::InputParser.input_text(ctx).to_s)
       @ctx.url = parsed.url&.to_s
       
-      if parsed.url&.host
-        host = parsed.url.host.downcase.delete_suffix('.')
-        raise 'Blocked domain' if BLOCKED_DOMAINS.any? { |domain| host.include?(domain) }
-      end
+      raise 'Blocked domain' if parsed.url && Utils::Url.hosts(parsed.url).any? { blocked_host?(_1) }
 
       @ctx.opts = SymMash.new(chat_default_opts.merge(normalized(parsed.opts)).merge(session: @ctx.session))
       self.class.apply_process_opts @ctx.opts
     end
+
+    def blocked_host?(host) = BLOCKED_DOMAINS.any? { host.include?(_1) } || Utils::DomainBlocklist.blocked?(host)
 
     # The chat's default options go through the same normalization, so the ones typed override them.
     def chat_default_opts = normalized(Utils::InputParser.parse(ChatSetting.default_options(ctx.msg&.chat&.id)).opts)

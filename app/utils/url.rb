@@ -27,6 +27,12 @@ module Utils
       parse(value)&.to_s
     end
 
+    # The host and those of the URLs it redirects to through its query (google.com/url?url=..., facebook.com/l.php?u=...).
+    def self.hosts(uri)
+      embedded = uri.query_values(Array).to_a.filter_map { |_, value| parse(value) if value.to_s.match?(%r{\Ahttps?://}i) }
+      [uri.host.downcase.delete_suffix('.'), *embedded.flat_map { hosts(_1) }]
+    end
+
     def self.display(value)
       normalize(value)&.sub(%r{\Ahttps?://}i, '')&.sub(%r{\Awww\.}i, '')
     end

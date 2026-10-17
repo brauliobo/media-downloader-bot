@@ -20,6 +20,13 @@ RSpec.describe Utils::Url do
     expect(uri.to_s).to eq('https://example.com/photo?album=1#cover')
   end
 
+  it 'lists the hosts a redirect link leads to' do
+    link = described_class.parse('google.com/url?sa=t&url=https://www.example.com/v/1&ved=2ahUKE')
+
+    expect(described_class.hosts(link)).to eq(%w[google.com www.example.com])
+    expect(described_class.hosts(described_class.parse('https://Example.com./a?b=1'))).to eq(%w[example.com])
+  end
+
   it 'only treats complete domain tokens as urls' do
     expect(described_class.token?('caption')).to be(false)
     expect(described_class.token?('example.com/photo.jpg')).to be_truthy
