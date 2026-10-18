@@ -4,7 +4,6 @@ module Tracked
   # standing kind keeps running when it has nothing pending, waiting for items added with `add`.
   class Engine
     TICK         = 1
-    MAX_PARALLEL = 10
     ERRORS       = [StandardError, NotImplementedError].freeze
 
     def initialize(handlers, tick: TICK)
@@ -87,7 +86,7 @@ module Tracked
 
     def handler_for(kind) = @handlers.fetch(kind.to_s) { raise ArgumentError, "unknown job kind #{kind.inspect}" }
 
-    def clamp(parallel) = Integer(parallel).clamp(1, MAX_PARALLEL)
+    def clamp(parallel) = [Integer(parallel), 1].max
 
     def enqueue(job)
       job.update(state: 'queued', error: nil, finished_at: nil)

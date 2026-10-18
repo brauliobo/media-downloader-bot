@@ -55,10 +55,11 @@ EOS
     sleep 1.year while true
   end
 
-  # The jobs that ask for it (`tune`) take as many items at once as the TTS pool of the router has room for, up to TUNE_MAX_PARALLEL.
+  # The jobs that ask for it (`tune`) take as many items at once as the TTS pool of the router and the workers have room for
+  # (TUNE_MAX_PARALLEL caps it when set).
   def start_tuner
     router = Utils::Oxiroute.new
-    tuner  = Tracked::Tuner.new(@tracked, backlog: -> { router.queue_depth(ENV.fetch('TUNE_POOL', 'omnivoice_nodes')) }, max: ENV.fetch('TUNE_MAX_PARALLEL', 9).to_i)
+    tuner  = Tracked::Tuner.new(@tracked, backlog: -> { router.queue_depth(ENV.fetch('TUNE_POOL', 'omnivoice_nodes')) }, max: ENV['TUNE_MAX_PARALLEL']&.to_i)
     Thread.new { tuner.run }
   end
 

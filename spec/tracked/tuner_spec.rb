@@ -56,6 +56,19 @@ RSpec.describe Tracked::Tuner do
     expect(low.refresh.parallel).to eq(1)
   end
 
+  it 'has no ceiling of its own: the workers are the limit, so it stops adding while a book waits for one' do
+    free   = described_class.new(engine, backlog: -> { 0 }, streak: 1)
+    tuned  = job(tune: true, parallel: 20, running: 20)
+
+    free.step
+    expect(tuned.refresh.parallel).to eq(21)
+    BotJob.dataset.insert(id: 'waiting', queue: 'tdbot', message: Sequel.pg_jsonb({}), state: 'queued')
+    free.step
+    expect(tuned.refresh.parallel).to eq(21)
+  ensure
+    BotJob.dataset.delete
+  end
+
   it 'leaves alone the jobs that did not ask for it, and reads nothing without one' do
     plain = job
 

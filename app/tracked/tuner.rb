@@ -6,7 +6,7 @@ module Tracked
   class Tuner
     INTERVAL = 20
 
-    def initialize(engine, backlog:, min: 1, max: Engine::MAX_PARALLEL, streak: 3, waiting: 2)
+    def initialize(engine, backlog:, min: 1, max: nil, streak: 3, waiting: 2)
       @engine, @backlog, @range, @streak, @waiting = engine, backlog, min..max, streak, waiting
       @votes = []
     end
@@ -43,7 +43,8 @@ module Tracked
       @engine.update(job.id, parallel: parallel) unless parallel == job.parallel
     end
 
-    # Every slot of the job is in use and items are waiting for one: only then is more of it of use.
-    def starved?(job) = JobItem.where(job_id: job.id, status: 'running').count >= job.parallel && JobItem.where(job_id: job.id, status: 'pending').any?
+    # Every slot of the job is in use, items are waiting for one and no worker is short of a book: only then is more of it of use.
+    # With no `max` the workers are the limit: while a book waits for one, the slots already taken are more than they can use.
+    def starved?(job) = JobItem.where(job_id: job.id, status: 'running').count >= job.parallel && JobItem.where(job_id: job.id, status: 'pending').any? && BotJob.where(state: 'queued').empty?
   end
 end

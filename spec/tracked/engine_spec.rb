@@ -137,10 +137,11 @@ RSpec.describe Tracked::Engine do
     Timeout.timeout(5) { sleep 0.01 until Job.unfinished.empty? }
   end
 
-  it 'changes the parallelism of a job' do
+  it 'changes the parallelism of a job, with no ceiling but one slot' do
     job = start
 
-    expect(engine.update(job[:id], parallel: 50)).to include(parallel: 10)
+    expect(engine.update(job[:id], parallel: 50)).to include(parallel: 50)
+    expect(engine.update(job[:id], parallel: 0)).to include(parallel: 1)
     settled(job[:id], 'completed')
   end
 
