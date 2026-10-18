@@ -17,7 +17,8 @@ class Worker
       uploads = Array.wrap(input.uploads.presence || input)
       return upload_album(container(uploads, input), caption) if album_uploads?(uploads)
 
-      uploads.each { |upload| worker.upload_item(upload) }
+      progress = Utils::ProgressCounter.new(total: uploads.size, status: (input.stl if uploads.many?)) { |done, total| "uploaded #{done}/#{total}" }
+      uploads.each { |upload| worker.upload_item(upload).tap { progress.advance } }
     ensure
       worker.cleanup_input(input)
     end

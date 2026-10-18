@@ -147,4 +147,16 @@ RSpec.describe Worker::UploadCoordinator do
     )
     expect(input.info.title).to eq('English caption')
   end
+
+  it 'reports each of several files uploaded' do
+    status = double(:status)
+    allow(status).to receive(:update)
+    allow(worker).to receive(:upload_item)
+    uploads = [item('1.pdf', 'application/pdf'), item('2.pdf', 'application/pdf')]
+
+    described_class.new(worker).upload(SymMash.new(uploads: uploads, stl: status))
+
+    expect(status).to have_received(:update).with('uploaded 1/2').ordered
+    expect(status).to have_received(:update).with('uploaded 2/2').ordered
+  end
 end
