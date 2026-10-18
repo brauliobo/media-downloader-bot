@@ -1,7 +1,5 @@
 module Processors
   class Document < File
-    MAX_BYTES = ENV.fetch('MAX_DOCUMENT_BYTES', 200 * 1024 * 1024).to_i
-
     self.attr = :document
 
     def self.document_kind(doc)
@@ -13,15 +11,6 @@ module Processors
     def self.can_handle?(msg) = !!document_kind(msg&.document)
 
     def document_kind = self.class.document_kind(msg.document)
-
-    def download
-      info = msg.document
-      raise ArgumentError, 'document is too large' if info&.file_size.to_i > MAX_BYTES
-
-      input = super
-      raise ArgumentError, 'document is too large' if input&.fn_in && ::File.size(input.fn_in) > MAX_BYTES
-      input
-    end
 
     def handle_input(i, pos: nil, **_kwargs)
       kind = document_kind
