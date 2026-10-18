@@ -31,6 +31,13 @@ RSpec.describe Tracked::Tuner do
     expect(tuned.refresh.parallel).to eq(2)
   end
 
+  it 'does not cut again while the items over the slots it left are still running' do
+    draining = job(tune: true, parallel: 3, running: 5)
+
+    steps(3, 3, 3)
+    expect(draining.refresh.parallel).to eq(3)
+  end
+
   it 'is not moved by a spike' do
     tuned = job(tune: true)
 

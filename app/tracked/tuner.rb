@@ -37,7 +37,7 @@ module Tracked
     def vote(waiting) = waiting.zero? ? 1 : (waiting >= @waiting ? -1 : 0)
 
     def move(job, step)
-      return if step.zero? || (step.positive? && !starved?(job))
+      return if step.zero? || (step.positive? && !starved?(job)) || (step.negative? && shrinking?(job))
 
       parallel = (job.parallel + step).clamp(@range)
       @engine.update(job.id, parallel: parallel) unless parallel == job.parallel
@@ -45,6 +45,11 @@ module Tracked
 
     # Every slot of the job is in use, items are waiting for one and no worker is short of a book: only then is more of it of use.
     # With no `max` the workers are the limit: while a book waits for one, the slots already taken are more than they can use.
-    def starved?(job) = JobItem.where(job_id: job.id, status: 'running').count >= job.parallel && JobItem.where(job_id: job.id, status: 'pending').any? && BotJob.where(state: 'queued').empty?
+    def starved?(job) = running(job) >= job.parallel && JobItem.where(job_id: job.id, status: 'pending').any? && BotJob.where(state: 'queued').empty?
+
+    # More items run than the job has slots: the last cut is still draining, and the books in flight keep the queue as it is.
+    def shrinking?(job) = running(job) > job.parallel
+
+    def running(job) = JobItem.where(job_id: job.id, status: 'running').count
   end
 end
