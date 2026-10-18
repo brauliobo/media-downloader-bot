@@ -5,7 +5,8 @@ module AI
     MODEL         = ENV['OLLAMA_OCR_MODEL'] || DEFAULT_MODEL
     PROMPT_MODEL  = ENV['OLLAMA_LANGUAGE_MODEL'] || DEFAULT_MODEL
     # One thread: the GPU does the work, more only spin on the CPU. Every caller sends the same options, or Ollama reloads the model.
-    OPTIONS       = { temperature: 0.0, num_thread: 1 }
+    # A page that makes the model loop at temperature 0 would otherwise generate until the timeout, holding the GPU for 15 minutes.
+    OPTIONS       = { temperature: 0.0, num_thread: 1, num_predict: ENV.fetch('OLLAMA_NUM_PREDICT', 8192).to_i }
     TIMEOUT       = ENV.fetch('OLLAMA_TIMEOUT', 15.minutes).to_i
 
     def self.prompt(text, model: PROMPT_MODEL)
@@ -23,6 +24,7 @@ module AI
       if parsed.error
         raise "Ollama API error: #{parsed.error}"
       end
+      raise "Ollama output cut at #{OPTIONS[:num_predict]} tokens, the model is looping" if parsed.done_reason == 'length'
       content = parsed.dig(:message, :content).to_s.strip
       if content.match?(/execution expired/i)
         raise "Ollama execution expired"
