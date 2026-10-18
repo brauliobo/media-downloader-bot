@@ -31,8 +31,9 @@ module Utils
       )
     end
 
+    # About two minutes in all: a backend that idled out answers 503 until it is up again, and a book is hours of work.
     def tts(**opts, &block)
-      call(tries: 4, interval: 0.5, multiplier: 2.0, **opts, &block)
+      call(tries: 8, interval: 1, multiplier: 2.0, **opts, &block)
     end
 
     def http_retryable?(error)

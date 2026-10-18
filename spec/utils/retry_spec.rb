@@ -73,7 +73,14 @@ RSpec.describe Utils::Retry do
       end
 
       expect(calls).to eq(2)
-      expect(Kernel).to have_received(:sleep).with(0.5).once
+      expect(Kernel).to have_received(:sleep).with(1).once
+    end
+
+    it 'keeps trying for about two minutes' do
+      allow(Kernel).to receive(:sleep)
+
+      expect { described_class.tts { raise 'down' } }.to raise_error('down')
+      expect(Kernel).to have_received(:sleep).with(any_args).exactly(7).times
     end
   end
 end
