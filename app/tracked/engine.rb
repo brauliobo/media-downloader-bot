@@ -32,7 +32,8 @@ module Tracked
     # Takes effect on the next tick of a running job.
     def update(id, parallel: nil, params: nil)
       job = Job.with_pk!(id)
-      job.update({ parallel: (clamp(parallel) if parallel), params: (handler_for(job.kind).normalize(job.options.merge(params.to_h.symbolize_keys)) if params) }.compact).to_api
+      job.update({ parallel: (clamp(parallel) if parallel), params: (handler_for(job.kind).normalize(job.options.merge(params.to_h.symbolize_keys)) if params) }.compact)
+      job.to_api
     end
 
     # Puts failed items back in line and wakes their jobs up; returns how many. With `discard` the done ones go too, after

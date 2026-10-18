@@ -142,6 +142,7 @@ RSpec.describe Tracked::Engine do
 
     expect(engine.update(job[:id], parallel: 50)).to include(parallel: 50)
     expect(engine.update(job[:id], parallel: 0)).to include(parallel: 1)
+    expect(engine.update(job[:id], parallel: 1)).to include(parallel: 1) # nothing changed
     settled(job[:id], 'completed')
   end
 
