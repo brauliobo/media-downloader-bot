@@ -53,6 +53,7 @@ TimeoutStopSec=660
 # when jobs wait and leave, with status 75 (not restarted), after WORKER_IDLE_EXIT seconds without a job.
 Environment=WORKER_MIN=4
 Environment=WORKER_IDLE_EXIT=120
+SuccessExitStatus=75
 RestartPreventExitStatus=75
 
 Restart=always
