@@ -9,6 +9,7 @@ RSpec.describe Worker::UploadCoordinator do
   before do
     Worker.skip_cleanup = false
     allow(worker).to receive(:cleanup_input)
+    allow(worker).to receive(:waiting_rate_limit) { |&block| block.call }
   end
 
   after do
@@ -90,6 +91,17 @@ RSpec.describe Worker::UploadCoordinator do
 
     expect(File.exist?(input)).to be(false)
     expect(File.exist?(upload.fn_out)).to be(false)
+  end
+
+  it 'keeps the files of an upload that failed, for the job taken again to send' do
+    real_worker = Worker.new(SymMash.new(from: {id: 1}, chat: {id: 1}))
+    real_worker.instance_variable_set(:@dir, dir)
+    upload = item('1.mp4', 'video/mp4')
+    allow(real_worker).to receive(:upload_item).and_raise(Bot::JobRestarted)
+
+    expect { described_class.new(real_worker).upload(upload) }.to raise_error(Bot::JobRestarted)
+
+    expect(File.exist?(upload.fn_out)).to be(true)
   end
 
   it 'preserves generated files when cleanup is disabled' do

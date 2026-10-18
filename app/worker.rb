@@ -4,6 +4,8 @@ class Worker
 
   ALBUM_CAPTION_SEPARATOR = "\n\n".freeze
   WORKDIR_TTL = 7.days
+  RATE_LIMIT_TRIES = Integer(ENV.fetch('UPLOAD_RATE_LIMIT_TRIES', 5))
+  RATE_LIMIT_PAUSE = 5
 
   class_attribute :service, :workdir_path, :skip_cleanup
   class_attribute :tmpdir, default: Utils::Tmp.root
@@ -167,7 +169,23 @@ class Worker
 
     pp ret_msg if ENV['DEBUG']
     caption = 'paid' if paid
-    send_message msg, caption, **ret_msg
+    waiting_rate_limit { send_message msg, caption, **ret_msg }
+  end
+
+  # An upload Telegram refuses with a 429 must not cost the work: the bot has already waited out the time it was told, so the same upload
+  # is tried again, and a job that still cannot get through goes back to the queue (Bot::JobRestarted) with its directory, to be resumed.
+  def waiting_rate_limit
+    tries = 0
+    begin
+      yield
+    rescue => e
+      raise unless Bot::RateLimiter.rate_limited?(e)
+      raise Bot::JobRestarted, "Telegram rate limit: #{e.message}" if (tries += 1) >= RATE_LIMIT_TRIES
+
+      warn "upload refused with 429 (#{tries}/#{RATE_LIMIT_TRIES}), trying again"
+      sleep RATE_LIMIT_PAUSE
+      retry
+    end
   end
 
   def caption_limit

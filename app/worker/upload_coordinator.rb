@@ -13,13 +13,10 @@ class Worker
       end
     end
 
+    # The files are removed once sent, not when the upload failed: a job taken again (Bot::JobRestarted) finds what was already made.
     def upload(input, caption: nil)
       uploads = Array.wrap(input.uploads.presence || input)
-      return upload_album(container(uploads, input), caption) if album_uploads?(uploads)
-
-      progress = Utils::ProgressCounter.new(total: uploads.size, status: (input.stl if uploads.many?)) { |done, total| "uploaded #{done}/#{total}" }
-      uploads.each { |upload| worker.upload_item(upload).tap { progress.advance } }
-    ensure
+      album_uploads?(uploads) ? upload_album(container(uploads, input), caption) : upload_each(uploads, input)
       worker.cleanup_input(input)
     end
 
@@ -35,8 +32,13 @@ class Worker
 
     attr_reader :worker, :album_queue
 
+    def upload_each(uploads, input)
+      progress = Utils::ProgressCounter.new(total: uploads.size, status: (input.stl if uploads.many?)) { |done, total| "uploaded #{done}/#{total}" }
+      uploads.each { |upload| worker.upload_item(upload).tap { progress.advance } }
+    end
+
     def upload_album(input, caption)
-      worker.send_album worker.msg, caption || worker.caption_for(input), uploads: input.uploads, parse_mode: 'MarkdownV2'
+      worker.waiting_rate_limit { worker.send_album worker.msg, caption || worker.caption_for(input), uploads: input.uploads, parse_mode: 'MarkdownV2' }
     end
 
     def album_uploads?(uploads)

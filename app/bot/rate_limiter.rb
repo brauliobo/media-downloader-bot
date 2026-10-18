@@ -144,21 +144,25 @@ module Bot
       raise
     end
 
-    def rate_limited?(error)
-      msg = error.message.to_s
-      msg.include?('429') || msg.include?('Too Many Requests')
-    end
+    # Also asked by a worker, of the error the bot answered its call with.
+    def self.rate_limited?(error) = error.message.to_s.then { |msg| msg.include?('429') || msg.include?('Too Many Requests') }
 
-    def retry_after_seconds(e)
-      retry_after = e.message.to_s[/retry after (\d+(?:\.\d+)?)/i, 1]
+    def self.response_body(error) = error.try(:response).try(:body)
+
+    def self.retry_after_seconds(error)
+      retry_after = error.message.to_s[/retry after (\d+(?:\.\d+)?)/i, 1]
       return retry_after.to_f.ceil if retry_after
 
-      parsed = JSON.parse(response_body(e).to_s) rescue {}
-      ra     = (parsed.dig('parameters', 'retry_after') || parsed.dig('error', 'retry_after')).to_i
-      ra.positive? ? ra : 60
+      parsed = JSON.parse(response_body(error).to_s) rescue {}
+      seconds = (parsed.dig('parameters', 'retry_after') || parsed.dig('error', 'retry_after')).to_i
+      seconds.positive? ? seconds : 60
     end
 
-    def response_body(error) = error.try(:response).try(:body)
+    def rate_limited?(error) = RateLimiter.rate_limited?(error)
+
+    def retry_after_seconds(error) = RateLimiter.retry_after_seconds(error)
+
+    def response_body(error) = RateLimiter.response_body(error)
 
     def log_rate_limit(tag, seconds)
       msg = "[RATE_LIMIT] sleeping #{seconds}s (#{tag})"
