@@ -142,7 +142,7 @@ RSpec.describe Zipper::AudioOps do
     described_class.compress('in.wav', 'out.opus', codec: 'libopus', bitrate: 64_000, speed: 1, ffmpeg: ffmpeg)
 
     expect(ffmpeg).to have_received(:reencode_audio).with(
-      input: 'in.wav', output: 'out.opus', codec: 'libopus', bitrate: 64_000, speed: 1.2, label: 'Failed to compress audio'
+      input: 'in.wav', output: 'out.opus', codec: 'libopus', bitrate: 64_000, speed: 1.2, min_duration: nil, label: 'Failed to compress audio'
     )
     expect(ffmpeg).to have_received(:reencode_audio).with(hash_including(speed: nil))
   end

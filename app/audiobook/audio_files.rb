@@ -2,6 +2,8 @@ module Audiobook
   module AudioFiles
     # bits/s; 64k is about a fifth of the wav and speech stays clean.
     STORED_BITRATE = ENV.fetch('SENTENCE_OPUS_BITRATE', 64_000).to_i
+    # Seconds; the TTS may answer with no audio at all, which Opus cannot keep.
+    STORED_MIN_DURATION = 0.02
 
     module_function
 
@@ -21,7 +23,7 @@ module Audiobook
     # (at the speed asked, in the same pass) and drops it. The stored file exists only whole, so one that exists is done.
     def compress(wav, speed: nil)
       stored = stored_path(wav)
-      Utils::Atomic.write(stored) { |part| Zipper::AudioOps.compress(wav, part, codec: 'libopus', bitrate: STORED_BITRATE, speed: speed) }
+      Utils::Atomic.write(stored) { |part| Zipper::AudioOps.compress(wav, part, codec: 'libopus', bitrate: STORED_BITRATE, speed: speed, min_duration: STORED_MIN_DURATION) }
       FileUtils.rm_f(wav)
       stored
     end

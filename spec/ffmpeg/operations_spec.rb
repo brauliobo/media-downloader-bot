@@ -166,6 +166,16 @@ RSpec.describe FFmpeg::Operations do
     expect(commands).to eq ['ffmpeg -y -threads 5 -loglevel error -i in.wav -c:a libopus -b:a 64000 <dir>/out.opus']
   end
 
+  it 'pads an audio shorter than a minimum, after the speed' do
+    ffmpeg.reencode_audio input: 'in.wav', output: path('out.opus'), label: 'x', speed: 1.2, min_duration: 0.02, codec: 'libopus', bitrate: 64_000
+
+    expect(commands).to eq [
+      'ffmpeg -y -threads 5 -loglevel error -i in.wav ' \
+      '-af rubberband=tempo=1.2:pitch=1:transients=smooth:detector=soft:phase=laminar:window=long:formant=preserved,apad=whole_dur=0.02 ' \
+      '-c:a libopus -b:a 64000 <dir>/out.opus'
+    ]
+  end
+
   it 'converts audio to wav' do
     ffmpeg.audio_to_wav input: 'in.mp3', output: path('out.wav'), sample_rate: 16_000, channels: 1, label: 'x'
 

@@ -59,11 +59,11 @@ class Zipper
     end
 
     # The audio at `output`, encoded with the codec at the bitrate and sped up if a speed is asked.
-    def compress(input, output, codec:, bitrate:, speed: nil, ffmpeg: nil, ffmpeg_factory: nil)
+    def compress(input, output, codec:, bitrate:, speed: nil, min_duration: nil, ffmpeg: nil, ffmpeg_factory: nil)
       speed = speed.to_f
       FFmpeg.resolve(ffmpeg, ffmpeg_factory).reencode_audio(
         input: input, output: output, codec: codec, bitrate: bitrate, speed: (speed if speed.positive? && speed != 1),
-        label: 'Failed to compress audio'
+        min_duration: min_duration, label: 'Failed to compress audio'
       )
       output
     end

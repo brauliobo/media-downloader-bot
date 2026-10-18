@@ -22,6 +22,16 @@ RSpec.describe Audiobook::AudioFiles do
     expect(Dir.children(@dir)).to eq ['1_0.opus']
   end
 
+  it 'keeps a TTS answer without any audio as a file that can be read and joined' do
+    empty = File.join(@dir, '1_1.wav')
+    system('ffmpeg', '-y', '-loglevel', 'error', '-f', 'lavfi', '-i', 'anullsrc=r=24000:cl=mono', '-t', '0', '-c:a', 'pcm_s16le', empty) || raise('empty fixture failed')
+    stored = described_class.compress(empty)
+
+    expect(duration(stored)).to be_within(0.01).of(0.02)
+    pause = File.join(@dir, 'pause.wav').tap { |path| sine_wav(path, seconds: 0.5) }
+    expect(duration(described_class.join([pause, stored], File.join(@dir, 'joined.wav')))).to be_within(0.1).of(0.52)
+  end
+
   it 'speeds the audio up in the same pass' do
     expect(duration(described_class.compress(wav, speed: 2))).to be_within(0.15).of(0.5)
   end

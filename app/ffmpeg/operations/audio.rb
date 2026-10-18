@@ -72,12 +72,14 @@ class FFmpeg
       end
 
       # Re-encodes the audio, through the filter if any (a speed asks for the speech one), as 16-bit PCM unless told otherwise.
-      def reencode_audio input:, output:, label:, filter: nil, speed: nil, codec: 'pcm_s16le', bitrate: nil
-        filter ||= FFmpeg.speech_speed_filter speed if speed
+      # With `min_duration` a shorter audio (an empty one included) is padded with silence to it: a codec like Opus makes of an
+      # audio without samples a file that cannot be read back.
+      def reencode_audio input:, output:, label:, filter: nil, speed: nil, min_duration: nil, codec: 'pcm_s16le', bitrate: nil
+        filters = [filter || (FFmpeg.speech_speed_filter speed if speed), ("apad=whole_dur=#{min_duration}" if min_duration)].compact
 
         run_one_shot label: label do |builder|
           builder.input input
-          builder.set_filter filter, stream: :audio if filter
+          builder.set_filter filters.join(','), stream: :audio if filters.any?
           builder.codec codec, stream: :audio
           builder.bitrate bitrate, stream: :audio, unit: :bit if bitrate
           builder.output output
