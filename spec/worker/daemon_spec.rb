@@ -69,6 +69,24 @@ RSpec.describe Worker::Daemon do
     expect(seen).to contain_exactly('book 1', 'book 2')
   end
 
+  describe 'an instance the scaler started' do
+    let(:daemon) { described_class.new(service: service, retire_after: 0.2) }
+
+    it 'retires once idle for its time, and does not before a job ends' do
+      submit(1)
+      thread = run_daemon
+      wait_until { seen.any? }
+
+      expect(thread.join(5)).to be_truthy
+      expect(daemon).to be_retired
+    end
+
+    it 'is not asked to retire when it is one of the minimum' do
+      expect(described_class.new(service: service)).not_to be_retired
+      expect(described_class.retire_after).to be_nil
+    end
+  end
+
   it 'leaves the queues of the other bots alone' do
     Bot::Jobs.new(queue: 'other').submit(SymMash.new(from: { id: 1 }, chat: { id: 1 }, message_id: 1, text: 'other'))
     thread = run_daemon

@@ -38,6 +38,12 @@ KillSignal=SIGTERM
 Environment=WORKER_DRAIN_TIMEOUT=540
 TimeoutStopSec=660
 
+# Autoscaling (Worker::Scaler, started by the tgbot when it has WORKER_MAX): instances up to WORKER_MIN stay, the ones above it are started
+# when jobs wait and leave, with status 75 (not restarted), after WORKER_IDLE_EXIT seconds without a job.
+Environment=WORKER_MIN=2
+Environment=WORKER_IDLE_EXIT=120
+RestartPreventExitStatus=75
+
 Restart=always
 RestartSec=1
 

@@ -5,4 +5,6 @@ Process.setproctitle "media-downloader-worker-#{instance}"
 $stdout.sync = $stderr.sync = true
 require_relative '../config/environment'
 
-Worker::Daemon.new.run
+daemon = Worker::Daemon.new
+daemon.run
+exit Worker::Daemon::RETIRED_STATUS if daemon.retired?

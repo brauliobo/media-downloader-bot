@@ -14,14 +14,24 @@ class Worker
     POLL          = 1
     DRAIN_TIMEOUT = Integer(ENV.fetch('WORKER_DRAIN_TIMEOUT', 540))
     SIGNALS       = { USR2: nil, TERM: DRAIN_TIMEOUT, INT: DRAIN_TIMEOUT }.freeze
+    # What a worker above WORKER_MIN leaves with after WORKER_IDLE_EXIT seconds without a job; the unit does not restart that status.
+    RETIRED_STATUS = 75
 
     attr_reader :id
 
-    def initialize(service_uri = ENV['BOT_HTTP'] || ENV['BOT_DRB'], service: Bot::Worker::Client.new(service_uri))
-      @service = service
-      @id      ="#{Socket.gethostname}-#{Process.pid}-#{SecureRandom.hex(3)}"
-      @signals = Set.new
+    # The instances above WORKER_MIN are the ones the scaler starts (Worker::Scaler): they leave when idle, the others stay.
+    def self.retire_after
+      ENV.fetch('WORKER_IDLE_EXIT', 120).to_f if ENV['WORKER_MIN'] && ENV['SYSTEMD_INSTANCE'].to_i > ENV['WORKER_MIN'].to_i
     end
+
+    def initialize(service_uri = ENV['BOT_HTTP'] || ENV['BOT_DRB'], service: Bot::Worker::Client.new(service_uri), retire_after: self.class.retire_after)
+      @service      = service
+      @retire_after = retire_after
+      @id           = "#{Socket.gethostname}-#{Process.pid}-#{SecureRandom.hex(3)}"
+      @signals      = Set.new
+    end
+
+    def retired? = @retired.present?
 
     def run
       Thread.abort_on_exception = false # a thread of a stopped job (a reader of its subprocess) ending must not take the worker down
@@ -40,11 +50,19 @@ class Worker
     private
 
     def take_jobs
+      idle_since = monotonic
       until @draining
-        job = @jobs.dequeue(worker: id)
-        job ? process(job) : sleep(POLL)
+        if (job = @jobs.dequeue(worker: id))
+          process(job)
+          idle_since = monotonic
+        else
+          retire if @retire_after && monotonic - idle_since > @retire_after
+          sleep POLL
+        end
       end
     end
+
+    def retire = @retired = @draining = true
 
     def process(job)
       @restarted = false

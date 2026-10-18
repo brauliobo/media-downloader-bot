@@ -97,6 +97,12 @@ One-time cut-over from the bot running the books itself (done for the tdbot on 2
 Jobs fed by a tracked job (replay, a group's queue) count against no user: the job's own `parallel` is their limit. A message sent by a
 person counts against them (`Bot::UserQueue.limit` running jobs, the admin exempt).
 
+Autoscaling: a bot with `WORKER_MAX` in its environment (and `WORKER_MIN`, the instances kept up) runs `Worker::Scaler`, which starts
+worker instances (`systemctl start`, allowed to the bot's user by `deploy/50-media-downloader-workers.rules`, installed in
+`/etc/polkit-1/rules.d/`) while jobs wait: the jobs in progress plus the ones a worker could take now, so a user at the limit
+(`BotJob.takeable`) asks for none. The instances above `WORKER_MIN` leave with status 75 after `WORKER_IDLE_EXIT` seconds idle, and the
+unit does not restart that status. Keep `WORKER_MIN` in the unit and in the bot's environment the same.
+
 After that:
 
 - Deploy the bot: update its tree, `systemctl restart media-downloader-tdbot`. Workers keep converting, queued jobs wait in the database.

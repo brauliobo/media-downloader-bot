@@ -50,6 +50,7 @@ EOS
     @relay.recover!
     @tracked.recover! if ENV['TD_BOT'] # replay needs tdlib; the Telegram bot API can't read chats
     start_tuner if ENV['TD_BOT']
+    start_scaler if ENV['WORKER_MAX']
     start_bot_service
     start_frontend
     sleep 1.year while true
@@ -61,6 +62,12 @@ EOS
     router = Utils::Oxiroute.new
     tuner  = Tracked::Tuner.new(@tracked, backlog: -> { router.queue_depth(ENV.fetch('TUNE_POOL', 'omnivoice_nodes')) }, max: ENV['TUNE_MAX_PARALLEL']&.to_i)
     Thread.new { tuner.run }
+  end
+
+  # The workers of this bot's queue follow its jobs: WORKER_MIN stay up, and more start (up to WORKER_MAX) while jobs wait for one.
+  def start_scaler
+    scaler = Worker::Scaler.new(queue: @jobs.queue, min: ENV.fetch('WORKER_MIN', 1).to_i, max: ENV['WORKER_MAX'].to_i)
+    Thread.new { scaler.run }
   end
 
   def start_td_bot
