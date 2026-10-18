@@ -49,9 +49,17 @@ EOS
     start_tg_bot if ENV['TG_BOT']
     @relay.recover!
     @tracked.recover! if ENV['TD_BOT'] # replay needs tdlib; the Telegram bot API can't read chats
+    start_tuner if ENV['TD_BOT']
     start_bot_service
     start_frontend
     sleep 1.year while true
+  end
+
+  # The jobs that ask for it (`tune`) take as many items at once as the TTS pool of the router has room for, up to TUNE_MAX_PARALLEL.
+  def start_tuner
+    router = Utils::Oxiroute.new
+    tuner  = Tracked::Tuner.new(@tracked, backlog: -> { router.queue_depth(ENV.fetch('TUNE_POOL', 'omnivoice_nodes')) }, max: ENV.fetch('TUNE_MAX_PARALLEL', 9).to_i)
+    Thread.new { tuner.run }
   end
 
   def start_td_bot
