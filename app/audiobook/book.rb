@@ -44,9 +44,9 @@ module Audiobook
       metadata.language || 'en'
     end
 
-    def self.translate_sentences(sentences, from:, to:)
+    def self.translate_sentences(sentences, from:, to:, progress: nil)
       sentences.group_by { |sent| sent.language.presence || from }.each do |source, group|
-        texts = Array(Translator.translate(group.map(&:text), from: source, to: to))
+        texts = Translator.in_batches(group.map(&:text), progress: progress) { |batch| Translator.translate(batch, from: source, to: to) }
         group.zip(texts).each do |sent, text|
           sent.text     = text
           sent.language = to
@@ -110,10 +110,7 @@ module Audiobook
     def translate!
       target = speech_language
       pending = @pages.flat_map(&:all_sentences).reject { |sent| sent.language.to_s == target.to_s }
-      if pending.any?
-        @stl&.update 'Translating pages'
-        self.class.translate_sentences(pending, from: @lang, to: target)
-      end
+      self.class.translate_sentences(pending, from: @lang, to: target, progress: Translator.progress(pending.size, @stl, 'Translating pages')) if pending.any?
       translate_names!(from: @lang, to: target)
       mark_translated!(target)
     end

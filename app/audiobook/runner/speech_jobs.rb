@@ -38,11 +38,15 @@ module Audiobook
         return if jobs.empty?
 
         speed, options = AudioFiles.split_speed_options(speech_options)
+        translation = Utils::ProgressCounter.new(total: jobs.size)
         progress = Utils::ProgressCounter.new(total: jobs.size, status: @stl) do |completed, total|
-          "#{jobs[completed - 1][:status]}, audio #{completed}/#{total}"
+          [jobs[completed - 1][:status], (translation_status(translation, total) if translation.count.positive?), "audio #{completed}/#{total}"].compact.join(', ')
         end
-        synthesize_speech_jobs(jobs, options, store_batch(progress, speed))
+        synthesize_speech_jobs(jobs, options, store_batch(progress, speed), translation)
       end
+
+      # Translated alongside the speech, so the translation shows with the audio count that reports it.
+      def translation_status(translation, total) = "translated #{translation.count}/#{total}"
 
       # Each batch is stored (at the speed asked) as it arrives, so the wavs do not pile up while the book is read.
       def store_batch(progress, speed)
@@ -52,19 +56,19 @@ module Audiobook
         end
       end
 
-      def synthesize_speech_jobs(jobs, options, on_batch)
+      def synthesize_speech_jobs(jobs, options, on_batch, translation)
         if @book.try(:translation_needed?) && !@book.translated
-          pipeline_speech_jobs(jobs, options, on_batch)
+          pipeline_speech_jobs(jobs, options, on_batch, translation)
         else
           TTS.synthesize_batch(items: jobs, on_batch: on_batch, **options)
         end
       end
 
-      def pipeline_speech_jobs(jobs, options, on_batch)
+      def pipeline_speech_jobs(jobs, options, on_batch, translation = Utils::ProgressCounter.new(total: jobs.size))
         target = @book.speech_language
         Pipeline.each(
           jobs, tasks: 2, batch: TTS::BATCH_SIZE,
-          perform: ->(job) { translate_speech_job(job, target) }
+          perform: ->(job) { translate_speech_job(job, target).tap { translation.advance } }
         ) do |batch|
           TTS.synthesize_batch(items: batch.select { |job| job[:text].present? }, on_batch: on_batch, **options)
         end

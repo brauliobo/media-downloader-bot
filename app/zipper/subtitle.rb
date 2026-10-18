@@ -188,8 +188,7 @@ class Zipper
       return subtitle unless to
       return subtitle if from && from == to
 
-      zipper.stl&.update 'translating'
-      subtitle.translated(from: from, to: to, merge_adjacent: false)
+      subtitle.translated(from: from, to: to, merge_adjacent: false, status: zipper.stl)
     end
 
     private :subtitles_requested?, :transcription_requested?, :provided_subtitle, :fetch, :fetch_scraped,

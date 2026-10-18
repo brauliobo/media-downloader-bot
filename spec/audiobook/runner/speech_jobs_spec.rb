@@ -37,4 +37,18 @@ RSpec.describe Audiobook::Runner::SpeechJobs do
     expect(Audiobook::AudioFiles).to have_received(:compress_all).with(['/tmp/one.wav', '/tmp/two.wav'], 1.2)
     expect(status).to have_received(:update).with('2/2')
   end
+
+  it 'reports the sentences translated along with the audio stored' do
+    book.define_singleton_method(:translation_needed?) { true }
+    status = double(:status)
+    allow(status).to receive(:update)
+    allow(Audiobook::Book).to receive(:translate_sentences) { |sentences, **| sentences.each { |sentence| sentence.text = 'um' } }
+    allow(TTS).to receive(:synthesize_batch) { |items:, on_batch:, **| on_batch.call(items) }
+    allow(Audiobook::AudioFiles).to receive(:compress_all)
+    page = double(speech_jobs: [job('one'), job('two')])
+
+    host.new.tap { |runner| runner.instance_variable_set(:@stl, status) }.send(:process_speech_jobs, [page], '/tmp', {})
+
+    expect(status).to have_received(:update).with('two, translated 2/2, audio 2/2')
+  end
 end

@@ -2,6 +2,8 @@ require 'thread'
 
 module Utils
   class ProgressCounter
+    attr_reader :count
+
     def initialize(total:, status: nil, &format)
       @total  = total
       @status = status

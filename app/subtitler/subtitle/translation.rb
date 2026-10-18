@@ -2,11 +2,11 @@ class Subtitler
   class Subtitle
     # The text translated in batches, with the entries rebuilt around the translation.
     module Translation
-      def translate!(from:, to:, merge_adjacent: true, translator: nil, batch_size: nil)
+      def translate!(from:, to:, merge_adjacent: true, translator: nil, batch_size: nil, status: nil)
         sentences = sentence_entries
         texts     = sentences.map(&:text)
         translated_texts = translate_texts(
-          texts, from: from, to: to, translator: translator, batch_size: batch_size
+          texts, from: from, to: to, translator: translator, batch_size: batch_size, status: status
         )
 
         sentences.zip(translated_texts).each do |entry, translated_text|
@@ -23,13 +23,13 @@ class Subtitler
         deep_copy.translate!(**options)
       end
 
-      def translate_srt!(from: nil, to:, translator: nil, batch_size: nil)
+      def translate_srt!(from: nil, to:, translator: nil, batch_size: nil, status: nil)
         raise ArgumentError, 'subtitle source must be SRT' unless @metadata['source_format'] == 'srt'
 
         lines = @entries.flat_map { |entry| entry.metadata.fetch('content_lines') }
         masked, replacements, marker_pattern = protect_srt_timestamps(lines)
         translated_lines = translate_texts(
-          masked, from: from, to: to, translator: translator, batch_size: batch_size
+          masked, from: from, to: to, translator: translator, batch_size: batch_size, status: status
         )
         unless translated_lines.length == lines.length
           raise "SRT translation result count mismatch: expected #{lines.length}, got #{translated_lines.length}"
@@ -122,11 +122,10 @@ class Subtitler
         [masked, replacements, marker_pattern]
       end
 
-      def translate_texts(texts, from:, to:, translator:, batch_size:)
-        service    = translator || ::Translator
-        batch_size ||= defined?(::Translator::BATCH_SIZE) ? ::Translator::BATCH_SIZE : 50
-        texts.each_slice(batch_size).flat_map do |slice|
-          Array(service.translate(slice, from: from, to: to))
+      def translate_texts(texts, from:, to:, translator:, batch_size:, status: nil)
+        service = translator || ::Translator
+        ::Translator.in_batches(texts, progress: ::Translator.progress(texts.size, status), batch_size: batch_size) do |slice|
+          service.translate(slice, from: from, to: to)
         end
       end
 

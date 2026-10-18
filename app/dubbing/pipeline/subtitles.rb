@@ -7,10 +7,10 @@ module Dubbing
       def translated_sentences(subtitle)
         sentences = subtitle.sentence_entries
         texts     = sentences.map(&:text)
-        translations = if ::Translator.respond_to?(:translate_for_dubbing)
-          Array(::Translator.translate_for_dubbing(texts, from: source_lang, to: target_lang))
-        else
-          Array(::Translator.translate(texts, from: source_lang, to: target_lang))
+        method    = ::Translator.respond_to?(:translate_for_dubbing) ? :translate_for_dubbing : :translate
+        progress  = ::Translator.progress(texts.size, @stl, 'dubbing: translating')
+        translations = ::Translator.in_batches(texts, progress: progress) do |batch|
+          ::Translator.public_send(method, batch, from: source_lang, to: target_lang)
         end
 
         sentences.zip(translations).filter_map do |sentence, translated|
@@ -62,7 +62,8 @@ module Dubbing
         target_subtitle.translated(
           from:           target_lang,
           to:             subtitle_target_lang,
-          merge_adjacent: false
+          merge_adjacent: false,
+          status:         @stl
         )
       end
 

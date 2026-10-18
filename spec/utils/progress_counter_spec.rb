@@ -14,4 +14,12 @@ RSpec.describe Utils::ProgressCounter do
 
     expect(updates).to eq(['Processing 2/5', 'Processing 3/5'])
   end
+
+  it 'exposes how many were counted' do
+    progress = described_class.new(total: 5)
+
+    progress.advance(3)
+
+    expect(progress.count).to eq(3)
+  end
 end

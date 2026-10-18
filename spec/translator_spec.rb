@@ -97,4 +97,15 @@ RSpec.describe Translator do
     expect(subtitle.to_ass(mode: :plain)).to include('Olá mundo')
     expect(subtitle.to_ass(mode: :plain)).not_to include('Hello world')
   end
+
+  it 'translates a batch at a time and reports each one, starting from none' do
+    updates = []
+    status  = double(update: nil)
+    allow(status).to receive(:update) { |message| updates << message }
+
+    result = described_class.in_batches(%w[a b c], progress: described_class.progress(3, status), batch_size: 2) { |batch| batch.map(&:upcase) }
+
+    expect(result).to eq(%w[A B C])
+    expect(updates).to eq(['translating 0/3', 'translating 2/3', 'translating 3/3'])
+  end
 end
