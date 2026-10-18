@@ -2,7 +2,10 @@ module Bot
   module RateLimiter
     extend ActiveSupport::Concern
 
-    DEFAULT_SEND_INTERVAL = 2.0
+    # What Telegram allows (core.telegram.org/bots/faq): a message a second to one chat, 20 a minute to one group, 30 a second in all.
+    GLOBAL_INTERVAL = 1.0 / 30
+    PRIVATE_INTERVAL = 1.0
+    GROUP_INTERVAL   = 3.0
 
     class Scheduler
       def initialize(interval)
@@ -57,14 +60,17 @@ module Bot
         send_at - now
       end
 
+      # The worker leaves when nothing is pending (it is set to nil under the lock, where `edit` starts it), so a chat that went quiet holds no thread.
       def start_worker
-        return if @worker&.alive?
+        return if @worker
 
         @worker = Thread.new do
-          loop do
-            next_edit.call
-          rescue => e
-            warn "Telegram edit failed: #{e.class}: #{e.message}"
+          while (operation = next_edit)
+            begin
+              operation.call
+            rescue => e
+              warn "Telegram edit failed: #{e.class}: #{e.message}"
+            end
           end
         end
       end
@@ -73,7 +79,8 @@ module Bot
         @mutex.synchronize do
           loop do
             if @pending.empty?
-              @condition.wait(@mutex)
+              @worker = nil
+              return
             elsif (delay = @next_at - clock).positive?
               @condition.wait(@mutex, delay)
             else
@@ -90,17 +97,41 @@ module Bot
       end
     end
 
-    included do
-      class_attribute :telegram_scheduler
-      self.telegram_scheduler = Scheduler.new(DEFAULT_SEND_INTERVAL)
+    # One scheduler per chat, at the pace Telegram gives it (a group's is slower than a private chat's), and one for all of them: a chat
+    # that is held back, a group with many books editing their status, holds back nobody else.
+    class Limits
+      def initialize(global: GLOBAL_INTERVAL, private_chat: PRIVATE_INTERVAL, group: GROUP_INTERVAL)
+        @global = Scheduler.new(global)
+        @chats  = Hash.new { |chats, id| chats[id] = Scheduler.new(id.to_i.negative? ? group : private_chat) }
+        @mutex  = Mutex.new
+      end
+
+      def wait(chat_id = nil)
+        chat(chat_id)&.wait
+        @global.wait
+      end
+
+      def edit(chat_id, key, force: false, &operation) = chat(chat_id).edit(key, force: force) { @global.wait; operation.call }
+
+      def stop = [@global, *@mutex.synchronize { @chats.values }].each(&:stop)
+
+      private
+
+      def chat(id) = (@mutex.synchronize { @chats[id] } unless id.nil?)
     end
 
-    def throttle!
-      telegram_scheduler.wait
+    included do
+      class_attribute :telegram_scheduler
+      self.telegram_scheduler = Limits.new
+    end
+
+    # `chat_id` is the chat the message goes to; without it only the overall limit applies.
+    def throttle!(chat_id = nil)
+      telegram_scheduler.wait(chat_id)
     end
 
     def throttle_edit(chat_id, message_id, force: false, &operation)
-      telegram_scheduler.edit([chat_id, message_id], force: force, &operation)
+      telegram_scheduler.edit(chat_id, [chat_id, message_id], force: force, &operation)
     end
 
     def with_rate_limit(tag)

@@ -16,7 +16,7 @@ module TDBot
 
       content = generated_message_content(media_type, text, parse_mode, params)
       bot.with_rate_limit('edit_generated_message') do
-        bot.send(:throttle!)
+        bot.send(:throttle!, chat_id)
         result = td.edit_message_media(
           chat_id:               chat_id,
           message_id:            message_id,
@@ -36,7 +36,7 @@ module TDBot
       media_type = type.to_s
       forum_topic_id = params.delete(:forum_topic_id).to_i
       content    = generated_message_content(media_type, text, parse_mode, params)
-      bot.send(:throttle!)
+      bot.send(:throttle!, chat_id)
       sent       = send_message_content(chat_id, forum_topic_id, content)
 
       message   = wait_uploaded_message(chat_id, sent.id)

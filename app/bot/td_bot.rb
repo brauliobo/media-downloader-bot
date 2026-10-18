@@ -105,7 +105,7 @@ module Bot
       media_type, params = normalize_params(params, type: type) unless t.in?(%w[message text])
       text = media_caption(msg, text, parse_mode) if media_type
       ret = with_rate_limit('send_message') do
-        throttle!
+        throttle!(msg.chat.id)
         reply_to = incoming_message_id(msg, :id, :message_id)
         dlog "[TD_SEND_MESSAGE] reply_to=#{reply_to} msg.class=#{msg.class}"
         if t.in? %w[message text]
@@ -138,7 +138,7 @@ module Bot
 
     def send_album_batch(msg, batch, parse_mode)
       result = with_rate_limit('send_album') do
-        throttle!
+        throttle!(msg.chat.id)
         message_sender.send_media_album(msg.chat.id, batch.uploads, caption: batch.caption, parse_mode: parse_mode, timeout: 1_800)
       end
       result ? Array(result.try(:messages) || result) : send_album_items(msg, batch, parse_mode)
@@ -155,7 +155,7 @@ module Bot
     def send_album_items(msg, batch, parse_mode)
       batch.items.map do |up, caption|
         with_rate_limit('send_album_item') do
-          throttle!
+          throttle!(msg.chat.id)
           case Utils::MimeTypes.telegram_type(up)
           when :video
             message_sender.send_video(msg.chat.id, caption, video: up.fn_out, reply_to: nil)

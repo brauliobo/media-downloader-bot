@@ -47,7 +47,7 @@ else
       expect(message_sender).to have_received(:send_media_album).with(
         123, [upload], caption: 'caption', parse_mode: 'MarkdownV2', timeout: 1_800
       )
-      expect(bot).to have_received(:throttle!).with(no_args)
+      expect(bot).to have_received(:throttle!).with(123)
     end
 
     it 'builds generated audio with the TDLib inputMessageAudio shape' do

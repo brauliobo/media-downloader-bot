@@ -82,7 +82,7 @@ module Bot
     def send_message(msg, text, type: 'message', parse_mode: 'MarkdownV2', delete: nil, delete_both: nil, cancel_job: nil, **params)
       with_rate_limit('send_message') do
         _text = text
-        throttle!
+        throttle!(msg.chat.id)
         ep = "send_#{type}"
         payload = tg_text_payload(msg, text, parse_mode)
         payload.delete(:text) if type.to_s != 'message'
@@ -105,7 +105,7 @@ module Bot
 
     def send_album_batch(msg, batch, parse_mode)
       with_rate_limit('send_album') do
-        throttle!
+        throttle!(msg.chat.id)
         payload = {
           chat_id:             msg.chat.id,
           reply_to_message_id: incoming_message_id(msg),

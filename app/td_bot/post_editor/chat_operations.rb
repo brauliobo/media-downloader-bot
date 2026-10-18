@@ -50,7 +50,7 @@ module TDBot
       def copy_message(from_chat_id:, message_id:, to_chat_id:, topic_id: nil, caption: nil)
         content = forwarded_content(from_chat_id, message_id, caption)
         flood_wait do
-          bot.send(:throttle!)
+          bot.send(:throttle!, to_chat_id)
           sent = send_message_content(to_chat_id, topic_id.to_i, content)
           bot.send(:wait_for_media_send, SymMash.new(message_id: sent.id), timeout: COPY_TIMEOUT).message_id
         end
@@ -72,7 +72,7 @@ module TDBot
       def replace_caption(chat_id:, message_id:, from:, to:)
         caption = CaptionEdit.replace(td.get_message(chat_id: chat_id, message_id: message_id).value!(20).content.caption, from, to)
         bot.with_rate_limit('replace_caption') do
-          bot.send(:throttle!)
+          bot.send(:throttle!, chat_id)
           td.edit_message_caption(chat_id: chat_id, message_id: message_id, reply_markup: nil, show_caption_above_media: false, caption: td_payload(caption)).value!
         end
         true

@@ -65,6 +65,42 @@ RSpec.describe Bot::RateLimiter::Scheduler do
   end
 end
 
+RSpec.describe Bot::RateLimiter::Limits do
+  subject(:limits) { described_class.new(global: 0, private_chat: 0.02, group: 0.2) }
+
+  after { limits.stop }
+
+  def timed = Process.clock_gettime(Process::CLOCK_MONOTONIC).then { |start| yield; Process.clock_gettime(Process::CLOCK_MONOTONIC) - start }
+
+  it 'gives a group a slower pace than a private chat' do
+    limits.wait(-100)
+    limits.wait(5)
+
+    expect(timed { limits.wait(-100) }).to be >= 0.18
+    expect(timed { limits.wait(5) }).to be < 0.15
+  end
+
+  it 'does not hold a chat back for the pace of another' do
+    limits.wait(-100)
+
+    expect(timed { limits.wait(-200) }).to be < 0.1
+  end
+
+  it 'edits the chats on their own: a group that is backed up does not delay a private chat' do
+    limits.wait(-100)
+    done = Queue.new
+    limits.edit(-100, :group) { sleep 0.5; done << :group }
+    limits.edit(5, :private) { done << :private }
+    sleep 0.1
+
+    expect(done.pop(true)).to eq(:private)
+  end
+
+  it 'asks only the overall limit when there is no chat' do
+    expect(timed { 3.times { limits.wait } }).to be < 0.05
+  end
+end
+
 RSpec.describe Bot::RateLimiter do
   let(:host) { Class.new { include Bot::RateLimiter }.new }
 
