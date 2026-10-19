@@ -11,6 +11,8 @@ module Dubbing
       SHORTLIST         = 8
       # Average word probability times its 10th percentile, as VoiceReference::Selector asks of a recording.
       MIN_CONFIDENCE    = 0.85 * 0.75
+      # Shortest span worth cloning from: a blip of diarization or a clipped word carries no voice.
+      MIN_DURATION      = 0.5
 
       def initialize(input_path, sentences:, segments:, analyzer:, cutter:, max_duration: MAX_DURATION)
         @input_path   = input_path
@@ -29,7 +31,7 @@ module Dubbing
 
       # The speaker's diarized turns. They carry no text, so whoever uses them has to transcribe the audio.
       def turns(speaker_id, dir: nil)
-        turns = @segments.select { |segment| segment.speaker_id == speaker_id && segment.finish > segment.start }
+        turns = @segments.select { |segment| segment.speaker_id == speaker_id && segment.finish - segment.start >= MIN_DURATION }
         fill(turns.map { |turn| Selection.new(start: turn.start.to_f, duration: [turn.finish - turn.start, @max_duration].min, text: '') })
       end
 
@@ -85,7 +87,7 @@ module Dubbing
 
       def selection(sentence, previous, following)
         text, start, finish = sentence.source_text.to_s.strip, sentence.start.to_f, sentence.finish.to_f
-        return if text.empty? || finish <= start || finish - start > max_duration
+        return if text.empty? || !(MIN_DURATION..max_duration).cover?(finish - start)
 
         Selection.new(
           start: start, duration: finish - start, text: text, confidence: confidence(sentence),

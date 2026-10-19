@@ -152,6 +152,19 @@ RSpec.describe Dubbing::VoiceReference do
     expect(transcriber).to have_received(:call_vocals).with(reference.path)
   end
 
+  it 'gives no reference to a speaker with only a diarization blip too short to carry a voice' do
+    references = described_class.extract_by_speaker(
+      input,
+      [segment(10, 10.017, speaker_id: 'SPEAKER_01')],
+      sentences: [sentence(0, 20, source_text: 'A transcript span that is too long.', speaker_id: 'SPEAKER_01')],
+      dir: dir,
+      transcriber: instance_double('VoiceReference::Transcriber', call_vocals: transcript('Observed.'))
+    )
+
+    expect(references).to be_empty
+    expect(described_class).not_to have_received(:extract_span)
+  end
+
   it 'combines complete reference sentences up to the cap' do
     segments = [segment(0, 1, speaker_id: 0), segment(2, 6, speaker_id: 0)]
     sentences = [

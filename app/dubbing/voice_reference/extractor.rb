@@ -1,6 +1,7 @@
 module Dubbing
   module VoiceReference
     # One recorded reference per speaker, from the first tier of Candidates that gives a voice with transcribed words.
+    # A speaker none of them serves gets none, and is spoken in the backend's default voice.
     class Extractor
       TIERS = %i[strict relaxed turns].freeze
 
@@ -29,17 +30,13 @@ module Dubbing
 
       def reference_for(speaker_id, dir)
         FileUtils.mkdir_p(dir)
-        found = false
         # The diarized turns have no text of their own, only a transcriber can give them any.
         TIERS.reject { |tier| tier == :turns && !transcriber }.each do |tier|
           selections = candidates.public_send(tier, speaker_id, dir: dir)
-          next if selections.empty?
-
-          found = true
-          reference = build(selections, dir)
+          reference = build(selections, dir) unless selections.empty?
           return reference if reference
         end
-        raise "speaker #{speaker_id} has no usable reference" unless found
+        nil
       end
 
       def build(selections, dir)
