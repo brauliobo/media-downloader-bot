@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { api, type Tracked, type TrackedItem, type TrackedInput } from './api'
 import ChatPicker from './ChatPicker.vue'
 
-const STATUSES = ['', 'pending', 'running', 'stalled', 'done', 'failed']
+const STATUSES = ['', 'pending', 'running', 'stalled', 'done', 'failed', 'untagged']
 const group = ref({ chatId: null as number | null, topicId: null as number | null })
 const parallel = ref(8)
 const retryFailed = ref(true)
@@ -12,14 +12,22 @@ const selected = ref<Tracked | null>(null)
 const status = ref('')
 const items = ref<TrackedItem[]>([])
 const hashtags = ref<Record<number, string>>({})
+const recorded: Record<number, string> = {}
 const error = ref('')
 let timer: ReturnType<typeof setInterval>
+
+// An input follows what the item recorded (the hashtags can be made in the background) unless it was edited meanwhile.
+const follow = (item: TrackedItem) => {
+  const wanted = item.result.hashtags ?? ''
+  if (hashtags.value[item.id] === undefined || hashtags.value[item.id] === recorded[item.id]) hashtags.value[item.id] = wanted
+  recorded[item.id] = wanted
+}
 
 const refresh = async () => {
   jobs.value = await api.trackedJobs()
   if (selected.value) {
     items.value = await api.trackedItems(selected.value.id, status.value)
-    items.value.forEach(item => hashtags.value[item.id] ??= item.result.hashtags ?? '')
+    items.value.forEach(follow)
   }
 }
 
@@ -38,7 +46,9 @@ const open = (job: Tracked) => { selected.value = job; hashtags.value = {}; atte
 const done = (job: Tracked) => (job.counts.done ?? 0)
 const total = (job: Tracked) => Object.values(job.counts).reduce((sum, count) => sum + count, 0)
 const active = (job: Tracked) => ['queued', 'running', 'stopping'].includes(job.state)
-const changed = (item: TrackedItem) => item.messages.some(message => !message.deleted_at && !message.failed && message.kind !== 'Text' && (message.hashtags ?? '') !== (hashtags.value[item.id] ?? ''))
+const books = (item: TrackedItem) => item.messages.filter(message => !message.deleted_at && !message.failed && message.kind !== 'Text')
+const changed = (item: TrackedItem) => books(item).some(message => (message.hashtags ?? '') !== (hashtags.value[item.id] ?? ''))
+const untagged = (item: TrackedItem) => item.status === 'done' && books(item).length > 0 && books(item).every(message => !message.hashtags)
 const idle = (item: TrackedItem) => item.active_at ? Math.round((Date.now() - Date.parse(item.active_at)) / 60000) : 0
 const opt = ([key, value]: [string, string | number]) => value === 1 ? key : `${key}=${value}`
 const inputOf = ({ file_name, type, size, text, inputs = [], error }: TrackedInput) =>
@@ -79,6 +89,7 @@ section
     label Status
       select(v-model="status" @change="refresh")
         option(v-for="s in STATUSES" :key="s" :value="s") {{ s || 'all' }}
+    button(v-if="status === 'untagged' && items.length" @click="attempt(() => api.retagUntagged(selected.id))") Redo the hashtags of these {{ items.length }} books
     ul
       li(v-for="item in items" :key="item.id")
         | {{ item.key }} · {{ item.status }} · attempts {{ item.attempts }}
@@ -93,6 +104,7 @@ section
         .row(v-if="item.status === 'done'")
           input(v-model="hashtags[item.id]" placeholder="#Hashtags posted with the book")
           button(:disabled="!changed(item)" @click="save(item)") Change in chat
+          button(v-if="untagged(item)" @click="attempt(() => api.retagTrackedItem(item.id))") Redo hashtags from the book
         ul
           li(v-for="message in item.messages" :key="message.id")
             | {{ message.kind }} {{ message.message_id }}

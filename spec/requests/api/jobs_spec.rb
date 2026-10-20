@@ -12,6 +12,8 @@ RSpec.describe 'Api jobs', type: :request do
       def tracked_resume(id) = (@calls << [:resume, id]) && { id: id }
       def tracked_edit(id, result) = (@calls << [:edit, id, result]) && { id: id }
       def tracked_apply(id) = (@calls << [:apply, id]) && { id: id }
+      def tracked_retag(id) = (@calls << [:retag, id]) && { id: id }
+      def tracked_retag_items(ids) = (@calls << [:retag_items, ids]) && ids.size
       def tracked_retry_items(ids, discard: false) = (@calls << [:retry, ids, discard]) && ids.size
       def tracked_delete_message(id) = (@calls << [:delete, id]) && { id: id }
     end.new
@@ -83,6 +85,25 @@ RSpec.describe 'Api jobs', type: :request do
 
     expect(response.parsed_body).to eq('retried' => 1)
     expect(fake_manager.calls).to eq([[:edit, item.id, { 'hashtags' => '#Novo' }], [:apply, item.id], [:retry, [item.id], false], [:retry, [item.id], true], [:retry, [item.id], false]])
+  end
+
+  describe 'the books posted without the hashtags they asked for' do
+    let!(:untagged) do
+      JobItem.create(job_id: job.id, kind: 'replay', key: '-200:3', status: 'done', result: Sequel.pg_jsonb(options: 'lang=pt hashtags')).tap do |book|
+        JobMessage.create(job_item_id: book.id, chat_id: -200, message_id: 30, kind: 'Audio', failed: false, hashtags: '')
+      end
+    end
+
+    it 'lists them, and makes the hashtags of one or of all of them again through the manager' do
+      get '/api/job_items', params: { job_id: job.id, status: 'untagged' }, headers: headers
+      expect(response.parsed_body.map { |i| i['id'] }).to eq([untagged.id])
+
+      post "/api/job_items/#{untagged.id}/retag", headers: headers
+      post "/api/job_items/retag_untagged?job_id=#{job.id}", headers: headers
+
+      expect(response.parsed_body).to eq('retagging' => 1)
+      expect(fake_manager.calls).to eq([[:retag, untagged.id], [:retag_items, [untagged.id]]])
+    end
   end
 
   it 'lists the live messages and deletes one through the manager' do

@@ -14,8 +14,10 @@ Rails.application.routes.draw do
     end
     resources :job_items, only: %i[index show update] do
       post :apply, on: :member
+      post :retag, on: :member
       post :retry, on: :member
       post :retry_failed, on: :collection
+      post :retag_untagged, on: :collection
     end
     resources :job_messages, only: %i[index destroy]
     resources :relay_rules, only: %i[index create update destroy]

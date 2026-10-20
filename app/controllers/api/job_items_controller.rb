@@ -7,7 +7,7 @@ module Api
     def index
       scope = JobItem.eager(:messages).reverse_order(:id).limit(params.fetch(:limit, 100).to_i)
       scope = scope.where(job_id: params[:job_id]) if params[:job_id].present?
-      scope = scope.where(status: params[:status] == 'stalled' ? 'running' : params[:status]) if params[:status].present?
+      scope = filtered(scope, params[:status]) if params[:status].present?
       items = with_activity(scope.all)
       render json: (params[:status] == 'stalled' ? items.select { |item| item[:stalled] } : items)
     end
@@ -17,6 +17,14 @@ module Api
     def update = render(json: manager.tracked_edit(item.id, params.require(:job_item).permit(:hashtags).to_h))
 
     def apply = render(json: manager.tracked_apply(item.id))
+
+    def retag = render(json: manager.tracked_retag(item.id))
+
+    # The books of the job posted without the hashtags they asked for; they are made in the background.
+    def retag_untagged
+      ids = JobItem.untagged.where(job_id: params.require(:job_id)).select_map(:id)
+      render json: { retagging: manager.tracked_retag_items(ids) }
+    end
 
     def retry
       render json: { retried: manager.tracked_retry_items([item.id], discard: params[:discard] == 'true') }
@@ -30,6 +38,13 @@ module Api
     private
 
     def item = @item ||= JobItem.with_pk!(params[:id])
+
+    # `stalled` are the running ones to be judged by their activity, `untagged` the done ones that lost their hashtags.
+    def filtered(scope, status)
+      return scope.untagged if status == 'untagged'
+
+      scope.where(status: status == 'stalled' ? 'running' : status)
+    end
 
     # `active_at`: the last sign of life of a running item, the last edit of its status or else when it was claimed.
     def with_activity(items)
