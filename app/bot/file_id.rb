@@ -16,6 +16,14 @@ module Bot
     # restarted, and this one does not.
     def remote(info) = info.try(:with_indifferent_access)&.dig(:document, :remote, :id).presence
 
+    # The id to download a TD file by its remote id. TDLib keeps a file as downloaded after its local copy is gone (a book this account
+    # posted, whose work files were cleaned): forgetting that copy makes the download fetch the file from Telegram again.
+    def fetchable(td, remote_id)
+      file = td.get_remote_file(remote_file_id: remote_id, file_type: nil).value(30)
+      td.delete_file(file_id: file.id).value(30) if file.local.is_downloading_completed && !::File.exist?(file.local.path)
+      file.id
+    end
+
     # The name a file was given, when whatever describes it carries one.
     def name(info)
       case info

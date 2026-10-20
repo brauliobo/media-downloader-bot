@@ -35,6 +35,45 @@ RSpec.describe Bot::FileId do
     end
   end
 
+  describe '.fetchable' do
+    let(:td)   { double('td') }
+    let(:copy) { Tempfile.new('book') }
+
+    before { allow(td).to receive(:get_remote_file).with(remote_file_id: 'remote', file_type: nil).and_return(double(value: double(id: 7, local: local))) }
+
+    after { copy.close! }
+
+    context 'when TDLib has the file as downloaded but its local copy is gone' do
+      let(:local) { double(is_downloading_completed: true, path: '/tmp/gone/book.yml') }
+
+      it 'forgets the copy, so the file is fetched from Telegram again' do
+        expect(td).to receive(:delete_file).with(file_id: 7).and_return(double(value: true))
+
+        expect(described_class.fetchable(td, 'remote')).to eq(7)
+      end
+    end
+
+    context 'when the local copy is there' do
+      let(:local) { double(is_downloading_completed: true, path: copy.path) }
+
+      it 'leaves it alone' do
+        expect(td).not_to receive(:delete_file)
+
+        expect(described_class.fetchable(td, 'remote')).to eq(7)
+      end
+    end
+
+    context 'when the file was not downloaded yet' do
+      let(:local) { double(is_downloading_completed: false, path: '') }
+
+      it 'leaves it alone' do
+        expect(td).not_to receive(:delete_file)
+
+        expect(described_class.fetchable(td, 'remote')).to eq(7)
+      end
+    end
+  end
+
   describe '.name' do
     it 'reads the file name of a hash or of an object' do
       expect(described_class.name({ 'file_name' => 'a.pdf' })).to eq('a.pdf')

@@ -72,7 +72,7 @@ module Bot
     end
 
     def download_file(file_id_or_info, priority: 32, offset: 0, limit: 0, synchronous: true, dir: nil, remote_id: Bot::FileId.remote(file_id_or_info))
-      file_id_or_info = td.get_remote_file(remote_file_id: remote_id, file_type: nil).value(30).id if remote_id
+      file_id_or_info = Bot::FileId.fetchable(td, remote_id) if remote_id
       result = file_manager.download_file(
         file_id_or_info, priority: priority, offset: offset, limit: limit,
         synchronous: synchronous, dir: dir
