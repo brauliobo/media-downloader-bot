@@ -30,6 +30,9 @@ module Bot
 
     def size = mine.where(state: 'queued').count
 
+    # Whether a new job of `owner` has to wait for the ones it has.
+    def waiting?(owner) = mine.where(owner_id: owner.to_i).count >= UserQueue.limit
+
     def cancel(id, user_id:, chat_id:, admin: false)
       job = mine.first(id: id.to_s) or return :not_found
       return :forbidden unless admin || (job.owner_id == user_id.to_i && job.chat_id == chat_id.to_i)

@@ -120,8 +120,8 @@ RSpec.describe Manager do
 
       it 'enqueues group media' do
         media = {video: Object.new, audio: Object.new, document: SymMash.new(file_name: 'file.pdf')}
-        media.each do |type, value|
-          manager.react(SymMash.new(from: {id: 123}, chat: {id: -456}, text: '', type => value))
+        media.each.with_index do |(type, value), i|
+          manager.react(SymMash.new(from: {id: 123 + i}, chat: {id: -456}, text: '', type => value))
         end
 
         expect(manager.queue_size).to eq(3)

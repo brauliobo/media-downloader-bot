@@ -182,6 +182,36 @@ RSpec.describe Manager, '#enqueue_message' do
   end
 end
 
+RSpec.describe Manager, '#enqueue_message queueing' do
+  let(:manager) { described_class.new }
+  let(:bot)     { double(send_message: SymMash.new(message_id: 99)) }
+
+  def message(id) = SymMash.new(from: {id: 123}, chat: {id: 456}, message_id: id, text: 'url')
+
+  before do
+    BotJob.dataset.delete
+    manager.instance_variable_set(:@bot, bot)
+  end
+
+  it 'answers Queued at once to a message behind the same user\'s job, and keeps that reply for the worker' do
+    manager.enqueue_message(message(1))
+    expect(bot).not_to have_received(:send_message)
+
+    job = manager.enqueue_message(message(2))
+
+    expect(bot).to have_received(:send_message).once
+    expect(manager.jobs.job_for(Bot::Jobs.key_of(message(2))).dig(:message, :resp, :message_id)).to eq(99)
+    expect(job[:id]).not_to eq(manager.jobs.job_for(Bot::Jobs.key_of(message(1)))[:id])
+  end
+
+  it 'does not announce a message of another user' do
+    manager.enqueue_message(message(1))
+    manager.enqueue_message(SymMash.new(**message(2), from: {id: 321}))
+
+    expect(bot).not_to have_received(:send_message)
+  end
+end
+
 RSpec.describe Manager, '#cancel_job' do
   let(:msg) { SymMash.new(from: {id: 123}, chat: {id: 123}, text: 'https://example.com') }
 

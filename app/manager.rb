@@ -110,7 +110,7 @@ EOS
   end
 
   def enqueue_message(msg, queued: false)
-    return jobs.submit(msg, owner: (msg.from.id unless queued)) unless ENV['WITH_WORKER']
+    return submit_message(msg, owner: (msg.from.id unless queued)) unless ENV['WITH_WORKER']
 
     job    = jobs.register(msg)
     forked = bot.fork_workers?
@@ -148,6 +148,12 @@ EOS
   private
 
   def admin?(user_id) = Bot::MsgHelpers::ADMIN_CHAT_ID && user_id.to_i == Bot::MsgHelpers::ADMIN_CHAT_ID
+
+  # A person at their limit of jobs waits for the workers: they are told so now, and the worker edits that reply with its progress.
+  def submit_message(msg, owner:)
+    waits = owner && !admin?(owner) && jobs.waiting?(owner)
+    jobs.submit(msg, owner: owner).tap { |job| BotJob.remember_status(job[:id], Bot::UserQueue.announce(bot, msg).message_id) if waits }
+  end
 
   def cancel_job_message(result)
     {
