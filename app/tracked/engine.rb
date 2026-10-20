@@ -68,6 +68,20 @@ module Tracked
       item.refresh.to_api
     end
 
+    # Makes again the hashtags a finished item lost and publishes them; what goes wrong is raised.
+    def retag(id)
+      item = JobItem.with_pk!(id)
+      handler_for(item.kind).retag(item)
+      item.refresh.to_api
+    end
+
+    # The same for many, one after the other in the background (each asks the model and edits a chat at its pace); the ones
+    # that fail are logged. Returns how many are in line.
+    def retag_items(ids)
+      @pool.post { ids.each { |id| retag_or_log(id) } }
+      ids.size
+    end
+
     # Deletes a tracked message from its chat.
     def delete_message(id)
       message = JobMessage.with_pk!(id)
@@ -88,6 +102,12 @@ module Tracked
     def handler_for(kind) = @handlers.fetch(kind.to_s) { raise ArgumentError, "unknown job kind #{kind.inspect}" }
 
     def clamp(parallel) = [Integer(parallel), 1].max
+
+    def retag_or_log(id)
+      retag(id)
+    rescue *ERRORS => e
+      warn "item #{id}: retag: #{e.class}: #{e.message}"
+    end
 
     def enqueue(job)
       job.update(state: 'queued', error: nil, finished_at: nil)

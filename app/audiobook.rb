@@ -43,15 +43,18 @@ module Audiobook
 
   HASHTAG_EXCERPT_CHARS = 4_000
 
-  # Hashtags (opts.hashtags) from the opening pages of the book, in the language it is spoken in.
+  # Hashtags (opts.hashtags) from the opening pages of the book, in the language it is spoken in. A book is not lost to their failing.
   def self.hashtags(book, opts)
-    return unless opts&.hashtags
-
-    Hashtags.generate(Publication.sample_from_pages(book.pages).first(HASHTAG_EXCERPT_CHARS),
-                      lang: Processors::LanguageOpts.from(opts, book_language(book)))
+    hashtags!(book, opts) if opts&.hashtags
   rescue => e
     STDERR.puts "[AUDIOBOOK] hashtags failed: #{e.class}: #{e.message}"
     nil
+  end
+
+  # The same, raising what went wrong (the proxy rate limited, the model refused).
+  def self.hashtags!(book, opts)
+    Hashtags.generate(Publication.sample_from_pages(book.pages).first(HASHTAG_EXCERPT_CHARS),
+                      lang: Processors::LanguageOpts.from(opts, book_language(book)))
   end
 
   def self.tag_uploads(uploads, hashtags)

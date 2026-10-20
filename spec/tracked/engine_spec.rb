@@ -24,6 +24,12 @@ RSpec.describe Tracked::Engine do
       ensure
         @lock.synchronize { @running -= 1 }
       end
+
+      def retag(item)
+        raise 'no yml was posted' if item.key == 'b'
+
+        item.update(result: item.outcome.merge(hashtags: '#New'))
+      end
     end
   end
   let(:handler) { handler_class.new }
@@ -42,6 +48,26 @@ RSpec.describe Tracked::Engine do
     expect(JobItem.where(job_id: job.id).map(&:attempts)).to eq([1, 1, 1])
     expect(JobMessage.select_map(:message_id)).to match_array(JobItem.select_map(:id))
     expect(JobItem.first.outcome).to include(hashtags: '#A')
+  end
+
+  describe 'making the hashtags of finished items again' do
+    let(:items) { JobItem.where(job_id: settled(start[:id], 'completed').id).order(:id).to_hash(:key) }
+
+    it 'makes them for one item and returns it, or raises what went wrong' do
+      expect(engine.retag(items['a'].id)).to include(result: include('hashtags' => '#New'))
+      expect { engine.retag(items['b'].id) }.to raise_error('no yml was posted')
+    end
+
+    it 'makes them for many in the background, logging the ones that fail and going on with the others' do
+      allow(engine).to receive(:warn)
+
+      expect(engine.retag_items(items.values.map(&:id))).to eq(3)
+      Timeout.timeout(5) { sleep 0.01 until items['c'].refresh.outcome[:hashtags] == '#New' }
+
+      expect(items['a'].refresh.outcome[:hashtags]).to eq('#New')
+      expect(items['b'].refresh.outcome[:hashtags]).to eq('#A')
+      expect(engine).to have_received(:warn).with("item #{items['b'].id}: retag: RuntimeError: no yml was posted")
+    end
   end
 
   it 'records what each item is about before it runs and keeps it with the outcome; an item that cannot be described says why' do

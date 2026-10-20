@@ -32,6 +32,9 @@ module Tracked
     # Pushes the edited result of a finished item to wherever it was published.
     def apply(item) = raise(NotImplementedError, "#{self.class} cannot apply changes")
 
+    # Makes again the hashtags a finished item lost, and publishes them like `apply`.
+    def retag(item) = raise(NotImplementedError, "#{self.class} cannot retag")
+
     # Removes a message the job sent (a JobMessage) from where it was sent.
     def delete_message(message) = raise(NotImplementedError, "#{self.class} cannot delete messages")
   end

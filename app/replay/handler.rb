@@ -70,11 +70,14 @@ module Replay
     def apply(item)
       wanted = item.outcome[:hashtags].to_s
       item.messages_dataset.live.media.exclude(failed: true).each do |message|
-        next if message.hashtags.to_s == wanted
-
-        @manager.replace_caption(chat_id: message.chat_id, message_id: message.message_id, from: message.hashtags.to_s, to: wanted)
-        message.update(hashtags: wanted)
+        recaption(message, wanted) unless message.hashtags.to_s == wanted
       end
+    end
+
+    # Generates again the hashtags of a book posted without them (see Retag) and puts them in its captions.
+    def retag(item)
+      item.update(result: item.outcome.merge(hashtags: Retag.new(@manager).call(item)))
+      apply(item)
     end
 
     # Removes a tracked message from the chat.
@@ -83,6 +86,16 @@ module Replay
     end
 
     private
+
+    # A message gone from the chat is no longer tracked, so the others still get their hashtags.
+    def recaption(message, wanted)
+      @manager.replace_caption(chat_id: message.chat_id, message_id: message.message_id, from: message.hashtags.to_s, to: wanted)
+      message.update(hashtags: wanted)
+    rescue => e
+      raise unless e.message.match?(/not found/i)
+
+      message.deleted!
+    end
 
     def message_id(item) = item.key.split(':').last.to_i
 

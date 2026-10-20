@@ -232,6 +232,55 @@ RSpec.describe Replay::Handler do
     expect(manager.captions.size).to eq(1)
   end
 
+  it 'stops tracking a message that is gone from the chat and still changes the hashtags of the others' do
+    answers = { 11 => [{ type: 'Audio', text: "Book\n#Livro" }, { type: 'Document', text: "Book\n#Livro" }] }
+    manager = ReplayingManager.new(answers: answers, gone: [1001])
+    engine  = Tracked::Engine.new({ 'replay' => described_class.new(manager, forwarded: forwarded, replayed: legacy) }, tick: 0.01)
+    id      = engine.start(kind: 'replay', params: { chat_id: -200 })[:id]
+    Timeout.timeout(5) { sleep 0.01 until Job[id].state == 'completed' }
+    item = JobItem.first(key: '-200:11')
+
+    engine.edit(item.id, hashtags: '#Novo')
+    engine.apply(item.id)
+
+    expect(manager.captions).to eq([{ chat_id: -200, message_id: 1002, from: '#Livro', to: '#Novo' }])
+    expect(JobMessage.first(message_id: 1001).deleted_at).not_to be_nil
+    expect(JobMessage.first(message_id: 1002)).to have_attributes(hashtags: '#Novo', deleted_at: nil)
+  end
+
+  describe 'a book posted without hashtags' do
+    let(:yml) do
+      File.join(dir, 'book.yml').tap do |path|
+        page = { 'page' => { 'number' => 1, 'items' => [{ 'paragraph' => { 'sentences' => [{ 'text' => 'A filosofia hermética.' }] } }] } }
+        File.write(path, { 'language' => 'pt', 'pages' => [page] }.to_yaml)
+      end
+    end
+    let(:answers) { { 11 => [{ type: 'Document', text: 'Book' }, { type: 'Audio', text: 'Book' }] } }
+    let(:manager) { ReplayingManager.new(answers: answers, files: { 1001 => { name: 'book.yml', path: yml } }) }
+
+    before { allow(AI::ClaudeProxy).to receive(:json_prompt).and_return(%w[Hermetismo Filosofia Universo]) }
+
+    it 'gets them again from the yml posted with it, in the captions of everything posted' do
+      run
+      item = JobItem.first(key: '-200:11')
+      expect(item.outcome[:hashtags]).to eq('')
+
+      engine.retag(item.id)
+
+      tags = '#Hermetismo #Filosofia #Universo'
+      expect(item.refresh.outcome[:hashtags]).to eq(tags)
+      expect(manager.captions).to match_array([1001, 1002].map { |message_id| { chat_id: -200, message_id: message_id, from: '', to: tags } })
+      expect(item.messages.map(&:hashtags)).to eq([tags, tags])
+    end
+
+    it 'says why it cannot when no yml was posted' do
+      run
+      item = JobItem.first(key: '-200:12')
+
+      expect { engine.retag(item.id) }.to raise_error('no yml was posted with the book')
+    end
+  end
+
   it 'deletes the error replies a dead run left in the chat, tracked or not, before every run' do
     leftover = { id: 99, chat_id: -200, type: 'Text', text: 'Processing error: ArgumentError: boom', reply_to_message_id: 12 }
     manager  = ReplayingManager.new(messages: [leftover])

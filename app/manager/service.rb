@@ -26,7 +26,7 @@ class Manager
     def forwarding_jobs = @forwarding.list
 
     # Resumable jobs kept in the database (see Tracked::Engine): tracked_start, tracked_stop, tracked_resume, ...
-    delegate :start, :stop, :resume, :update, :retry_items, :edit, :apply, :delete_message, to: :@tracked, prefix: :tracked
+    delegate :start, :stop, :resume, :update, :retry_items, :edit, :apply, :retag, :retag_items, :delete_message, to: :@tracked, prefix: :tracked
 
     # Turns the queue of a group on or off (its latest replay job follows the chat, or one starts) and sets its slots.
     def group_queue(chat_id:, enabled:, parallel: nil)

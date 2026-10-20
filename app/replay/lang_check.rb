@@ -30,14 +30,10 @@ module Replay
     end
 
     def yml_language(item)
-      item.messages_dataset.live.where(kind: 'Document').each do |message|
-        media = @manager.chat_message(chat_id: message.chat_id, message_id: message.message_id)&.dig(:media)
-        next unless media&.dig(:file_name).to_s.end_with?('.yml')
+      path = PostedYml.new(@manager).path(item) or return
 
-        data = SymMash.new(Audiobook::Yaml.load(@manager.download_file(media[:file_id])))
-        return data.metadata&.language || data.language
-      end
-      nil
+      data = SymMash.new(Audiobook::Yaml.load(path))
+      data.metadata&.language || data.language
     end
   end
 end

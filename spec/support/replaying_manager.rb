@@ -3,8 +3,9 @@
 class ReplayingManager
   attr_reader :replayed, :deleted, :captions, :messages, :replies, :announced
 
-  def initialize(failing: [], gate: nil, messages: [], answers: {}, files: {}, active: [], same_file: [])
+  def initialize(failing: [], gate: nil, messages: [], answers: {}, files: {}, active: [], same_file: [], gone: [])
     @active   = active
+    @gone     = gone
     @same_file = same_file
     @files    = files
     @messages = messages
@@ -26,7 +27,7 @@ class ReplayingManager
   # `files` maps a message id to { name:, path: } of the document it carries.
   def chat_message(chat_id:, message_id:) = (file = @files[message_id]) && { id: message_id, media: { file_name: file[:name], file_id: message_id } }
 
-  def download_file(file_id) = @files.fetch(file_id)[:path]
+  def download_file(file_id, **) = @files.fetch(file_id)[:path]
 
   # Every message carries a different file unless `same_file` lists message ids that carry one: a book of the same name and size.
   def message_input(chat_id:, message_id:) = { type: 'document', file_name: "Book #{file_of(message_id)}.pdf", size: 10, inputs: [{ opts: { 'lang' => 'pt' } }] }
@@ -38,7 +39,12 @@ class ReplayingManager
 
   def message_link(chat_id:, message_id:) = "https://t.me/c/#{chat_id.abs}/#{message_id}"
 
-  def replace_caption(chat_id:, message_id:, from:, to:) = @captions << { chat_id: chat_id, message_id: message_id, from: from, to: to }
+  # The messages in `gone` were deleted from the chat.
+  def replace_caption(chat_id:, message_id:, from:, to:)
+    raise 'Not Found' if @gone.include?(message_id)
+
+    @captions << { chat_id: chat_id, message_id: message_id, from: from, to: to }
+  end
 
   def reply_to_message(chat_id:, message_id:, text:) = @replies << { chat_id: chat_id, message_id: message_id, text: text }
 
