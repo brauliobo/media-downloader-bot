@@ -1,5 +1,5 @@
 # Worker of the tdbot (TDLib user account) queue; instance = a number, one book at a time each:
-#   systemctl enable --now media-downloader-tdbot-worker@{1..7}
+#   started on demand by the tdbot's scaler (WORKER_MAX), nothing to enable
 # The tgbot worker (media-downloader-tgbot-worker@.service) is the same unit pointed at the tgbot's service.
 [Unit]
 Description=media-downloader-bot tdbot worker %i
@@ -49,9 +49,8 @@ KillSignal=SIGTERM
 Environment=WORKER_DRAIN_TIMEOUT=540
 TimeoutStopSec=660
 
-# Autoscaling (Worker::Scaler, started by the tdbot when it has WORKER_MAX): instances up to WORKER_MIN stay, the ones above it are started
-# when jobs wait and leave, with status 75 (not restarted), after WORKER_IDLE_EXIT seconds without a job.
-Environment=WORKER_MIN=4
+# Autoscaling (Worker::Scaler, started by the tdbot when it has WORKER_MAX): instances are started when jobs wait, and leave with
+# status 75 (not restarted) after their book, or after WORKER_IDLE_EXIT seconds without one. A fresh process per book keeps the heap small.
 Environment=WORKER_IDLE_EXIT=120
 SuccessExitStatus=75
 RestartPreventExitStatus=75

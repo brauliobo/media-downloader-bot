@@ -2,11 +2,12 @@ require 'socket'
 require 'set'
 
 class Worker
-  # A worker process of a bot, pointed at the bot's service by address (BOT_HTTP or BOT_DRB): it takes the jobs of the bot's queue
-  # one at a time and renews the lease of the one it holds, so the bot restarting changes nothing for it.
+  # A worker process of a bot, pointed at the bot's service by address (BOT_HTTP or BOT_DRB): it takes one job of the bot's queue,
+  # renews its lease, and ends after it (a fresh process per book, started by the scaler: Worker::Scaler) or after IDLE_EXIT seconds
+  # without one, so the bot restarting changes nothing for it.
   #
-  # USR2, TERM and INT make it stop taking jobs and end once the job in flight does; a process manager that restarts it then
-  # brings the replacement up. USR2 waits as long as the job takes, TERM and INT only up to DRAIN_TIMEOUT. The same signal twice, or
+  # USR2, TERM and INT make it stop taking jobs and end once the job in flight does; the scaler then starts a replacement
+  # (on the new code) if jobs wait. USR2 waits as long as the job takes, TERM and INT only up to DRAIN_TIMEOUT. The same signal twice, or
   # the timeout, stops the job: it is asked to (Bot::JobRestarted) and leaves at its next checkpoint, in seconds, with its files whole,
   # and goes back to the queue; whoever takes it next resumes it from its work dir. Only a job that reaches no checkpoint in
   # Bot::JobRunner::STOP_GRACE has the stop thrown into it.
@@ -14,24 +15,18 @@ class Worker
     POLL          = 1
     DRAIN_TIMEOUT = Integer(ENV.fetch('WORKER_DRAIN_TIMEOUT', 540))
     SIGNALS       = { USR2: nil, TERM: DRAIN_TIMEOUT, INT: DRAIN_TIMEOUT }.freeze
-    # What a worker above WORKER_MIN leaves with after WORKER_IDLE_EXIT seconds without a job; the unit does not restart that status.
-    RETIRED_STATUS = 75
+    # What a worker leaves with: the scaler starts one when a job waits, so the unit does not restart that status.
+    EXIT_STATUS = 75
+    IDLE_EXIT   = ENV.fetch('WORKER_IDLE_EXIT', 120).to_f
 
     attr_reader :id
 
-    # The instances above WORKER_MIN are the ones the scaler starts (Worker::Scaler): they leave when idle, the others stay.
-    def self.retire_after
-      ENV.fetch('WORKER_IDLE_EXIT', 120).to_f if ENV['WORKER_MIN'] && ENV['SYSTEMD_INSTANCE'].to_i > ENV['WORKER_MIN'].to_i
-    end
-
-    def initialize(service_uri = ENV['BOT_HTTP'] || ENV['BOT_DRB'], service: Bot::Worker::Client.new(service_uri), retire_after: self.class.retire_after)
+    def initialize(service_uri = ENV['BOT_HTTP'] || ENV['BOT_DRB'], service: Bot::Worker::Client.new(service_uri), idle_exit: IDLE_EXIT)
       @service      = service
-      @retire_after = retire_after
+      @idle_exit    = idle_exit
       @id           = "#{Socket.gethostname}-#{Process.pid}-#{SecureRandom.hex(3)}"
       @signals      = Set.new
     end
-
-    def retired? = @retired.present?
 
     def run
       Thread.abort_on_exception = false # a thread of a stopped job (a reader of its subprocess) ending must not take the worker down
@@ -54,15 +49,13 @@ class Worker
       until @draining
         if (job = @jobs.dequeue(worker: id))
           process(job)
-          idle_since = monotonic
+          @draining = true # one book per process: the heap it grew stays resident in Ruby
         else
-          retire if @retire_after && monotonic - idle_since > @retire_after
+          @draining = true if monotonic - idle_since > @idle_exit
           sleep POLL
         end
       end
     end
-
-    def retire = @retired = @draining = true
 
     def process(job)
       @restarted = false

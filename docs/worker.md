@@ -66,8 +66,10 @@ the files are safe to resume from: whatever resume takes for done is written asi
 wavs, the pauses, the paragraph and page wavs, the cached texts), and a resumed run clears what the stopped one left half written
 (`Utils::Tmp.resumable`). A stop costs the job no attempt.
 
-Each worker converts one book, so reloading all of them loses no capacity: idle ones restart at once, busy ones after their book, and
-a busy one was working anyway. A job handed back or lost is resumed, not restarted:
+Each worker converts one book and then ends with status 75 (`Daemon::EXIT_STATUS`, not restarted by the unit): Ruby keeps the heap a
+book grew, so a fresh process takes every book, and none runs while nothing waits. The scaler starts the next one. Reloading all of
+them therefore loses no capacity: idle ones end at once, busy ones after their book, and the scaler starts replacements on the new
+code while jobs wait. A job handed back or lost is resumed, not restarted:
 
 - it works in `TMPDIR/job-<job id>`, the same path whoever takes it, kept when it is stopped (removed after success, error or cancel;
   `Worker.prune_workdirs` clears the ones nobody took for 7 days);
@@ -92,16 +94,16 @@ One-time cut-over from the bot running the books itself (done for the tdbot on 2
    Remove `WITH_WORKER` from the bot's drop-ins and from its `.env.local`. Install `media-downloader.tmpfiles.conf` as
    `/etc/tmpfiles.d/media-downloader.conf` and run `systemd-tmpfiles --create` for the work dirs.
 5. `systemctl daemon-reload`, restart the bot (the last time the books it was running are lost; replay items are retried), then
-   `systemctl enable --now media-downloader-tdbot-worker@{1..7}`. A worker takes minutes to boot on a busy host.
+   nothing to enable: the bot's scaler starts the instances on demand (needs `WORKER_MAX`). A worker takes minutes to boot on a busy host.
 
 Jobs fed by a tracked job (replay, a group's queue) count against no user: the job's own `parallel` is their limit. A message sent by a
 person counts against them (`Bot::UserQueue.limit` running jobs, the admin exempt).
 
-Autoscaling: a bot with `WORKER_MAX` in its environment (and `WORKER_MIN`, the instances kept up) runs `Worker::Scaler`, which starts
-worker instances (`systemctl start`, allowed to the bot's user by `deploy/50-media-downloader-workers.rules`, installed in
-`/etc/polkit-1/rules.d/`) while jobs wait: the jobs in progress plus the ones a worker could take now, so a user at the limit
-(`BotJob.takeable`) asks for none. The instances above `WORKER_MIN` leave with status 75 after `WORKER_IDLE_EXIT` seconds idle, and the
-unit does not restart that status. Keep `WORKER_MIN` in the unit and in the bot's environment the same.
+Autoscaling: a bot with `WORKER_MAX` in its environment runs `Worker::Scaler`, which starts worker instances (`systemctl start`, allowed
+to the bot's user by `deploy/50-media-downloader-workers.rules`, installed in `/etc/polkit-1/rules.d/`) while jobs wait: the jobs in
+progress plus the ones a worker could take now, so a user at the limit (`BotJob.takeable`) asks for none. No instance is kept up. A
+worker leaves with status 75 after its book, or after `WORKER_IDLE_EXIT` seconds without finding one; the unit does not restart that
+status.
 
 After that:
 

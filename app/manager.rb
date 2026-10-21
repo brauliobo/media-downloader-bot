@@ -64,9 +64,9 @@ EOS
     Thread.new { tuner.run }
   end
 
-  # The workers of this bot's queue follow its jobs: WORKER_MIN stay up, and more start (up to WORKER_MAX) while jobs wait for one.
+  # The workers of this bot's queue are started on demand (up to WORKER_MAX) while jobs wait for one, and leave after their book.
   def start_scaler
-    scaler = Worker::Scaler.new(queue: @jobs.queue, min: ENV.fetch('WORKER_MIN', 1).to_i, max: ENV['WORKER_MAX'].to_i)
+    scaler = Worker::Scaler.new(queue: @jobs.queue, max: ENV['WORKER_MAX'].to_i)
     Thread.new { scaler.run }
   end
 

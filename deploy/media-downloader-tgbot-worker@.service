@@ -1,5 +1,5 @@
 # Worker of the tgbot (Telegram Bot API) queue; see media-downloader-tdbot-worker@.service.
-#   systemctl enable --now media-downloader-tgbot-worker@{1..2}
+#   started on demand by the tgbot's scaler (WORKER_MAX), nothing to enable
 [Unit]
 Description=media-downloader-bot tgbot worker %i
 After=network-online.target
@@ -38,9 +38,8 @@ KillSignal=SIGTERM
 Environment=WORKER_DRAIN_TIMEOUT=540
 TimeoutStopSec=660
 
-# Autoscaling (Worker::Scaler, started by the tgbot when it has WORKER_MAX): instances up to WORKER_MIN stay, the ones above it are started
-# when jobs wait and leave, with status 75 (not restarted), after WORKER_IDLE_EXIT seconds without a job.
-Environment=WORKER_MIN=2
+# Autoscaling (Worker::Scaler, started by the tgbot when it has WORKER_MAX): instances are started when jobs wait, and leave with
+# status 75 (not restarted) after their book, or after WORKER_IDLE_EXIT seconds without one. A fresh process per book keeps the heap small.
 Environment=WORKER_IDLE_EXIT=120
 SuccessExitStatus=75
 RestartPreventExitStatus=75

@@ -58,33 +58,23 @@ RSpec.describe Worker::Daemon do
     expect(Zipper.size_mb_limit).to eq(50)
   end
 
-  it 'works through the queue of its bot, finishing every job it ran' do
-    submit(1)
-    submit(2)
+  it 'takes one job of the queue of its bot, finishes it and ends, leaving the next one to a fresh process' do
+    first  = submit(1)
+    second = submit(2)
     thread = run_daemon
-    wait_until { BotJob.of('daemon-spec').empty? }
-    signal(:USR2)
 
     expect(thread.join(5)).to be_truthy
-    expect(seen).to contain_exactly('book 1', 'book 2')
+    expect(seen).to eq(['book 1'])
+    expect(jobs.active?(first[:id])).to be(false)
+    expect(jobs.dequeue(worker: 'next')).to eq(second)
   end
 
-  describe 'an instance the scaler started' do
-    let(:daemon) { described_class.new(service: service, retire_after: 0.2) }
+  it 'ends once idle for its time' do
+    daemon = described_class.new(service: service, idle_exit: 0.2)
+    allow(daemon).to receive(:puts)
 
-    it 'retires once idle for its time, and does not before a job ends' do
-      submit(1)
-      thread = run_daemon
-      wait_until { seen.any? }
-
-      expect(thread.join(5)).to be_truthy
-      expect(daemon).to be_retired
-    end
-
-    it 'is not asked to retire when it is one of the minimum' do
-      expect(described_class.new(service: service)).not_to be_retired
-      expect(described_class.retire_after).to be_nil
-    end
+    expect(Thread.new { daemon.run }.join(5)).to be_truthy
+    expect(seen).to be_empty
   end
 
   it 'leaves the queues of the other bots alone' do

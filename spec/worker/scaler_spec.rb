@@ -8,7 +8,7 @@ RSpec.describe Worker::Scaler do
 
   let(:jobs)    { Bot::Jobs.new(queue: 'scaler-spec') }
   let(:systemd) { FakeSystemd.new([1, 2], []) }
-  let(:scaler)  { described_class.new(queue: 'scaler-spec', min: 2, max: 8, systemd: systemd) }
+  let(:scaler)  { described_class.new(queue: 'scaler-spec', max: 8, systemd: systemd) }
 
   before { BotJob.dataset.delete }
   after  { BotJob.dataset.delete }
@@ -52,7 +52,8 @@ RSpec.describe Worker::Scaler do
     expect(systemd.started).to be_empty
   end
 
-  it 'leaves the minimum to the units themselves when nothing waits' do
+  it 'starts nothing when nothing waits' do
+    systemd.running = []
     scaler.step
 
     expect(systemd.started).to be_empty
