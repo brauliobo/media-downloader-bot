@@ -19,8 +19,15 @@ module AI
       payload = { model: MODEL, stream: false, options: OPTIONS, messages: messages }
       payload[:model] = model if model
       payload[:format] = format if format
-      parsed = request(payload)
-      parsed = request(payload.merge(options: OPTIONS.merge(LOOP_BREAKER))) if cut?(parsed)
+      again  = -> { request(payload.merge(options: OPTIONS.merge(LOOP_BREAKER))) }
+      parsed = begin
+        request(payload)
+      rescue Mechanize::ResponseCodeError => e
+        raise unless e.response_code == '500' # Ollama fails some replies at temperature 0 the same way every time
+
+        again.call
+      end
+      parsed = again.call if cut?(parsed)
       raise "Ollama output cut at #{OPTIONS[:num_predict]} tokens, the model is looping" if cut?(parsed)
       content = parsed.dig(:message, :content).to_s.strip
       if content.match?(/execution expired/i)

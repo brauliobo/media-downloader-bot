@@ -16,6 +16,21 @@ RSpec.describe AI::Ollama do
     expect(seen).to eq(described_class::TIMEOUT)
   end
 
+  it 'is asked again with the loop breaker when Ollama fails the reply every time at temperature 0' do
+    allow(described_class).to receive(:chat).and_call_original
+    allow(Kernel).to receive(:sleep)
+    sent = []
+    allow_any_instance_of(Mechanize).to receive(:post) do |_, _, json|
+      sent << JSON.parse(json)['options']
+      raise Mechanize::ResponseCodeError, instance_double(Mechanize::Page, code: '500') unless sent.last['repeat_penalty']
+
+      instance_double(Mechanize::Page, code: '200', body: { message: { content: 'text' } }.to_json)
+    end
+
+    expect(described_class.chat([{ role: :user, content: 'hi' }])).to eq('text')
+    expect(sent.size).to eq(5)
+  end
+
   describe 'a reply that hit the output cap' do
     let(:sent) { [] }
 
