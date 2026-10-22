@@ -15,6 +15,10 @@ RSpec.describe Bot::FileId do
     expect(described_class.call(file_id: 8)).to eq(8)
   end
 
+  it 'reads the inner file id of a TD video, audio or animation' do
+    %w[video audio animation].each { |kind| expect(described_class.call(SymMash.new(kind => { id: 5 }))).to eq(5) }
+  end
+
   it 'leaves a Bot API file id as it is' do
     expect(described_class.call('AgACAgIAAxkBAAI')).to eq('AgACAgIAAxkBAAI')
   end
@@ -25,6 +29,10 @@ RSpec.describe Bot::FileId do
 
       expect(described_class.remote(document)).to eq('BQACAgEA')
       expect(described_class.remote(SymMash.new(document))).to eq('BQACAgEA')
+    end
+
+    it 'reads the remote id of a TD video' do
+      expect(described_class.remote(SymMash.new(video: { id: 7, remote: { id: 'BAACAgEA' } }))).to eq('BAACAgEA')
     end
 
     it 'has none for a bare id, a Bot API document or a file not uploaded yet' do
