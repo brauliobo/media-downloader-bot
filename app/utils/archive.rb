@@ -2,6 +2,19 @@ require 'archive/zip'
 
 module Utils
   module Archive
+    # Some epubs carry a zero day or month in an entry's timestamp, which archive-zip (the epub parser's too) refuses to parse.
+    # Nothing here uses it, so it reads as the DOS epoch, 1980-01-01.
+    module LenientDosTime
+      EPOCH = (1 << 16) | (1 << 21)
+
+      def initialize(time = nil)
+        super
+      rescue ArgumentError
+        @dos_time = EPOCH
+      end
+    end
+    ::Archive::Zip::DOSTime.prepend(LenientDosTime)
+
     module_function
 
     def validate_zip!(path, max_entries:, max_entry_bytes:, max_total_bytes:, max_ratio:)
