@@ -40,5 +40,13 @@ RSpec.describe Sh do
         described_class.assert_success!('ffprobe failed', '', status: status)
       }.to raise_error(Sh::Error, 'ffprobe failed: command failed: 127')
     end
+
+    it 'names the signal that killed the command when it has no exit status and no stderr' do
+      status = instance_double(Process::Status, success?: false, exitstatus: nil, termsig: 9)
+
+      expect {
+        described_class.assert_success!('Failed to compress audio', '', status: status)
+      }.to raise_error(Sh::Error, 'Failed to compress audio: command failed: signal 9')
+    end
   end
 end

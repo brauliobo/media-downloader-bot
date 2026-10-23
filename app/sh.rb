@@ -32,7 +32,7 @@ class Sh
     msg = stderr.to_s.strip
     return msg unless msg.empty?
 
-    code = status.respond_to?(:exitstatus) ? status.exitstatus : status
+    code = status.respond_to?(:exitstatus) ? (status.exitstatus || "signal #{status.termsig}") : status # a killed process has no exit status
     [fallback, code].compact.join(': ')
   end
 
