@@ -88,6 +88,30 @@ RSpec.describe Audiobook::TextPdf do
     end
   end
 
+  # Chromium prints no PDF from hundreds of lossless PNGs (a scanned book), so the rasterized pages are JPEGs of a page's width.
+  it 'embeds a rasterized page as a JPEG no wider than a page needs, instead of the PNG' do
+    Dir.mktmpdir do |dir|
+      source = File.join(dir, 'book.pdf').tap { |path| File.write(path, '') }
+      png_size = nil
+      allow(Audiobook::OcrText).to receive(:rasterize_pdf_page) do |_pdf, _page, base|
+        "#{base}.png".tap do |png|
+          system('ffmpeg', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=3200x4000', '-frames:v', '1', png, exception: true)
+          png_size = File.size(png)
+        end
+      end
+      pdf = described_class.new(book_with(page_of(paragraph_of('x'))), source_pdf: source)
+      pdf.instance_variable_set(:@assets, dir)
+
+      name = pdf.send(:rasterize_page, 3, 'page-3')
+
+      expect(name).to eq('page-3.jpg')
+      expect(File).not_to exist(File.join(dir, 'page-3.png'))
+      width, = Sh.run(['ffprobe', '-v', 'error', '-show_entries', 'stream=width', '-of', 'csv=p=0', File.join(dir, name)])
+      expect(width.to_i).to eq(described_class::MAX_IMAGE_WIDTH)
+      expect(File.size(File.join(dir, name))).to be < png_size
+    end
+  end
+
   it 'rasterizes an image-only first page as the cover' do
     pdf = source_pdf_of(page_of(ocr_image('/tmp/book.pdf#page=1', 'OCR cover text.')))
 

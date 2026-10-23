@@ -3,6 +3,7 @@ require 'cgi'
 module Audiobook
   class TextPdf
     MIN_FIGURE_AREA = 0.002
+    MAX_IMAGE_WIDTH = 1600
 
     def self.generate(book, pdf_path, stl: nil, source_pdf: nil)
       new(book, stl: stl, source_pdf: source_pdf).generate(pdf_path)
@@ -201,7 +202,17 @@ module Audiobook
 
       base = File.join(@assets, name)
       png  = OcrText.rasterize_pdf_page(source_pdf, page_num, base)
-      File.basename(png) if png && File.exist?(png)
+      compact(png) if png && File.exist?(png)
+    end
+
+    # A scanned book of hundreds of lossless PNGs makes chromium exit with no PDF and no error, so the images go in as JPEGs,
+    # no wider than a page needs.
+    def compact(png)
+      jpg = png.sub(/\.png\z/, '.jpg')
+      _out, err, status = Sh.run ['ffmpeg', '-y', '-loglevel', 'error', '-i', png, '-vf', "scale='min(#{MAX_IMAGE_WIDTH},iw)':-2", '-q:v', '4', jpg]
+      Sh.assert_success!('image compaction failed', err, status: status, output: jpg)
+      File.delete(png)
+      File.basename(jpg)
     end
 
     def extract_figures(page_num)
@@ -214,7 +225,7 @@ module Audiobook
       prefix = File.join(@assets, "p#{page_num}-fig")
       Sh.run ['pdfimages', '-png', '-f', page_num.to_s, '-l', page_num.to_s, source_pdf, prefix]
       Dir["#{prefix}*.png"].sort.zip(images).filter_map do |path, metrics|
-        File.basename(path) if path && keep.include?(metrics)
+        compact(path) if path && keep.include?(metrics)
       end
     end
 
