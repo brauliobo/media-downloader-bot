@@ -11,6 +11,7 @@ module Bot
 
     self.max_caption = 4096
     MEDIA_SEND_TIMEOUT = 1_800
+    TEXT_SEND_TIMEOUT = 5
     SEND_OUTCOME_LIMIT = 1_000
     SendOutcome = Struct.new(:message_id, :error, keyword_init: true)
 
@@ -109,13 +110,13 @@ module Bot
         reply_to = incoming_message_id(msg, :id, :message_id)
         dlog "[TD_SEND_MESSAGE] reply_to=#{reply_to} msg.class=#{msg.class}"
         if t.in? %w[message text]
-          result = message_sender.send_text(
+          result = sent_id(message_sender.send_text(
             msg.chat.id,
             text,
             parse_mode:   parse_mode,
             reply_to:     reply_to,
             reply_markup: job_reply_markup(cancel_job),
-          )
+          ))
         else
           result = message_sender.public_send("send_#{media_type}", msg.chat.id, text, reply_to: reply_to, **params)
           result = wait_for_media_send(result, timeout: params[:timeout].to_i.nonzero? || MEDIA_SEND_TIMEOUT)
@@ -243,6 +244,17 @@ module Bot
 
     def job_reply_markup(_job_id)
       nil
+    end
+
+    # The id a sent text gets once Telegram has it: the one it is sent under is known only to this process, so a status edited by
+    # a worker that outlives a restart of the bot would never be found. The sent id stays when Telegram is slow to answer.
+    def sent_id(result)
+      id = result[:message_id].to_i
+      return result unless id.positive?
+
+      deadline = Time.now + TEXT_SEND_TIMEOUT
+      sleep 0.1 until (outcome = self.class.message_send_outcomes[id]) || Time.now >= deadline
+      outcome&.message_id ? result.merge(message_id: outcome.message_id) : result
     end
 
     def wait_for_media_send(result, timeout:)

@@ -22,8 +22,16 @@ else
       allow(bot).to receive(:message_sender).and_return(sender)
       allow(bot).to receive(:throttle!)
       allow(bot).to receive(:throttle_edit).and_yield
+      stub_const('Bot::TDBot::TEXT_SEND_TIMEOUT', 0)
       described_class.message_send_outcomes.clear
       described_class.status_jobs.clear
+    end
+
+    it 'answers a sent text with the id Telegram gave it' do
+      allow(sender).to receive(:send_text).and_return(message_id: 789)
+      described_class.message_send_outcomes[789] = described_class::SendOutcome.new(message_id: 800)
+
+      expect(bot.send_message(msg, 'working').message_id).to eq(800)
     end
 
     it 'resolves a /stop reply to the job of its status message, by sent or final id' do
