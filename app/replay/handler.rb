@@ -35,12 +35,13 @@ module Replay
     def describe(item) = @manager.message_input(chat_id: chat_id_of(item), message_id: message_id(item))
 
     # A message joining the queue is told how it stands once its checksum is read: a file the group already has is settled at once
-    # with the link of its book, any other gets the standard "Queued" reply.
+    # with the link of its book, any other gets the standard "Queued" reply, unless a slot took it while its checksum was read:
+    # the run has cleared the replies by then and the worker posts its own status.
     def queued(item)
       original = original_of(item)
       return answer_duplicate(item, original) if original
 
-      @manager.announce_queued(chat_id: chat_id_of(item), message_id: message_id(item))
+      @manager.announce_queued(chat_id: chat_id_of(item), message_id: message_id(item)) if item.refresh.status == 'pending'
       nil
     end
 

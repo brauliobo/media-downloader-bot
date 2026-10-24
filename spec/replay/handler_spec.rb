@@ -85,6 +85,11 @@ RSpec.describe Replay::Handler do
       expect(manager.replies).to be_empty
     end
 
+    it 'gets no Queued reply when a slot took it meanwhile, the worker posts its own status' do
+      expect(handler.queued(item(13, status: 'running'))).to be_nil
+      expect(manager.announced).to be_empty
+    end
+
     it 'is settled with the link of the book, not queued, when the group has the file already' do
       item(11, status: 'done', checksum: 'sum-11')
 
