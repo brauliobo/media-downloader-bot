@@ -138,6 +138,13 @@ RSpec.describe Downloaders::YtDlp::FormatPicker do
     expect(pick(info)).to eq('18')
   end
 
+  it 'never picks a format of the skipped note' do
+    info.formats = [audio('140', 4), video('133', 240, 5).merge(format_note: 'Timeline'), video('134', 360, 12)]
+    expect(pick(info, skipped_note: 'Timeline')).to eq('134+140')
+    info.formats = [audio('140', 4), video('133', 240, 5).merge(format_note: 'Timeline')]
+    expect(pick(info, skipped_note: 'Timeline')).to be_nil
+  end
+
   it 'scales sizes down to a clipped section' do
     expect(pick(clip: 150)).to eq('137+140')
   end

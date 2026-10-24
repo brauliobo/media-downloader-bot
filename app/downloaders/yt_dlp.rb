@@ -8,17 +8,16 @@ module Downloaders
     MAX_RES  = ENV['MAX_RES'] || 1080
     BASE_CMD = "yt-dlp -S 'res:#{MAX_RES}' --ignore-errors --compat-options no-live-chat".freeze
     REMOTE   = ENV['YT_DLP_REMOTE_COMPONENTS']
-    RUMBLE_UA = 'curl/8.9.1'.freeze # rumble answers 403 to browser user agents from non-browser clients
 
     def download
       source_url = normalized_url
       return st.error('No URL found') if source_url.blank?
-      source_url = normalize_rumble_url(source_url)
+      source_url = resolve(source_url)
       validate_public_url!(source_url)
 
       cmd = "#{base_cmd} #{formats.encoded} --write-info-json --no-clean-infojson --skip-download -o #{Sh.escape("info-%(playlist_index)s.%(ext)s")} #{Sh.escape(source_url)}"
-      cmd << " --match-filter #{Sh.escape('live_status != is_upcoming')}" if source_url.match?(/youtu\.?be/)
-      
+      Site.for(source_url).info_args.each { cmd << " #{_1}" }
+
       _, e, s = Sh.run cmd, chdir: dir
       return st.error("Metadata errors:\n<pre>#{Bot::MsgHelpers.he e}</pre>", parse_mode: 'HTML') unless s == 0
 
@@ -28,7 +27,7 @@ module Downloaders
     def download_one(i, pos: 1)
       fn  = "input-#{pos}"
       source_url = Utils::Url.normalize(i.info&.webpage_url.presence || i.url)
-      source_url = normalize_rumble_url(source_url)
+      source_url = resolve(source_url)
       validate_public_url!(source_url)
       cmd = "#{base_cmd} #{formats.for(i.stream)} -o #{Sh.escape("#{fn}.%(ext)s")} #{Sh.escape(source_url)}"
       _, e, s = Sh.run cmd, chdir: dir
@@ -48,7 +47,9 @@ module Downloaders
 
     private
 
-    def formats = @formats ||= FormatArgs.new(opts, url)
+    def formats = @formats ||= FormatArgs.new(opts, site)
+    def site    = @site ||= Site.for(url)
+    def resolve(source_url) = Site.for(source_url).resolve(source_url)
 
     # a source without a video track (e.g. SoundCloud) is audio whether or not `audio` was asked
     def audio_only?(info) = opts.audio || info&.video_ext == 'none'
@@ -63,7 +64,7 @@ module Downloaders
     def pick_format(info)
       FormatPicker.new(
         info, audio_only: audio_only?(info), limit_mb: Zipper.size_mb_limit, max_res: MAX_RES.to_i,
-        clip: Utils::Duration.clip_length(opts, info.duration), alang: opts.alang
+        clip: Utils::Duration.clip_length(opts, info.duration), alang: opts.alang, skipped_note: site.skipped_note
       ).selector
     end
 
@@ -105,13 +106,8 @@ module Downloaders
         cmd << "--paths #{tmp}"
         cmd << '-s' if opts.simulate
         cmd << "--extractor-args #{Sh.escape('generic:impersonate')}"
-        cmd << "--user-agent #{Sh.escape(RUMBLE_UA)}" if url.match?(/rumble\.com/i)
+        cmd.concat site.args(opts)
 
-        if opts.alang && url.match?(/youtu\.?be/)
-          args = "youtube:lang=#{opts.alang};player_client=web_embedded,default"
-          cmd << "--extractor-args #{Sh.escape(args)}"
-        end
-        
         begin
           if (cp = Utils::CookieJar.write(session, tmp))
             cmd << "--cookies #{Sh.escape(cp)}"
@@ -132,19 +128,6 @@ module Downloaders
         
         cmd.join(' ')
       end
-    end
-
-    def normalize_rumble_url(source_url)
-      uri = Utils::Url.parse(source_url)
-      host = uri.host.to_s.downcase
-      return source_url unless host == 'rumble.com' || host.end_with?('.rumble.com')
-      return source_url if uri.path.match?(%r{\A/embed/}i)
-
-      clean_url = uri.dup.tap { |u| u.query = u.fragment = nil }.to_s
-      body      = Utils::HTTP.get_public("https://rumble.com/api/Media/oembed.json?#{URI.encode_www_form(url: clean_url)}")
-      JSON.parse(body)['html'].to_s[%r{https://rumble\.com/embed/[^"']+}] || source_url
-    rescue StandardError
-      source_url
     end
 
     def apply_playlist_options(cmd)
@@ -187,17 +170,7 @@ module Downloaders
       SymMash.new(url: display_url(info, source_url), opts: opts.deep_dup, info: info, stream: stream)
     end
 
-    def display_url(info, source_url)
-      return Utils::Url.display(source_url) unless youtube_url?(source_url)
-
-      video_id = info.id.presence || info.display_id.presence
-      video_id ? "youtu.be/#{video_id}" : Utils::Url.display(source_url)
-    end
-
-    def youtube_url?(source_url)
-      host = Utils::Url.parse(source_url)&.host.to_s.downcase
-      host == 'youtu.be' || host == 'youtube.com' || host.end_with?('.youtube.com')
-    end
+    def display_url(info, source_url) = Site.for(source_url).display(info, source_url)
 
     def format_title(info, i, mult)
       t = info.track || info.title

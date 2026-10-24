@@ -2,12 +2,10 @@ module Downloaders
   class YtDlp
     # What tells yt-dlp which format to fetch: the picked one as is (streamed), or the best one to be encoded.
     class FormatArgs
-      # Rumble lists its 180p storyboard as a video-only format, which bestvideo would take over the real ones
-      BEST_VIDEO_AUDIO = 'bestvideo[format_note!=Timeline]+bestaudio'.freeze
       FASTSTART = 'Merger+ffmpeg_o:-movflags +faststart'.freeze
 
-      def initialize(opts, url)
-        @opts, @url = opts, url
+      def initialize(opts, site)
+        @opts, @site = opts, site
       end
 
       def for(stream) = stream ? streamed(stream) : encoded
@@ -25,14 +23,16 @@ module Downloaders
       private
 
       def best
-        return 'mp3-320' if @opts.audio && @url.include?('bandcamp.com')
+        return @site.audio_format if @opts.audio && @site.audio_format
 
-        base = (@opts.onlysrt || @opts.audio) ? 'bestaudio' : BEST_VIDEO_AUDIO
+        base = (@opts.onlysrt || @opts.audio) ? 'bestaudio' : "#{best_video}+bestaudio"
         al   = @opts.alang
         return "#{base}/best" unless al
 
         "#{base}[language^=#{al}]/best[language^=#{al}]/#{base}/best"
       end
+
+      def best_video = "bestvideo#{"[format_note!=#{@site.skipped_note}]" if @site.skipped_note}"
     end
   end
 end

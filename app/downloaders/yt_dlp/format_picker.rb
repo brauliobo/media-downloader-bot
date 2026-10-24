@@ -15,8 +15,8 @@ module Downloaders
       SMALL_LIMIT_ABR = 64
 
       # clip is the length that is downloaded (a requested section is cut while downloading)
-      def initialize(info, limit_mb:, audio_only: false, max_res: nil, clip: info.duration, alang: nil)
-        @info, @limit_mb, @audio_only, @max_res, @alang = info, limit_mb, audio_only, max_res, alang
+      def initialize(info, limit_mb:, audio_only: false, max_res: nil, clip: info.duration, alang: nil, skipped_note: nil)
+        @info, @limit_mb, @audio_only, @max_res, @alang, @skipped_note = info, limit_mb, audio_only, max_res, alang, skipped_note
         @budget = limit_mb * 2**20 * SAFETY unless unlimited?
         @ratio  = clip.to_f / info.duration.to_f
       end
@@ -51,7 +51,7 @@ module Downloaders
 
       def tier(format) = VIDEO_CODECS.index { format.vcodec.to_s.match?(_1) } || VIDEO_CODECS.size
 
-      def formats = @formats ||= Array(@info.formats)
+      def formats = @formats ||= Array(@info.formats).reject { @skipped_note && _1.format_note == @skipped_note }
 
       # keeps the original audio language first unless another was asked for
       def preferred_language(tracks)
