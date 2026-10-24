@@ -2,6 +2,7 @@ module Audiobook
   # Prints an HTML file to PDF with the first tool installed: chromium, wkhtmltopdf or pandoc.
   module HtmlToPdf
     CHROMIUM_BINS = %w[chromium google-chrome-stable google-chrome chromium-browser].freeze
+    DBUS_NOISE    = /ERROR:dbus\//
 
     module_function
 
@@ -64,8 +65,10 @@ module Audiobook
       run_pdf!(['pandoc', '-f', 'html', '-t', 'pdf', '-o', pdf_path, html_path], 'pandoc pdf', pdf_path)
     end
 
+    # Chromium without a session bus fills stderr with DBus errors that hide why it printed nothing, and it exits 0 doing so.
     def run_pdf!(cmd, label, pdf_path, **options)
       _out, err, status = Sh.run(cmd, **options)
+      err = err.lines.grep_v(DBUS_NOISE).join.presence || ('wrote no PDF' if status.success?)
       Sh.assert_success!(label, err, status: status, output: pdf_path)
     end
   end
