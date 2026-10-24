@@ -7,7 +7,7 @@ module Replay
     WINDOW   = 100
     PAGE     = 100
     EXCERPT  = 500
-    ERROR    = /error|failed/i
+    ERROR    = /error|failed|no url or media/i
     HASHTAG  = /#\p{L}[\p{L}\p{N}_]*/
 
     def initialize(manager, forwarded: Forwarding::Log.new, replayed: Log.new)
@@ -36,12 +36,13 @@ module Replay
 
     # A message joining the queue is told how it stands once its checksum is read: a file the group already has is settled at once
     # with the link of its book, any other gets the standard "Queued" reply, unless a slot took it while its checksum was read:
-    # the run has cleared the replies by then and the worker posts its own status.
+    # the run answers it then (the worker posts its own status), after clearing the replies.
     def queued(item)
       original = original_of(item)
+      return unless item.refresh.status == 'pending'
       return answer_duplicate(item, original) if original
 
-      @manager.announce_queued(chat_id: chat_id_of(item), message_id: message_id(item)) if item.refresh.status == 'pending'
+      @manager.announce_queued(chat_id: chat_id_of(item), message_id: message_id(item))
       nil
     end
 

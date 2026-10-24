@@ -90,6 +90,13 @@ RSpec.describe Replay::Handler do
       expect(manager.announced).to be_empty
     end
 
+    it 'leaves the link of the book to the run when a slot took it meanwhile' do
+      item(11, status: 'done', checksum: 'sum-11')
+
+      expect(handler.queued(item(13, status: 'running'))).to be_nil
+      expect(manager.replies).to be_empty
+    end
+
     it 'is settled with the link of the book, not queued, when the group has the file already' do
       item(11, status: 'done', checksum: 'sum-11')
 
@@ -288,13 +295,14 @@ RSpec.describe Replay::Handler do
 
   it 'deletes the error replies a dead run left in the chat, tracked or not, before every run' do
     leftover = { id: 99, chat_id: -200, type: 'Text', text: 'Processing error: ArgumentError: boom', reply_to_message_id: 12 }
-    manager  = ReplayingManager.new(messages: [leftover])
+    refused  = { id: 98, chat_id: -200, type: 'Text', text: 'No URL or media provided', reply_to_message_id: 13 }
+    manager  = ReplayingManager.new(messages: [leftover, refused])
     engine   = Tracked::Engine.new({ 'replay' => described_class.new(manager, forwarded: forwarded, replayed: legacy) }, tick: 0.01)
 
     id = engine.start(kind: 'replay', params: { chat_id: -200 })[:id]
     Timeout.timeout(5) { sleep 0.01 until Job[id].state == 'completed' }
 
-    expect(manager.deleted).to eq([99])
+    expect(manager.deleted).to contain_exactly(98, 99)
     expect(manager.replayed.map { |m| m[:id] }).to contain_exactly(11, 12, 13)
   end
 
