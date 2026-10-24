@@ -119,6 +119,16 @@ RSpec.describe Downloaders::YtDlp do
       expect(captured.first).not_to include('v7c086u-modern-education')
     end
 
+    it 'uses a non-browser user agent for rumble urls' do
+      ctx.url = 'https://rumble.com/v7c086u-modern-education-is-working-exactly-as-planned-sf736.html'
+      allow(Utils::HTTP).to receive(:get_public).and_return('{}')
+      captured = fake_yt_dlp
+
+      downloader.download
+
+      expect(captured.first).to include("--user-agent #{described_class::RUMBLE_UA}")
+    end
+
     it 'reports a missing url instead of crashing' do
       ctx.url = nil
       ctx.st  = status

@@ -8,6 +8,7 @@ module Downloaders
     MAX_RES  = ENV['MAX_RES'] || 1080
     BASE_CMD = "yt-dlp -S 'res:#{MAX_RES}' --ignore-errors --compat-options no-live-chat".freeze
     REMOTE   = ENV['YT_DLP_REMOTE_COMPONENTS']
+    RUMBLE_UA = 'curl/8.9.1'.freeze # rumble answers 403 to browser user agents from non-browser clients
 
     def download
       source_url = normalized_url
@@ -104,6 +105,7 @@ module Downloaders
         cmd << "--paths #{tmp}"
         cmd << '-s' if opts.simulate
         cmd << "--extractor-args #{Sh.escape('generic:impersonate')}"
+        cmd << "--user-agent #{Sh.escape(RUMBLE_UA)}" if url.match?(/rumble\.com/i)
 
         if opts.alang && url.match?(/youtu\.?be/)
           args = "youtube:lang=#{opts.alang};player_client=web_embedded,default"
