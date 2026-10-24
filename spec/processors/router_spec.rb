@@ -90,4 +90,17 @@ RSpec.describe Processors::Router do
       expect(processors.first.ctx.opts.audio).to eq(1)
     end
   end
+
+  it 'routes a video sent as a file as media' do
+    Dir.mktmpdir('router-spec-') do |dir|
+      msg = SymMash.new(text: 'clip.mp4 lang=pt', document: SymMash.new(file_name: 'clip.mp4', mime_type: 'video/mp4'))
+      ctx = Context.new(dir: dir, msg: msg)
+
+      processors = described_class.for_message(ctx, Utils::InputParser.message_lines(msg))
+
+      expect(processors.size).to eq(1)
+      expect(processors.first).to be_a(Processors::Media)
+      expect(processors.first.ctx.opts.lang).to eq('pt')
+    end
+  end
 end

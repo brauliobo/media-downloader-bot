@@ -27,6 +27,7 @@ module Processors
       return [LocalFile.new(ctx)] if ::File.exist?(file&.local_path.to_s)
       return [Video.new(ctx)] if ctx.msg.video.present?
       return [Audio.new(ctx)] if ctx.msg.audio.present?
+      return [LocalFile.new(ctx)] if ctx.msg.document&.mime_type.to_s.match?(%r{\A(video|audio)/})
 
       nil
     end
