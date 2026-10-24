@@ -104,7 +104,7 @@ RSpec.describe Downloaders::YtDlp do
 
       extractor_args = 'youtube:lang=pt;player_client=web_embedded,default'
       expect(captured.first).to include("--extractor-args #{Sh.escape(extractor_args)}")
-      expect(captured.first).to include(Sh.escape('bestvideo+bestaudio[language^=pt]'))
+      expect(captured.first).to include(Sh.escape('bestvideo[format_note!=Timeline]+bestaudio[language^=pt]'))
     end
 
     it 'resolves rumble urls through oembed' do

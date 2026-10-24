@@ -13,7 +13,7 @@ RSpec.describe Downloaders::YtDlp::FormatArgs do
     end
 
     it 'fetches the best format when encoding' do
-      expect(args.for(nil)).to eq("-f #{Sh.escape('bestvideo+bestaudio/best')}")
+      expect(args.for(nil)).to eq("-f #{Sh.escape('bestvideo[format_note!=Timeline]+bestaudio/best')}")
     end
   end
 
@@ -25,7 +25,7 @@ RSpec.describe Downloaders::YtDlp::FormatArgs do
 
     it 'prefers the requested audio language' do
       opts.alang = 'pt'
-      expect(args.encoded).to include(Sh.escape('bestvideo+bestaudio[language^=pt]'))
+      expect(args.encoded).to include(Sh.escape('bestvideo[format_note!=Timeline]+bestaudio[language^=pt]'))
     end
 
     it 'asks bandcamp for its mp3' do
