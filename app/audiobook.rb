@@ -143,8 +143,10 @@ module Audiobook
     dest
   end
 
+  FILENAME_MAX_BYTES = 200 # leaves room for the language and extension under the 255 bytes a name can have
+
   def self.safe_filename(name)
-    name.to_s.gsub(/[\/\\\0]/, ' ').gsub(/\s+/, ' ').strip.sub(/\.\z/, '').presence
+    name.to_s.gsub(/[\/\\\0]/, ' ').gsub(/\s+/, ' ').byteslice(0, FILENAME_MAX_BYTES).scrub('').strip.sub(/\.\z/, '').presence
   end
 
   def self.cleanup_kindle_capture(pdf_path)
