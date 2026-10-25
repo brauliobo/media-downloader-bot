@@ -59,8 +59,8 @@ class Subtitler
       def build_word_entry(source, words)
         copies = words.map(&:deep_copy)
         Entry.new(
-          start:        copies.first.start,
-          finish:       copies.last.finish,
+          start:        copies.map(&:start).min,
+          finish:       copies.map(&:finish).max,
           text:         copies.map { |word| word.text.strip }.join(' '),
           words:        copies,
           speaker_id:   source.speaker_id,

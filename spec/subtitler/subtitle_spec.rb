@@ -228,6 +228,17 @@ RSpec.describe Subtitler::Subtitle do
       expect(split.entries).to all(satisfy { |candidate| !candidate.metadata.key?('ass_text') })
     end
 
+    it 'splits an entry whose words are out of order without producing a reversed entry' do
+      words = [[2, 3, 'first'], [0, 1, 'second'], [1, 2, 'third']].map do |start, finish, text|
+        described_class::Word.new(text: text, start: start, finish: finish)
+      end
+      split = described_class.new(entries: [described_class::Entry.new(start: 0, finish: 3, text: 'first second third', words: words)])
+
+      split.split_long_entries!(max_chars: 12)
+
+      expect(split.entries.map { |candidate| [candidate.start, candidate.finish] }).to eq([[0, 3], [1, 2]])
+    end
+
     it 'replaces language and entries and rebuilds or filters document text explicitly' do
       kept = described_class::Entry.new(start: 0, finish: 1, text: 'Kept')
       gone = described_class::Entry.new(start: 1, finish: 2, text: '')
