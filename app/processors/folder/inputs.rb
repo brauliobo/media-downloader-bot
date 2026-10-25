@@ -5,7 +5,7 @@ module Processors
       private
 
       def apply_presets
-        Presets::Camera.apply(opts, option_args: option_args) if opts.camera || opts.efficient
+        Presets::Camera.apply(opts, option_args: option_args) if camera?
       end
 
       def expand_inputs
@@ -37,13 +37,7 @@ module Processors
       end
 
       def output_dir_for(path)
-        return replace_dir_for(path) if replace?
-
-        ::File.join(::File.dirname(path), 'converted')
-      end
-
-      def replace_dir_for(path)
-        ::File.join(::File.dirname(path), '.mediazip-replace')
+        ::File.join(::File.dirname(path), 'converted') unless replace?
       end
 
       def media_file?(path)
@@ -53,7 +47,11 @@ module Processors
         return false unless MEDIA_EXTENSIONS.include?(ext) ||
           Rack::Mime.mime_type(ext).then { |mime| mime&.start_with?('video/', 'audio/') }
 
-        within_age?(path)
+        within_age?(path) && !(camera? && Presets::Camera.converted?(path))
+      end
+
+      def camera?
+        opts.camera || opts.efficient
       end
 
       def review(entries)
@@ -63,7 +61,7 @@ module Processors
           "output: #{replace? ? 'replace originals in place' : 'converted/ beside each input file'}",
           "options: #{option_args.join(' ')}",
         ]
-        lines.concat(entries.first(20).map { |entry| "#{entry.path} -> #{entry.out_dir}" })
+        lines.concat(entries.first(20).map { |entry| "#{entry.path} -> #{entry.out_dir || 'in place'}" })
         lines << "... #{entries.size - 20} more" if entries.size > 20
         lines.join("\n")
       end

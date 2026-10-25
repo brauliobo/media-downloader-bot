@@ -1,4 +1,7 @@
 require 'rails_helper'
+require_relative '../support/media_files'
+require 'tmpdir'
+require 'fileutils'
 
 RSpec.describe Presets::Camera do
   it 'applies camera compression defaults without overriding explicit opts' do
@@ -45,5 +48,28 @@ RSpec.describe Presets::Camera do
     expect(archive.keyframes).to eq(1)
     expect(archive.mpdecimate).to eq('hi=6144:lo=3072:frac=0.80')
     expect(archive.noaudio).to eq(1)
+  end
+
+  describe '.converted?' do
+    include MediaFiles
+
+    def stamped(dir, age, tier)
+      name = "cam-#{(Date.today - age).strftime('%Y%m%d')}_000000.mp4"
+      File.join(dir, name).tap do |path|
+        media_file(path, as: :busy_mp4)
+        tagged = path.sub('.mp4', '-tagged.mp4')
+        system('ffmpeg', '-v', 'error', '-y', '-i', path, '-c', 'copy', '-metadata', "comment=mediazip:#{tier}", tagged, exception: true)
+        FileUtils.mv(tagged, path)
+      end
+    end
+
+    it 'is done when stamped with the tier of its age or a stricter one, or already under the bitrate ceiling' do
+      Dir.mktmpdir do |dir|
+        expect(described_class.converted?(stamped(dir, 70, 1))).to be false
+        expect(described_class.converted?(stamped(dir, 70, 2))).to be true
+        expect(described_class.converted?(media_file(File.join(dir, "cam-#{Date.today.strftime('%Y%m%d')}_000000.mp4"), as: :busy_mp4))).to be false
+        expect(described_class.converted?(media_file(File.join(dir, "cam-#{Date.today.strftime('%Y%m%d')}_000001.mp4")))).to be true
+      end
+    end
   end
 end

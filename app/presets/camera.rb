@@ -32,6 +32,9 @@ module Presets
       },
     }.freeze
 
+    # Per tier, the kbit/s an average file converts to is far below (measured 6-57); a file already under it has nothing to gain.
+    CEILING_KBIT = [100, 100, 100, 30].freeze
+
     DATE_REGEX = /(\d{8})_\d{6}/
 
     def self.apply(opts, option_args: nil, path: nil)
@@ -48,8 +51,20 @@ module Presets
       end
     end
 
+    # The tier is stamped into the output, so a later run only converts a file again once it reaches a stricter one.
     def self.tier(path)
-      AGE_TIERS.find { |max_age, _settings| age_days(path) <= max_age }.last
+      AGE_TIERS.values.fetch(tier_rank(path)).merge(mediazip_tier: tier_rank(path).to_s)
+    end
+
+    def self.tier_rank(path) = AGE_TIERS.keys.index { |max_age| age_days(path) <= max_age }
+
+    def self.converted?(path)
+      format = Prober.for(path).format
+      tier = format&.tags&.comment.to_s[/\Amediazip:(\d+)\z/, 1]
+      rank = tier_rank(path)
+      (tier && tier.to_i >= rank) || (format.bit_rate.to_i.positive? && format.bit_rate.to_i / 1000 <= CEILING_KBIT.fetch(rank))
+    rescue
+      false
     end
 
     def self.age_days(path)

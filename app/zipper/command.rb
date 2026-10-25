@@ -65,6 +65,7 @@ class Zipper
           mark: !(ENV['SKIP_METAMARK'] || opts.skip_metamark)
         )
       end
+      builder.metadata comment: "mediazip:#{opts.mediazip_tier}" if opts.mediazip_tier
       builder.movflags '+faststart' if video?
     end
 

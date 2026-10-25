@@ -8,6 +8,9 @@ module MediaFiles
     m4a: ->(d) { %W[-f lavfi -i sine=d=#{d}] },
     mp3: ->(d) { %W[-f lavfi -i sine=d=#{d}] },
     silent_mp4: ->(d) { %W[-f lavfi -i testsrc=d=#{d}:s=64x64:r=5 -an -pix_fmt yuv420p] },
+    # above every camera ceiling, which tiny fixtures are under
+    busy_mp4: ->(d) { %W[-f lavfi -i testsrc=d=#{d}:s=320x240,noise=alls=60:allf=t -f lavfi -i sine=d=#{d} -shortest -pix_fmt yuv420p] },
+    busy_silent_mp4: ->(d) { %W[-f lavfi -i testsrc=d=#{d}:s=320x240,noise=alls=60:allf=t -an -pix_fmt yuv420p] },
     jpg: ->(_) { %w[-f lavfi -i testsrc=s=64x64 -frames:v 1] }
   }.freeze
 

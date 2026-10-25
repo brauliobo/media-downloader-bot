@@ -17,7 +17,7 @@ module Processors
       end
 
       def archive_output?(path)
-        return false unless replace? && (opts.camera || opts.efficient)
+        return false unless replace? && camera?
         return false unless Presets::Camera.tier(path)[:noaudio]
 
         !Prober.audio_stream?(Prober.for(path))
@@ -26,12 +26,7 @@ module Processors
       end
 
       def cleanup_replace(entry)
-        return unless replace? && entry
-
-        FileUtils.rm_f(output_path(entry.path, entry.out_dir))
-        Dir.rmdir(entry.out_dir)
-      rescue Errno::ENOENT, Errno::ENOTEMPTY
-        nil
+        FileUtils.rm_rf(entry.out_dir) if replace? && entry.out_dir
       end
 
       def delete_original(entry, started_at)
@@ -47,7 +42,10 @@ module Processors
       def finish_entry(entry, started_at)
         return unless replace? && valid_output?(entry.path, entry.out_dir, started_at)
 
-        FileUtils.mv(output_path(entry.path, entry.out_dir), entry.path, force: true)
+        output = output_path(entry.path, entry.out_dir)
+        target = ::File.join(::File.dirname(entry.path), ::File.basename(entry.path, '.*') + ::File.extname(output))
+        Utils::Atomic.copy(output, target)
+        FileUtils.rm_f(entry.path) unless target == entry.path
         puts "replaced original: #{entry.path}"
       end
 
@@ -56,8 +54,10 @@ module Processors
           valid_media_file?(output_path(input_path, out_dir))
       end
 
+      # The converter names its output after the input, adding the new extension (x.flv -> x.flv.mp4).
       def output_path(input_path, out_dir)
-        ::File.join(out_dir, ::File.basename(input_path))
+        name = ::File.basename(input_path)
+        ::File.join(out_dir, Dir.children(out_dir).find { _1.start_with?(name) } || name)
       end
 
       def converted_after?(path, started_at)
