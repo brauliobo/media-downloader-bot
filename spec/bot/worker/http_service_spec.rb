@@ -25,6 +25,14 @@ RSpec.describe Bot::Worker::HTTPService do
     end
   end
 
+  describe Bot::Worker::HTTPClient do
+    it 'waits longer than a book takes to upload for the answer' do
+      conn = described_class.new('http://127.0.0.1:1').instance_variable_get(:@conn)
+
+      expect(conn.options.timeout).to be > 1_800 # the longest a book is waited for in the bot
+    end
+  end
+
   describe '#allowed_roots' do
     around do |example|
       original = ENV['BOT_ALLOWED_PATH_ROOTS']
