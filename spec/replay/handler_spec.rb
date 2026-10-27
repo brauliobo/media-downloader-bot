@@ -306,6 +306,18 @@ RSpec.describe Replay::Handler do
     expect(manager.replayed.map { |m| m[:id] }).to contain_exactly(11, 12, 13)
   end
 
+  it 'deletes an error reply however far back in the chat it is' do
+    old     = { id: 20, chat_id: -200, type: 'Text', text: 'Processing error: Faraday::TimeoutError', reply_to_message_id: 12 }
+    newer   = (100...300).map { |id| { id: id, chat_id: -200, type: 'Text', text: "chat #{id}" } }
+    manager = ReplayingManager.new(messages: [old, *newer])
+    engine  = Tracked::Engine.new({ 'replay' => described_class.new(manager, forwarded: forwarded, replayed: legacy) }, tick: 0.01)
+
+    id = engine.start(kind: 'replay', params: { chat_id: -200 })[:id]
+    Timeout.timeout(5) { sleep 0.01 until Job[id].state == 'completed' }
+
+    expect(manager.deleted).to eq([20])
+  end
+
   it 'keeps only the book of a run that left status lines behind, as a resumed one does' do
     manager = ReplayingManager.new(answers: { 12 => [{ type: 'Text', text: 'Processing page 1/9' }, { type: 'Audio', text: 'Book 12' }] })
     engine  = Tracked::Engine.new({ 'replay' => described_class.new(manager, forwarded: forwarded, replayed: legacy) }, tick: 0.01)

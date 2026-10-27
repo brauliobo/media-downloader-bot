@@ -4,7 +4,6 @@ module Replay
   # and the hashtags can be edited later (`apply` rewrites them in the posted captions).
   class Handler < Tracked::Handler
     PARALLEL = 8
-    WINDOW   = 100
     PAGE     = 100
     EXCERPT  = 500
     ERROR    = /error|failed|no url or media/i
@@ -197,7 +196,8 @@ module Replay
       books
     end
 
-    def answers(chat_id, id) = @manager.chat_messages(chat_id: chat_id, limit: WINDOW).select { |message| message[:reply_to_message_id] == id }.map { |message| tracked(message) }
+    # Read down to the message itself: an error reply of an old book is far from the latest messages of the chat.
+    def answers(chat_id, id) = history(chat_id, id).select { |message| message[:reply_to_message_id] == id }.map { |message| tracked(message) }
 
     def tracked(message)
       chat_id = message[:chat_id]
