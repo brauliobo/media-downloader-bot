@@ -52,6 +52,37 @@ RSpec.describe Worker, 'job status controls' do
     expect(service.edited.last).to eq([789, {text: 'Downloading metadata\\.\\.\\.', cancel_job: 'job-id', force: true}])
   end
 
+  describe 'a job taken again' do
+    before do
+      BotJob.dataset.delete
+      BotJob.dataset.insert(id: 'job-id', queue: 'tdbot', key: '123:1', attempts: 2, message: Sequel.pg_jsonb(text: 'url'))
+      msg.resp = SymMash.new(message_id: 111)
+    end
+
+    after { BotJob.dataset.delete }
+
+    it 'edits the status of the earlier attempt while its files are there' do
+      worker = described_class.new(msg, service: service, job_id: 'job-id', skip_cleanup: true)
+      worker.instance_variable_set(:@kept_files, true)
+
+      worker.send(:init_status)
+
+      expect(service.deleted).to be_empty
+      expect(service.edited.last.first).to eq(111)
+    end
+
+    it 'starts over with a new status when the files are gone, the old one would show the progress of a run that is gone' do
+      worker = described_class.new(msg, service: service, job_id: 'job-id', skip_cleanup: true)
+      worker.instance_variable_set(:@kept_files, false)
+
+      worker.send(:init_status)
+
+      expect(service.deleted.map(&:first)).to eq([111])
+      expect(service.edited).to be_empty
+      expect(msg.resp.message_id).to eq(789)
+    end
+  end
+
   it 'posts a status once and keeps its id in the job, for a worker resuming it to edit' do
     BotJob.dataset.delete
     BotJob.dataset.insert(id: 'job-id', queue: 'tdbot', key: '123:1', message: Sequel.pg_jsonb(text: 'url'))

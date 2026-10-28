@@ -78,7 +78,8 @@ code while jobs wait. A job handed back or lost is resumed, not restarted:
   A sentence is kept as Opus (`SENTENCE_OPUS_BITRATE`, 64 kbit/s, about a fifth of the wav) once its batch is read, at the speed asked;
   the wavs of the sentences and paragraphs go once joined.
 
-Not resumed: the download of the input, the parsing of the book, the translation. The resumed job posts a new status message.
+Not resumed: the download of the input, the parsing of the book, the translation. A job taken again edits the status message of its earlier
+attempt only while its work dir is there; without it (a reboot clears the tmpfs) the book starts over and posts a new status message.
 
 ## Deploy runbook (the units live in `deploy/`; the repo installs nothing)
 

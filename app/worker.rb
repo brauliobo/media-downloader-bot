@@ -207,7 +207,9 @@ class Worker
   # (see Bot::JobRestarted) or lost with its worker continues in it when it is taken again.
   def workdir &block
     cancelled = restarted = false
-    @dir = FileUtils.mkdir_p(workdir_path || job_dir, mode: 0o700).first
+    path = workdir_path || job_dir
+    @kept_files = File.directory?(path)
+    @dir = FileUtils.mkdir_p(path, mode: 0o700).first
     yield @dir
   rescue Bot::JobCancelled
     cancelled = true

@@ -15,12 +15,25 @@ class Worker
       initial_text   = 'Downloading metadata...'
       @status_update = [initial_text, [], initial_params]
       text    = Bot::MsgHelpers.me(initial_text)
+      drop_stale_status
       resumed = msg.resp&.message_id && edit_message(msg, msg.resp.message_id, text: text, force: true, **initial_params)
       return if resumed
 
       msg.resp = send_message msg, text, **initial_params
       BotJob.remember_status(job_id, msg.resp.message_id) if job_id
     end
+
+    # The status of an earlier attempt goes on being the job's only while its files are there: the work continues from them. A job taken
+    # again without them (a reboot clears the tmpfs) starts over, and a new message says so instead of the old one showing the
+    # progress of a run that is gone. The "Queued" reply of a first attempt is the status to edit, as it always was.
+    def drop_stale_status
+      return unless msg.resp&.message_id && retaken? && !@kept_files
+
+      delete_message(msg, msg.resp.message_id, wait: 0)
+      msg.resp = nil
+    end
+
+    def retaken? = job_id && BotJob.where(id: job_id).get(:attempts).to_i > 1
 
     def delete_status_message
       delete_message(msg, msg.resp.message_id, wait: 0) if msg.resp&.message_id
