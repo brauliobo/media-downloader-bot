@@ -99,6 +99,20 @@ RSpec.describe Tracked::Engine do
     settled(job[:id], 'stopped')
   end
 
+  it 'goes on with a job when the database drops its connection, as it does when it restarts' do
+    dropped = false
+    handler = handler_class.new
+    handler.define_singleton_method(:standing?) { |_job| dropped ? true : (dropped = true; raise Sequel::DatabaseDisconnectError, 'terminating connection') }
+    engine = described_class.new({ 'fake' => handler }, tick: 0.01)
+    job    = engine.start(kind: 'fake', params: { keys: [] })
+
+    expect { Timeout.timeout(5) { sleep 0.01 until dropped } }.to output(/DatabaseDisconnectError/).to_stderr
+    engine.add(job[:id], 'late')
+    Timeout.timeout(5) { sleep 0.01 until JobItem.first(key: 'late').status == 'done' }
+    expect(Job[job[:id]].state).to eq('running')
+    engine.stop(job[:id])
+  end
+
   it 'lets the handler tell an item added to a job that it waits, or settle it at once, but not one it already had' do
     told = []
     handler = handler_class.new

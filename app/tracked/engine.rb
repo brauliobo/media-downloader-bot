@@ -155,13 +155,20 @@ module Tracked
       item.update(result: item.outcome.merge(input: input)) if input
     end
 
+    # A database that restarts drops the connection once: the tick is taken again over a new one, as the job would otherwise stay
+    # running with nothing to run it.
     def work(job, handler)
       threads = []
-      while job.refresh.state == 'running'
+      loop do
+        break unless job.refresh.state == 'running'
+
         threads.select!(&:alive?)
         fill(job, handler, threads)
         break if threads.empty? && !handler.standing?(job)
 
+        sleep @tick
+      rescue Sequel::DatabaseDisconnectError => e
+        warn "job #{job.id}: #{e.class}: #{e.message}"
         sleep @tick
       end
       threads.each(&:join)
