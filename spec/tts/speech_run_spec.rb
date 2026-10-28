@@ -33,6 +33,14 @@ RSpec.describe TTS::SpeechRun do
     expect(status).to have_received(:update).with('dub: page 1, translated 2/2, audio 1/2')
   end
 
+  it 'counts what an earlier run spoke in the progress' do
+    spoken_calls
+
+    described_class.new([job('three', status: 'page 3'), job('four', status: 'page 4')], resumed: 2, status: status).call
+
+    expect(status).to have_received(:update).with('page 4, audio 4/4')
+  end
+
   it 'speaks the jobs of a reference in its voice and passes each batch on' do
     calls = spoken_calls
     stored = []

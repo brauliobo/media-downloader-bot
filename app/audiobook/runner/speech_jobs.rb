@@ -32,13 +32,12 @@ module Audiobook
       end
 
       def process_speech_jobs(pages, dir, speech_options, lang = @lang)
-        jobs = pages.each_with_index.flat_map do |page, idx|
-          page.speech_jobs(dir, page_id(idx), lang)
-        end
+        slots = pages.each_with_index.flat_map { |page, idx| page.speech_slots(dir, page_id(idx), lang) }
+        jobs  = slots.reject { |slot| slot[:done] }
         return if jobs.empty?
 
         speed, options = AudioFiles.split_speed_options(speech_options)
-        TTS::SpeechRun.new(jobs, status: @stl, translate: speech_translator, on_batch: store_batch(speed)).call(**options)
+        TTS::SpeechRun.new(jobs, resumed: slots.size - jobs.size, status: @stl, translate: speech_translator, on_batch: store_batch(speed)).call(**options)
         @book.translate! if translation_pending?
       end
 

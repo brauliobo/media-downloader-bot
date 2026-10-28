@@ -5,13 +5,15 @@ class TTS
     TRANSLATION_TASKS = 2
 
     # translate gets a job and fills in its :text; a text left blank (the translator had nothing to say) is not spoken.
-    # on_batch gets each batch once spoken, before it is counted.
-    def initialize(jobs, status: nil, prefix: nil, translate: nil, on_batch: nil)
+    # on_batch gets each batch once spoken, before it is counted. `resumed` is how many an earlier run already spoke: the counts
+    # are those of the whole job, not of the jobs left.
+    def initialize(jobs, resumed: 0, status: nil, prefix: nil, translate: nil, on_batch: nil)
       @jobs        = jobs
+      @resumed     = resumed
       @translate   = translate
       @on_batch    = on_batch
-      @translation = Utils::ProgressCounter.new(total: jobs.size)
-      @progress    = Utils::ProgressCounter.new(total: jobs.size, status: status) { |done, total| "#{prefix}#{report(done, total)}" }
+      @translation = Utils::ProgressCounter.new(total: jobs.size + resumed, done: resumed)
+      @progress    = Utils::ProgressCounter.new(total: jobs.size + resumed, done: resumed, status: status) { |done, total| "#{prefix}#{report(done, total)}" }
     end
 
     def call(**options)
@@ -39,7 +41,7 @@ class TTS
 
     # Translated alongside the speech, so the translation shows with the audio count that reports it.
     def report(done, total)
-      [@jobs[done - 1][:status], ("translated #{@translation.count}/#{total}" if @translation.count.positive?), "audio #{done}/#{total}"].compact.join(', ')
+      [@jobs[done - @resumed - 1][:status], ("translated #{@translation.count}/#{total}" if @translation.count > @resumed), "audio #{done}/#{total}"].compact.join(', ')
     end
   end
 end

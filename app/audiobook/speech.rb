@@ -25,8 +25,7 @@ module Audiobook
     # stl: status line object (optional, for compatibility)
     def to_wav(dir, idx, lang: 'en', stl: nil, tts_options: {})
       wav_path = File.join(dir, "#{idx}.wav")
-      stored = AudioFiles.stored_path(wav_path)
-      File.exist?(stored) ? stored : synthesize_audio(wav_path, lang, tts_options: tts_options)
+      AudioFiles.stored?(wav_path) ? AudioFiles.stored_path(wav_path) : synthesize_audio(wav_path, lang, tts_options: tts_options)
     end
 
     def pause_file(dir)

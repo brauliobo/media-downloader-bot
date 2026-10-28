@@ -37,9 +37,22 @@ RSpec.describe 'Audiobook parts cleanup' do
 
       expect(stored).to eq File.join(dir, '1_0.opus')
       expect(Dir.children(dir)).to eq ['1_0.opus']
-      expect(page.sentence_job(sentence, File.join(dir, '1_0.wav'), 'en', 'x')).to be_nil
+      expect(page.sentence_slot(sentence, File.join(dir, '1_0.wav'), 'en', 'x')).to include(done: true)
       expect(sentence.to_wav(dir, '1_0', lang: 'en')).to eq stored
       expect(spoken).to eq ['Hello.']
+    end
+  end
+
+  it 'reads again only the gaps of an earlier run, wherever they are, and an empty stored file is one' do
+    page = Audiobook::Page.new(1, [Audiobook::Paragraph.new(%w[One. Two. Three.].map { |text| Audiobook::Sentence.new(text) })])
+    Dir.mktmpdir('audiobook-parts-') do |dir|
+      page.prepare_speech_items(dir, '0001', lang: 'en')
+      File.write(File.join(dir, '0001_0_0.opus'), 'audio')
+      File.write(File.join(dir, '0001_0_1.opus'), '')
+      File.write(File.join(dir, '0001_0_2.opus'), 'audio')
+
+      expect(page.speech_slots(dir, '0001', 'en').map { |slot| slot[:done] }).to eq([true, false, true])
+      expect(page.speech_jobs(dir, '0001', 'en').map { |job| job[:text] }).to eq(['Two.'])
     end
   end
 
@@ -62,7 +75,7 @@ RSpec.describe 'Audiobook parts cleanup' do
       spoken.clear
 
       expect(paragraph.to_wav).to eq(paragraph.wav_path)
-      expect(page.paragraph_jobs(paragraph, 'en')).to be_empty
+      expect(page.paragraph_slots(paragraph, 'en').map { |slot| slot[:done] }).to all(be(true))
       expect(spoken).to be_empty
     end
   end

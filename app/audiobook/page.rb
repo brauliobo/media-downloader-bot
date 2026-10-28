@@ -80,40 +80,44 @@ module Audiobook
       { page_idx: page_idx, page_total: page_total, is_ocr_book: is_ocr_book }
     end
 
-    # Nothing is left to synthesize for a page, or a paragraph, whose wav is already joined: its sentences' wavs were dropped.
-    def speech_jobs(dir, idx, lang)
-      return [] if File.exist?(wav_path(dir, idx))
+    # What is left to synthesize, wherever the gaps of an earlier run are: a sentence is read when its audio is stored, whatever
+    # comes before or after it.
+    def speech_jobs(dir, idx, lang) = speech_slots(dir, idx, lang).reject { |slot| slot[:done] }
 
+    # Every sentence the page speaks, each marked done when an earlier run has it. Nothing of a page, or a paragraph, whose wav is
+    # already joined is left to synthesize: its sentences' wavs were dropped.
+    def speech_slots(dir, idx, lang)
+      joined     = File.exist?(wav_path(dir, idx))
       paragraph  = items.grep(Audiobook::Paragraph).first
       page_idx   = paragraph&.page_idx || number
       page_total = paragraph&.page_total || number
 
       items.each_with_index.flat_map do |item, iidx|
         if item.is_a?(Audiobook::Paragraph)
-          paragraph_jobs(item, lang)
+          paragraph_slots(item, lang, joined: joined)
         elsif item.is_a?(Sentence)
-          sentence_job(item, File.join(dir, "#{idx}_#{iidx}.wav"), lang, item_status(item, iidx, page_idx, page_total))
+          sentence_slot(item, File.join(dir, "#{idx}_#{iidx}.wav"), lang, item_status(item, iidx, page_idx, page_total), joined: joined)
         end
       end.compact
     end
 
-    def paragraph_jobs(paragraph, lang)
-      return [] if File.exist?(paragraph.wav_path)
-
+    def paragraph_slots(paragraph, lang, joined: false)
+      joined ||= File.exist?(paragraph.wav_path)
       paragraph.sentences.each_with_index.flat_map do |sentence, sidx|
-        jobs = [sentence_job(sentence, File.join(paragraph.dir, "#{paragraph.idx}_#{sidx}.wav"), lang,
-                             paragraph.progress_status("sentence #{sidx + 1}/#{paragraph.sentences.size}", ocr: false))]
+        slots = [sentence_slot(sentence, File.join(paragraph.dir, "#{paragraph.idx}_#{sidx}.wav"), lang,
+                               paragraph.progress_status("sentence #{sidx + 1}/#{paragraph.sentences.size}", ocr: false), joined: joined)]
         sentence.references.each_with_index do |reference, ridx|
           reference.sentences.each_with_index do |referenced, idx|
-            jobs << sentence_job(
+            slots << sentence_slot(
               referenced,
               File.join(paragraph.dir, "#{paragraph.idx}_#{sidx}_r#{ridx}_#{idx}.wav"),
               lang,
-              paragraph.progress_status("reference #{reference.id}", "sentence #{idx + 1}/#{reference.sentences.size}", ocr: false)
+              paragraph.progress_status("reference #{reference.id}", "sentence #{idx + 1}/#{reference.sentences.size}", ocr: false),
+              joined: joined
             )
           end
         end
-        jobs.compact
+        slots.compact
       end
     end
 
@@ -124,12 +128,10 @@ module Audiobook
       )
     end
 
-    def sentence_job(sentence, out_path, lang, status)
-      return if File.exist?(AudioFiles.stored_path(out_path))
-
+    def sentence_slot(sentence, out_path, lang, status, joined: false)
       lang = sentence.language || lang
       text = sentence.spoken_text(lang)
-      { text: text, lang: lang, out_path: out_path, status: status, sentence: sentence } unless text.empty?
+      { text: text, lang: lang, out_path: out_path, status: status, sentence: sentence, done: joined || AudioFiles.stored?(out_path) } unless text.empty?
     end
 
     # Extract all sentences from all items for translation

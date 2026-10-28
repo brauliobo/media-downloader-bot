@@ -20,7 +20,7 @@ module Audiobook
     end
 
     # A sentence is kept as Opus, a fraction of its wav, which the tmpfs of a book cannot hold: the TTS writes the wav, this stores it
-    # (at the speed asked, in the same pass) and drops it. The stored file exists only whole, so one that exists is done.
+    # (at the speed asked, in the same pass) and drops it. The stored file exists only whole, so one that exists (and has content) is done.
     def compress(wav, speed: nil)
       stored = stored_path(wav)
       Utils::Atomic.write(stored) { |part| Zipper::AudioOps.compress(wav, part, codec: 'libopus', bitrate: STORED_BITRATE, speed: speed, min_duration: STORED_MIN_DURATION) }
@@ -31,6 +31,9 @@ module Audiobook
     def compress_all(wavs, speed) = wavs.map { |wav| compress(wav, speed: speed) }
 
     def stored_path(wav) = wav.sub(/\.wav\z/, '.opus')
+
+    # Whether the sentence has its audio from an earlier run: a stored file that is empty is a gap to read again, not work done.
+    def stored?(wav) = File.size?(stored_path(wav)).to_i.positive?
 
     # Joins parts, stored or not, into a wav at the sample rate of the book (an Opus part decodes at 48 kHz).
     def join(parts, wav, consumed: [])
