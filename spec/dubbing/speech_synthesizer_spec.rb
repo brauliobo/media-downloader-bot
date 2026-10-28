@@ -72,7 +72,7 @@ RSpec.describe Dubbing::SpeechSynthesizer do
     ).render
 
     expect(updates).to include(
-      'dubbing: synthesizing 2/2',
+      'dubbing: audio 2/2',
       'dubbing: normalizing speech 1/2',
       'dubbing: normalizing speech 2/2'
     )
@@ -99,5 +99,29 @@ RSpec.describe Dubbing::SpeechSynthesizer do
     expect(calls.size).to eq(2)
     expect(calls.last.fetch(:items).map { |item| item.fetch(:text) }).to eq(['Voz padrão.'])
     expect(calls.last.fetch(:options)).not_to include(:speaker_wav, :ref_text)
+  end
+
+  it 'translates each sentence on the way and drops the ones left with nothing to say' do
+    spoken = []
+    allow(TTS).to receive(:synthesize_batch) do |items:, **|
+      spoken.concat(items.map { |item| item.fetch(:text) })
+      items.each { |item| File.write(item.fetch(:out_path), 'raw') }
+    end
+    translations = {'Sim.' => 'Yes.', 'Esta é uma frase longa para aquecer a voz.' => ''}
+    synthesizer = described_class.new(
+      sentences:      sentences,
+      references:     {'speaker' => reference},
+      opts:           SymMash.new,
+      target_lang:    'en',
+      workdir:        dir,
+      video_duration: 5.0,
+      translate:      ->(sentence) { translations.fetch(sentence.text) }
+    )
+
+    timeline = synthesizer.render
+
+    expect(spoken).to eq(['Yes.'])
+    expect(synthesizer.sentences).to eq([sentences.first])
+    expect(timeline.clips.size).to eq(1)
   end
 end

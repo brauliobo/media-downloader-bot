@@ -4,27 +4,18 @@ module Dubbing
     module Subtitles
       private
 
-      def translated_sentences(subtitle)
-        sentences = subtitle.sentence_entries
-        texts     = sentences.map(&:text)
-        method    = ::Translator.respond_to?(:translate_for_dubbing) ? :translate_for_dubbing : :translate
-        progress  = ::Translator.progress(texts.size, @stl, 'dubbing: translating')
-        translations = ::Translator.in_batches(texts, progress: progress) do |batch|
-          ::Translator.public_send(method, batch, from: source_lang, to: target_lang)
-        end
-
-        sentences.zip(translations).filter_map do |sentence, translated|
-          text = Subtitler::Subtitle.clean_translation(translated)
-          next if text.empty?
-
-          translated_entry(sentence, text)
+      # Copies of the transcript's sentences, each remembering its source words for when it is translated.
+      def source_sentences(subtitle)
+        subtitle.sentence_entries.map do |sentence|
+          sentence.deep_copy.replace_source!(text: sentence.text.strip, words: sentence.words.map(&:deep_copy))
         end
       end
 
-      def translated_entry(sentence, text)
-        sentence.deep_copy
-          .replace_source!(text: sentence.text.strip, words: sentence.words.map(&:deep_copy))
-          .project_text!(text)
+      # The sentence put into the target language in place. Returns what is to be spoken: blank when there is no translation.
+      def translate_sentence!(sentence)
+        method = ::Translator.respond_to?(:translate_for_dubbing) ? :translate_for_dubbing : :translate
+        text   = Subtitler::Subtitle.clean_translation(::Translator.public_send(method, [sentence.text], from: source_lang, to: target_lang).first)
+        text.empty? ? text : sentence.project_text!(text).text
       end
 
       def prepare_translated_subtitles

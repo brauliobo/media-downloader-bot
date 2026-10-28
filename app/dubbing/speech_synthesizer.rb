@@ -1,31 +1,31 @@
-require 'thread'
-
 module Dubbing
-  # Speaks every sentence in its speaker's recorded voice. The reference goes straight to the backend: a synthesized
-  # copy of it (an Anchor) would only be a worse clone of the same voice.
+  # Speaks every sentence in its speaker's recorded voice, translating them on the way when given a translate step. The
+  # reference goes straight to the backend: a synthesized copy of it (an Anchor) would only be a worse clone of the same voice.
   class SpeechSynthesizer
-    def initialize(sentences:, references:, opts:, target_lang:, workdir:, video_duration:, stl: nil)
+    # The sentences spoken: those the translation left with nothing to say are dropped.
+    attr_reader :sentences
+
+    # translate gets a sentence and returns the text to speak for it.
+    def initialize(sentences:, references:, opts:, target_lang:, workdir:, video_duration:, translate: nil, stl: nil)
       @sentences       = sentences
       @references      = references
       @opts            = opts
       @target_lang     = target_lang
       @workdir         = workdir
       @video_duration  = video_duration
+      @translate       = translate
       @stl             = stl
     end
 
     def render
       @stl&.update 'dubbing: synthesizing'
-      clips         = Array.new(@sentences.size)
-      options       = TTS::Options.for(@opts)
-      synthesis     = progress_counter('synthesizing')
-      normalization = progress_counter('normalizing speech')
+      jobs = @sentences.each_with_index.map { |sentence, idx| job_for(sentence, idx) }
+      # A speaker without a usable reference gets the backend's default voice.
+      TTS::SpeechRun.new(jobs, status: @stl, prefix: 'dubbing: ', translate: (method(:translate_job) if @translate)).call(**TTS::Options.for(@opts))
 
-      speaker_groups.each do |speaker_id, indices|
-        jobs = jobs_for(indices)
-        synthesize_jobs(jobs, @references[speaker_id], options, on_batch: synthesis.batch_callback)
-        normalize_jobs(jobs, indices, clips, normalization)
-      end
+      jobs = jobs.select { |job| job[:text].present? }
+      @sentences = jobs.map { |job| job.fetch(:sentence) }
+      clips = normalize_jobs(jobs)
 
       @stl&.update 'dubbing: rendering speech'
       Audio.render_timeline(clips, File.join(@workdir, 'dub.wav'), duration: @video_duration)
@@ -33,40 +33,27 @@ module Dubbing
 
     private
 
-    def speaker_groups
-      @speaker_groups ||= @sentences.each_index.group_by { |idx| @sentences.fetch(idx).speaker_id }
+    def job_for(sentence, idx)
+      {
+        sentence:  sentence,
+        text:      spoken_text(sentence.text),
+        lang:      @target_lang,
+        reference: @references[sentence.speaker_id],
+        out_path:  File.join(@workdir, format('sentence-%04d.raw.wav', idx + 1))
+      }
     end
 
-    def jobs_for(indices)
-      indices.map do |idx|
-        {
-          text:     Text::Spoken::Numbers.call(@sentences.fetch(idx).text, @target_lang),
-          lang:     @target_lang,
-          out_path: File.join(@workdir, format('sentence-%04d.raw.wav', idx + 1))
-        }
-      end
-    end
+    def translate_job(job) = job.tap { job[:text] = spoken_text(@translate.call(job.fetch(:sentence))) }
 
-    # A speaker without a usable reference gets the backend's default voice.
-    def synthesize_jobs(jobs, reference, options, on_batch: nil)
-      TTS.synthesize_batch(items: jobs, on_batch: on_batch, **options.merge(reference ? reference.tts_options : {}))
-    end
+    def spoken_text(text) = Text::Spoken::Numbers.call(text, @target_lang)
 
-    def normalize_jobs(jobs, indices, clips, progress)
-      jobs.zip(indices).each do |job, idx|
+    def normalize_jobs(jobs)
+      progress = Utils::ProgressCounter.new(total: jobs.size, status: @stl) { |done, total| "dubbing: normalizing speech #{done}/#{total}" }
+      jobs.each_with_index.map do |job, idx|
         fit = File.join(@workdir, format('sentence-%04d.fit.wav', idx + 1))
         Audio.normalize(job.fetch(:out_path), fit)
-        sentence = @sentences.fetch(idx)
-        clips[idx] = Audio::Clip.new(
-          path: fit, start: sentence.start.to_f, end: sentence.finish.to_f, speaker_id: sentence.speaker_id
-        )
-        progress.advance
-      end
-    end
-
-    def progress_counter(operation)
-      Utils::ProgressCounter.new(total: @sentences.size, status: @stl) do |completed, total|
-        "dubbing: #{operation} #{completed}/#{total}"
+        sentence = job.fetch(:sentence)
+        Audio::Clip.new(path: fit, start: sentence.start.to_f, end: sentence.finish.to_f, speaker_id: sentence.speaker_id).tap { progress.advance }
       end
     end
   end

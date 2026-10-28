@@ -54,7 +54,7 @@ module Audiobook
       end
 
       def source_voice_reference_text
-        return if @book.try(:translation_needed?) && !@book.translated
+        return if translation_pending?
 
         @book.pages.flat_map(&:all_sentences).filter_map do |sentence|
           text = sentence.text.to_s.strip

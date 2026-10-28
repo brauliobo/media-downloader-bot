@@ -55,6 +55,10 @@ RSpec.describe Dubbing::Pipeline do
     File.binwrite(path, header + ("\0" * data_size))
   end
 
+  def stub_translation(translations)
+    allow(::Translator).to receive(:translate_for_dubbing) { |texts, **| texts.map { |text| translations.fetch(text) } }
+  end
+
   def ok_status
     instance_double(Process::Status, success?: true)
   end
@@ -107,7 +111,7 @@ RSpec.describe Dubbing::Pipeline do
       Processors::Base.normalize_options(opts)
       pipeline = described_class.new(input, dir: dir, opts: opts, probe: probe)
       pipeline.instance_variable_set(:@source_lang, 'en')
-      sentences = pipeline.send(:translated_sentences, source)
+      sentences = pipeline.send(:source_sentences, source).each { |sentence| pipeline.send(:translate_sentence!, sentence) }
       clip = Dubbing::Audio::Clip.new(path: speech, start: 0.0, end: 1.0)
       timeline = Dubbing::Audio.render_timeline([clip], File.join(dir, "dub-#{nowords}.wav"), duration: 1.5)
       pipeline.instance_variable_set(:@sentences, sentences)
@@ -268,7 +272,7 @@ RSpec.describe Dubbing::Pipeline do
     opts = SymMash.new(dub: 1)
     pipeline = described_class.new(input, dir: dir, opts: opts, stl: status, probe: probe)
     allow(Subtitler).to receive(:transcribe_vocals).and_return(source)
-    allow(::Translator).to receive(:translate_for_dubbing).and_return(['Olá.', 'Tchau.'])
+    stub_translation('Hello.' => 'Olá.', 'Bye.' => 'Tchau.')
     allow(Diarizer).to receive(:diarize).and_return(diarization)
     allow(Dubbing::VoiceReference).to receive(:extract_by_speaker).and_return(speakers)
     allow(Dubbing::Audio).to receive(:normalize) { |_raw, out| File.write(out, 'fit') }
@@ -292,8 +296,8 @@ RSpec.describe Dubbing::Pipeline do
 
     pipeline.apply
 
-    expect(::Translator).to have_received(:translate_for_dubbing)
-      .with(['Hello.', 'Bye.'], from: 'en', to: 'pt')
+    expect(::Translator).to have_received(:translate_for_dubbing).with(['Hello.'], from: 'en', to: 'pt')
+    expect(::Translator).to have_received(:translate_for_dubbing).with(['Bye.'], from: 'en', to: 'pt')
     expect(Dubbing::VoiceReference).to have_received(:extract_by_speaker)
       .with(
         vocals,
@@ -318,7 +322,7 @@ RSpec.describe Dubbing::Pipeline do
     )
     pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), probe: probe)
     allow(Subtitler).to receive(:transcribe_vocals).and_return(transcript)
-    allow(::Translator).to receive(:translate_for_dubbing).and_return(['Olá.', 'Tchau.'])
+    stub_translation('Hello.' => 'Olá.', 'Bye.' => 'Tchau.')
     allow(Diarizer).to receive(:diarize).and_return(diarization)
     allow(Dubbing::VoiceReference).to receive(:extract_by_speaker).and_return(0 => reference)
     allow(TTS).to receive(:synthesize_batch) do |items:, **|
@@ -349,7 +353,7 @@ RSpec.describe Dubbing::Pipeline do
     diarization = diarization(speaker_segment(0.0, 3.0, 0))
     pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), probe: probe)
     allow(Subtitler).to receive(:transcribe_vocals).and_return(transcript)
-    allow(::Translator).to receive(:translate_for_dubbing).and_return(['Olá.', 'Tchau.'])
+    stub_translation('Hello.' => 'Olá.', 'Bye.' => 'Tchau.')
     allow(Diarizer).to receive(:diarize).and_return(diarization)
     allow(Dubbing::VoiceReference).to receive(:extract_by_speaker).and_return({})
     allow(TTS).to receive(:synthesize_batch) do |items:, **|

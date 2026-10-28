@@ -44,7 +44,7 @@ module Audiobook
     def translate_or_batch(pages, dir, speech_options)
       if backend_supports?(:batch_synthesis)
         process_speech_jobs(pages, dir, speech_options)
-      elsif @book.try(:translation_needed?) && !@book.translated
+      elsif translation_pending?
         @book.translate!
       end
     end

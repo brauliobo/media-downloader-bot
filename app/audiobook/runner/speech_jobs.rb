@@ -38,42 +38,20 @@ module Audiobook
         return if jobs.empty?
 
         speed, options = AudioFiles.split_speed_options(speech_options)
-        translation = Utils::ProgressCounter.new(total: jobs.size)
-        progress = Utils::ProgressCounter.new(total: jobs.size, status: @stl) do |completed, total|
-          [jobs[completed - 1][:status], (translation_status(translation, total) if translation.count.positive?), "audio #{completed}/#{total}"].compact.join(', ')
-        end
-        synthesize_speech_jobs(jobs, options, store_batch(progress, speed), translation)
+        TTS::SpeechRun.new(jobs, status: @stl, translate: speech_translator, on_batch: store_batch(speed)).call(**options)
+        @book.translate! if translation_pending?
       end
-
-      # Translated alongside the speech, so the translation shows with the audio count that reports it.
-      def translation_status(translation, total) = "translated #{translation.count}/#{total}"
 
       # Each batch is stored (at the speed asked) as it arrives, so the wavs do not pile up while the book is read.
-      def store_batch(progress, speed)
-        lambda do |batch|
-          AudioFiles.compress_all(batch.map { |job| job[:out_path] }, speed)
-          progress.batch_callback.call(batch)
-        end
-      end
+      def store_batch(speed) = ->(batch) { AudioFiles.compress_all(batch.map { |job| job[:out_path] }, speed) }
 
-      def synthesize_speech_jobs(jobs, options, on_batch, translation)
-        if @book.try(:translation_needed?) && !@book.translated
-          pipeline_speech_jobs(jobs, options, on_batch, translation)
-        else
-          TTS.synthesize_batch(items: jobs, on_batch: on_batch, **options)
-        end
-      end
-
-      def pipeline_speech_jobs(jobs, options, on_batch, translation = Utils::ProgressCounter.new(total: jobs.size))
+      # The book is translated a job at a time, along with the speech, unless it already is.
+      def speech_translator
         target = @book.speech_language
-        Pipeline.each(
-          jobs, tasks: 2, batch: TTS::BATCH_SIZE,
-          perform: ->(job) { translate_speech_job(job, target).tap { translation.advance } }
-        ) do |batch|
-          TTS.synthesize_batch(items: batch.select { |job| job[:text].present? }, on_batch: on_batch, **options)
-        end
-        @book.translate!
+        ->(job) { translate_speech_job(job, target) } if translation_pending?
       end
+
+      def translation_pending? = @book.try(:translation_needed?) && !@book.translated
 
       # The translation can come back blank or as punctuation only, which the TTS refuses: such a job is skipped, as an untranslated one is.
       def translate_speech_job(job, target)

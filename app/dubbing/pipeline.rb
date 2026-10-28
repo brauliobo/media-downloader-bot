@@ -37,8 +37,7 @@ module Dubbing
         diarization = Diarizer.diarize(stems.vocals, speakers: @opts.speakers&.to_i)
         Diarizer.assign_speakers!(transcript, diarization.segments, sentence_level: true)
 
-        replace_sentences!(translated_sentences(transcript))
-        next @input_path if @sentences.empty?
+        replace_sentences!(source_sentences(transcript))
 
         Utils::Tmp.dir('dub-', @dir) do |workdir|
           @speaker_references = VoiceReference.extract_by_speaker(
@@ -49,6 +48,8 @@ module Dubbing
             transcriber: ::VoiceReference::Transcriber.new
           )
           timeline = synthesize_timeline(workdir)
+          next @input_path if @sentences.empty?
+
           spoken   = transcribe_spoken_timeline(timeline.path)
           apply_scheduled_timings!(timeline.clips, spoken: spoken)
           @timing_score = timeline.score

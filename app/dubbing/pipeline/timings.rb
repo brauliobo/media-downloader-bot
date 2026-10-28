@@ -4,16 +4,19 @@ module Dubbing
     module Timings
       private
 
+      # Translates and speaks the sentences; the ones with nothing to say are left out.
       def synthesize_timeline(workdir)
-        SpeechSynthesizer.new(
+        synthesizer = SpeechSynthesizer.new(
           sentences:       @sentences,
           references:      @speaker_references,
           opts:            @opts,
           target_lang:     target_lang,
           workdir:         workdir,
           video_duration:  video_duration,
+          translate:       method(:translate_sentence!),
           stl:             @stl
-        ).render
+        )
+        synthesizer.render.tap { replace_sentences!(synthesizer.sentences) }
       end
 
       def apply_scheduled_timings!(clips, spoken: nil)
