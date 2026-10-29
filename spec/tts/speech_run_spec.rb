@@ -51,4 +51,20 @@ RSpec.describe TTS::SpeechRun do
     expect(calls.find { |call| call[:texts] == ['two'] }[:options]).not_to include(:speaker_wav)
     expect(stored.map { |item| item[:text] }).to match_array(%w[one two])
   end
+
+  it 'speaks as many batches at once as the job has threads, and does not split them with the translation' do
+    inside = Concurrent::AtomicFixnum.new
+    most   = Concurrent::AtomicFixnum.new
+    allow(TTS).to receive(:synthesize_batch) do |items:, on_batch:, **|
+      most.update { |peak| [peak, inside.increment].max }
+      sleep 0.2
+      inside.decrement
+      on_batch.call(items)
+    end
+    jobs = %w[a b c d].map { |text| job(text) }
+
+    Enumerable.with_peach_threads(2) { described_class.new(jobs, translate: ->(job) { job }).call }
+
+    expect(most.value).to eq(2)
+  end
 end

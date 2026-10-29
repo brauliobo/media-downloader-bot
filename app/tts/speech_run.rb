@@ -2,8 +2,6 @@ class TTS
   # Speaks jobs, each translated first when there is a translate step: the translations run ahead of the speech, so a
   # batch is spoken as soon as its texts are ready. A job with a :reference is spoken in that voice.
   class SpeechRun
-    TRANSLATION_TASKS = 2
-
     # translate gets a job and fills in its :text; a text left blank (the translator had nothing to say) is not spoken.
     # on_batch gets each batch once spoken, before it is counted. `resumed` is how many an earlier run already spoke: the counts
     # are those of the whole job, not of the jobs left.
@@ -16,10 +14,11 @@ class TTS
       @progress    = Utils::ProgressCounter.new(total: jobs.size + resumed, done: resumed, status: status) { |done, total| "#{prefix}#{report(done, total)}" }
     end
 
+    # Translation and speech each run on all the threads the job has (two for an admin), they are not split between them.
     def call(**options)
       return speak(@jobs, options) unless @translate
 
-      Pipeline.each(@jobs, tasks: TRANSLATION_TASKS, batch: BATCH_SIZE, perform: method(:translate)) do |batch|
+      Pipeline.each(@jobs, tasks: 1, batch: BATCH_SIZE, perform: method(:translate)) do |batch|
         speak(batch.select { |job| job[:text].present? }, options)
       end
     end
