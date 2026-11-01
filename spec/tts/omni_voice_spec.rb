@@ -2,6 +2,17 @@ require 'rails_helper'
 require 'timeout'
 
 RSpec.describe TTS::OmniVoice do
+  def wav(source)
+    Dir.mktmpdir('wav-') do |dir|
+      path = File.join(dir, 'out.wav')
+      system('ffmpeg', '-loglevel', 'error', '-f', 'lavfi', '-i', source, '-t', '0.5', path, exception: true)
+      File.binread(path)
+    end
+  end
+
+  let(:tone)    { wav('sine=frequency=440') }
+  let(:silence) { wav('anullsrc=r=24000:cl=mono') }
+
   it 'requires reference text when cloning a speaker voice' do
     expect do
       described_class.synthesize(
@@ -97,8 +108,8 @@ RSpec.describe TTS::OmniVoice do
         code: '200',
         body: JSON.dump(
           'items' => [
-            { 'audio' => Base64.strict_encode64('wav1') },
-            { 'audio' => Base64.strict_encode64('wav2') },
+            { 'audio' => Base64.strict_encode64(tone) },
+            { 'audio' => Base64.strict_encode64(tone) },
           ]
         )
       )
@@ -122,8 +133,21 @@ RSpec.describe TTS::OmniVoice do
         { 'text' => 'Two.', 'language' => 'en' },
       ])
       expect(captured_form['normalize_text']).to eq('true')
-      expect(File.read(paths[0])).to eq('wav1')
-      expect(File.read(paths[1])).to eq('wav2')
+      expect(paths.map { |path| File.binread(path) }).to eq([tone, tone])
+    end
+  end
+
+  it 'fails a sentence with text that came back silent, and lets one without words through' do
+    Dir.mktmpdir('omnivoice-spec-') do |dir|
+      agent = double
+      body  = JSON.dump('items' => [{ 'audio' => Base64.strict_encode64(silence) }])
+      allow(Utils::HTTP).to receive(:client).and_return(agent)
+      allow(agent).to receive(:post).and_return(double(code: '200', body: body))
+
+      expect { described_class.synthesize_batch(items: [{ text: 'Olá.', lang: 'pt', out_path: File.join(dir, 'a.wav') }]) }
+        .to raise_error(/TTS returned silence for "Olá."/)
+      expect { described_class.synthesize_batch(items: [{ text: '...', lang: 'pt', out_path: File.join(dir, 'b.wav') }]) }
+        .not_to raise_error
     end
   end
 
@@ -149,7 +173,7 @@ RSpec.describe TTS::OmniVoice do
       agent = double
       response = double(
         code: '200',
-        body: JSON.dump('items' => [{ 'audio' => Base64.strict_encode64('wav') }])
+        body: JSON.dump('items' => [{ 'audio' => Base64.strict_encode64(tone) }])
       )
       captured_form = nil
 

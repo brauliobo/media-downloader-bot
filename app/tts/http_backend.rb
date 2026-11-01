@@ -42,10 +42,9 @@ class TTS
     end
 
     def synthesize_batch(items:, lang: nil, speaker_wav: nil, **kwargs)
-      out_paths = []
+      items = items.map { |item| item.to_h.symbolize_keys }
+      out_paths = items.map { |item| item.fetch(:out_path) }
       payload = items.map do |item|
-        item = item.to_h.symbolize_keys
-        out_paths << item.fetch(:out_path)
         {
           text:     item.fetch(:text).to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: ''),
           language: (item[:lang] || lang).to_s,
@@ -68,6 +67,7 @@ class TTS
       audios.each_with_index do |item, idx|
         Utils::Atomic.binwrite(out_paths[idx], Base64.decode64(item.fetch('audio')))
       end
+      Audible.check!(items)
       out_paths
     end
 
