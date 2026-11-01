@@ -16,5 +16,14 @@ RSpec.describe Subtitler::Sentences do
       expect(sentences.map { |sentence| [sentence.start, sentence.finish] }).to eq([[0.0, 0.6], [1.0, 2.0]])
       expect(entry.words.map(&:text)).to eq(['Hello', '.', 'Again.'])
     end
+
+    it 'cuts speech without punctuation at its longest pause (not within its first words) once it passes the word limit' do
+      words = (0...100).map { |idx| Subtitler::Subtitle::Word.new(text: "w#{idx}", start: idx + (idx > 40 ? 3 : 0), finish: idx + 0.5 + (idx > 40 ? 3 : 0)) }
+      entry = Subtitler::Subtitle::Entry.new(start: 0, finish: 103, words: words)
+
+      sentences = described_class.from_entries([entry])
+
+      expect(sentences.map { |sentence| sentence.words.size }).to eq([41, 59])
+    end
   end
 end
