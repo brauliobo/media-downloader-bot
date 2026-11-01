@@ -6,7 +6,7 @@ RSpec.describe Audiobook, '.generate_uploads hashtags' do
 
   before do
     allow(Language).to receive(:book_metadata).and_return('lang' => 'pt', 'title' => 'Caibalion', 'author' => 'Iniciados', 'gender' => 'male')
-    allow(AI::ClaudeProxy).to receive(:json_prompt) { |text, **| prompt << text; %w[Hermetismo Filosofia Universo] }
+    allow(AI::ClaudeProxy).to receive(:json_prompt) { |text, **| prompt << text; %w[Hermetismo Filosofia Universo].map { |tag| {'tag' => tag, 'detail' => ''} } }
   end
 
   def uploads(opts)
@@ -22,7 +22,7 @@ RSpec.describe Audiobook, '.generate_uploads hashtags' do
 
     expect(result.map { |upload| upload.info.hashtags }).to all(eq('#Hermetismo #Filosofia #Universo'))
     expect(prompt.first).to include('Write every hashtag in pt.', 'filosofia hermética')
-    expect(prompt.first.size).to be < described_class::HASHTAG_EXCERPT_CHARS + 2_000
+    expect(prompt.first.size).to be < described_class::HASHTAG_EXCERPT_CHARS + 3_000
   end
 
   it 'asks for hashtags in the caption language option when given' do

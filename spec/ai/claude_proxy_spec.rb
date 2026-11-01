@@ -17,9 +17,9 @@ RSpec.describe AI::ClaudeProxy do
   end
 
   it 'validates JSON output against the provided schema' do
-    allow(agent).to receive(:post).and_return(http_response(completion('["Health"]')))
+    allow(agent).to receive(:post).and_return(http_response(completion('[{"tag":"Health","detail":""}]')))
 
-    expect(described_class.json_prompt('return json', schema: Hashtags::HASHTAG_SCHEMA.merge(minItems: 1))).to eq(['Health'])
+    expect(described_class.json_prompt('return json', schema: Hashtags::HASHTAG_SCHEMA.merge(minItems: 1))).to eq([{'tag' => 'Health', 'detail' => ''}])
   end
 
   describe 'when the subscription is rate limited' do
