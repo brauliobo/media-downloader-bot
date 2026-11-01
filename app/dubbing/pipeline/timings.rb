@@ -2,6 +2,9 @@ module Dubbing
   class Pipeline
     # Speaking the translated sentences and fitting their timing to what was spoken.
     module Timings
+      # The share of sentences the transcription of the dub may not hear: short ones are sometimes missed, a mute dub misses them all.
+      MAX_UNHEARD = 0.25
+
       private
 
       # Translates and speaks the sentences; the ones with nothing to say are left out.
@@ -25,6 +28,7 @@ module Dubbing
         end
 
         spoken_words = Array(spoken&.entries).flat_map(&:words)
+        unheard      = 0
         scheduled = @sentences.zip(clips).filter_map do |sentence, clip|
           target_start    = clip.start.to_f
           target_end      = clip.end.to_f
@@ -32,12 +36,15 @@ module Dubbing
 
           words = words_in_clip(spoken_words, target_start, target_end)
           if words.empty?
+            unheard += 1
             sentence.retime!(start: target_start, finish: target_end)
           else
             align_sentence_to_speech!(sentence, words, fallback_start: target_start, fallback_end: target_end)
           end
           sentence
         end
+        raise "dubbed speech is mute: no words heard in #{unheard} of #{clips.size} sentences" if spoken && unheard > clips.size * MAX_UNHEARD
+
         replace_sentences!(scheduled)
       end
 

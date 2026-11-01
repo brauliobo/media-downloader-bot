@@ -21,8 +21,8 @@ RSpec.describe Dubbing::Pipeline do
     Subtitler::Subtitle.new(
       language: lang,
       entries: [
-        Subtitler::Subtitle::Entry.new(text: 'Hello.', start: 0.0, finish: 1.0),
-        Subtitler::Subtitle::Entry.new(text: 'Bye.', start: 2.0, finish: 3.0),
+        subtitle_entry(text: 'Hello.', start: 0.0, finish: 1.0, words: [subtitle_word('Hello.', 0.0, 1.0)]),
+        subtitle_entry(text: 'Bye.', start: 2.0, finish: 3.0, words: [subtitle_word('Bye.', 2.0, 3.0)]),
       ]
     )
   end
@@ -347,6 +347,20 @@ RSpec.describe Dubbing::Pipeline do
       items: [hash_including(text: 'Tchau.')],
       on_batch: kind_of(Proc)
     )
+  end
+
+  it 'fails a dub whose speech the alignment cannot hear' do
+    pipeline = described_class.new(input, dir: dir, opts: SymMash.new(dub: 1), probe: probe)
+    mute = Subtitler::Subtitle.new(language: 'en', entries: [])
+    allow(Subtitler).to receive(:transcribe_vocals).and_return(transcript, mute)
+    stub_translation('Hello.' => 'Olá.', 'Bye.' => 'Tchau.')
+    allow(Diarizer).to receive(:diarize).and_return(diarization(speaker_segment(0.0, 3.0, 0)))
+    allow(Dubbing::VoiceReference).to receive(:extract_by_speaker).and_return({})
+    allow(TTS).to receive(:synthesize_batch) { |items:, **| items.each { |item| File.write(item.fetch(:out_path), 'raw') } }
+    allow(Dubbing::Audio).to receive(:normalize) { |_raw, out| File.write(out, 'fit') }
+    allow(Dubbing::Audio).to receive(:render_timeline) { |clips, output, **| Dubbing::Audio::Timeline.new(path: output, clips: clips) }
+
+    expect { pipeline.apply }.to raise_error(/dubbed speech is mute: no words heard in 2 of 2 sentences/)
   end
 
   it 'dubs every sentence with the default voice when no speaker has a usable reference' do
