@@ -22,7 +22,7 @@ RSpec.describe Audiobook, '.generate_uploads hashtags' do
 
     expect(result.map { |upload| upload.info.hashtags }).to all(eq('#Hermetismo #Filosofia #Universo'))
     expect(prompt.first).to include('Write every hashtag in pt.', 'filosofia hermética')
-    expect(prompt.first.size).to be < described_class::HASHTAG_EXCERPT_CHARS + 3_000
+    expect(prompt.first.size).to be < text.size / 2
   end
 
   it 'asks for hashtags in the caption language option when given' do
