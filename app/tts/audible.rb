@@ -1,14 +1,16 @@
 class TTS
   # A backend can answer 200 with silence for a text it failed to speak. A sentence with text and no sound is an error to
-  # retry, not a gap left in the dub or the audiobook.
+  # retry; TTS.synthesize_batch only lets the few that stay silent through as gaps.
   module Audible
     PEAK_DB = -50.0
+
+    class Silent < StandardError; end
 
     module_function
 
     def check!(items, ffmpeg: FFmpeg.new)
       items.select { |item| item.fetch(:text).to_s.match?(/[\p{L}\p{N}]/) }.each do |item|
-        raise "TTS returned silence for #{item[:text].to_s.truncate(80).inspect}" if silent?(item.fetch(:out_path), ffmpeg)
+        raise Silent, "TTS returned silence for #{item[:text].to_s.truncate(80).inspect}" if silent?(item.fetch(:out_path), ffmpeg)
       end
     end
 

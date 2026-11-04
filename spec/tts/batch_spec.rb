@@ -108,4 +108,40 @@ RSpec.describe 'TTS batch synthesis' do
 
     expect(backend.attempts).to eq(2)
   end
+
+  context 'when a batch stays silent after its retries' do
+    let(:backend) do
+      Class.new do
+        def self.synthesize_batch(items:, **) = (raise TTS::Audible::Silent, 'silent' if items.first[:text] == 'm.')
+      end
+    end
+    let(:items) { %w[m. a b c d e f g].map { |text| { text: text, out_path: "#{text}.wav" } } }
+
+    before do
+      stub_const('TTS::BACKEND', backend)
+      allow(Kernel).to receive(:sleep)
+      allow(backend).to receive(:synthesize_batch).and_call_original
+    end
+
+    it 'tries it three times without backing off' do
+      TTS.synthesize_batch(items: items, threads: 1)
+
+      expect(backend).to have_received(:synthesize_batch).with(items: items.first(2)).exactly(3).times
+      expect(Kernel).not_to have_received(:sleep)
+    end
+
+    it 'leaves it as a gap while the silent ones are a small share' do
+      done = []
+
+      expect(TTS.synthesize_batch(items: items, threads: 1, on_batch: ->(batch) { done << batch })).to eq(items.map { |item| item[:out_path] })
+      expect(done.size).to eq(4)
+    end
+
+    it 'fails when the silent ones are over a quarter' do
+      expect { TTS.synthesize_batch(items: items, threads: 1, **{}) }.not_to raise_error
+      silent = items.map { |item| item.merge(text: 'm.') }
+
+      expect { TTS.synthesize_batch(items: silent, threads: 1) }.to raise_error(TTS::Audible::Silent)
+    end
+  end
 end

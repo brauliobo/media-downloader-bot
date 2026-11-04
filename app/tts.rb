@@ -2,6 +2,9 @@ class TTS
   BACKEND = const_get(ENV['TTS'] || 'OmniVoice')
   BATCH_SIZE = 2
   DEFAULT_SAMPLE_RATE = 22_050
+  # The share of batches that may stay silent after their retries: a fragment is sometimes not spoken, a broken backend never is.
+  MAX_SILENT = 0.25
+  SILENT_TRIES = 3
 
   def self.synthesize(**args)
     BACKEND.synthesize(**args)
@@ -10,9 +13,14 @@ class TTS
   def self.synthesize_batch(items:, on_batch: nil, threads: nil, **args)
     batches = items.each_slice(BATCH_SIZE).to_a
     errors = Queue.new
+    silent = Queue.new
 
     process_batch = lambda do |batch|
-      Utils::Retry.tts { BACKEND.synthesize_batch(items: batch, **args) }
+      begin
+        speak_batch(batch, **args)
+      rescue Audible::Silent => error
+        silent << error
+      end
       on_batch&.call(batch)
     rescue StandardError => error
       errors << error
@@ -25,9 +33,18 @@ class TTS
     end
 
     raise errors.pop unless errors.empty?
+    raise silent.pop if silent.size > batches.size * MAX_SILENT
 
     items.map { |item| item.fetch(:out_path) }
   end
+
+  # The backend answered, so a silent batch is tried again at once; a backend that is down backs off instead.
+  def self.speak_batch(batch, **args)
+    Utils::Retry.call(tries: SILENT_TRIES, sleep: false, on: Audible::Silent) do
+      Utils::Retry.tts(retry_if: ->(error) { !error.is_a?(Audible::Silent) }) { BACKEND.synthesize_batch(items: batch, **args) }
+    end
+  end
+  private_class_method :speak_batch
 
   def self.supports?(feature)
     BACKEND.respond_to?(predicate = :"supports_#{feature}?") && BACKEND.public_send(predicate)
