@@ -11,8 +11,8 @@ class Subtitler
       end
 
       def to_ass(portrait: false, mode: :instagram, preset: 'default')
-
-        Subtitler::Ass.document_for(self, portrait: portrait, mode: mode, preset: preset).to_s
+        subtitle = portrait ? deep_copy.tap { |copy| copy.split_long_entries!(max_chars: PORTRAIT_MAX_ENTRY_CHARS) } : self
+        Subtitler::Ass.document_for(subtitle, portrait: portrait, mode: mode, preset: preset).to_s
       end
 
       private

@@ -109,6 +109,17 @@ RSpec.describe Subtitler::Ass do
     expect(portrait).to include(',2,10,10,48,1')
   end
 
+  it 'keeps each portrait cue within the portrait line budget and leaves landscape cues whole' do
+    words = %w[Recently there was a study that released looking at both metformin and berberine in the gut]
+    cue   = words.each_with_index.map { |word, index| "<00:00:#{format('%02d', index)}.000>#{word}" }.join(' ')
+    vtt   = "WEBVTT\n\n00:00:00.000 --> 00:00:16.000\n#{cue}\n"
+    texts = ->(**options) { render(vtt, mode: :plain, **options).lines.grep(/^Dialogue:/).map { |line| line.split(',,').last.strip } }
+
+    expect(texts.call).to eq([words.join(' ')])
+    expect(texts.call(portrait: true)).to all(satisfy { |text| text.length <= Subtitler::Subtitle::PORTRAIT_MAX_ENTRY_CHARS })
+    expect(texts.call(portrait: true).join(' ')).to eq(words.join(' '))
+  end
+
   it 'renders a cue without inline word timings as one dialogue' do
     vtt = <<~VTT
       WEBVTT

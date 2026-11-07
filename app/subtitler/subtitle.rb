@@ -6,6 +6,8 @@ require 'securerandom'
 class Subtitler
   class Subtitle
     MAX_ENTRY_CHARS    = 84
+    # a portrait frame fits about 28 characters a line, 44 keeps a cue within 2 lines as 84 does in landscape
+    PORTRAIT_MAX_ENTRY_CHARS = 44
     TRANSLATION_PREFIX = /\A(?:translation|translated(?:\s+text)?|answer|response)\s*:\s*/i
     NOISE_DOTS_LINE    = /\A\s*\d(?:\s*\.\s*\d){3,}\.??\s*\z/.freeze
     FORMAT_TEXT_METADATA_KEYS = %w[ass_text source_signature].freeze
