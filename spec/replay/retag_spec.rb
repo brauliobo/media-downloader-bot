@@ -16,7 +16,7 @@ RSpec.describe Replay::Retag do
   after { FileUtils.remove_entry(dir) }
 
   it 'generates the hashtags from the yml posted with the book' do
-    allow(AI::ClaudeProxy).to receive(:json_prompt).and_return(%w[Hermetismo Filosofia Universo])
+    allow(AI::ClaudeProxy).to receive(:json_prompt).and_return(%w[Hermetismo Filosofia Universo].map { |tag| { 'tag' => tag } })
 
     expect(described_class.new(manager).call(item)).to eq('#Hermetismo #Filosofia #Universo')
   end

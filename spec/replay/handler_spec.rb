@@ -270,7 +270,7 @@ RSpec.describe Replay::Handler do
     let(:answers) { { 11 => [{ type: 'Document', text: 'Book' }, { type: 'Audio', text: 'Book' }] } }
     let(:manager) { ReplayingManager.new(answers: answers, files: { 1001 => { name: 'book.yml', path: yml } }) }
 
-    before { allow(AI::ClaudeProxy).to receive(:json_prompt).and_return(%w[Hermetismo Filosofia Universo]) }
+    before { allow(AI::ClaudeProxy).to receive(:json_prompt).and_return(%w[Hermetismo Filosofia Universo].map { |tag| { 'tag' => tag } }) }
 
     it 'gets them again from the yml posted with it, in the captions of everything posted' do
       run

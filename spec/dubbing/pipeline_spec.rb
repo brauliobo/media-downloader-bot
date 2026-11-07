@@ -145,7 +145,7 @@ RSpec.describe Dubbing::Pipeline do
     highlighted = default[:ass].lines.grep(/^Dialogue:/)
     unhighlighted = plain[:ass].lines.grep(/^Dialogue:/)
     expect(highlighted.size).to eq(4)
-    expect(highlighted.last).to include('0:00:01.13,0:00:01.50', '{\\1c&Hffffff&}', '{\\1c&HC0C0C0&}')
+    expect(highlighted.last).to include('0:00:01.13,0:00:01.50', '{\\1c&H00e6ff&}', '{\\1c&HC0C0C0&}')
     expect(unhighlighted).to contain_exactly(include('0:00:00.00,0:00:01.50', 'Muito bom dia, amigo.'))
     expect(unhighlighted.first).not_to include('{\\1c')
   end

@@ -157,7 +157,7 @@ RSpec.describe Subtitler::Subtitle::SemanticDiff do
     expect(JSON.generate(result)).not_to include('object_id')
   end
 
-  it 'supports the CLI JSON report and fail-on-difference exit status' do
+  it 'supports the CLI JSON report and fail-on-difference exit status', :child_ruby do
     Tempfile.create(['before', '.srt']) do |before_file|
       Tempfile.create(['after', '.srt']) do |after_file|
         before_file.write("\uFEFF1\n00:00:00,000 --> 00:00:01,000\nBefore\n")

@@ -1,7 +1,7 @@
 require 'rails_helper'
 
 RSpec.describe Sh do
-  describe '.run' do
+  describe '.run', :child_ruby do
     it 'runs commands without an environment override' do
       stdout, stderr, status = described_class.run([RbConfig.ruby, '-e', 'print ENV.fetch("PATH")'])
 
