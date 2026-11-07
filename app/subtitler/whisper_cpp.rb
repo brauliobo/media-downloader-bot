@@ -22,7 +22,7 @@ class Subtitler
     protected
 
     def transcribe_with_params path, merge_words:, language: nil, **extra
-      out = Zipper::AudioOps.with_wav(path) do |file|
+      subtitle = Zipper::AudioOps.with_wav(path) do |file|
         params = {
           file:            file,
           temperature:     '0.0',
@@ -31,20 +31,26 @@ class Subtitler
         }
         params[:language] = language if language
 
-        url = "#{api.scheme}://#{api.host}:#{api.port}/inference"
-        res = Utils::HTTP.post(url, params)
-        Utils::HTTP.assert_ok!(res, 'TTS')
-
-        res.body
+        transcript = infer(params)
+        DroppedSpeech.new(transcript, audio: file.path) do |gap|
+          infer(params.merge(offset_t: (gap.start * 1000).round, duration: ((gap.finish - gap.start) * 1000).round))
+        end.call
       end
 
-      subtitle = Subtitle.from_whisper_verbose_json(out)
       subtitle.replace_language!(Language::Code.normalize(subtitle.language))
       merge_split_words!(subtitle) if merge_words
       subtitle
     end
 
     private
+
+    def infer params
+      url = "#{api.scheme}://#{api.host}:#{api.port}/inference"
+      res = Utils::HTTP.post(url, params)
+      Utils::HTTP.assert_ok!(res, 'TTS')
+
+      Subtitle.from_whisper_verbose_json(res.body)
+    end
 
     def merge_split_words!(subtitle)
       subtitle.merge_split_words!
