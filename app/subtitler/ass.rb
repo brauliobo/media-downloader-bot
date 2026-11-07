@@ -26,6 +26,7 @@ class Subtitler
 
     UNSPOKEN_COLOUR  = 'C0C0C0'.freeze
     WHITE_TAG        = '{\1c&Hffffff&}'.freeze
+    YELLOW_TAG       = '{\1c&H00ffff&}'.freeze
     SECONDARY_COLOUR = '&H0000ffff'.freeze
 
     BOX_STYLE = {
@@ -50,8 +51,8 @@ class Subtitler
     }.freeze
 
     HIGHLIGHT_STYLES = {
-      'default' => WHITE_TAG,
-      'hlword'  => '{\1c&H00ffff&}'.freeze,
+      'default' => YELLOW_TAG,
+      'hlword'  => YELLOW_TAG,
       'nobg'    => '{\bord2\shad0\be1\3c&H000000&\4c&H00ffff&}'.freeze,
     }.freeze
 
