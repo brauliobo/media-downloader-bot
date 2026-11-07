@@ -24,6 +24,8 @@ class Subtitler
       'MarginV'       => 32,
     }.freeze
 
+    PORTRAIT_MARGIN_V = 48 # clear of the bottom cut of the Telegram chat view
+
     UNSPOKEN_COLOUR  = 'C0C0C0'.freeze
     WHITE_TAG        = '{\1c&Hffffff&}'.freeze
     YELLOW_TAG       = '{\1c&H00e6ff&}'.freeze
@@ -79,6 +81,7 @@ class Subtitler
     def style_for(preset, portrait)
       values = PRESETS.fetch(preset).dup
       values['Fontsize'] = (values.fetch('Fontsize') * (portrait ? 0.6 : 1)).round
+      values['MarginV']  = PORTRAIT_MARGIN_V if portrait
       Style.new(
         **values.merge(
           'Name'            => 'Default',

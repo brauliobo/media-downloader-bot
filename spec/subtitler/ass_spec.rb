@@ -102,11 +102,11 @@ RSpec.describe Subtitler::Ass do
     expect(fallback).to eq(default)
   end
 
-  it 'scales only the preset font size for portrait output' do
+  it 'scales the font size and raises the bottom margin for portrait output' do
     portrait = render(timed_vtt, portrait: true)
 
     expect(portrait).to include('Style: Default,Roboto Medium,12,')
-    expect(portrait).to include(',2,10,10,32,1')
+    expect(portrait).to include(',2,10,10,48,1')
   end
 
   it 'renders a cue without inline word timings as one dialogue' do
