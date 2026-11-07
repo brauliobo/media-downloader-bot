@@ -1,7 +1,7 @@
 require 'fileutils'
 
 module Dubbing
-  # Cuts each speaker's recorded TTS::Reference out of the original vocals. Dubbing always clones these, never an Anchor.
+  # Cuts each speaker's recorded TTS::Reference out of the original vocals. Dubbing clones these through a TargetVoice, never an Anchor.
   #
   # The backend keeps the voice from the reference, so it is built with care: the clearest and most confidently
   # transcribed sentences that no other speaker talks over (Candidates), cut in the silence between words (Cutter),

@@ -14,6 +14,7 @@ RSpec.describe Dubbing::Pipeline do
     File.write(vocals, 'vocals')
     File.write(non_vocals, 'non-vocals')
     allow(VoiceSeparator).to receive(:with_stems).and_yield(stems)
+    allow_any_instance_of(VoiceClone::EmbeddingScorer).to receive(:call).and_return(cosine_similarity: 0.5)
   end
   after { FileUtils.remove_entry(dir) if Dir.exist?(dir) }
 
@@ -249,10 +250,10 @@ RSpec.describe Dubbing::Pipeline do
 
   it 'translates and batch synthesizes with each extracted speaker reference' do
     speaker_paths = {
-      0 => File.join(dir, 'speaker-0.wav'),
-      1 => File.join(dir, 'speaker-1.wav'),
+      0 => File.join(dir, 'speaker-0', 'speaker.wav'),
+      1 => File.join(dir, 'speaker-1', 'speaker.wav'),
     }
-    speaker_paths.each_value { |path| File.write(path, 'speaker') }
+    speaker_paths.each_value { |path| FileUtils.mkdir_p(File.dirname(path)) && File.write(path, 'speaker') }
     speakers = {
       0 => TTS::Reference.new(path: speaker_paths.fetch(0), text: 'Hello.'),
       1 => TTS::Reference.new(path: speaker_paths.fetch(1), text: 'Bye.'),
@@ -281,18 +282,7 @@ RSpec.describe Dubbing::Pipeline do
     end
     allow(pipeline).to receive(:mix_video).and_return(File.join(dir, 'out.mp4'))
 
-    expect(TTS).to receive(:synthesize_batch).with(
-      items: [hash_including(text: 'Olá.', lang: 'pt', out_path: kind_of(String))],
-      on_batch: kind_of(Proc),
-      speaker_wav: speaker_paths.fetch(0),
-      ref_text: 'Hello.'
-    ) { |items:, **_| items.each { |item| File.write(item.fetch(:out_path), 'raw') } }
-    expect(TTS).to receive(:synthesize_batch).with(
-      items: [hash_including(text: 'Tchau.', lang: 'pt', out_path: kind_of(String))],
-      on_batch: kind_of(Proc),
-      speaker_wav: speaker_paths.fetch(1),
-      ref_text: 'Bye.'
-    ) { |items:, **_| items.each { |item| File.write(item.fetch(:out_path), 'raw') } }
+    allow(TTS).to receive(:synthesize_batch) { |items:, **_| items.each { |item| File.write(item.fetch(:out_path), 'raw') } }
 
     pipeline.apply
 
@@ -306,6 +296,17 @@ RSpec.describe Dubbing::Pipeline do
         dir:         kind_of(String),
         transcriber: kind_of(VoiceReference::Transcriber)
       )
+    {0 => ['Olá.', 'Hello.'], 1 => ['Tchau.', 'Bye.']}.each do |speaker, (text, reference_text)|
+      anchor = File.join(dir, "speaker-#{speaker}", 'target-voice-1.wav')
+      expect(TTS).to have_received(:synthesize_batch).with(
+        items: Array.new(Dubbing::TargetVoice::CANDIDATES) { hash_including(text: text, lang: 'pt', out_path: kind_of(String)) },
+        speaker_wav: speaker_paths.fetch(speaker), ref_text: reference_text
+      )
+      expect(TTS).to have_received(:synthesize_batch).with(
+        items: [hash_including(text: text, lang: 'pt', out_path: kind_of(String))],
+        on_batch: kind_of(Proc), speaker_wav: anchor, ref_text: text
+      )
+    end
     expect(pipeline.sentences.map(&:speaker_id)).to eq([0, 1])
     expect(pipeline.sentences.map(&:source_text)).to eq(['Hello.', 'Bye.'])
     expect(pipeline.sentences.map(&:text)).to eq(['Olá.', 'Tchau.'])
@@ -340,8 +341,8 @@ RSpec.describe Dubbing::Pipeline do
     expect(TTS).to have_received(:synthesize_batch).with(
       items: [hash_including(text: 'Olá.')],
       on_batch: kind_of(Proc),
-      speaker_wav: speaker_path,
-      ref_text: 'Hello.'
+      speaker_wav: File.join(dir, 'target-voice-1.wav'),
+      ref_text: 'Olá.'
     )
     expect(TTS).to have_received(:synthesize_batch).with(
       items: [hash_including(text: 'Tchau.')],

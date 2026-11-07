@@ -26,15 +26,22 @@ RSpec.describe Dubbing::SpeechSynthesizer do
     end
   end
 
+  before do
+    allow_any_instance_of(VoiceClone::EmbeddingScorer).to receive(:call).and_return(cosine_similarity: 0.5)
+  end
+
   after do
     FileUtils.remove_entry(dir) if Dir.exist?(dir)
   end
 
-  it 'clones every sentence of a speaker from the speaker recorded reference, not from a synthesized anchor' do
+  it 'clones every sentence of a speaker from the best of several target language copies of the recorded reference' do
     calls = []
     allow(TTS).to receive(:synthesize_batch) do |items:, **options|
       calls << {items: items, options: options}
-      items.each { |item| File.write(item.fetch(:out_path), 'raw') }
+      items.each_with_index { |item, idx| File.write(item.fetch(:out_path), "raw#{idx}") }
+    end
+    allow_any_instance_of(VoiceClone::EmbeddingScorer).to receive(:call) do |_scorer, **args|
+      {cosine_similarity: args[:sample].end_with?('-2.wav') ? 0.9 : 0.5}
     end
 
     described_class.new(
@@ -46,10 +53,11 @@ RSpec.describe Dubbing::SpeechSynthesizer do
       video_duration: 5.0
     ).render
 
-    expect(calls.size).to eq(1)
-    expect(calls.first.fetch(:items).map { |item| item.fetch(:text) }).to eq(sentences.map(&:text))
-    expect(calls.first.fetch(:options)).to include(speaker_wav: reference.path, ref_text: reference.text)
-    expect(calls.first.fetch(:options)).not_to include(:threads)
+    anchors, speech = calls
+    expect(anchors.fetch(:items).map { |item| item.fetch(:text) }).to eq([sentences.last.text] * Dubbing::TargetVoice::CANDIDATES)
+    expect(anchors.fetch(:options)).to include(speaker_wav: reference.path, ref_text: reference.text)
+    expect(speech.fetch(:items).map { |item| item.fetch(:text) }).to eq(sentences.map(&:text))
+    expect(speech.fetch(:options)).to include(speaker_wav: File.join(dir, 'target-voice-2.wav'), ref_text: sentences.last.text)
   end
 
   it 'reports normalization progress before timeline rendering' do
@@ -96,7 +104,7 @@ RSpec.describe Dubbing::SpeechSynthesizer do
       video_duration: 5.0
     ).render
 
-    expect(calls.size).to eq(2)
+    expect(calls.size).to eq(3)
     expect(calls.last.fetch(:items).map { |item| item.fetch(:text) }).to eq(['Voz padrão.'])
     expect(calls.last.fetch(:options)).not_to include(:speaker_wav, :ref_text)
   end

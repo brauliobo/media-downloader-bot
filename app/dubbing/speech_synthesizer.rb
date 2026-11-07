@@ -1,6 +1,6 @@
 module Dubbing
-  # Speaks every sentence in its speaker's recorded voice, translating them on the way when given a translate step. The
-  # reference goes straight to the backend: a synthesized copy of it (an Anchor) would only be a worse clone of the same voice.
+  # Speaks every sentence in its speaker's voice, translating them on the way when given a translate step. The voice is the
+  # recorded reference spoken in the target language (TargetVoice), so the accent is the target language's.
   class SpeechSynthesizer
     # The sentences spoken: those the translation left with nothing to say are dropped.
     attr_reader :sentences
@@ -20,6 +20,7 @@ module Dubbing
     def render
       @stl&.update 'dubbing: synthesizing'
       jobs = @sentences.each_with_index.map { |sentence, idx| job_for(sentence, idx) }
+      jobs.group_by { |job| job[:reference] }.each { |reference, group| use_target_voice(reference, group) if reference }
       # A speaker without a usable reference gets the backend's default voice.
       TTS::SpeechRun.new(jobs, status: @stl, prefix: 'dubbing: ', translate: (method(:translate_job) if @translate)).call(**TTS::Options.for(@opts))
 
@@ -43,7 +44,21 @@ module Dubbing
       }
     end
 
-    def translate_job(job) = job.tap { job[:text] = spoken_text(@translate.call(job.fetch(:sentence))) }
+    # The speaker's longest sentence is spoken first, as the text of the target voice, and is not translated again.
+    def use_target_voice(reference, jobs)
+      anchor = jobs.max_by { |job| job.fetch(:sentence).text.to_s.length }
+      translate_job(anchor)
+      return if anchor[:text].blank?
+
+      @stl&.update 'dubbing: preparing speaker voice'
+      voice = TargetVoice.new(reference, text: anchor[:text], lang: @target_lang, options: TTS::Options.for(@opts)).call
+      jobs.each { |job| job[:reference] = voice }
+    end
+
+    def translate_job(job)
+      job[:text] = spoken_text(@translate.call(job.fetch(:sentence))) if @translate && !job[:translated]
+      job.merge!(translated: true)
+    end
 
     def spoken_text(text) = Text::Spoken::Numbers.call(text, @target_lang)
 
