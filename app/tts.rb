@@ -3,7 +3,9 @@ class TTS
   BATCH_SIZE = 2
   DEFAULT_SAMPLE_RATE = 22_050
   # The share of batches that may stay silent after their retries: a fragment is sometimes not spoken, a broken backend never is.
+  # A job of a few batches (a short clip, the candidates of a voice) cannot tell the two apart, so it may leave this many silent.
   MAX_SILENT = 0.25
+  MIN_SILENT_ALLOWED = 2
   SILENT_TRIES = 3
 
   def self.synthesize(**args)
@@ -33,7 +35,7 @@ class TTS
     end
 
     raise errors.pop unless errors.empty?
-    raise silent.pop if silent.size > batches.size * MAX_SILENT
+    raise silent.pop if silent.size > [batches.size * MAX_SILENT, MIN_SILENT_ALLOWED].max
 
     items.map { |item| item.fetch(:out_path) }
   end

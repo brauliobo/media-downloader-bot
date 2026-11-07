@@ -16,6 +16,7 @@ RSpec.describe Dubbing::Pipeline do
     allow(VoiceSeparator).to receive(:with_stems).and_yield(stems)
     allow_any_instance_of(VoiceClone::EmbeddingScorer).to receive(:call).and_return(cosine_similarity: 0.5)
     allow_any_instance_of(FFmpeg).to receive(:audio_duration).and_return(2.0)
+    allow(TTS::Audible).to receive(:silent?).and_return(false)
   end
   after { FileUtils.remove_entry(dir) if Dir.exist?(dir) }
 

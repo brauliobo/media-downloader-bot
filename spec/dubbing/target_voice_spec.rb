@@ -7,6 +7,8 @@ RSpec.describe Dubbing::TargetVoice do
   let(:durations) { Hash.new(2.0) }
   let(:ffmpeg)    { instance_double(FFmpeg).tap { |ffmpeg| allow(ffmpeg).to receive(:audio_duration) { |path| durations[File.basename(path)] } } }
 
+  before { allow(TTS::Audible).to receive(:silent?).and_return(false) }
+
   after { FileUtils.remove_entry(dir) }
 
   it 'keeps the candidate closest to the recorded voice and clones it with the text it speaks' do
@@ -37,5 +39,15 @@ RSpec.describe Dubbing::TargetVoice do
     scorer = ->(**) { raise 'scored' }
 
     expect(described_class.new(reference, text: 'Olá.', lang: 'pt', options: {}, scorer: scorer, ffmpeg: ffmpeg).call).to be_nil
+  end
+
+  it 'leaves out the silent candidates' do
+    allow(TTS).to receive(:synthesize_batch) { |items:, **| items.each { |item| File.write(item.fetch(:out_path), 'raw') } }
+    allow(TTS::Audible).to receive(:silent?) { |path, _| path.end_with?('-3.wav') }
+    scorer = ->(sample:, **) { {cosine_similarity: sample.end_with?('-3.wav') ? 0.9 : 0.4} }
+
+    voice = described_class.new(reference, text: 'Olá.', lang: 'pt', options: {}, scorer: scorer, ffmpeg: ffmpeg).call
+
+    expect(voice.path).to eq(File.join(dir, 'target-voice-1.wav'))
   end
 end

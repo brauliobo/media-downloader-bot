@@ -138,10 +138,13 @@ RSpec.describe 'TTS batch synthesis' do
     end
 
     it 'fails when the silent ones are over a quarter' do
-      expect { TTS.synthesize_batch(items: items, threads: 1, **{}) }.not_to raise_error
-      silent = items.map { |item| item.merge(text: 'm.') }
+      silent = Array.new(12) { |idx| {text: 'm.', out_path: "m#{idx}.wav"} }
 
       expect { TTS.synthesize_batch(items: silent, threads: 1) }.to raise_error(TTS::Audible::Silent)
+    end
+
+    it 'does not fail a job of few batches, which cannot tell a broken backend from a fragment not spoken' do
+      expect { TTS.synthesize_batch(items: [{text: 'm.', out_path: 'm.wav'}], threads: 1) }.not_to raise_error
     end
   end
 end

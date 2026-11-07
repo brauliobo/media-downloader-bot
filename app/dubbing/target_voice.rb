@@ -4,8 +4,8 @@ module Dubbing
   # A synthesized copy is a worse clone of the voice and varies from one try to the next, so several are made at once
   # and the one closest to the recorded voice is kept. They are scored on the CPU: the embedding model is small, and
   # starting it on the GPU takes longer than the scoring.
-  # A copy too short to carry a voice (the backend sometimes speaks next to nothing) is not a candidate: with none left
-  # there is no target voice.
+  # A copy silent or too short to carry a voice (the backend sometimes speaks next to nothing) is not a candidate: with
+  # none left there is no target voice.
   class TargetVoice
     CANDIDATES   = 3
     MIN_DURATION = 0.5
@@ -20,7 +20,7 @@ module Dubbing
     end
 
     def call
-      paths = speak_candidates.select { |path| @ffmpeg.audio_duration(path) >= MIN_DURATION }
+      paths = speak_candidates.select { |path| voiced?(path) }
       return if paths.empty?
 
       scores = {}
@@ -29,6 +29,8 @@ module Dubbing
     end
 
     private
+
+    def voiced?(path) = @ffmpeg.audio_duration(path) >= MIN_DURATION && !TTS::Audible.silent?(path, @ffmpeg)
 
     def speak_candidates
       dir   = File.dirname(@reference.path)
