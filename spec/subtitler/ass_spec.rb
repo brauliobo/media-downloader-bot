@@ -26,8 +26,8 @@ RSpec.describe Subtitler::Ass do
     dialogues = render(timed_vtt, mode: :instagram).lines.grep(/^Dialogue:/)
 
     expect(dialogues).to eq([
-      "Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,{\\1c&H00ffff&}One{\\1c&HC0C0C0&} two\n",
-      "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,One {\\1c&H00ffff&}two{\\1c&HC0C0C0&}\n",
+      "Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,{\\1c&H00e6ff&}One{\\1c&HC0C0C0&} two\n",
+      "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,One {\\1c&H00e6ff&}two{\\1c&HC0C0C0&}\n",
     ])
   end
 
@@ -42,8 +42,8 @@ RSpec.describe Subtitler::Ass do
     ])
 
     expect(subtitle.to_ass.lines.grep(/^Dialogue:/)).to eq([
-      "Dialogue: 0,0:00:00.00,0:00:00.80,Default,,0,0,0,,{\\1c&H00ffff&}One{\\1c&HC0C0C0&} two\n",
-      "Dialogue: 0,0:00:00.80,0:00:02.00,Default,,0,0,0,,One {\\1c&H00ffff&}two{\\1c&HC0C0C0&}\n",
+      "Dialogue: 0,0:00:00.00,0:00:00.80,Default,,0,0,0,,{\\1c&H00e6ff&}One{\\1c&HC0C0C0&} two\n",
+      "Dialogue: 0,0:00:00.80,0:00:02.00,Default,,0,0,0,,One {\\1c&H00e6ff&}two{\\1c&HC0C0C0&}\n",
     ])
   end
 
@@ -59,7 +59,7 @@ RSpec.describe Subtitler::Ass do
     ])
 
     expect(subtitle.to_ass.lines.grep(/^Dialogue:/)).to eq([
-      "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,One {\\1c&H00ffff&}two{\\1c&HC0C0C0&} three\n",
+      "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,One {\\1c&H00e6ff&}two{\\1c&HC0C0C0&} three\n",
     ])
   end
 
@@ -75,15 +75,15 @@ RSpec.describe Subtitler::Ass do
     expectations = {
       'default' => {
         style: 'Roboto Medium,20,&H00ffffff,&H0000ffff,&HFF000000,&H80000000,0,0,0,0,100,100,0,0,4,4,0,2,10,10,32,1',
-        highlight: '{\\1c&H00ffff&}One{\\1c&HC0C0C0&}',
+        highlight: '{\\1c&H00e6ff&}One{\\1c&HC0C0C0&}',
       },
       'hlword' => {
         style: 'Roboto Medium,20,&H00ffffff,&H0000ffff,&HFF000000,&H80000000,0,0,0,0,100,100,0,0,4,4,0,2,10,10,32,1',
-        highlight: '{\\1c&H00ffff&}One{\\1c&Hffffff&}',
+        highlight: '{\\1c&H00e6ff&}One{\\1c&Hffffff&}',
       },
       'nobg' => {
         style: 'Roboto Medium,20,&H00ffffff,&H0000ffff,&H80000000,&H00000000,0,0,0,0,100,100,0,0,1,0,2,2,10,10,32,1',
-        highlight: '{\\bord2\\shad0\\be1\\3c&H000000&\\4c&H00ffff&}One{\\r}{\\1c&Hffffff&}',
+        highlight: '{\\bord2\\shad0\\be1\\3c&H000000&\\4c&H00e6ff&}One{\\r}{\\1c&Hffffff&}',
       },
     }
 
