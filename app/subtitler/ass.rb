@@ -33,7 +33,7 @@ class Subtitler
 
     BOX_STYLE = {
       'OutlineColour' => '&HFF000000',
-      'BackColour'    => '&H80000000',
+      'BackColour'    => '&H40000000',
       'BorderStyle'   => 4,
       'Outline'       => 4,
       'Shadow'        => 0,
@@ -44,10 +44,10 @@ class Subtitler
       'default' => BOX_PRESET,
       'hlword'  => BOX_PRESET,
       'nobg'    => BASE_STYLE.merge(
-        'OutlineColour' => '&H80000000',
+        'OutlineColour' => '&H00000000',
         'BackColour'    => '&H00000000',
         'BorderStyle'   => 1,
-        'Outline'       => 0,
+        'Outline'       => 1.5,
         'Shadow'        => 2,
       ).freeze,
     }.freeze

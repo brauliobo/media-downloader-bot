@@ -74,15 +74,15 @@ RSpec.describe Subtitler::Ass do
   it 'applies every preset style and its corresponding instagram highlight tags' do
     expectations = {
       'default' => {
-        style: 'Roboto Medium,20,&H00ffffff,&H0000ffff,&HFF000000,&H80000000,0,0,0,0,100,100,0,0,4,4,0,2,10,10,32,1',
+        style: 'Roboto Medium,20,&H00ffffff,&H0000ffff,&HFF000000,&H40000000,0,0,0,0,100,100,0,0,4,4,0,2,10,10,32,1',
         highlight: '{\\1c&H00e6ff&}One{\\1c&HC0C0C0&}',
       },
       'hlword' => {
-        style: 'Roboto Medium,20,&H00ffffff,&H0000ffff,&HFF000000,&H80000000,0,0,0,0,100,100,0,0,4,4,0,2,10,10,32,1',
+        style: 'Roboto Medium,20,&H00ffffff,&H0000ffff,&HFF000000,&H40000000,0,0,0,0,100,100,0,0,4,4,0,2,10,10,32,1',
         highlight: '{\\1c&H00e6ff&}One{\\1c&Hffffff&}',
       },
       'nobg' => {
-        style: 'Roboto Medium,20,&H00ffffff,&H0000ffff,&H80000000,&H00000000,0,0,0,0,100,100,0,0,1,0,2,2,10,10,32,1',
+        style: 'Roboto Medium,20,&H00ffffff,&H0000ffff,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,1.5,2,2,10,10,32,1',
         highlight: '{\\bord2\\shad0\\be1\\3c&H000000&\\4c&H00e6ff&}One{\\r}{\\1c&Hffffff&}',
       },
     }
