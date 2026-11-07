@@ -28,6 +28,7 @@ RSpec.describe Dubbing::SpeechSynthesizer do
 
   before do
     allow_any_instance_of(VoiceClone::EmbeddingScorer).to receive(:call).and_return(cosine_similarity: 0.5)
+    allow_any_instance_of(FFmpeg).to receive(:audio_duration).and_return(2.0)
   end
 
   after do
@@ -58,6 +59,38 @@ RSpec.describe Dubbing::SpeechSynthesizer do
     expect(anchors.fetch(:options)).to include(speaker_wav: reference.path, ref_text: reference.text)
     expect(speech.fetch(:items).map { |item| item.fetch(:text) }).to eq(sentences.map(&:text))
     expect(speech.fetch(:options)).to include(speaker_wav: File.join(dir, 'target-voice-2.wav'), ref_text: sentences.last.text)
+  end
+
+  def render_with(sentences)
+    described_class.new(
+      sentences: sentences, references: {'speaker' => reference}, opts: SymMash.new, target_lang: 'pt', workdir: dir, video_duration: 5.0
+    ).render
+  end
+
+  it 'keeps the recorded reference of a speaker whose longest sentence has nothing to say' do
+    calls = []
+    allow(TTS).to receive(:synthesize_batch) do |items:, **options|
+      calls << options
+      items.each { |item| File.write(item.fetch(:out_path), 'raw') }
+    end
+
+    render_with([sentence('Sim.', 0.0, 1.0, 'speaker'), sentence('🇺🇦🇸🇪🇬🇧 ...', 1.5, 4.0, 'speaker')])
+
+    expect(calls).to all(include(speaker_wav: reference.path))
+    expect(calls.size).to eq(1)
+  end
+
+  it 'keeps the recorded reference of a speaker whose target voice candidates are all too short' do
+    calls = []
+    allow(TTS).to receive(:synthesize_batch) do |items:, **options|
+      calls << options
+      items.each { |item| File.write(item.fetch(:out_path), 'raw') }
+    end
+    allow_any_instance_of(FFmpeg).to receive(:audio_duration).and_return(0.02)
+
+    render_with(sentences)
+
+    expect(calls.last).to include(speaker_wav: reference.path, ref_text: reference.text)
   end
 
   it 'reports normalization progress before timeline rendering' do

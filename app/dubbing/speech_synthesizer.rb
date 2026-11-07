@@ -1,6 +1,7 @@
 module Dubbing
   # Speaks every sentence in its speaker's voice, translating them on the way when given a translate step. The voice is the
-  # recorded reference spoken in the target language (TargetVoice), so the accent is the target language's.
+  # recorded reference spoken in the target language (TargetVoice), so the accent is the target language's. A speaker
+  # whose target voice cannot be made keeps the recorded reference.
   class SpeechSynthesizer
     # The sentences spoken: those the translation left with nothing to say are dropped.
     attr_reader :sentences
@@ -48,11 +49,11 @@ module Dubbing
     def use_target_voice(reference, jobs)
       anchor = jobs.max_by { |job| job.fetch(:sentence).text.to_s.length }
       translate_job(anchor)
-      return if anchor[:text].blank?
+      return unless TTS::Audible.speakable?(anchor[:text])
 
       @stl&.update 'dubbing: preparing speaker voice'
       voice = TargetVoice.new(reference, text: anchor[:text], lang: @target_lang, options: TTS::Options.for(@opts)).call
-      jobs.each { |job| job[:reference] = voice }
+      jobs.each { |job| job[:reference] = voice } if voice
     end
 
     def translate_job(job)

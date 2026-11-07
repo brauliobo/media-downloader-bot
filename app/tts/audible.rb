@@ -9,10 +9,13 @@ class TTS
     module_function
 
     def check!(items, ffmpeg: FFmpeg.new)
-      items.select { |item| item.fetch(:text).to_s.match?(/[\p{L}\p{N}]/) }.each do |item|
+      items.select { |item| speakable?(item.fetch(:text)) }.each do |item|
         raise Silent, "TTS returned silence for #{item[:text].to_s.truncate(80).inspect}" if silent?(item.fetch(:out_path), ffmpeg)
       end
     end
+
+    # Text with a letter or a digit: anything else (punctuation, emoji) has nothing to say.
+    def speakable?(text) = text.to_s.match?(/[\p{L}\p{N}]/)
 
     # astats prints no number for digital silence ("-inf").
     def silent?(path, ffmpeg)

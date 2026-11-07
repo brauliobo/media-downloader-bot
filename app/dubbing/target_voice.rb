@@ -4,19 +4,25 @@ module Dubbing
   # A synthesized copy is a worse clone of the voice and varies from one try to the next, so several are made at once
   # and the one closest to the recorded voice is kept. They are scored on the CPU: the embedding model is small, and
   # starting it on the GPU takes longer than the scoring.
+  # A copy too short to carry a voice (the backend sometimes speaks next to nothing) is not a candidate: with none left
+  # there is no target voice.
   class TargetVoice
-    CANDIDATES = 3
+    CANDIDATES   = 3
+    MIN_DURATION = 0.5
 
-    def initialize(reference, text:, lang:, options:, scorer: VoiceClone::EmbeddingScorer.new(provider: 'cpu'))
+    def initialize(reference, text:, lang:, options:, scorer: VoiceClone::EmbeddingScorer.new(provider: 'cpu'), ffmpeg: FFmpeg.new)
       @reference = reference
       @text      = text
       @lang      = lang
       @options   = options
       @scorer    = scorer
+      @ffmpeg    = ffmpeg
     end
 
     def call
-      paths  = speak_candidates
+      paths = speak_candidates.select { |path| @ffmpeg.audio_duration(path) >= MIN_DURATION }
+      return if paths.empty?
+
       scores = {}
       paths.peach(reraise: true) { |path| scores[path] = similarity(path) }
       TTS::Reference.new(path: paths.max_by(&scores), text: @text)
