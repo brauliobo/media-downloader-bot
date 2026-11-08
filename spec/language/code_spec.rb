@@ -9,4 +9,10 @@ RSpec.describe Language::Code do
     expect(described_class.normalize(nil)).to be_nil
     expect(described_class.normalize('xx')).to be_nil
   end
+
+  it 'knows the languages written without spaces between words' do
+    %w[zh zh-CN Chinese ja Japanese th].each { |lang| expect(described_class.spaceless?(lang)).to be(true), lang }
+    %w[pt en ko].each { |lang| expect(described_class.spaceless?(lang)).to be(false), lang }
+    expect(described_class.spaceless?(nil)).to be(false)
+  end
 end

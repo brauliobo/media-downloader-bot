@@ -352,6 +352,19 @@ RSpec.describe Subtitler::Subtitle do
       expect(split.entries.first.source_words.map(&:text)).to eq([' test', 'ing'])
     end
 
+    it 'keeps the tokens of a language written without spaces apart' do
+      entries = [['大家好', 0.0, 0.5], ['今天', 0.5, 1.0]].map do |text, start, finish|
+        described_class::Entry.new(start: start, finish: finish, text: text,
+                                   words: [described_class::Word.new(text: text, start: start, finish: finish)])
+      end
+      chinese = described_class.new(language: 'zh', entries: entries)
+
+      chinese.merge_split_words!
+
+      expect(chinese.entries.map(&:text)).to eq(%w[大家好 今天])
+      expect(chinese.entries.map(&:start)).to eq([0.0, 0.5])
+    end
+
     it 'assigns a speaker to every entry explicitly' do
       expect(subtitle.assign_speaker!(9)).to equal(subtitle)
       expect(subtitle.entries.map(&:speaker_id)).to eq([9])

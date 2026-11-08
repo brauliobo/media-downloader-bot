@@ -2,7 +2,11 @@ class Subtitler
   class Subtitle
     # Entries joined into longer ones where the words and the gaps between them allow it.
     module Merging
+      # A token without a leading space continues the word before it, which holds only where words are spaced:
+      # elsewhere every token would join into one word spanning the whole entry, and the entries into one another.
       def merge_split_words!
+        return self if Language::Code.spaceless?(language)
+
         @entries.each(&:merge_split_words!)
 
         index = 1
