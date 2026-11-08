@@ -32,8 +32,10 @@ class Subtitler
         params[:language] = language if language
 
         transcript = infer(params)
+        # A gap is too short to detect the language of, and a wrong guess there transcribes it in another one.
+        language = Language::Code.normalize(transcript.language) || params[:language]
         DroppedSpeech.new(transcript, audio: file.path) do |gap|
-          infer(params.merge(offset_t: (gap.start * 1000).round, duration: ((gap.finish - gap.start) * 1000).round))
+          infer(params.merge(language: language, offset_t: (gap.start * 1000).round, duration: ((gap.finish - gap.start) * 1000).round))
         end.call
       end
 

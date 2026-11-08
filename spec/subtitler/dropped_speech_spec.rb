@@ -47,4 +47,36 @@ RSpec.describe Subtitler::DroppedSpeech do
     expect(calls).to eq(1)
     expect(result.entries.map(&:text)).to eq(%w[before after])
   end
+
+  it 'drops a phrase the transcription looped on and transcribes its stretch again' do
+    speech([0.0, 35.0])
+    looped = [entry('Do you feel it?', 6.0, 7.0), entry('do you feel it', 7.0, 8.0), entry('Do you feel it!', 8.0, 9.0)]
+    gaps   = []
+
+    result = described_class.new(subtitle(before, *looped, after), audio: 'audio.wav') do |gap|
+      gaps << gap
+      subtitle(entry('what was said', 10.0, 20.0))
+    end.call
+
+    expect(gaps.first).to eq(described_class::Gap.new(6.0, 31.0))
+    expect(result.entries.map(&:text)).to eq(['before', 'what was said', 'after'])
+  end
+
+  it 'keeps a phrase said twice' do
+    speech([0.0, 35.0])
+    twice = [entry('Do you feel it?', 6.0, 7.0), entry('Do you feel it?', 7.0, 8.0)]
+
+    result = described_class.new(subtitle(before, *twice, after), audio: 'audio.wav') { subtitle }.call
+
+    expect(result.entries.map(&:text)).to eq(['before', 'Do you feel it?', 'Do you feel it?', 'after'])
+  end
+
+  it 'drops an entry that is one phrase repeated' do
+    speech([0.0, 35.0])
+    repeated = entry('I know her, ' * 12, 6.0, 20.0)
+
+    result = described_class.new(subtitle(before, repeated, after), audio: 'audio.wav') { subtitle }.call
+
+    expect(result.entries.map(&:text)).to eq(%w[before after])
+  end
 end

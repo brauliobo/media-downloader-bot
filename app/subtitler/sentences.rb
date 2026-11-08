@@ -3,8 +3,9 @@ class Subtitler
   module Sentences
     CLOSERS_ONLY       = /\A["')\]]+\z/
     TITLE_ABBREVIATION = /\A(?:Mr|Mrs|Ms|Dr|Prof|Sr|Sra|St)\.\z/i
-    # Speech transcribed without punctuation (a separated voice) would be one sentence for the whole media: past this it is cut at its longest pause.
+    # Speech transcribed without punctuation (a separated voice) would be one sentence for the whole media: past these it is cut at its longest pause.
     MAX_WORDS          = 60
+    MAX_DURATION       = 15.0
     MIN_WORDS          = 20
 
     module_function
@@ -27,7 +28,7 @@ class Subtitler
         end
         cur_words << word
         eos_pending = true if eos_punct?(raw) && !title_abbreviation?(raw)
-        split_at_longest_pause!(sentences, cur_words) if cur_words.size > MAX_WORDS
+        split_at_longest_pause!(sentences, cur_words) if too_long?(cur_words)
       end
       flush!(sentences, cur_words)
       sentences
@@ -36,6 +37,8 @@ class Subtitler
     def each_word(entries, &block)
       entries.each { |entry| entry.words.each { |word| block.call(word.deep_copy) } }
     end
+
+    def too_long?(words) = words.size > MAX_WORDS || (words.size > MIN_WORDS && words.last.finish - words.first.start > MAX_DURATION)
 
     def split_at_longest_pause!(sentences, cur_words)
       at   = (MIN_WORDS - 1...cur_words.size - 1).max_by { |idx| [cur_words[idx + 1].start - cur_words[idx].finish, idx] }
