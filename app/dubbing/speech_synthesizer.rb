@@ -3,6 +3,8 @@ module Dubbing
   # recorded reference spoken in the target language (TargetVoice), so the accent is the target language's. A speaker
   # whose target voice cannot be made keeps the recorded reference.
   class SpeechSynthesizer
+    ANCHOR_MAX_DURATION = 20.0
+
     # The sentences spoken: those the translation left with nothing to say are dropped.
     attr_reader :sentences
 
@@ -45,9 +47,10 @@ module Dubbing
       }
     end
 
-    # The speaker's longest sentence is spoken first, as the text of the target voice, and is not translated again.
+    # The speaker's longest sentence, among those short enough to be a voice reference (a run-on of minutes is not), is spoken
+    # first, as the text of the target voice, and is not translated again.
     def use_target_voice(reference, jobs)
-      anchor = jobs.max_by { |job| job.fetch(:sentence).text.to_s.length }
+      anchor = jobs.min_by { |job| [anchor_duration(job) > ANCHOR_MAX_DURATION ? 1 : 0, -job.fetch(:sentence).text.to_s.length] }
       translate_job(anchor)
       return unless TTS::Audible.speakable?(anchor[:text])
 
@@ -55,6 +58,8 @@ module Dubbing
       voice = TargetVoice.new(reference, text: anchor[:text], lang: @target_lang, options: TTS::Options.for(@opts)).call
       jobs.each { |job| job[:reference] = voice } if voice
     end
+
+    def anchor_duration(job) = job.fetch(:sentence).finish.to_f - job.fetch(:sentence).start.to_f
 
     def translate_job(job)
       job[:text] = spoken_text(@translate.call(job.fetch(:sentence))) if @translate && !job[:translated]

@@ -68,6 +68,18 @@ RSpec.describe Dubbing::SpeechSynthesizer do
     ).render
   end
 
+  it 'takes the target voice text from the longest sentence short enough to be a voice reference' do
+    calls = []
+    allow(TTS).to receive(:synthesize_batch) do |items:, **options|
+      calls << items.map { |item| item.fetch(:text) }
+      items.each { |item| File.write(item.fetch(:out_path), 'raw') }
+    end
+
+    render_with([sentence('Frase de dois minutos sem pausa nenhuma na fala.', 0.0, 120.0, 'speaker'), *sentences])
+
+    expect(calls.first).to eq([sentences.last.text] * Dubbing::TargetVoice::CANDIDATES)
+  end
+
   it 'keeps the recorded reference of a speaker whose longest sentence has nothing to say' do
     calls = []
     allow(TTS).to receive(:synthesize_batch) do |items:, **options|

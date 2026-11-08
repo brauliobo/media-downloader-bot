@@ -6,21 +6,30 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 import numpy as np
 import sherpa_onnx
 import soundfile as sf
 
+# The embedding model takes at most 12288 frames (about 122 s) at once.
+WINDOW_SECONDS = 60
+
 
 def embedding(extractor: sherpa_onnx.SpeakerEmbeddingExtractor, path: str) -> np.ndarray:
     samples, sample_rate = sf.read(path, always_2d=True, dtype="float32")
-    samples = np.ascontiguousarray(np.mean(samples, axis=1))
+    samples = np.mean(samples, axis=1)
+    windows = np.array_split(samples, max(1, math.ceil(len(samples) / (WINDOW_SECONDS * sample_rate))))
+    return np.mean([window_embedding(extractor, window, sample_rate) for window in windows], axis=0)
+
+
+def window_embedding(extractor: sherpa_onnx.SpeakerEmbeddingExtractor, samples: np.ndarray, sample_rate: int) -> np.ndarray:
     stream = extractor.create_stream()
-    stream.accept_waveform(sample_rate=sample_rate, waveform=samples)
+    stream.accept_waveform(sample_rate=sample_rate, waveform=np.ascontiguousarray(samples))
     stream.input_finished()
     if not extractor.is_ready(stream):
-        raise RuntimeError(f"speaker embedding extractor is not ready for {path}")
+        raise RuntimeError("speaker embedding extractor is not ready")
     return np.asarray(extractor.compute(stream), dtype=np.float32)
 
 
