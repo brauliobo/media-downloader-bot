@@ -3,15 +3,15 @@ require 'active_support/core_ext/string/inflections'
 class Hashtags
   HASHTAG_SCHEMA = {
     type:     'array',
-    minItems: 10,
-    maxItems: 30,
+    minItems: 8,
+    maxItems: 25,
     items:    {
       type:       'object',
       properties: {
         tag:    {type: 'string', minLength: 1, maxLength: 80},
         detail: {type: 'string', maxLength: 160},
       },
-      required:   %w[tag detail],
+      required:   %w[tag],
     },
   }.freeze
 
