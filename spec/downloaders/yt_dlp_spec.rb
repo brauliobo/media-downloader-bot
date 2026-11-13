@@ -148,6 +148,18 @@ RSpec.describe Downloaders::YtDlp do
 
       expect(status.errors).to eq(["Metadata errors:\n<pre>unsupported &lt;url&gt;</pre>"])
     end
+
+    it 'keeps the metadata errors short enough to close their <pre>' do
+      ctx.st = status
+      fake_yt_dlp(stderr: "ERROR: [x] a: No video formats found!\n" * 17 + "ERROR: <#{'\'' * 2000}>", code: 1)
+
+      downloader.download
+
+      text = status.errors.first
+      expect(text.size).to be < 1024
+      expect(text).to start_with("Metadata errors:\n<pre>ERROR: [x] a: No video formats found!\nERROR: ").and end_with('</pre>')
+      expect(text).not_to match(/&#?\w*<\/pre>\z/)
+    end
   end
 
   describe '#download_one' do

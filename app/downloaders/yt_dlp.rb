@@ -19,7 +19,7 @@ module Downloaders
       Site.for(source_url).info_args.each { cmd << " #{_1}" }
 
       _, e, s = Sh.run cmd, chdir: dir
-      return st.error("Metadata errors:\n<pre>#{Bot::MsgHelpers.he e}</pre>", parse_mode: 'HTML') unless s == 0
+      return st.error("Metadata errors:\n<pre>#{metadata_errors(e)}</pre>", parse_mode: 'HTML') unless s == 0
 
       process_infos
     end
@@ -46,6 +46,15 @@ module Downloaders
     end
 
     private
+
+    ERROR_LINES = 3
+    ERROR_CHARS = 600
+
+    # yt-dlp repeats one error per playlist entry; the status message cannot be cut inside its <pre> or Telegram rejects it
+    def metadata_errors(stderr)
+      lines = stderr.lines.map(&:strip).reject(&:empty?).uniq.last(ERROR_LINES).join("\n")
+      Bot::MsgHelpers.he(lines).first(ERROR_CHARS).sub(/&#?\w*\z/, '')
+    end
 
     def formats = @formats ||= FormatArgs.new(opts, site)
     def site    = @site ||= Site.for(url)
