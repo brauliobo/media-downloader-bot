@@ -58,6 +58,17 @@ RSpec.describe Downloaders::GalleryDl do
       expect(described_class.content_from(ctx.gallery_rows)).to eq("full tweet\n\nwith note text")
     end
 
+    it 'reads Instagram posts through the bundled embed extractor, which needs no login' do
+      ctx.url = 'https://www.instagram.com/p/Dfkrg_JlH0Q/?img_index=11'
+      rows = [[3, 'https://example.com/photo.jpg', {type: 'image'}]]
+
+      expect(Sh).to receive(:run)
+        .with([anything, '-X', described_class::EXTRACTORS, '-j', 'instagram-embed:Dfkrg_JlH0Q'], chdir: tmp)
+        .and_return([rows.to_json, '', ok])
+
+      expect(described_class.supports?(ctx)).to eq(true)
+    end
+
     it 'loads bundled extractors for YouTube community posts' do
       ctx.url = 'https://youtube.com/post/Ugkx0123456789_-'
       rows = [[3, 'https://yt3.ggpht.com/image=s0?imgmax=0', {type: 'image'}]]

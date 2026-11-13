@@ -4,6 +4,8 @@ module Downloaders
     BIN        = ENV['GALLERY_DL'].presence || File.expand_path('~/.local/bin/gallery-dl')
     EXTRACTORS = File.expand_path(__dir__)
 
+    INSTAGRAM_POST = %r{\Ahttps?://(?:www\.)?instagram\.com/(?:[^/?#]+/)?(?:p|tv|reels?)/(?<code>[\w-]+)}
+
     def self.build(ctx)
       downloader = new(ctx)
       downloader if downloader.gallery_post?
@@ -48,7 +50,13 @@ module Downloaders
     def command
       cmd = [gallery_dl, '-X', EXTRACTORS, '--no-part', '--no-mtime', '-D', tmp]
       cmd.concat ['--cookies', cookie_path] if cookie_path
-      cmd << normalized_url
+      cmd << target
+    end
+
+    # Instagram's own extractor needs a login; the bundled one reads the public embed page.
+    def target
+      code = normalized_url[INSTAGRAM_POST, :code]
+      code ? "instagram-embed:#{code}" : normalized_url
     end
 
     def gallery_dl
@@ -90,7 +98,7 @@ module Downloaders
     def gallery_rows
       return ctx.gallery_rows unless ctx.gallery_rows.nil?
 
-      out, = Sh.run [gallery_dl, '-X', EXTRACTORS, '-j', normalized_url], chdir: tmp
+      out, = Sh.run [gallery_dl, '-X', EXTRACTORS, '-j', target], chdir: tmp
       ctx.gallery_rows = JSON.parse(out)
     rescue StandardError
       ctx.gallery_rows = []
