@@ -4,6 +4,8 @@ Wants=network-online.target
 After=network-online.target
 RequiresMountsFor=/srv/OmniVoice
 StopWhenUnneeded=yes
+StartLimitIntervalSec=30
+StartLimitBurst=1
 
 [Service]
 SyslogIdentifier=omnivoice-gpu%i
@@ -29,7 +31,7 @@ ProtectHome=yes
 NoNewPrivileges=yes
 
 ExecStart=/bin/sh -c 'exec env CUDA_VISIBLE_DEVICES=%i PORT=$(($PORT_BASE + %i)) "$OMNIVOICE_PYTHON" /srv/OmniVoice/http_server.py'
-ExecStartPost=/bin/sh -c 'exec /usr/bin/curl --fail --silent --show-error --retry 150 --retry-delay 2 --retry-connrefused --retry-all-errors --retry-max-time 300 --max-time 2 "http://127.0.0.1:$(($PORT_BASE + %i))/health" >/dev/null'
+ExecStartPost=/bin/sh -c 'until /usr/bin/curl --fail --silent --max-time 2 "http://127.0.0.1:$(($PORT_BASE + %i))/health" >/dev/null; do kill -0 $MAINPID || exit 1; sleep 1; done'
 
 Restart=on-failure
 RestartSec=10

@@ -1,0 +1,7 @@
+[Unit]
+Description=Revive the activation socket %I after it gave up on a backend that cannot start
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl reset-failed %I
+ExecStart=/usr/bin/systemctl start %I

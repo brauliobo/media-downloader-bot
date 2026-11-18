@@ -1,5 +1,6 @@
 [Unit]
 Description=OmniVoice TTS activation socket for GPU %i
+OnFailure=socket-revive@%n.service
 
 [Socket]
 ListenStream=127.0.0.1:1045%i

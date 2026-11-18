@@ -4,6 +4,8 @@ After=network-online.target
 Wants=network-online.target
 RequiresMountsFor=/srv/whisper.cpp
 StopWhenUnneeded=yes
+StartLimitIntervalSec=30
+StartLimitBurst=1
 
 [Service]
 SyslogIdentifier=tinydiarize-gpu%i
@@ -18,7 +20,7 @@ Environment=LD_LIBRARY_PATH=/srv/whisper.cpp/runtime-tinydiarize
 ExecStart=@/srv/whisper.cpp/runtime-tinydiarize/whisper-server tinydiarize-gpu%i \
   --model /srv/whisper.cpp/models/ggml-small.en-tdrz.bin \
   --host 127.0.0.1 --port 838%i --threads 16 -l en --device %i --tinydiarize --convert
-ExecStartPost=/usr/bin/curl --fail --silent --show-error --retry 90 --retry-delay 1 --retry-connrefused --retry-all-errors --retry-max-time 90 --max-time 2 http://127.0.0.1:838%i/health
+ExecStartPost=/bin/bash -c 'until curl --fail --silent --max-time 2 http://127.0.0.1:838%i/health; do kill -0 $MAINPID || exit 1; sleep 0.5; done'
 
 NoNewPrivileges=yes
 PrivateTmp=yes
