@@ -85,10 +85,13 @@ def diarize(file: UploadFile = File(...), speakers: int | None = Form(None)):
     options = {"num_speakers": speakers} if speakers is not None else {}
     started = time.perf_counter()
     with lock:
-        torch.cuda.reset_peak_memory_stats()
-        output = pipeline({"waveform": waveform, "sample_rate": sample_rate}, **options)
-        torch.cuda.synchronize()
-        peak_memory = torch.cuda.max_memory_allocated()
+        try:
+            torch.cuda.reset_peak_memory_stats()
+            output = pipeline({"waveform": waveform, "sample_rate": sample_rate}, **options)
+            torch.cuda.synchronize()
+            peak_memory = torch.cuda.max_memory_allocated()
+        finally:
+            torch.cuda.empty_cache()
         vram = vram_usage()
     elapsed = time.perf_counter() - started
     annotation = output.exclusive_speaker_diarization
