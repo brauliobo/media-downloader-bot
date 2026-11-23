@@ -31,6 +31,29 @@ RSpec.describe Zipper do
     expect(ffmpeg).to have_received(:capture)
   end
 
+  describe '.zip_video' do
+    let(:failed) { ['', "Hardware device setup failed for decoder\n", instance_double(Process::Status, success?: false)] }
+    let(:ok)     { ['', '', instance_double(Process::Status, success?: true)] }
+
+    def zip(ffmpeg, opts) = described_class.zip_video('/tmp/in.mp4', '/tmp/out.mp4', probe: video_probe, opts: opts, ffmpeg: ffmpeg)
+
+    it 'retries a failed CUDA transcode on the CPU' do
+      ffmpeg = ffmpeg_double
+      allow(ffmpeg).to receive(:capture).and_return failed, ok
+
+      expect(zip(ffmpeg, video_options(cuda: true))).to eq ok
+      expect(ffmpeg).to have_received(:encode_video).with(:h264, cuda: true, quality: 33).ordered
+      expect(ffmpeg).to have_received(:encode_video).with(:h264, cuda: false, quality: 33).ordered
+    end
+
+    it 'does not retry a failed CPU transcode' do
+      ffmpeg = ffmpeg_double result: failed
+
+      expect(zip(ffmpeg, video_options)).to eq failed
+      expect(ffmpeg).to have_received(:capture).once
+    end
+  end
+
   it 'uses named variable-frame-rate and quality operations' do
     ffmpeg = ffmpeg_double
     zipper = described_class.new(

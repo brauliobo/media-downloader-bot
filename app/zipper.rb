@@ -24,8 +24,12 @@ class Zipper
     FFmpeg.new fdk_aac: FFmpeg.fdk_aac_available?
   end
 
-  def self.zip_video *args, **params
-    new(*args, **params).zip_video
+  def self.zip_video *args, opts: SymMash.new, **params
+    result = new(*args, opts: opts, **params).zip_video
+    return result if result.last.success? || !opts.cuda
+
+    STDERR.puts "[ZIPPER] CUDA transcode failed, retrying on the CPU: #{result[1].lines.last(2).join.strip}"
+    new(*args, opts: opts.dup.tap { _1.nocuda = true }, **params).zip_video
   end
 
   def self.zip_audio *args, **params
