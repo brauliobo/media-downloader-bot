@@ -22,7 +22,7 @@ class Subtitler
     protected
 
     def transcribe_with_params path, merge_words:, language: nil, **extra
-      subtitle = Zipper::AudioOps.with_wav(path) do |file|
+      subtitle = Zipper::AudioOps.with_speech_wav(path) do |file|
         params = {
           file:            file,
           temperature:     '0.0',

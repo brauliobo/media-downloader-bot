@@ -69,6 +69,15 @@ RSpec.describe Subtitler::WhisperCpp do
     ])
   end
 
+  it 'uploads 16 kHz mono audio so long stereo sources stay under the server upload limit' do
+    whisper_says(language: 'pt', segments: [])
+    allow(Zipper::AudioOps).to receive(:with_speech_wav).and_call_original
+
+    backend.transcribe(audio)
+
+    expect(Zipper::AudioOps).to have_received(:with_speech_wav).with(audio)
+  end
+
   it 'merges split tokens within a segment and extends the first token timing' do
     whisper_says(
       language: 'pt',
