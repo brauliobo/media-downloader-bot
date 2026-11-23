@@ -85,6 +85,21 @@ RSpec.describe Replay::Handler do
       expect(manager.replies).to be_empty
     end
 
+    it 'keeps the Queued reply while it waits' do
+      handler.queued(item(13))
+
+      expect(manager.deleted).to be_empty
+    end
+
+    it 'deletes the Queued reply it sent when a slot took the message while it was being sent' do
+      manager = ReplayingManager.new(while_sending: -> { JobItem.first(key: '-200:13').update(status: 'running') })
+      handler = described_class.new(manager, forwarded: forwarded, replayed: legacy)
+
+      expect(handler.queued(item(13))).to be_nil
+      expect(manager.announced).to eq([13])
+      expect(manager.deleted).to eq([ReplayingManager::SENT_ID])
+    end
+
     it 'gets no Queued reply when a slot took it meanwhile, the worker posts its own status' do
       expect(handler.queued(item(13, status: 'running'))).to be_nil
       expect(manager.announced).to be_empty

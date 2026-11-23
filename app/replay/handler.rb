@@ -35,13 +35,15 @@ module Replay
 
     # A message joining the queue is told how it stands once its checksum is read: a file the group already has is settled at once
     # with the link of its book, any other gets the standard "Queued" reply, unless a slot took it while its checksum was read:
-    # the run answers it then (the worker posts its own status), after clearing the replies.
+    # the run answers it then (the worker posts its own status), after clearing the replies. Sending waits for the chat's turn, so
+    # a slot may take it meanwhile and clear the replies before this one is there: it is looked at again once sent.
     def queued(item)
       original = original_of(item)
       return unless item.refresh.status == 'pending'
       return answer_duplicate(item, original) if original
 
-      @manager.announce_queued(chat_id: chat_id_of(item), message_id: message_id(item))
+      sent = @manager.announce_queued(chat_id: chat_id_of(item), message_id: message_id(item))
+      delete(chat_id_of(item), [sent]) unless item.refresh.status == 'pending'
       nil
     end
 

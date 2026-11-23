@@ -11,7 +11,7 @@ module Bot
 
     self.max_caption = 4096
     MEDIA_SEND_TIMEOUT = 1_800
-    TEXT_SEND_TIMEOUT = 5
+    TEXT_SEND_TIMEOUT = 120
     SEND_OUTCOME_LIMIT = 1_000
     SendOutcome = Struct.new(:message_id, :error, keyword_init: true)
 
@@ -247,7 +247,8 @@ module Bot
     end
 
     # The id a sent text gets once Telegram has it: the one it is sent under is known only to this process, so a status edited by
-    # a worker that outlives a restart of the bot would never be found. The sent id stays when Telegram is slow to answer.
+    # a worker that outlives a restart of the bot would never be found, nor a status edited once Telegram has the message (many books
+    # posting to one group wait over a minute for it). The sent id stays only when it takes longer than TEXT_SEND_TIMEOUT.
     def sent_id(result)
       id = result[:message_id].to_i
       return result unless id.positive?

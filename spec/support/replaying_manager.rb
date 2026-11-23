@@ -3,7 +3,10 @@
 class ReplayingManager
   attr_reader :replayed, :deleted, :captions, :messages, :replies, :announced
 
-  def initialize(failing: [], gate: nil, messages: [], answers: {}, files: {}, active: [], same_file: [], gone: [])
+  SENT_ID = 9_000
+
+  def initialize(failing: [], gate: nil, messages: [], answers: {}, files: {}, active: [], same_file: [], gone: [], while_sending: nil)
+    @while_sending = while_sending
     @active   = active
     @gone     = gone
     @same_file = same_file
@@ -48,7 +51,13 @@ class ReplayingManager
 
   def reply_to_message(chat_id:, message_id:, text:) = @replies << { chat_id: chat_id, message_id: message_id, text: text }
 
-  def announce_queued(chat_id:, message_id:) = @announced << message_id
+  # The id of the reply sent; `while_sending` runs before it is there (a slot taking the message).
+  def announce_queued(chat_id:, message_id:)
+    @while_sending&.call
+    @announced << message_id
+    @messages << { id: SENT_ID, chat_id: chat_id, type: 'Text', text: Bot::UserQueue::QUEUED_MSG, reply_to_message_id: message_id }
+    SENT_ID
+  end
 
   def file_of(message_id) = @same_file.include?(message_id) ? @same_file.first : message_id
 
