@@ -499,5 +499,25 @@ RSpec.describe Downloaders::YtDlp do
       expect(input.info.title).to eq("full tweet\n\nwith note text")
       expect(input.info.description).to eq("full tweet\n\nwith note text")
     end
+
+    it 'uses clean Facebook descriptions instead of view-count titles' do
+      info = info_of(
+        webpage_url: 'https://m.facebook.com/watch/?v=2991134747942674&_rdr',
+        title:       '1.3M views · 60K reactions | PARE DE PERGUNTAR | Caveira Kids',
+        description: "PARE DE PERGUNTAR\n\nTexto completo"
+      )
+
+      expect(inputs(info).first.info.title).to eq("PARE DE PERGUNTAR\n\nTexto completo")
+    end
+
+    it 'falls back to the title on Facebook when description is blank' do
+      info = info_of(
+        webpage_url: 'https://m.facebook.com/watch/?v=2991134747942674&_rdr',
+        title:       'Caveira Kids on Reels',
+        description: ''
+      )
+
+      expect(inputs(info).first.info.title).to eq('Caveira Kids on Reels')
+    end
   end
 end

@@ -23,6 +23,30 @@ RSpec.describe Downloaders::GalleryDl do
       expect(described_class.supports?(ctx)).to eq(false)
     end
 
+    it 'routes split video and audio streams like Facebook reels to yt-dlp' do
+      ctx.url = 'https://web.facebook.com/reel/2991134747942674'
+      rows = [
+        [2, {category: 'facebook', subcategory: 'video', id: '2991134747942674', type: 'video', username: 'Caveira Kids'}],
+        [3, 'https://video.fbcdn.net/v.mp4', {category: 'facebook', type: 'video', extension: 'mp4'}],
+        [3, 'https://video.fbcdn.net/a.mp4', {category: 'facebook', type: 'audio', extension: 'm4a'}]
+      ]
+      allow(Sh).to receive(:run).and_return([rows.to_json, '', ok])
+
+      expect(described_class.supports?(ctx)).to eq(false)
+    end
+
+    it 'routes single-video tweets to gallery-dl' do
+      rows = [
+        [2, {category: 'twitter', subcategory: 'tweet', content: "full tweet\n\nwith note text", user: {nick: 'NEXTA'}, tweet_id: 1}],
+        [3, 'https://video.twimg.com/video.mp4', {category: 'twitter', type: 'video', extension: 'mp4'}]
+      ]
+      allow(Sh).to receive(:run).and_return([rows.to_json, '', ok])
+
+      expect(described_class.supports?(ctx)).to eq(true)
+      expect(ctx.gallery_rows).to eq(JSON.parse(rows.to_json))
+      expect(described_class.content_from(ctx.gallery_rows)).to eq("full tweet\n\nwith note text")
+    end
+
     it 'routes multi-item posts to gallery-dl' do
       rows = [
         [3, 'https://example.com/video.mp4', {type: 'video'}],
@@ -46,16 +70,16 @@ RSpec.describe Downloaders::GalleryDl do
       expect(described_class.supports?(ctx)).to eq(false)
     end
 
-    it 'keeps single-video tweet metadata for yt-dlp captions' do
+    it 'keeps non-twitter single-video metadata cached on the context' do
       rows = [
-        [2, {content: "full tweet\n\nwith note text", user: {nick: 'NEXTA'}, tweet_id: 1}],
+        [2, {content: "full post\n\ntext", user: {nick: 'Author'}, id: 1}],
         [3, 'https://example.com/video.mp4', {type: 'video'}]
       ]
       allow(Sh).to receive(:run).and_return([rows.to_json, '', ok])
 
       expect(described_class.supports?(ctx)).to eq(false)
       expect(ctx.gallery_rows).to eq(JSON.parse(rows.to_json))
-      expect(described_class.content_from(ctx.gallery_rows)).to eq("full tweet\n\nwith note text")
+      expect(described_class.content_from(ctx.gallery_rows)).to eq("full post\n\ntext")
     end
 
     it 'reads Instagram posts through the bundled embed extractor, which needs no login' do
@@ -135,6 +159,50 @@ RSpec.describe Downloaders::GalleryDl do
       expect(downloader).to be_a(described_class)
       expect(input.info.title).to eq('tweet text')
       expect(probes).to eq(1)
+    end
+
+    it 'hands a single downloaded video to the media processor with streaming enabled' do
+      allow(Sh).to receive(:run).and_return([[[2, {category: 'twitter', content: 'tweet video', user: {nick: 'NEXTA'}, tweet_id: 42}]].to_json, '', ok])
+      allow(Sh).to receive(:run).with(array_including('--no-part'), any_args) do |_cmd, **_|
+        File.write(File.join(tmp, 'clip.mp4'), '')
+        ['', '', ok]
+      end
+
+      input = described_class.new(ctx).download
+
+      expect(input.uploads).to be_nil
+      expect(input.fn_in).to eq(File.join(tmp, 'clip.mp4'))
+      expect(input.stream).to eq('gallery-dl')
+      expect(input.info.title).to eq('tweet video')
+      expect(input.info.uploader).to eq('NEXTA')
+    end
+
+    it 'disables streaming on a single video when audio extraction or cutting is requested' do
+      opts.audio = 1
+      allow(Sh).to receive(:run).and_return([[[2, {category: 'twitter', content: 'tweet video', tweet_id: 42}]].to_json, '', ok])
+      allow(Sh).to receive(:run).with(array_including('--no-part'), any_args) do |_cmd, **_|
+        File.write(File.join(tmp, 'clip.mp4'), '')
+        ['', '', ok]
+      end
+
+      input = described_class.new(ctx).download
+
+      expect(input.fn_in).to eq(File.join(tmp, 'clip.mp4'))
+      expect(input.stream).to be_nil
+    end
+
+    it 'extracts caption and username metadata from Facebook photo posts' do
+      ctx.url = 'https://www.facebook.com/photo/?fbid=123'
+      allow(Sh).to receive(:run).and_return([[[2, {category: 'facebook', caption: 'Photo caption', username: 'Caveira Kids', id: '123'}]].to_json, '', ok])
+      allow(Sh).to receive(:run).with(array_including('--no-part'), any_args) do |_cmd, **_|
+        File.write(File.join(tmp, 'photo.jpg'), '')
+        ['', '', ok]
+      end
+
+      input = described_class.new(ctx).download
+
+      expect(input.info.title).to eq('Photo caption')
+      expect(input.info.uploader).to eq('Caveira Kids')
     end
   end
 end

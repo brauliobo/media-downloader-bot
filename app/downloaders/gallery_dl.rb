@@ -19,7 +19,10 @@ module Downloaders
       return false unless Utils::Safety.public_http_url?(normalized_url)
 
       items = self.class.rows_of(gallery_rows, 3)
-      items.present? && !(items.one? && items.first.last['type'].to_s == 'video')
+      return false if items.empty?
+      return items.none? { |row| row.last['type'].to_s == 'audio' } if twitter_post?
+
+      !single_av_media?(items)
     end
 
     def download
@@ -32,6 +35,16 @@ module Downloaders
 
       files = downloaded_files - before
       return st.error('gallery-dl did not download media') if files.empty?
+
+      if files.one? && video_file?(files.first)
+        return SymMash.new(
+          url:    source_url,
+          opts:   gopts,
+          info:   info,
+          fn_in:  files.first,
+          stream: (Streaming.enabled?(gopts) && !gopts.audio && !Utils::Duration.cut?(gopts) ? 'gallery-dl' : nil)
+        )
+      end
 
       SymMash.new(
         url:     source_url,
@@ -70,16 +83,16 @@ module Downloaders
 
     def self.content_from(rows)
       meta = post_metadata(rows)
-      meta.content.presence || meta.title.presence
+      meta.content.presence || meta.caption.presence || meta.post_text.presence || meta.title.presence
     end
 
     def gallery_info
       meta = metadata
-      user = meta.user || meta.author || SymMash.new
+      user = meta.user.is_a?(Hash) ? meta.user : (meta.author.is_a?(Hash) ? meta.author : SymMash.new)
       SymMash.new(
         title:       self.class.content_from(gallery_rows) || File.basename(normalized_url.to_s),
         description: meta.description.presence,
-        uploader:    user.nick.presence || user.name.presence,
+        uploader:    user.nick.presence || user.name.presence || meta.username.presence || (meta.user if meta.user.is_a?(String)).presence,
         display_id:  (meta.tweet_id || meta.id || normalized_url).to_s,
         language:    meta.lang
       )
@@ -115,9 +128,27 @@ module Downloaders
       Dir[File.join(tmp, '**', '*')].select { |f| File.file?(f) }.sort
     end
 
+    def twitter_post?
+      metadata.category == 'twitter'
+    end
+
+    # A single video, audio track, or a video split into separate video and audio streams (like Facebook DASH) belongs to yt-dlp.
+    def single_av_media?(items)
+      types = items.map { |row| row.last['type'].to_s }
+      types.all? { |t| t == 'video' || t == 'audio' } && types.count('video') <= 1
+    end
+
+    def video_file?(file)
+      Utils::MimeTypes.type_for_mime(mime_for(file)) == :video
+    end
+
+    def mime_for(file)
+      Rack::Mime.mime_type(File.extname(file)) || 'application/octet-stream'
+    end
+
     def upload(file, pos, info, gopts)
       title = File.basename(file, File.extname(file))
-      mime  = Rack::Mime.mime_type(File.extname(file)) || 'application/octet-stream'
+      mime  = mime_for(file)
       SymMash.new(
         fn_out: file,
         type:   SymMash.new(name: Utils::MimeTypes.type_for_mime(mime)),

@@ -183,10 +183,14 @@ module Downloaders
 
     def format_title(info, i, mult)
       t = info.track || info.title
-      t = info.description || t if info.webpage_url.include?('instagram.com')
+      t = info.description.presence || t if social_caption_url?(info.webpage_url)
       t = twitter_full_text(info) || t
       t = format('%02d %s', i + 1, t) if mult && opts.number
       t
+    end
+
+    def social_caption_url?(url)
+      url.to_s.match?(%r{(?:^|://)(?:[^/]+\.)?(?:instagram\.com|facebook\.com|fb\.watch)/})
     end
 
     def twitter_status?(url)
